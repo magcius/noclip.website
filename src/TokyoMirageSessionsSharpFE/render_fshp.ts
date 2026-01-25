@@ -24,6 +24,7 @@ export class fshp_renderer
 {
     public bone_index: number;
     public skin_bone_count: number;
+    public do_not_render: boolean = false;
 
     private vertex_buffers: GfxBuffer[] = [];
     private vertex_buffer_descriptors: GfxVertexBufferDescriptor[] = [];
@@ -33,7 +34,6 @@ export class fshp_renderer
     private input_layout: GfxInputLayout;
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
-    private do_not_render: boolean = false;
 
     constructor
     (

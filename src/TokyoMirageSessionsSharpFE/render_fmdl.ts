@@ -95,6 +95,18 @@ export class fmdl_renderer
                 device,
                 renderHelper
             );
+
+            // disable meshes that are set to not render
+            const bone_user_data = fmdl.fskl.bones[fshp.bone_index].user_data;
+            const render_mesh_enable = bone_user_data.find((f) => f.key === "render_mesh_enable");
+            if (render_mesh_enable != undefined)
+            {
+                if (render_mesh_enable.values[0] == 0)
+                {
+                    renderer.do_not_render = true;
+                }
+            }
+
             this.fshp_renderers.push(renderer);
         }
 
