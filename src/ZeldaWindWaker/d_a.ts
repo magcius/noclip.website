@@ -2412,6 +2412,9 @@ class d_a_sie_flag extends fopAc_ac_c {
 
         this.set_mtx();
 
+        if (!this.cullingCheck(globals.camera))
+            return;
+
         // TODO(jstpierre): addCalcPos2 windvec
         vec3.add(scratchVec3a, this.pos, this.flagOffset);
         dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
@@ -2497,6 +2500,9 @@ class d_a_tori_flag extends fopAc_ac_c {
         super.execute(globals, deltaTimeFrames);
 
         this.set_mtx();
+
+        if (!this.cullingCheck(globals.camera))
+            return;
 
         vec3.add(scratchVec3a, this.pos, this.flagOffset);
         dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
@@ -2901,6 +2907,9 @@ class d_a_majuu_flag extends fopAc_ac_c {
     }
 
     private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
+        if (!this.cullingCheck(globals.camera))
+            return;
+
         this.wave += this.waveSpeed * deltaTimeFrames;
         const windSpeed = lerp(this.windSpeed1, this.windSpeed2, Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
