@@ -636,13 +636,13 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const rgbBlendState: GfxChannelBlendState = {
             blendMode: blendFunctionRGB,
-            blendSrcFactor: translateBlendFactor(rawBlendSrcFactorRGB),
-            blendDstFactor: translateBlendFactor(rawBlendDstFactorRGB),
+            blendSrcFactor: blendEnabled ? translateBlendFactor(rawBlendSrcFactorRGB) : GfxBlendFactor.One,
+            blendDstFactor: blendEnabled ? translateBlendFactor(rawBlendDstFactorRGB) : GfxBlendFactor.Zero,
         };
         const alphaBlendState: GfxChannelBlendState = {
             blendMode: blendFunctionAlpha,
-            blendSrcFactor: translateBlendFactor(rawBlendSrcFactorAlpha),
-            blendDstFactor: translateBlendFactor(rawBlendDstFactorAlpha),
+            blendSrcFactor: blendEnabled ? translateBlendFactor(rawBlendSrcFactorAlpha) : GfxBlendFactor.One,
+            blendDstFactor: blendEnabled ? translateBlendFactor(rawBlendDstFactorAlpha) : GfxBlendFactor.Zero,
         };
 
         let blendColor: Color | null = null;
