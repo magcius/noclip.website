@@ -11,19 +11,19 @@ use crate::{crazytaxi::FileLoc, unity::types::common::NullTerminatedAsciiString}
 pub struct ShpHeader {
     #[deku(assert_eq = "1.0")]
     pub _version: f32,
-    pub scale: f32,
+    pub bounding_radius: f32,
     pub unk_0x08: u32,
     pub unk_0x0c: u32,
     pub num_textures: u32,
     pub unk_0x14: u32,
     pub unk_0x18: u32,
     pub unk_0x1c: u32,
-    pub aabb_min_x: f32,
-    pub aabb_min_y: f32,
-    pub aabb_min_z: f32,
-    pub aabb_max_x: f32,
-    pub aabb_max_y: f32,
-    pub aabb_max_z: f32,
+    pub pos_x: f32,
+    pub pos_y: f32,
+    pub pos_z: f32,
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub scale_z: f32,
     pub unk_0x38: u32,
     pub unk_0x3c: u32,
     #[deku(pad_bytes_before = "32")]
@@ -153,14 +153,14 @@ impl Shape {
         }
     }
 
-    pub fn get_aabb(&self) -> Vec<f32> {
+    pub fn pos_and_scale(&self) -> Vec<f32> {
         vec![
-            self.header.aabb_min_x,
-            self.header.aabb_min_y,
-            self.header.aabb_min_z,
-            self.header.aabb_max_x,
-            self.header.aabb_max_y,
-            self.header.aabb_max_z,
+            self.header.pos_x,
+            self.header.pos_y,
+            self.header.pos_z,
+            self.header.scale_x,
+            self.header.scale_y,
+            self.header.scale_z,
         ]
     }
 
@@ -202,8 +202,8 @@ impl Shape {
         }
     }
 
-    pub fn scale(&self) -> f32 {
-        self.header.scale
+    pub fn bounding_radius(&self) -> f32 {
+        self.header.bounding_radius
     }
 
     pub fn display_list_offs(&self) -> u32 {
