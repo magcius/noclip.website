@@ -27,10 +27,10 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         const name = read_bfres_string(buffer, name_offset, true);
         
         const texture_name_array_offset = view.getUint32(fmat_entry_offset + 0x30, true);
-        const texture_name_count = view.getUint8(fmat_entry_offset + 0x9D);
+        const texture_count = view.getUint8(fmat_entry_offset + 0x9D);
         const texture_name_array: string[] = [];
         let texture_name_entry_offset = texture_name_array_offset;
-        for (let i = 0; i < texture_name_count; i++)
+        for (let i = 0; i < texture_count; i++)
         {
             const texture_name_offset = view.getUint32(texture_name_entry_offset, true);
             const texture_name = read_bfres_string(buffer, texture_name_offset, true);
@@ -40,10 +40,10 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         }
 
         const sampler_info_array_offset = view.getUint32(fmat_entry_offset + 0x40, true);
-        const sampler_info_count = view.getUint8(fmat_entry_offset + 0x9C);
+        const sampler_count = view.getUint8(fmat_entry_offset + 0x9C);
         let sampler_descriptors: GfxSamplerDescriptor[] = [];
         let sampler_info_entry_offset = sampler_info_array_offset;
-        for (let i = 0; i < sampler_info_count; i++)
+        for (let i = 0; i < sampler_count; i++)
         {
             const original_wrap_s = view.getUint8(sampler_info_entry_offset);
             const wrap_s = convert_wrap_mode(original_wrap_s);
@@ -85,11 +85,24 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
             sampler_info_entry_offset += SAMPLER_INFO_ENTRY_SIZE;
         }
 
+        const sampler_name_array_offset = view.getUint32(fmat_entry_offset + 0x48, true);
+        const sampler_name_array: string[] = [];
+        // index groups have a header and a fake entry at the start, skip over that
+        let sampler_name_entry_offset = sampler_name_array_offset + 0x18;
+        for (let i = 0; i < sampler_count; i++)
+        {
+            const sampler_name_offset = view.getUint32(sampler_name_entry_offset + 0x8, true);
+            const sampler_name = read_bfres_string(buffer, sampler_name_offset, true);
+            
+            sampler_name_array.push(sampler_name);
+            sampler_name_entry_offset += SAMPLER_NAME_ENTRY_SIZE;
+        }
+
         const user_data_array_offset = view.getUint32(fmat_entry_offset + 0x68, true);
         const user_data_count = view.getUint16(fmat_entry_offset + 0xA6, true);
         const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_count);
         
-        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, user_data: user_data_array });
+        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, sampler_names: sampler_name_array, user_data: user_data_array });
         fmat_entry_offset += FMAT_ENTRY_SIZE;
     }
 
@@ -99,12 +112,14 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
 const FMAT_ENTRY_SIZE = 0xA8;
 const TEXTURE_NAME_ENTRY_SIZE = 0x8;
 const SAMPLER_INFO_ENTRY_SIZE = 0x20;
+const SAMPLER_NAME_ENTRY_SIZE = 0X10;
 
 export interface FMAT
 {
     name: string;
     texture_names: string[];
     sampler_descriptors: GfxSamplerDescriptor[];
+    sampler_names: string[];
     user_data: user_data[];
 }
 

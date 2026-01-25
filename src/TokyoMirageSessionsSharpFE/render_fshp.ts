@@ -93,11 +93,14 @@ export class fshp_renderer
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
         // setup sampler
-
         // TODO: sometimes a cubemap isn't being found?? whats up with that
-        // for (let i = 0; i < fmat.texture_names.length; i++)
-        for (let i = 0; i < 1; i++)
+        for (let i = 0; i < fmat.sampler_names.length; i++)
         {
+            // TODO: for now just grabbing s_diffuse
+            if (fmat.sampler_names[i] != "s_diffuse")
+            {
+                continue;
+            }
             const texture_name = fmat.texture_names[i];
             if (texture_name == undefined)
             {

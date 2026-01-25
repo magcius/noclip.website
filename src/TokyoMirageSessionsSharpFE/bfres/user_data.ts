@@ -41,7 +41,7 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
                 break;
             
             case 1:
-                // float
+                // f32
                 for (let j = 0; j < data_count; j++)
                 {
                     values.push(view.getFloat32(data_offset + (j * 0x4), true));
@@ -51,6 +51,7 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
             case 2:
                 // string
                 // TODO
+                throw("need to support strings in user data");
                 break;
             
             case 3:
