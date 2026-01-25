@@ -12,6 +12,7 @@ export enum dProcName_e {
     d_a_bridge          = 0x005B,
     d_a_obj_Ygush00     = 0x0099,
     d_a_py_lk           = 0x00A9,
+    d_a_pirate_flag     = 0x00AE,
     d_a_majuu_flag      = 0x00AF,
     d_a_tori_flag       = 0x00B0,
     d_a_sie_flag        = 0x00B1,

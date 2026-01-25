@@ -7294,7 +7294,13 @@ class d_a_obj_pirateship extends fopAc_ac_c {
 
     private partsCreate(globals: dGlobals): void {
         // TODO: Sail
-        // TODO: Pirate flag
+
+        // Pirate flag
+        let prm: fopAcM_prm_class = {
+            parameters: 0, pos: this.pos, roomNo: this.tevStr.roomNo, rot: this.rot, scale: Vec3One,
+            subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+        };
+        fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_a_pirate_flag, prm);
 
         const shipCfgIdx = (this.parameters >> 0x18) & 0xFF;
 
@@ -7320,7 +7326,7 @@ class d_a_obj_pirateship extends fopAc_ac_c {
         const doorParams = doorId === 0 ? 0x101000FF : 0x101004FF;
         const pos = vec3.transformMat4(vec3.create(), vec3.set(scratchVec3a, 0, 400, 475), this.model.modelMatrix);
         const rot = vec3.fromValues(0xFFF, this.rot[1] + 0x8000, 0);
-        const prm: fopAcM_prm_class = {
+        prm = {
             parameters: doorParams, pos, roomNo: this.tevStr.roomNo, rot, scale: Vec3One,
             subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
         };
@@ -7450,6 +7456,91 @@ class d_a_obj_tousekiki extends fopAc_ac_c {
     }
 }
 
+class d_a_pirate_flag extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_pirate_flag;
+
+    private pirateShip: d_a_obj_pirateship;
+    private modelMatrix = mat4.create();
+    private cloth: dCloth_packet_c;
+    private windvec = vec3.create();
+
+    private static arcName = `Kaizokusen`;
+    private static arcNameCloth = `Cloth`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status: cPhs__Status;
+
+        status = dComIfG_resLoad(globals, d_a_pirate_flag.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, d_a_pirate_flag.arcNameCloth);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.pirateShip = assertExists(fopAcIt_JudgeByID<d_a_obj_pirateship>(globals.frameworkGlobals, this.parentPcId));
+
+        const resCtrl = globals.resCtrl;
+        dKy_tevstr_init(this.tevStr, this.roomNo);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, d_a_pirate_flag.arcNameCloth, 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, d_a_pirate_flag.arcName, 0x9);
+        this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 800.0, 400.0, this.tevStr);
+
+        vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
+
+        this.cullMtx = mat4.create();
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(globals.camera))
+            return;
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        renderInstManager.setCurrentList(globals.dlst.main[0]);
+        this.cloth.cloth_draw(globals, renderInstManager);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
+
+        this.set_mtx();
+
+        // TODO(jstpierre): addCalcPos2 windvec
+        dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
+
+        // noclip modification: This actor implements its own cloth simulation. For simplicity, we use dCloth_packet_c with equivalent parameters.
+        this.cloth.drag = 0.899;
+        this.cloth.ripple = 900;
+        this.cloth.spring = 0.45;
+        this.cloth.gravity = -3.5;
+        this.cloth.waveSpeed = 0x040;
+        this.cloth.windSpeed = 10.0;
+        this.cloth.windSpeedWave = 3.0;
+        this.cloth.setGlobalWind(this.windvec);
+        this.cloth.cloth_move(deltaTimeFrames);
+    }
+
+    private set_mtx(): void {
+        const flagOffset = vec3.set(scratchVec3a, 0.0, 3200.0, 100.0);
+        vec3.transformMat4(this.pos, flagOffset, this.pirateShip.model.modelMatrix);
+
+        MtxTrans(this.pos, false, this.modelMatrix);
+        mDoMtx_ZXYrotM(this.modelMatrix, this.rot);
+        MtxTrans(vec3.set(scratchVec3a, 0, 0, -30), true, this.modelMatrix);
+        this.cloth.setMtx(this.modelMatrix);
+
+        // This actor has a frozen bounding box, but it is very incorrect. Scale it back to a proper bounding volume.
+        mat4.scale(this.cullMtx!, this.modelMatrix, vec3.set(scratchVec3a, 22, -4, 22));
+    }
+
+    public override delete(globals: dGlobals): void {
+        this.cloth.destroy(globals.modelCache.device);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -7489,5 +7580,6 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_demo00);
     R(d_a_obj_pirateship);
     R(d_a_obj_tousekiki);
+    R(d_a_pirate_flag);
 }
 
