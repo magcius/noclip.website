@@ -31,9 +31,9 @@ import { create_d007_07_gimmicks } from "./maps/d007_07.js";
 import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
-
 import { create_f002_03_gimmicks } from "./maps/f002_03.js";
 import { create_f003_02_gimmicks, create_f003_02_party_gimmicks } from "./maps/f003_02.js";
+import { create_f003_06_gimmicks } from "./maps/f003_06.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
@@ -259,7 +259,7 @@ const sceneDescs =
     new TMSFESceneDesc("f003_01", "Hee Ho Mart 1", ["f003_01"], [""]),
     new TMSFESceneDesc("f003_09", "Hee Ho Mart 2", ["f003_09"], [""]),
     new TMSFESceneDesc("f003_04", "Carabia", ["f003_04", "obj01"], ["", "obj01"]),
-    new TMSFESceneDesc("f003_06", "Café Seiren", ["f003_06", "sky"], ["", ""]),
+    new TMSFESceneDesc("f003_06", "Café Seiren", ["f003_06", "sky"], ["", ""], create_f003_06_gimmicks),
     // new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"], ["", ""]), // not a wii u file, but the map layout file is big endian, which causes it to fail to load. maybe load the wii u version instead?
     new TMSFESceneDesc("f003_08", "Anzu", ["f003_08"], [""], create_f003_08_gimmicks),
     "Cutscene Maps",
