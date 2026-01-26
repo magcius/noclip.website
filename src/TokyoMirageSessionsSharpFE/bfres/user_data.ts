@@ -29,43 +29,56 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
         }
         const data_count = view.getUint32(user_data_entry_offset + 0x10, true);
         const data_type = view.getUint8(user_data_entry_offset + 0x14);
-        let values = [];
+        let values: number[] | string[] = [];
         switch (data_type)
         {
             case 0:
                 // s32
+                let s32_values: number[] = [];
                 for (let j = 0; j < data_count; j++)
                 {
-                    values.push(view.getInt32(data_offset + (j * 0x4), true));
+                    s32_values.push(view.getInt32(data_offset + (j * 0x4), true));
                 }
+                values = s32_values;
                 break;
             
             case 1:
                 // f32
+                let f32_values: number[] = [];
                 for (let j = 0; j < data_count; j++)
                 {
-                    values.push(view.getFloat32(data_offset + (j * 0x4), true));
+                    f32_values.push(view.getFloat32(data_offset + (j * 0x4), true));
                 }
+                values = f32_values;
                 break;
             
             case 2:
                 // string
-                // TODO
-                throw("need to support strings in user data");
+                let string_values: string[] = [];
+                for (let j = 0; j < data_count; j++)
+                {
+                    const string_offset = view.getUint32(data_offset + (j * 0x8), true);
+                    const string = read_bfres_string(buffer, string_offset, true);
+                    string_values.push(string);
+                }
+                values = string_values;
                 break;
             
             case 3:
                 // byte
+                let byte_values: number[] = [];
                 for (let j = 0; j < data_count; j++)
                 {
                     // TODO: is this signed or unsigned?
-                    values.push(view.getInt8(data_offset + (j * 0x1)));
+                    byte_values.push(view.getInt8(data_offset + (j * 0x1)));
                 }
+                values = byte_values;
                 break;
         }
         user_data_array.push({ key, values });
         user_data_entry_offset += USER_DATA_ENTRY_SIZE;
     }
+
     return user_data_array;
 }
 

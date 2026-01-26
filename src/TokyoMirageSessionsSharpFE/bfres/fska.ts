@@ -60,7 +60,7 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
 
             const curve_array_offset = view.getUint32(bone_animation_entry_offset + 0x8, true);
             const curve_count = view.getUint8(bone_animation_entry_offset + 0x2E);
-            let curves: Curve[] = parse_curves(buffer, curve_array_offset, curve_count);
+            let curves: Curve[] = parse_curves(buffer, curve_array_offset, curve_count, 0);
 
             bone_animations.push({ name: bone_name, flags, initial_values, curves });
             bone_animation_entry_offset += BONE_ANIMATION_ENTRY_SIZE;
@@ -77,18 +77,19 @@ const FSKA_ENTRY_SIZE = 0x78; // TODO: not sure this is correct
 const BONE_ANIMATION_ENTRY_SIZE = 0x38;
 const CURVE_ENTRY_SIZE = 0x30;
 
+// TODO move this to an animation_common file
 /**
  * reads from a curve array in a bfres file and returns an array of Curve objects
  * @param buffer the bfres file
  * @param offset offset of the curve array
  * @param count number of curves in the array
  */
-export function parse_curves(buffer: ArrayBufferSlice, offset: number, count: number): Curve[]
+export function parse_curves(buffer: ArrayBufferSlice, offset: number, count: number, start_index: number): Curve[]
 {
     const view = buffer.createDataView();
     let curves: Curve[] = [];
-    let curve_entry_offset = offset;
-    for (let curve_index = 0; curve_index < count; curve_index++)
+    let curve_entry_offset = offset + (start_index * CURVE_ENTRY_SIZE);
+    for (let curve_index = start_index; curve_index < count; curve_index++)
     {                
         const flags = view.getUint16(curve_entry_offset + 0x10, true);
         const frame_type = flags & 0x3;

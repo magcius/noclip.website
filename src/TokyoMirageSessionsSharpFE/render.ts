@@ -38,6 +38,7 @@ export class TMSFEScene implements SceneGfx
             const fmdl = model_fres.fmdl[0];
 
             // initialize textures
+            // textures are stored in an embedded .bntx file
             const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
             const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
             
