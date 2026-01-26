@@ -112,6 +112,7 @@ class TMSFESceneDesc implements SceneDesc
                     throw("whoops");
                 }
             }
+            console.log(animation_fres);
 
             level_models.push({ model_fres, animation_fres });
         }

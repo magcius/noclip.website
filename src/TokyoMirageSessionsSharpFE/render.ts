@@ -1,6 +1,7 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
+import { FMAA } from './bfres/fmaa.js';
 import { FSKA } from "./bfres/fska.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -42,12 +43,20 @@ export class TMSFEScene implements SceneGfx
             const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
             const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
             
-            // get skeletal animation (if there is one)
+            // get animations
             let fska: FSKA | undefined = undefined;
+            let fmaa: FMAA | undefined = undefined;
             const animation_fres = level_models[level_models_index].animation_fres;
-            if (animation_fres != undefined && animation_fres.fska.length > 0)
+            if (animation_fres != undefined)
             {
-                fska = animation_fres.fska[0];
+                if (animation_fres.fska.length > 0)
+                {
+                    fska = animation_fres.fska[0];
+                }
+                if (animation_fres.fmaa.length > 0)
+                {
+                    fmaa = animation_fres.fmaa[0];
+                }
             }
 
             let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
@@ -57,7 +66,8 @@ export class TMSFEScene implements SceneGfx
                 fmdl,
                 bntx,
                 gfx_texture_array,
-                fska, 
+                fska,
+                fmaa,
                 vec3.fromValues(0.0, 0.0, 0.0),
                 vec3.fromValues(0.0, 0.0, 0.0),
                 vec3.fromValues(1.0, 1.0, 1.0),

@@ -2,6 +2,7 @@
 // handles all the common tasks shared between the separate meshes of a model, such as animating the skeleton
 
 import * as BNTX from '../fres_nx/bntx.js';
+import { FMAA } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
@@ -21,12 +22,15 @@ export class fmdl_renderer
 
     private fskl: FSKL;
     private fska: FSKA | undefined;
+    private fmaa: FMAA | undefined;
     private bone_to_bone_animation_indices: number[] = [];
     private smooth_rigid_matrix_array: mat4[] = [];
+    private material_to_material_animation_indices: number[] = [];
     private transform_matrix: mat4 = mat4.create();
     private fshp_renderers: fshp_renderer[] = [];
     private special_skybox: boolean;
     private current_animation_frame: number = 0.0;
+    private current_material_animation_frame: number = 0.0; // TODO: do I need separate ones? not sure if theres a model with both material and skeletal animations
 
     constructor
     (
@@ -34,6 +38,7 @@ export class fmdl_renderer
         bntx: BNTX.BNTX,
         gfx_texture_array: GfxTexture[],
         fska: FSKA | undefined,
+        fmaa: FMAA | undefined,
         position: vec3,
         rotation: vec3,
         scale: vec3,
@@ -49,7 +54,7 @@ export class fmdl_renderer
         this.fska = fska;
         assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
-        // for each bone, which element of the fska bone_animations array applies to this bone
+        // for each bone, which element of the fska bone_animations array applies to it
         if (this.fska != undefined)
         {
             for (let i = 0; i < this.fskl.bones.length; i++)
@@ -61,6 +66,23 @@ export class fmdl_renderer
                     bone_animation_index = this.fska.bone_animations.indexOf(bone_animation);
                 }
                 this.bone_to_bone_animation_indices.push(bone_animation_index);
+            }
+        }
+
+        this.fmaa = fmaa;
+
+        // for each material, which element of the material_animations array applies to it
+        if (this.fmaa != undefined)
+        {
+            for (let i = 0; i < fmdl.fmat.length; i++)
+            {
+                let material_animation_index = -1;
+                const material_animation = this.fmaa.material_animations.find((f) => f.target_material === fmdl.fmat[i].name);
+                if (material_animation != undefined)
+                {
+                    material_animation_index = this.fmaa.material_animations.indexOf(material_animation);
+                }
+                this.material_to_material_animation_indices.push(material_animation_index);
             }
         }
 
@@ -115,12 +137,7 @@ export class fmdl_renderer
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
         let current_bones: FSKL_Bone[] = [];
-        if (this.fska == undefined)
-        {
-            // this model doesn't have an animated skeleton
-            current_bones = this.fskl.bones;
-        }
-        else
+        if (this.fska != undefined)
         {
             // this model has an animated skeleton
             // advance time
@@ -131,6 +148,11 @@ export class fmdl_renderer
             }
             // update each bone's transformations to the current frame
             current_bones = this.animate_skeleton(this.current_animation_frame);
+        }
+        else
+        {
+            // this model doesn't have an animated skeleton
+            current_bones = this.fskl.bones;
         }
 
         // remake smooth rigid matrix
@@ -151,6 +173,14 @@ export class fmdl_renderer
                 // rigid skinned vertices are stored in bone local space, so they are fine as is
                 this.smooth_rigid_matrix_array.push(transformation_matrix);
             }
+        }
+
+        // animate material
+        if (this.fmaa != undefined)
+        {
+            this.current_material_animation_frame += viewerInput.deltaTime * FPS_RATE;
+            this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frame_count;
+
         }
 
         // render all fshp renderers

@@ -24,6 +24,7 @@ export class fshp_renderer
 {
     public bone_index: number;
     public skin_bone_count: number;
+    public fmat_index: number;
     public do_not_render: boolean = false;
 
     private vertex_buffers: GfxBuffer[] = [];
@@ -49,6 +50,7 @@ export class fshp_renderer
     {
         this.bone_index = fshp.bone_index;
         this.skin_bone_count = fshp.skin_bone_count;
+        this.fmat_index = fshp.fmat_index;
 
         // create vertex buffers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
