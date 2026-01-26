@@ -7,9 +7,10 @@ import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatfo
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { Skybox, Level } from "./bin";
+import { Skybox, Level, Moby } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
+import { colorNewFromRGBA, White } from "../Color";
 
 class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -21,7 +22,6 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
-    vec4 u_LevelCenter;
     float u_Time;
     float u_WaterAmp;
     float u_WaterSpeed1;
@@ -42,7 +42,7 @@ void main() {
     v_Color = a_Color;
     v_TexCoord = a_UV;
 
-    vec3 worldPos = a_Position - u_LevelCenter.xyz;
+    vec3 worldPos = a_Position;
     if (a_Color.a < 0.5) {
         float phase = dot(worldPos.xz, vec2(0.03, 0.04));
         float wave = sin(u_Time * u_WaterSpeed1 + phase) * 3.0 + sin(u_Time * u_WaterSpeed2 + phase * 1.7) * 1.5;
@@ -121,11 +121,9 @@ export class LevelRenderer {
     private indexCountTransparent: number;
     private inputLayout: GfxInputLayout;
     private texture: GfxTexture;
-    private levelMin: vec3;
-    private levelMax: vec3;
-    private levelCenter: vec3;
+    public showMobys: boolean;
 
-    constructor(cache: GfxRenderCache, level: Level) {
+    constructor(cache: GfxRenderCache, level: Level, private mobys?: Moby[]) {
         const device = cache.device;
         const atlas = level.atlas;
         
@@ -141,17 +139,6 @@ export class LevelRenderer {
         device.uploadTextureData(this.texture, 0, [atlas.data]);
 
         const { vertices, colors, faces, uvs } = level;
-        const xs = vertices.map(v => v[0]);
-        const ys = vertices.map(v => v[1]);
-        const zs = vertices.map(v => v[2]);
-        this.levelMin = vec3.fromValues(Math.min(...xs), Math.min(...ys), Math.min(...zs));
-        this.levelMax = vec3.fromValues(Math.max(...xs), Math.max(...ys), Math.max(...zs));
-        this.levelCenter = vec3.fromValues(
-            (this.levelMin[0] + this.levelMax[0]) * 0.5,
-            (this.levelMin[1] + this.levelMax[1]) * 0.5,
-            (this.levelMin[2] + this.levelMax[2]) * 0.5,
-        );
-
         const expandedPos: number[] = [];
         const expandedColor: number[] = [];
         const expandedUV: number[] = [];
@@ -239,7 +226,6 @@ export class LevelRenderer {
         const buf = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
         mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
         offs += fillMatrix4x4(buf, offs, scratchMat4a);
-        offs += fillVec4(buf, offs, this.levelCenter[0], this.levelCenter[1], this.levelCenter[2], 0);
         buf[offs++] = viewerInput.time * 0.001 * 2; // u_Time
         buf[offs++] = 1.0; // u_WaterAmp
         buf[offs++] = 0.50; // u_WaterSpeed1
@@ -301,8 +287,45 @@ export class LevelRenderer {
             renderInst.setDrawCount(this.indexCountTransparent);
             renderInstManager.submitRenderInst(renderInst);
         }
+        if (this.showMobys) {
+            this.drawMobys(renderHelper);
+        }
 
         renderInstManager.popTemplate();
+    }
+
+    private drawMobys(renderHelper: GfxRenderHelper): void {
+        if (!this.mobys)
+            return;
+        const scale = 1.0 / 16;
+        for (let i = 0; i < this.mobys.length; i++) {
+            const m = this.mobys[i];
+            const spyroPos = vec3.fromValues(
+                m.x * scale, 
+                m.y * scale, 
+                m.z * scale
+            );
+            const worldPos = vec3.create();
+            vec3.transformMat4(worldPos, spyroPos, noclipSpaceFromSpyroSpace);
+
+            const r = ((m.classId * 97) & 0xFF) / 255;
+            const g = ((m.classId * 57) & 0xFF) / 255;
+            const b = ((m.classId * 17) & 0xFF) / 255;
+            const color = colorNewFromRGBA(r, g, b, 1);
+            renderHelper.debugDraw.drawLocator(worldPos, 50, color);
+
+            // const radians = (m.yaw) * Math.PI * 2.0;
+            // const dirX = Math.sin(radians);
+            // const dirZ = Math.cos(radians);
+            // const forward = vec3.fromValues(dirX, 0, dirZ);
+            // const color2 = colorNewFromRGBA(1, 1, 0, 1); // Yellow for better visibility
+            // renderHelper.debugDraw.drawLocator(worldPos, 10, color2);
+            // renderHelper.debugDraw.drawVector(worldPos, forward, 40, color2);
+
+            const labelPos = vec3.clone(worldPos);
+            labelPos[1] += 100;
+            renderHelper.debugDraw.drawWorldTextRU(`${i} class=${m.classId}`, labelPos, White);
+        }
     }
 
     public destroy(device: GfxDevice) {

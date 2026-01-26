@@ -2,11 +2,12 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildTileAtlas, buildLevel, buildSkybox, parseTileGroups, VRAM, Skybox, Level } from "./bin.js"
+import { buildTileAtlas, buildLevel, buildSkybox, parseTileGroups, VRAM, Skybox, Level, parseMobys, Moby } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 
 /*
 To-do list
@@ -49,16 +50,19 @@ class SpyroRenderer implements SceneGfx {
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox, mobys?: Moby[]) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, level);
+        this.levelRenderer = new LevelRenderer(cache, level, mobys);
         this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+        if (this.levelRenderer.showMobys) {
+            this.renderHelper.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        }
         this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         this.levelRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender();
@@ -79,11 +83,24 @@ class SpyroRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
+        this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
+    }
+
+    public createPanels(): Panel[] {
+        const panel = new Panel();
+        panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        panel.setTitle(RENDER_HACKS_ICON, "Level Options");
+        const showMobysCheckbox = new Checkbox("Show mobys (Spyro 3 only)", false);
+        showMobysCheckbox.onchanged = () => {
+            this.levelRenderer.showMobys = showMobysCheckbox.checked
+        };
+        panel.contents.appendChild(showMobysCheckbox.elem);
+        return [panel];
     }
 
     public destroy(device: GfxDevice): void {
@@ -171,12 +188,14 @@ class SpyroScene3 implements SceneDesc {
         const vram = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_vram.bin`);
         const textures = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.level`);
+        const mobys = this.subLevelID === undefined ? parseMobys(levelFile.createDataView()) : [];
 
         const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const renderer = new SpyroRenderer(device, level, skybox);
+        const renderer = new SpyroRenderer(device, level, skybox, mobys);
 
         return renderer;
     }

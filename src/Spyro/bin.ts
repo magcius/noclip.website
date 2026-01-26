@@ -51,6 +51,14 @@ export interface Skybox {
     faces: SkyboxFace[];
 }
 
+export interface Moby {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    classId: number;
+}
+
 class Header {
     static size = 2+2+2+2 + 1+1+1+1 + 1+1+1+1 + 4;
     y: number; x: number; i0: number; z: number;
@@ -733,6 +741,77 @@ export function parseTileGroups(view: DataView, gameNumber: number): TileGroups 
     }
 
     return { lod };
+}
+
+export function parseMobys(view: DataView): Moby[] {
+    const subPtr = view.getUint32(0x18, true);
+    const subSize = view.getUint32(0x1C, true);
+    const subView = new DataView(view.buffer, subPtr, subSize);
+    
+    let cursor = 48;
+    let bestSection = { cursor: -1, count: 0, score: -1, realObjectCount: -1 };
+
+    while (cursor < subView.byteLength - 8) {
+        const sectionSize = subView.getUint32(cursor, true);
+        if (sectionSize < 4)
+            break;
+
+        if (sectionSize > 0x500 && sectionSize % 4 === 0) {
+            const count = subView.getUint32(cursor + 4, true);
+            
+            if (count > 0 && count < 1000) {
+                let currentScore = 0;
+                let realObjectCount = 0;
+                
+                for (let i = 0; i < Math.min(count, 50); i++) {
+                    const pos = cursor + 8 + (i * 88);
+                    if (pos + 88 > subView.byteLength) break;
+
+                    const classId = subView.getUint8(pos + 0x43);
+                    const x = subView.getInt32(pos + 12, true);
+
+                    if (Math.abs(x) < 500000) {
+                        currentScore++;
+                        if (classId !== 0xFF && classId > 0) {
+                            realObjectCount++;
+                        }
+                    }
+                    if (classId === 0xFF || (classId > 0 && classId < 128)) {
+                        currentScore++;
+                    }
+                }
+
+                if (currentScore > bestSection.score) {
+                    bestSection = { cursor, count, score: currentScore, realObjectCount };
+                } else if (currentScore === bestSection.score && currentScore > 0) {
+                    if (realObjectCount >= bestSection.realObjectCount) {
+                        bestSection = { cursor, count, score: currentScore, realObjectCount };
+                    }
+                }
+            }
+        }
+        cursor += sectionSize;
+    }
+
+    const mobys: Moby[] = [];
+    if (bestSection.cursor !== -1) {
+        for (let i = 0; i < bestSection.count; i++) {
+            const pos = bestSection.cursor + 8 + (i * 88);
+            if (pos + 88 > subView.byteLength)
+                break;
+            const x = subView.getInt32(pos + 12, true);
+            const y = subView.getInt32(pos + 16, true);
+            const z = subView.getInt32(pos + 20, true);
+            if (x === 0 && y === 0 && z === 0)
+                continue;
+            mobys.push({
+                x, y, z,
+                yaw: 0,
+                classId: subView.getUint8(pos + 0x36)
+            });
+        }
+    }
+    return mobys;
 }
 
 function readTile(view: DataView, offs: number): Tile {
