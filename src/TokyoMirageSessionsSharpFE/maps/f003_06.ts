@@ -1,25 +1,29 @@
 // f003_06.ts
 // Café Seiren
 
-import { get_animations_from_apak, get_fres_from_apak } from "../apak.js";
+import { get_animations_from_apak, get_file_by_name, get_fres_from_apak, parseAPAK } from "../apak.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./../gimmick.js";
 import { vec3 } from "gl-matrix";
 import { MapLayout } from "./../maplayout.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
+import { parseBFRES } from "../bfres/bfres_switch.js";
 
 export async function create_f003_06_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 
     const ilyana_model_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/nonplayer/np122/skin/01/model.apak", "np122_01.bfres", data_fetcher);
-    const ilyana_animation_fres = await get_animations_from_apak("TokyoMirageSessionsSharpFE/nonplayer/np122/skin/01/model_common.apak", data_fetcher);
+    const ilyana_animation_apak_data = await data_fetcher.fetchData("TokyoMirageSessionsSharpFE/nonplayer/np122/skin/01/model_common.apak");
+    const ilyana_animation_apak = parseAPAK(ilyana_animation_apak_data);
+    const ilyana_animation_bfres = get_file_by_name(ilyana_animation_apak, "fd_idle_00.anm");
+    let ilyana_animation_fres;
 
-    // for (let i = 0; i < ilyana_animation_fres.length; i++)
-    // {
-    //     console.log(`${i} ${ilyana_animation_fres[i].fska[0].name}`);
-    // }
+    if (ilyana_animation_bfres != undefined)
+    {
+        ilyana_animation_fres = parseBFRES(ilyana_animation_bfres);
+    }
 
     gimmicks.push
     (
@@ -31,7 +35,7 @@ export async function create_f003_06_gimmicks(layout: MapLayout, data_fetcher: D
             ilyana_model_fres,
             device,
             new GfxRenderHelper(device),
-            ilyana_animation_fres[34], // idle
+            ilyana_animation_fres,
         )
     );
 

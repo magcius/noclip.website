@@ -60,113 +60,7 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
 
             const curve_array_offset = view.getUint32(bone_animation_entry_offset + 0x8, true);
             const curve_count = view.getUint8(bone_animation_entry_offset + 0x2E);
-            let curves: Curve[] = [];
-            let curve_entry_offset = curve_array_offset;
-            for (let curve_index = 0; curve_index < curve_count; curve_index++)
-            {                
-                const flags = view.getUint16(curve_entry_offset + 0x10, true);
-                const frame_type = flags & 0x3;
-                const key_type = (flags >> 0x2) & 0x3;
-                const curve_type: CurveType = (flags >> 0x4) & 0x7;
-                // currently only support cubic
-                assert(curve_type == CurveType.CubicSingle);
-                // console.log(`frame ${frame_type} key ${key_type} curve ${curve_type}`);
-
-                const key_count = view.getUint16(curve_entry_offset + 0x12, true);
-
-                const start_frame = view.getFloat32(curve_entry_offset + 0x18, true);
-                const end_frame = view.getFloat32(curve_entry_offset + 0x1C, true);
-
-                // used to convert the stored values to the actual value
-                // this allows more granularity
-                const data_scale = view.getFloat32(curve_entry_offset + 0x20, true);
-                const data_offset = view.getFloat32(curve_entry_offset + 0x24, true);
-
-                const frame_array_offset = view.getUint32(curve_entry_offset, true);
-                let frames: number[] = [];
-                let frame_entry_offset = frame_array_offset;
-                for (let i = 0; i < key_count; i++)
-                {
-                    switch(frame_type)
-                    {
-                        case 0:
-                            // f32
-                            frames.push(view.getFloat32(frame_entry_offset, true));
-                            frame_entry_offset += 0x4;
-                            break;
-
-                        case 1:
-                            // 16 bit fixed point
-                            let frame = view.getInt16(frame_entry_offset, true);
-                            frame = frame / 32;
-                            frames.push(frame);
-                            frame_entry_offset += 0x2;
-                            break;
-
-                        case 2:
-                            // byte
-                            // TODO: is this int or uint?
-                            frames.push(view.getInt8(frame_entry_offset));
-                            frame_entry_offset += 0x1;
-                            break;
-
-                        default:
-                            console.error(`unknown frame type in bone ${bone_name}`);
-                            throw("whoops");
-                    }
-                }
-
-                const key_array_offset = view.getUint32(curve_entry_offset + 0x8, true);
-                let keys: vec4[] = [];
-                let key_entry_offset = key_array_offset;
-                for (let i = 0; i < key_count; i++)
-                {
-                    // keyframes store four coefficients that can be used to interpolate a value
-                    let constant: number;
-                    let linear: number;
-                    let square: number;
-                    let cubic: number;
-                    switch(key_type)
-                    {
-                        case 0:
-                            // f32
-                            // only constant has data_offset added to it
-                            constant = view.getFloat32(key_entry_offset + 0x0, true) * data_scale + data_offset;
-                            linear = view.getFloat32(key_entry_offset + 0x4, true) * data_scale;
-                            square = view.getFloat32(key_entry_offset + 0x8, true) * data_scale;
-                            cubic = view.getFloat32(key_entry_offset + 0xC, true) * data_scale;
-                            key_entry_offset += 0x10;
-                            break;
-
-                        case 1:
-                            // s16
-                            constant = view.getInt16(key_entry_offset + 0x0, true) * data_scale + data_offset;
-                            linear = view.getInt16(key_entry_offset + 0x2, true) * data_scale;
-                            square = view.getInt16(key_entry_offset + 0x4, true) * data_scale;
-                            cubic = view.getInt16(key_entry_offset + 0x6, true) * data_scale;
-                            key_entry_offset += 0x8;
-                            break;
-
-                        case 2:
-                            // s8
-                            constant = view.getInt8(key_entry_offset + 0x0) * data_scale + data_offset;
-                            linear = view.getInt8(key_entry_offset + 0x1) * data_scale;
-                            square = view.getInt8(key_entry_offset + 0x2) * data_scale;
-                            cubic = view.getInt8(key_entry_offset + 0x3) * data_scale;
-                            key_entry_offset += 0x4;
-                            break;
-
-                        default:
-                            console.error(`unknown key type in bone ${bone_name}`);
-                            throw("whoops");
-                    }
-
-                    keys.push(vec4.fromValues(cubic, square, linear, constant));
-                }
-
-                curves.push({ curve_type, start_frame, end_frame, frames, keys });
-                curve_entry_offset += CURVE_ENTRY_SIZE;
-            }
+            let curves: Curve[] = parse_curves(buffer, curve_array_offset, curve_count);
 
             bone_animations.push({ name: bone_name, flags, initial_values, curves });
             bone_animation_entry_offset += BONE_ANIMATION_ENTRY_SIZE;
@@ -182,6 +76,123 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
 const FSKA_ENTRY_SIZE = 0x78; // TODO: not sure this is correct
 const BONE_ANIMATION_ENTRY_SIZE = 0x38;
 const CURVE_ENTRY_SIZE = 0x30;
+
+/**
+ * reads from a curve array in a bfres file and returns an array of Curve objects
+ * @param buffer the bfres file
+ * @param offset offset of the curve array
+ * @param count number of curves in the array
+ */
+export function parse_curves(buffer: ArrayBufferSlice, offset: number, count: number): Curve[]
+{
+    const view = buffer.createDataView();
+    let curves: Curve[] = [];
+    let curve_entry_offset = offset;
+    for (let curve_index = 0; curve_index < count; curve_index++)
+    {                
+        const flags = view.getUint16(curve_entry_offset + 0x10, true);
+        const frame_type = flags & 0x3;
+        const key_type = (flags >> 0x2) & 0x3;
+        const curve_type: CurveType = (flags >> 0x4) & 0x7;
+        // currently only support cubic
+        assert(curve_type == CurveType.CubicSingle);
+        const key_count = view.getUint16(curve_entry_offset + 0x12, true);
+        const start_frame = view.getFloat32(curve_entry_offset + 0x18, true);
+        const end_frame = view.getFloat32(curve_entry_offset + 0x1C, true);
+
+        // used to convert the stored values to the actual value
+        const data_scale = view.getFloat32(curve_entry_offset + 0x20, true);
+        const data_offset = view.getFloat32(curve_entry_offset + 0x24, true);
+
+        const frame_array_offset = view.getUint32(curve_entry_offset, true);
+        let frames: number[] = [];
+        let frame_entry_offset = frame_array_offset;
+        for (let i = 0; i < key_count; i++)
+        {
+            switch(frame_type)
+            {
+                case 0:
+                    // f32
+                    frames.push(view.getFloat32(frame_entry_offset, true));
+                    frame_entry_offset += 0x4;
+                    break;
+
+                case 1:
+                    // 16 bit fixed point
+                    let frame = view.getInt16(frame_entry_offset, true);
+                    frame = frame / 32;
+                    frames.push(frame);
+                    frame_entry_offset += 0x2;
+                    break;
+
+                case 2:
+                    // byte
+                    // TODO: is this int or uint?
+                    frames.push(view.getInt8(frame_entry_offset));
+                    frame_entry_offset += 0x1;
+                    break;
+
+                default:
+                    console.error(`unknown frame type`);
+                    throw("whoops");
+            }
+        }
+
+        const key_array_offset = view.getUint32(curve_entry_offset + 0x8, true);
+        let keys: vec4[] = [];
+        let key_entry_offset = key_array_offset;
+        for (let i = 0; i < key_count; i++)
+        {
+            // keyframes store four coefficients that can be used to interpolate a value
+            // see getPointCubic() in Spline.ts
+            let constant: number;
+            let linear: number;
+            let square: number;
+            let cubic: number;
+            switch(key_type)
+            {
+                case 0:
+                    // f32
+                    // only constant has data_offset added to it
+                    constant = view.getFloat32(key_entry_offset + 0x0, true) * data_scale + data_offset;
+                    linear = view.getFloat32(key_entry_offset + 0x4, true) * data_scale;
+                    square = view.getFloat32(key_entry_offset + 0x8, true) * data_scale;
+                    cubic = view.getFloat32(key_entry_offset + 0xC, true) * data_scale;
+                    key_entry_offset += 0x10;
+                    break;
+
+                case 1:
+                    // s16
+                    constant = view.getInt16(key_entry_offset + 0x0, true) * data_scale + data_offset;
+                    linear = view.getInt16(key_entry_offset + 0x2, true) * data_scale;
+                    square = view.getInt16(key_entry_offset + 0x4, true) * data_scale;
+                    cubic = view.getInt16(key_entry_offset + 0x6, true) * data_scale;
+                    key_entry_offset += 0x8;
+                    break;
+
+                case 2:
+                    // s8
+                    constant = view.getInt8(key_entry_offset + 0x0) * data_scale + data_offset;
+                    linear = view.getInt8(key_entry_offset + 0x1) * data_scale;
+                    square = view.getInt8(key_entry_offset + 0x2) * data_scale;
+                    cubic = view.getInt8(key_entry_offset + 0x3) * data_scale;
+                    key_entry_offset += 0x4;
+                    break;
+
+                default:
+                    console.error(`unknown key type`);
+                    throw("whoops");
+            }
+
+            keys.push(vec4.fromValues(cubic, square, linear, constant));
+        }
+
+        curves.push({ curve_type, start_frame, end_frame, frames, keys });
+        curve_entry_offset += CURVE_ENTRY_SIZE;
+    }
+
+    return curves;
+}
 
 export interface FSKA
 {
