@@ -1170,6 +1170,7 @@ const sceneDescs = [
     new DemoDesc("sea", "Stolen Sister", [44], "stolensister.stb", 9, 0, [0.0, 0.0, 20000.0], 0, 0, 0), // ?t=701
     new DemoDesc("LinkRM", "Grandma Gives Link His Shield", [0], "get_shield.stb", 9, 0, [0, 0, 0], 0, 201, 0), // ?t=887s
     new DemoDesc("sea", "Departure", [44], "departure.stb", 10, 0, [-200000.0, 0.0, 320000.0], 0.0, 204, 0), // ?t=929
+    new DemoDesc("Hyrule", "Hyrule Barrier Break", [0], "seal.stb", 4, 1, [0.0, 0.0, 0.0], 0, 0, 0), // ?t=6046s
 
     "Outset Island",
     new SceneDesc("sea_T", "Title Screen", [44]),
