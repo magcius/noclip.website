@@ -40,6 +40,7 @@ import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_Y
 import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { parseTParagraphData, TParseData_fixed } from "../Common/JSYSTEM/JStudio.js";
 import { AABB } from "../Geometry.js";
+import { d_a_noclip_legacy } from "./LegacyActor.js";
 
 // Framework'd actors
 
@@ -2411,6 +2412,9 @@ class d_a_sie_flag extends fopAc_ac_c {
 
         this.set_mtx();
 
+        if (!this.cullingCheck(globals.camera))
+            return;
+
         // TODO(jstpierre): addCalcPos2 windvec
         vec3.add(scratchVec3a, this.pos, this.flagOffset);
         dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
@@ -2496,6 +2500,9 @@ class d_a_tori_flag extends fopAc_ac_c {
         super.execute(globals, deltaTimeFrames);
 
         this.set_mtx();
+
+        if (!this.cullingCheck(globals.camera))
+            return;
 
         vec3.add(scratchVec3a, this.pos, this.flagOffset);
         dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
@@ -2900,6 +2907,9 @@ class d_a_majuu_flag extends fopAc_ac_c {
     }
 
     private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
+        if (!this.cullingCheck(globals.camera))
+            return;
+
         this.wave += this.waveSpeed * deltaTimeFrames;
         const windSpeed = lerp(this.windSpeed1, this.windSpeed2, Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
@@ -3250,9 +3260,9 @@ function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T
 }
 
 function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
-    actor.curMode = mode;
-    const func = mode_tbl[actor.curMode * 2 + 0];
+    const func = mode_tbl[mode * 2 + 0];
     func.call(actor, globals, 0);
+    actor.curMode = mode;
 }
 
 type dPathMoveCB = (dst: vec3, curr: dPath__Point, next: dPath__Point, speed: number) => boolean;
@@ -5136,10 +5146,10 @@ enum LinkDemoMode {
     Wait = 0x01,
     Walk = 0x02,
     Dash = 0x03,
-    SetPosRotEquip = 0x04,
+    InitWait = 0x04,
     WaitTurn = 0x05,
-    SetRot = 0x2B,
-    SetPosRot = 0x2C,
+    CutRoll = 0x2B,
+    PosInit = 0x2C,
     MAX = 0x4B,
 
     Tool = 0x200,
@@ -5228,7 +5238,6 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
     public curMode = d_a_py_lk_mode.wait;
-    public prevMode = d_a_py_lk_mode.wait;
 
     private model: J3DModelInstance;
     private modelSwordHilt: J3DModelInstance;
@@ -5252,6 +5261,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
     private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
     private vel = vec3.create(); // TODO: This should be part of fopAc_ac_c
+    private targetSpeed: number = 0;
+    private maxSpeed: number = 17;
+    private shouldChangeMode = false;
 
     private frontFoot: number = 2;
     private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
@@ -5266,6 +5278,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         this.procUnkInit, this.procUnk,
         this.procWaitInit, this.procWait,
         this.procToolInit, this.procTool,
+        this.procMoveInit, this.procMove,
     ];
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
@@ -5361,6 +5374,10 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
             setLightTevColorType(globals, this.modelKatsura, this.tevStr, globals.camera);
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager);
+        } else {
+            this.model.setShapeVisible(LkModelShape.Hat, true);
+            this.model.setShapeVisible(LkModelShape.Scabbard, globals.scnPlay.demo.getName() !== 'tale');
+            this.model.setShapeVisible(LkModelShape.Buckle, true);
         }
 
         if (this.equippedItem === LkEquipItem.Sword) {
@@ -5471,6 +5488,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         let targetPos: ReadonlyVec3 = this.pos;
         let targetRot: number = this.rot[1];
+        let demoMode = LinkDemoMode.Wait;
 
         const enable = demoActor.checkEnable(0xFF);
         if (enable & EDemoActorFlags.HasPos) { targetPos = demoActor.translation; }
@@ -5479,7 +5497,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
         // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
         if (enable & EDemoActorFlags.HasAnim) {
-            this.demoMode = demoActor.nextBckId;
+            demoMode = demoActor.nextBckId;
         }
 
         if (enable & EDemoActorFlags.HasShape) {
@@ -5491,14 +5509,14 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
-        switch (this.demoMode) {
-            case LinkDemoMode.SetPosRotEquip:
-            case LinkDemoMode.SetPosRot:
+        switch (demoMode) {
+            case LinkDemoMode.InitWait:
+            case LinkDemoMode.PosInit:
                 vec3.copy(this.pos, targetPos);
                 this.rot[1] = targetRot;
                 break;
 
-            case LinkDemoMode.SetRot: {
+            case LinkDemoMode.CutRoll: {
                 debugger;
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
@@ -5509,33 +5527,70 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             case LinkDemoMode.Walk:
             case LinkDemoMode.Dash: {
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+
+                if (this.targetSpeed / this.maxSpeed < 0.5) {
+                    demoMode = LinkDemoMode.Walk;
+                }
+
+                const distXZ = moveVec[0] * moveVec[0] + moveVec[2] * moveVec[2];
+                if (distXZ < 100.0 || (distXZ < 2500.0 && this.targetSpeed < 0.001)) {
+                    demoMode = LinkDemoMode.Wait;
+                    this.targetSpeed = 0;
+                } else if ((demoMode === LinkDemoMode.Walk && distXZ < 400.0) || distXZ < 2500.0) {
+                    this.targetSpeed = 12;
+                } else {
+                    this.targetSpeed = this.maxSpeed;
+                }
+
+                // Immediately after setDemoData(), setStickData() is called. If the mode is Dash or Walk, set the stick to 1.0
+                // This value is used in procMove() to determine speed, which determines the blend of Walk vs Dash to play.
+
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
                 this.rot[1] = newRot;
-                this.setSingleMoveAnime(globals, (this.demoMode === LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
                 break;
             }
         }
 
+        this.demoMode = demoMode;
+
         return true;
     }
+
+    private checkNextMode(globals: dGlobals): boolean {
+        if (Math.abs(this.targetSpeed) <= 0.001) {
+            // Handle WaitTurn
+            return this.procWaitInit(globals);
+        } else {
+            return this.procMoveInit(globals);
+        }
+    };
 
     private changeDemoProc(globals: dGlobals): boolean {
         assert(this.demoMode < LinkDemoMode.MAX || this.demoMode === LinkDemoMode.Tool)
 
         switch (this.demoMode) {
             case LinkDemoMode.None: return false;
-            case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
-            case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+            case LinkDemoMode.Tool:
+                this.shouldChangeMode = true;
+                modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool);
+                return true;
+
+            case LinkDemoMode.InitWait: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+
+            case LinkDemoMode.Wait:
+            case LinkDemoMode.Walk:
+            case LinkDemoMode.Dash:
+                if (this.shouldChangeMode) {
+                    this.shouldChangeMode = false;
+                    this.checkNextMode(globals);
+                }
+                return true;
 
             default:
-                if (this.prevMode !== d_a_py_lk_mode.unk) {
-                    console.warn('Unsupported demo mode:', this.demoMode);
-                    modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.unk);
-                }
+                console.warn('Unsupported demo mode:', this.demoMode);
+                modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait);
                 break;
         }
-
-        this.prevMode = this.curMode;
         return true;
     }
 
@@ -5623,6 +5678,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         const moveVec = vec3.sub(scratchVec3e, toePos[this.frontFoot], this.footData[this.frontFoot].toePos);
         moveVec[1] = 0;
         let moveVel = vec3.length(moveVec);
+
+        // TODO: Blend between foot movement and targetSpeed
+        moveVel *= this.targetSpeed / this.maxSpeed;
 
         // Adjust speed when on slopes
         let groundAngle = 0;
@@ -5801,7 +5859,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             }
         } else {
             // The demo anim archive is toggled based on if Aryll has been rescued. See dComIfGp_getLkDemoAnmArchive() 
-            const arcName = (globals.scnPlay.linkDemoAnmNo === 1)  ? 'LkD01' : 'LkD00';
+            const arcName = (globals.scnPlay.linkDemoAnmNo === 1) ? 'LkD01' : 'LkD00';
             const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, anmBckId);
             this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
             this.anmBck.frameCtrl.setFrame(anmFrame);
@@ -5827,13 +5885,41 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 
     private procWaitInit(globals: dGlobals) {
-        if (this.prevMode !== d_a_py_lk_mode.wait) {
+        if (this.curMode === d_a_py_lk_mode.wait) {
+            return false;
+        }
+
+        this.setSingleMoveAnime(globals, LkAnim.WAITS);
+        return true;
+    }
+
+    private procWait(globals: dGlobals) {
+        const modeChanged = this.checkNextMode(globals);
+        if (!modeChanged) {
+            // Wait animations
             this.setSingleMoveAnime(globals, LkAnim.WAITS);
         }
     }
 
-    private procWait() {
+    private procMoveInit(globals: dGlobals) {
+        // setBlendMoveAnime(m_HIO->mBasic.m.field_0xC);
+        this.setSingleMoveAnime(globals, LkAnim.WALK);
+        return true;
+    }
 
+    private procMove(globals: dGlobals) {
+        const modeChanged = this.checkNextMode(globals);
+        if (!modeChanged) {
+            if (this.demoMode === LinkDemoMode.Walk) {
+                this.targetSpeed = Math.min(this.targetSpeed, this.maxSpeed * 0.5);
+            }
+
+            // TODO: setBlendMoveAnime(-1.0f) blends between walk and dash based on speed.
+            if (this.demoMode === LinkDemoMode.Walk)
+                this.setSingleMoveAnime(globals, LkAnim.WALK);
+            else
+                this.setSingleMoveAnime(globals, LkAnim.DASH);
+        }
     }
 
     private setSwordModel(globals: dGlobals) {
@@ -7135,6 +7221,326 @@ class d_a_demo00 extends fopAc_ac_c {
     }
 }
 
+class d_a_obj_pirateship extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_obj_pirateship;
+
+    public model: J3DModelInstance;
+
+    private modelWheel: mDoExt_McaMorf;
+    private idDoor: number = -1;
+    private actDoor: d_a_noclip_legacy | null = null;
+
+    private static arcName = `Kaizokusen`;
+    private static arcNameWheel = `Kaji`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status = dComIfG_resLoad(globals, d_a_obj_pirateship.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, d_a_obj_pirateship.arcNameWheel);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_obj_pirateship.arcName, 0xE);
+        this.model = new J3DModelInstance(modelData);
+
+        const shipCfgIdx = (this.parameters >> 0x18) & 0xFF;
+        switch (shipCfgIdx) {
+            case 0: this.piratesCreate(globals, [0, 1, 2, 3]); break;
+            case 1: this.piratesCreate(globals, [0, 1, 4, 5, 6]); /* TODO: this.CreateWave() */; break;
+            case 2: this.piratesCreate(globals, [1, 7, 8, 9, 10]); break;
+            case 4: this.piratesCreate(globals, [0, 1, 5]); break;
+        };
+
+        this.set_mtx();
+
+        this.partsCreate(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        // GndChk
+
+        if (!this.demo_move(globals, deltaTimeFrames)) {
+            // PathMove
+        }
+
+        // Event handling
+
+        if (!this.actDoor) this.actDoor = fopAcIt_JudgeByID<d_a_noclip_legacy>(globals.frameworkGlobals, this.idDoor);
+
+        if (this.modelWheel) {
+            this.modelWheel.play(deltaTimeFrames);
+        }
+
+        this.set_mtx();
+        // SetWave
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
+
+        if (this.modelWheel) {
+            const wheelPos = mat4.getTranslation(scratchVec3a, this.modelWheel.model.modelMatrix);
+            settingTevStruct(globals, LightType.Actor, wheelPos, this.tevStr);
+            setLightTevColorType(globals, this.modelWheel.model, this.tevStr, globals.camera);
+            this.modelWheel.entryDL(globals, renderInstManager);
+        }
+    }
+
+    private partsCreate(globals: dGlobals): void {
+        // TODO: Sail
+
+        // Pirate flag
+        let prm: fopAcM_prm_class = {
+            parameters: 0, pos: this.pos, roomNo: this.tevStr.roomNo, rot: this.rot, scale: Vec3One,
+            subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+        };
+        fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_a_pirate_flag, prm);
+
+        const shipCfgIdx = (this.parameters >> 0x18) & 0xFF;
+
+        // Catapult (this must remain a separate actor because demos need to reference it)
+        if (shipCfgIdx !== 3) {
+            const pos = vec3.transformMat4(vec3.create(), vec3.set(scratchVec3a, 0, 700, 850), this.model.modelMatrix);
+            const prm: fopAcM_prm_class = {
+                parameters: 0, pos, roomNo: this.tevStr.roomNo, rot: this.rot, scale: Vec3One,
+                subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+            };
+            fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_a_obj_tousekiki, prm);
+        }
+
+        // Steering Wheel
+        if (shipCfgIdx !== 3) {
+            const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_obj_pirateship.arcNameWheel, 0x11);
+            const anim = globals.resCtrl.getObjectRes(ResType.Bck, d_a_obj_pirateship.arcNameWheel, 0xE);
+            this.modelWheel = new mDoExt_McaMorf(modelData, null, null, anim, LoopMode.Repeat, 1.0, 0, -1);
+        }
+
+        // Door 
+        const doorId = (this.parameters >> 8) & 0xFF;
+        const doorParams = doorId === 0 ? 0x101000FF : 0x101004FF;
+        const pos = vec3.transformMat4(vec3.create(), vec3.set(scratchVec3a, 0, 400, 475), this.model.modelMatrix);
+        const rot = vec3.fromValues(0xFFF, this.rot[1] + 0x8000, 0);
+        prm = {
+            parameters: doorParams, pos, roomNo: this.tevStr.roomNo, rot, scale: Vec3One,
+            subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+        };
+        this.idDoor = assertExists(fpcSCtRq_Request(globals.frameworkGlobals, null, 0x0133, prm));
+    }
+
+    private piratesCreate(globals: dGlobals, pirateIdxs: number[]): void {
+        const pirateData: [string, number, vec3, number][] = [
+            ["P2a", 0xFFFFFF00, vec3.fromValues(135.5, 2200.0, 198.0), 0x2900],
+            ["P2c", 0xFFFFFF02, vec3.fromValues(275.0, 400.0, 216.0), 0x4D00],
+            ["P1b", 0xF0100000, vec3.fromValues(-150.0, 700.0, 950.0), 0x4000],
+            ["P1a", 0xF0000000, vec3.fromValues(150.0, 700.0, 950.0), 0xC000],
+            ["Zl1", 0xFFFFFF04, vec3.fromValues(-200.0, 680.0, -875.0), 0],
+            ["P1b", 0xF0100002, vec3.fromValues(163.0, 700.0, 822.0), 0xC000],
+            ["P1a", 0xF0000002, vec3.fromValues(0.0, 750.0, -860.0), 0],
+            ["Zl1", 0xFFFFFF03, vec3.fromValues(125.0, 2200.0, 100.0), 0],
+            ["P2a", 0xFFFFFF00, vec3.fromValues(-200.0, 680.0, -875.0), 0x0000],
+            ["P1b", 0xF0100003, vec3.fromValues(215.0, 700.0, 765.0), 0x3C00],
+            ["P1a", 0xF0000003, vec3.fromValues(275.0, 740.0, -1145.0), 0x1800],
+        ];
+        for (let i = 0; i < pirateIdxs.length; i++) {
+            const p = pirateIdxs[i];
+            this.pirateCreate(globals, ...pirateData[p]);
+        }
+    }
+
+    private pirateCreate(globals: dGlobals, name: string, parameters: number, posOffset: vec3, rotYOffset: number) {
+        const objName = assertExists(globals.dStage_searchName(name));
+        vec3.rotateY(posOffset, posOffset, Vec3Zero, cM_s2rad(this.rot[1]));
+        const pos = vec3.add(posOffset, this.pos, posOffset);
+        const rot = vec3.fromValues(this.rot[0], this.rot[1] + rotYOffset, this.rot[2]);
+
+        // Make sure the actors are created on the same noclip roomLayer, so they only appear on the same layer as the ship
+        const prm: fopAcM_prm_class = {
+            parameters, pos, roomNo: this.tevStr.roomNo, rot, scale: Vec3One, subtype: objName.subtype,
+            parentPcId: this.processId, enemyNo: -1, gbaName: objName.gbaName, layer: this.roomLayer
+        };
+        fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, prm);
+    };
+
+    private set_mtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
+
+        if (this.actDoor) {
+            vec3.transformMat4(this.actDoor.pos, vec3.set(scratchVec3a, 0, 400, 475), this.model.modelMatrix);
+            vec3.set(this.actDoor.rot, 0, this.rot[1] + 0x8000, 0);
+            const dst = this.actDoor.objectRenderers[0].modelMatrix;
+            MtxTrans(this.actDoor.pos, false, dst);
+            mDoMtx_ZXYrotM(dst, this.actDoor.rot);
+        }
+
+        if (this.modelWheel) {
+            const offset = vec3.fromValues(0.0, 740.0, -858.0);
+            const wheelPos = vec3.transformMat4(offset, offset, this.model.modelMatrix);
+            MtxTrans(wheelPos, false, this.modelWheel.model.modelMatrix);
+            mDoMtx_ZXYrotM(this.modelWheel.model.modelMatrix, this.rot);
+            this.modelWheel.calc();
+        }
+    }
+
+    private demo_move(globals: dGlobals, deltaTimeFrames: number): boolean {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor) {
+            return false;
+        }
+        dDemo_setDemoData(globals, deltaTimeFrames, this, EDemoActorFlags.HasPos | EDemoActorFlags.HasRot);
+        return true;
+    }
+}
+
+class d_a_obj_tousekiki extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_obj_tousekiki;
+
+    private morf: mDoExt_McaMorf;
+    private pirateShip: d_a_obj_pirateship;
+
+    private static arcName = `Touseki`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status = dComIfG_resLoad(globals, d_a_obj_tousekiki.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.pirateShip = assertExists(fopAcIt_JudgeByID<d_a_obj_pirateship>(globals.frameworkGlobals, this.parentPcId));
+
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_obj_tousekiki.arcName, 0x8);
+        const anm = globals.resCtrl.getObjectRes(ResType.Bck, d_a_obj_tousekiki.arcName, 0x5);
+        this.morf = new mDoExt_McaMorf(modelData, null, null, anm, LoopMode.Once, 1.0, 0, -1);
+        // this.morf.frameCtrl.setFrame(this.morf.frameCtrl.endFrame - 1);
+
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.demo_move(globals);
+        this.set_mtx();
+        this.morf.calc();
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
+        this.morf.entryDL(globals, renderInstManager, globals.dlst.bg);
+    }
+
+    private set_mtx(): void {
+        MtxTrans(this.pos, false, this.morf.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.morf.model.modelMatrix, this.rot);
+    }
+
+    private demo_move(globals: dGlobals): void {
+
+        // Transform offset by ship's base transform
+        const touseki_offset = vec3.fromValues(0.0, 700.0, 850.0);
+        transformVec3Mat4w1(this.pos, this.pirateShip.model.modelMatrix, touseki_offset);
+
+        const channelMask = EDemoActorFlags.HasAnimFrame | EDemoActorFlags.HasAnim | EDemoActorFlags.HasRot;
+        const isDemo = dDemo_setDemoData(globals, 1.0, this, channelMask, this.morf, d_a_obj_tousekiki.arcName);
+
+        if (!isDemo) {
+            this.rot[1] = this.pirateShip.rot[1];
+        }
+    }
+}
+
+class d_a_pirate_flag extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_pirate_flag;
+
+    private pirateShip: d_a_obj_pirateship;
+    private modelMatrix = mat4.create();
+    private cloth: dCloth_packet_c;
+    private windvec = vec3.create();
+
+    private static arcName = `Kaizokusen`;
+    private static arcNameCloth = `Cloth`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status: cPhs__Status;
+
+        status = dComIfG_resLoad(globals, d_a_pirate_flag.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, d_a_pirate_flag.arcNameCloth);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.pirateShip = assertExists(fopAcIt_JudgeByID<d_a_obj_pirateship>(globals.frameworkGlobals, this.parentPcId));
+
+        const resCtrl = globals.resCtrl;
+        dKy_tevstr_init(this.tevStr, this.roomNo);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, d_a_pirate_flag.arcNameCloth, 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, d_a_pirate_flag.arcName, 0x9);
+        this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 800.0, 400.0, this.tevStr);
+
+        vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
+
+        this.cullMtx = mat4.create();
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(globals.camera))
+            return;
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        renderInstManager.setCurrentList(globals.dlst.main[0]);
+        this.cloth.cloth_draw(globals, renderInstManager);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
+
+        this.set_mtx();
+
+        // TODO(jstpierre): addCalcPos2 windvec
+        dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
+
+        // noclip modification: This actor implements its own cloth simulation. For simplicity, we use dCloth_packet_c with equivalent parameters.
+        this.cloth.drag = 0.899;
+        this.cloth.ripple = 900;
+        this.cloth.spring = 0.45;
+        this.cloth.gravity = -3.5;
+        this.cloth.waveSpeed = 0x040;
+        this.cloth.windSpeed = 10.0;
+        this.cloth.windSpeedWave = 3.0;
+        this.cloth.setGlobalWind(this.windvec);
+        this.cloth.cloth_move(deltaTimeFrames);
+    }
+
+    private set_mtx(): void {
+        const flagOffset = vec3.set(scratchVec3a, 0.0, 3200.0, 100.0);
+        vec3.transformMat4(this.pos, flagOffset, this.pirateShip.model.modelMatrix);
+
+        MtxTrans(this.pos, false, this.modelMatrix);
+        mDoMtx_ZXYrotM(this.modelMatrix, this.rot);
+        MtxTrans(vec3.set(scratchVec3a, 0, 0, -30), true, this.modelMatrix);
+        this.cloth.setMtx(this.modelMatrix);
+
+        // This actor has a frozen bounding box, but it is very incorrect. Scale it back to a proper bounding volume.
+        mat4.scale(this.cullMtx!, this.modelMatrix, vec3.set(scratchVec3a, 22, -4, 22));
+    }
+
+    public override delete(globals: dGlobals): void {
+        this.cloth.destroy(globals.modelCache.device);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -7172,5 +7578,8 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_title);
     R(d_a_bridge);
     R(d_a_demo00);
+    R(d_a_obj_pirateship);
+    R(d_a_obj_tousekiki);
+    R(d_a_pirate_flag);
 }
 

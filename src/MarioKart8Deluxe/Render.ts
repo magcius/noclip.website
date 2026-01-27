@@ -128,7 +128,7 @@ class TurboUBER extends DeviceProgram {
     public static a_Orders = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_n0', '_t0' ];
     public static a_Types = [ 'vec3', 'vec4', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4' ];
 
-    public static s_Orders = ['_a0', '_s0', '_n0', '_n1', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3', '_t0' ];
+    public static s_Orders = ['_a0', '_s0', '_n0', '_n1', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3', '_t0'];
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -139,7 +139,7 @@ class TurboUBER extends DeviceProgram {
         super();
 
         this.name = this.fmat.name;
-        assert(this.fmat.samplerInfo.length <= 8);
+        // assert(this.fmat.samplerInfo.length <= 8);
 
         this.frag = this.generateFrag();
     }
@@ -936,7 +936,7 @@ function getRenderInfoBoolean(renderInfo: FMAT_RenderInfo): boolean {
         throw "whoops";
 }
 
-function translateCullMode(fmat: FMAT): GfxCullMode {
+function translateCullMode(fmat: FMAT): GfxCullMode | null {
     const display_face = getRenderInfoSingleString(fmat.renderInfo.get('gsys_render_state_display_face')!);
     if (display_face === 'front')
         return GfxCullMode.Back;
@@ -944,6 +944,8 @@ function translateCullMode(fmat: FMAT): GfxCullMode {
         return GfxCullMode.Front;
     else if (display_face === 'both')
         return GfxCullMode.None;
+    else if (display_face === 'none')
+        return null;
     else
         throw "whoops";
 }
@@ -1087,6 +1089,7 @@ class FMATInstance {
 
     public inColorPass: boolean = false;
     public inShadowMap: boolean = false;
+    public visible = true;
 
     // Shader params, should maybe be generic?
     private texCoordSRT0 = new TexSRT();
@@ -1149,10 +1152,15 @@ class FMATInstance {
         this.gfxProgram = cache.createProgram(this.program);
 
         // Render flags.
+        let cullMode = translateCullMode(fmat);
+        if (cullMode === null) {
+            this.visible = false;
+            cullMode = GfxCullMode.Back;
+        }
         this.megaStateFlags = {
-            cullMode:       translateCullMode(fmat),
-            depthCompare:   reverseDepthForCompareMode(translateDepthCompare(fmat)),
-            depthWrite:     translateDepthWrite(fmat),
+            cullMode: cullMode,
+            depthCompare: reverseDepthForCompareMode(translateDepthCompare(fmat)),
+            depthWrite: translateDepthWrite(fmat),
         };
 
         const blendMode = getRenderInfoSingleString(fmat.renderInfo.get('gsys_render_state_blend_mode')!);
@@ -1552,7 +1560,7 @@ class FSHPInstance {
     }
 
     public prepareToRender(globals: TurboRenderGlobals, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
+        if (!this.visible || !this.fmatInstance.visible)
             return;
 
         if (!this.fmatInstance.inColorPass)

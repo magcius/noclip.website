@@ -71,11 +71,11 @@ pub fn get_uint16_le(src: &[u8], offs: usize) -> u16 {
 }
 
 pub fn get_uint24_le(src: &[u8], offs: usize) -> u32 {
-    (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+1] as u32) << 16)
+    (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+2] as u32) << 16)
 }
 
 pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
-    (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 24)
+    (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+2] as u32) << 16) | ((src[offs+3] as u32) << 24)
 }
 
 pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
@@ -83,11 +83,11 @@ pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
 }
 
 pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
-    ((src[offs] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
+    ((src[offs] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+2] as u32)
 }
 
 pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
-    ((src[offs] as u32) << 24) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
+    ((src[offs] as u32) << 24) | ((src[offs+1] as u32) << 16) | ((src[offs+2] as u32) << 8) | (src[offs+3] as u32)
 }
 
 #[wasm_bindgen]

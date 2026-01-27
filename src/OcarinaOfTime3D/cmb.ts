@@ -353,6 +353,50 @@ function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
     }
 }
 
+function translateCompareMode(compareMode: number): GfxCompareMode {
+    // GL enums
+    switch (compareMode) {
+    case 0x0200: return GfxCompareMode.Never;
+    case 0x0201: return GfxCompareMode.Less;
+    case 0x0202: return GfxCompareMode.Equal;
+    case 0x0203: return GfxCompareMode.LessEqual;
+    case 0x0204: return GfxCompareMode.Greater;
+    case 0x0205: return GfxCompareMode.NotEqual;
+    case 0x0206: return GfxCompareMode.GreaterEqual;
+    case 0x0207: return GfxCompareMode.Always;
+    default: throw "whoops";
+    }
+}
+
+function translateBlendMode(blendMode: number): GfxBlendMode {
+    // GL enums
+    switch (blendMode) {
+    case 0x8006: return GfxBlendMode.Add;
+    case 0x800A: return GfxBlendMode.Subtract;
+    case 0x800B: return GfxBlendMode.ReverseSubtract;
+    default: throw "whoops";
+    }
+}
+
+function translateBlendFactor(blendFactor: number): GfxBlendFactor {
+    // GL enums
+    switch (blendFactor) {
+    case 0x0000: return GfxBlendFactor.Zero;
+    case 0x0001: return GfxBlendFactor.One;
+    case 0x0300: return GfxBlendFactor.Src;
+    case 0x0301: return GfxBlendFactor.OneMinusSrc;
+    case 0x0302: return GfxBlendFactor.SrcAlpha;
+    case 0x0303: return GfxBlendFactor.OneMinusSrcAlpha;
+    case 0x0304: return GfxBlendFactor.DstAlpha;
+    case 0x0305: return GfxBlendFactor.OneMinusDstAlpha;
+    case 0x0306: return GfxBlendFactor.Dst;
+    case 0x0307: return GfxBlendFactor.OneMinusDst;
+    case 0x8001: case 0x8003: return GfxBlendFactor.ConstantColor;
+    case 0x8002: case 0x8004: return GfxBlendFactor.OneMinusConstantColor;
+    default: throw "whoops";
+    }
+}
+
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const view = buffer.createDataView();
 
@@ -556,11 +600,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const alphaTestEnabled = !!view.getUint8(offs + 0x130);
         const alphaTestReference = (view.getUint8(offs + 0x131) / 0xFF);
-        const alphaTestFunction: GfxCompareMode = alphaTestEnabled ? view.getUint16(offs + 0x132, true) : GfxCompareMode.Always;
+        const alphaTestFunction: GfxCompareMode = alphaTestEnabled ? translateCompareMode(view.getUint16(offs + 0x132, true)) : GfxCompareMode.Always;
 
         const depthTestEnabled = !!view.getUint8(offs + 0x134);
         const depthWriteEnabled = !!view.getUint8(offs + 0x135);
-        const depthTestFunction: GfxCompareMode = depthTestEnabled ? view.getUint16(offs + 0x136, true) : GfxCompareMode.Always;
+        const depthTestFunction: GfxCompareMode = depthTestEnabled ? translateCompareMode(view.getUint16(offs + 0x136, true)) : GfxCompareMode.Always;
 
         const blendMode = view.getUint8(offs + 0x138);
         const blendEnabled = blendMode !== 0;
@@ -569,44 +613,37 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         assert(view.getUint8(offs + 0x139) === 0);
         assert(view.getUint16(offs + 0x13A, true) === 0);
 
-        const blendSrcFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13C, true) : GfxBlendFactor.One;
-        const blendDstFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13E, true) : GfxBlendFactor.Zero;
-        const blendFunctionRGB: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x140, true) : GfxBlendMode.Add;
-        const rgbBlendState: GfxChannelBlendState = {
-            blendMode: blendFunctionRGB,
-            blendDstFactor: blendDstFactorRGB,
-            blendSrcFactor: blendSrcFactorRGB,
-        };
-        // TODO(jstpierre): What is at 0x142? More logic op things?
-        const blendSrcFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x144, true) : GfxBlendFactor.One;
-        const blendDstFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x146, true) : GfxBlendFactor.Zero;
-        const blendFunctionAlpha: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x148, true) : GfxBlendMode.Add;
-        const alphaBlendState: GfxChannelBlendState = {
-            blendMode: blendFunctionAlpha,
-            blendDstFactor: blendDstFactorAlpha,
-            blendSrcFactor: blendSrcFactorAlpha,
+        const rawBlendSrcFactorRGB = view.getUint16(offs + 0x13C, true);
+        const rawBlendDstFactorRGB = view.getUint16(offs + 0x13E, true);
+
+        const rawBlendSrcFactorAlpha = view.getUint16(offs + 0x144, true);
+        const rawBlendDstFactorAlpha = view.getUint16(offs + 0x146, true);
+
+        const blendFunctionRGB: GfxBlendMode = blendEnabled ? translateBlendMode(view.getUint16(offs + 0x140, true)) : GfxBlendMode.Add;
+        const blendFunctionAlpha: GfxBlendMode = blendEnabled ? translateBlendMode(view.getUint16(offs + 0x148, true)) : GfxBlendMode.Add;
+
+        const factorUsesBlendConstantColor = (v: GLenum) => {
+            return v === 0x8001 || v === 0x8002;
         };
 
         const factorUsesBlendConstantAlpha = (v: GLenum) => {
-            return v === WebGL2RenderingContext.CONSTANT_ALPHA || v === WebGL2RenderingContext.ONE_MINUS_CONSTANT_ALPHA;
-        };
-
-        const factorUsesBlendConstantColor = (v: GLenum) => {
-            return v === WebGL2RenderingContext.CONSTANT_COLOR || v === WebGL2RenderingContext.ONE_MINUS_CONSTANT_COLOR;
-        };
-
-        const translateBlendFactor = (v: GLenum): GfxBlendFactor => {
-            if (v === WebGL2RenderingContext.CONSTANT_ALPHA)
-                return GfxBlendFactor.ConstantColor;
-            else if (v === WebGL2RenderingContext.ONE_MINUS_CONSTANT_ALPHA)
-                return GfxBlendFactor.OneMinusConstantColor;
-            else
-                return v as GfxBlendFactor;
+            return v === 0x8003 || v === 0x8004;
         };
 
         // Ensure we're not using blend constants in two different contexts.
-        const usesBlendConstantAlpha = factorUsesBlendConstantAlpha(blendSrcFactorRGB) || factorUsesBlendConstantAlpha(blendDstFactorRGB) || factorUsesBlendConstantAlpha(blendSrcFactorAlpha) || factorUsesBlendConstantAlpha(blendDstFactorAlpha);
-        const usesBlendConstantColor = factorUsesBlendConstantColor(blendSrcFactorRGB) || factorUsesBlendConstantColor(blendDstFactorRGB) || factorUsesBlendConstantColor(blendSrcFactorAlpha) || factorUsesBlendConstantColor(blendDstFactorAlpha);
+        const usesBlendConstantAlpha = factorUsesBlendConstantAlpha(rawBlendSrcFactorRGB) || factorUsesBlendConstantAlpha(rawBlendDstFactorRGB) || factorUsesBlendConstantAlpha(rawBlendSrcFactorAlpha) || factorUsesBlendConstantAlpha(rawBlendDstFactorAlpha);
+        const usesBlendConstantColor = factorUsesBlendConstantColor(rawBlendSrcFactorRGB) || factorUsesBlendConstantColor(rawBlendDstFactorRGB) || factorUsesBlendConstantColor(rawBlendSrcFactorAlpha) || factorUsesBlendConstantColor(rawBlendDstFactorAlpha);
+
+        const rgbBlendState: GfxChannelBlendState = {
+            blendMode: blendFunctionRGB,
+            blendSrcFactor: blendEnabled ? translateBlendFactor(rawBlendSrcFactorRGB) : GfxBlendFactor.One,
+            blendDstFactor: blendEnabled ? translateBlendFactor(rawBlendDstFactorRGB) : GfxBlendFactor.Zero,
+        };
+        const alphaBlendState: GfxChannelBlendState = {
+            blendMode: blendFunctionAlpha,
+            blendSrcFactor: blendEnabled ? translateBlendFactor(rawBlendSrcFactorAlpha) : GfxBlendFactor.One,
+            blendDstFactor: blendEnabled ? translateBlendFactor(rawBlendDstFactorAlpha) : GfxBlendFactor.Zero,
+        };
 
         let blendColor: Color | null = null;
         if (usesBlendConstantColor || usesBlendConstantAlpha) {
@@ -619,10 +656,6 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             if (usesBlendConstantAlpha) {
                 assert(!usesBlendConstantColor);
                 blendColor.r = blendColor.g = blendColor.b = blendColor.a;
-                rgbBlendState.blendSrcFactor = translateBlendFactor(rgbBlendState.blendSrcFactor);
-                rgbBlendState.blendDstFactor = translateBlendFactor(rgbBlendState.blendDstFactor);
-                alphaBlendState.blendSrcFactor = translateBlendFactor(alphaBlendState.blendSrcFactor);
-                alphaBlendState.blendDstFactor = translateBlendFactor(alphaBlendState.blendDstFactor);
             }
         }
 

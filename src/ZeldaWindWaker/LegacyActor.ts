@@ -46,7 +46,7 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
 const chk = new dBgS_GndChk();
 
 // "Legacy actor" for noclip
-class d_a_noclip_legacy extends fopAc_ac_c {
+export class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public morf: mDoExt_McaMorf;
     public shadowChk: dBgS_GndChk;
@@ -358,6 +358,23 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         } else {
             // TODO: setShadowReal( ... )
         }
+    }
+    else if (actorName === 'SPitem') {
+        const itemId = (actor.parameters & 0x000000FF);
+        
+        // Hero's Shield (Link's House)
+        if (itemId === 0x3B ) fetchArchive(`VshiN`).then((rarc) => {
+            const model = buildModel(rarc, `bdl/vshin.bdl`);
+            mat4.fromTranslation(model.modelMatrix, legacy.pos);
+            mDoMtx_ZXYrotM(model.modelMatrix, vec3.fromValues(4000, 4200, 5200));
+            scaleMatrix(model.modelMatrix, model.modelMatrix, 1.5, 1.5, 1.5);
+        });
+        // Boko Belt (Orca's House)
+        else if( itemId === 0x48 ) fetchArchive(`Vbelt`).then((rarc) => {
+            const model = buildModel(rarc, `bdl/vbelt.bdl`)
+            mat4.translate(model.modelMatrix, model.modelMatrix, vec3.fromValues(0, 24, 0));
+        });
+        else console.warn(`Unknown special item: ${hexzero(itemId, 2)}`);
     }
     // Heart Container
     else if (actorName === 'Bitem') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/vhutl.bdl`).bindTTK1(parseBTK(rarc, `btk/vhutl.btk`)));

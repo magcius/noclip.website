@@ -35,6 +35,7 @@ export class DkrLevel {
     public id: number = -1;
     public hasCameraAnimation = false;
     private hackCresIslandTexScrollers: { drawCall: DkrDrawCall, scrollU: number, scrollV: number }[] = [];
+    private animChannel = 1;
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, id: string, private dataManager: DataManager, private sprites: DkrSprites) {
         if (id.startsWith('model:')) {
@@ -114,8 +115,6 @@ export class DkrLevel {
         this.cameraInMirrorMode = DkrControlGlobals.ADV2_MIRROR.on;
     }
 
-    private previousChannel = -1;
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplate();
 
@@ -143,34 +142,25 @@ export class DkrLevel {
             this.objectMap2.updateObjects(viewerInput.deltaTime);
         }
 
+        DkrControlGlobals.ANIM_PROGRESS.max = this.animationTracks.getMaxDuration(this.animChannel);
+        (DkrControlGlobals.ANIM_PROGRESS.elem as Slider).setRange(
+            DkrControlGlobals.ANIM_PROGRESS.min,
+            DkrControlGlobals.ANIM_PROGRESS.max,
+            DkrControlGlobals.ANIM_PROGRESS.step
+        );
+        this.animationTracks.setAnimChannel(this.animChannel);
+
         if(DkrControlGlobals.ENABLE_ANIM_CAMERA.on && this.animationTracks.isCompiled()) {
-            // Uncomment this when cutscenes get properly implemented.
-            //const channel = DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel;
-            const channel = 1; // For the main tracks channel #1 contains the flyby animation.
-
-            if(channel !== this.previousChannel) {
-                // User has changed the track channel.
-                DkrControlGlobals.ANIM_PROGRESS.max = this.animationTracks.getMaxDuration(channel);
-                (DkrControlGlobals.ANIM_PROGRESS.elem as Slider).setRange(
-                    DkrControlGlobals.ANIM_PROGRESS.min,
-                    DkrControlGlobals.ANIM_PROGRESS.max,
-                    DkrControlGlobals.ANIM_PROGRESS.step
-                );
-                DkrControlGlobals.ANIM_PROGRESS.setValue(0);
-                this.previousChannel = channel;
-            }
-            if(channel >= 0) {
+            if (this.animChannel >= 0) {
                 let curFlybyPos = DkrControlGlobals.ANIM_PROGRESS.value;
-                if(!DkrControlGlobals.ANIM_THIRD_PERSON.on) {
-                    this.animationTracks.setCameraToPoint(channel, curFlybyPos, viewerInput.camera);
-                }
+                this.animationTracks.setCameraToPoint(this.animChannel, curFlybyPos, viewerInput.camera);
 
-                this.animationTracks.setObjectsToPoint(channel, curFlybyPos);
+                this.animationTracks.setObjectsToPoint(this.animChannel, curFlybyPos);
                 if(!DkrControlGlobals.ANIM_PAUSED.on) {
                     curFlybyPos += (viewerInput.deltaTime / 1000.0) * DkrControlGlobals.ANIM_SPEED.value;
-                    const maxDuration = this.animationTracks.getMaxDuration(channel);
+                    const maxDuration = this.animationTracks.getMaxDuration(this.animChannel);
                     if(curFlybyPos >= maxDuration) {
-                        if(this.animationTracks.doesTrackLoop(channel)) {
+                        if(this.animationTracks.doesTrackLoop(this.animChannel)) {
                             curFlybyPos -= maxDuration;
                         } else {
                             curFlybyPos = maxDuration;
