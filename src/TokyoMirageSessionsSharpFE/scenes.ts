@@ -12,6 +12,7 @@ import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 
+import { create_battle_gimmicks } from "./maps/battle.js";
 import { create_d002_01_gimmicks } from "./maps/d002_01.js";
 import { create_d003_01_gimmicks } from "./maps/d003_01.js";
 import { create_d003_02_gimmicks } from "./maps/d003_02.js";
@@ -129,6 +130,11 @@ class TMSFESceneDesc implements SceneDesc
             {
                 scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
+        }
+        // battle maps don't have a maplayout.layout file
+        if (this.id[0] == "b" && this.id != "b011_01")
+        {
+            scene.map_gimmicks = await create_battle_gimmicks(dataFetcher, device);
         }
 
         return scene;

@@ -6,6 +6,7 @@ import { FRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
 import { DataFetcher } from "../DataFetcher.js";
+import { FMAA } from './bfres/fmaa.js';
 import { FSKA } from "./bfres/fska.js";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -28,12 +29,21 @@ export class gimmick
 
         const fmdl = model_fres.fmdl[0];
 
-        // get skeletal animation (if there is one)
+        // get animations
         let fska: FSKA | undefined = undefined;
-        if (animation_fres != undefined && animation_fres.fska.length > 0)
+        let fmaa: FMAA | undefined = undefined;
+        if (animation_fres != undefined)
         {
-            fska = animation_fres.fska[0];
+            if (animation_fres.fska.length > 0)
+            {
+                fska = animation_fres.fska[0];
+            }
+            if (animation_fres.fmaa.length > 0)
+            {
+                fmaa = animation_fres.fmaa[0];
+            }
         }
+        console.log(fmaa);
 
         this.fmdl_renderer = new fmdl_renderer
         (
@@ -41,7 +51,7 @@ export class gimmick
             bntx,
             gfx_texture_array,
             fska,
-            undefined,
+            fmaa,
             position,
             rotation,
             scale,
