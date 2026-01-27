@@ -130,17 +130,20 @@ export function parse_curves(buffer: ArrayBufferSlice, offset: number, count: nu
  * @param start_index which index to start reading from
  * @param count how many constants to read
  */
-export function parse_constants(buffer: ArrayBufferSlice, offset: number, start_index: number, count: number): number[]
+export function parse_constants(buffer: ArrayBufferSlice, offset: number, start_index: number, count: number): AnimationConstant[]
 {
+    // TODO: parse animdata offsets too
     const view = buffer.createDataView();
 
-    let constants: number[] = [];
+    console.log(`start_index ${start_index} count ${count}`);
+    let constants: AnimationConstant[] = [];
     let constant_entry_offset = offset + (start_index * CONSTANT_ENTRY_SIZE);
     for (let i = start_index; i < start_index + count; i++)
     {
+        const animation_data_offset = view.getUint32(constant_entry_offset + 0x0, true);
         const value = view.getUint32(constant_entry_offset + 0x4, true);
 
-        constants.push(value);
+        constants.push({ animation_data_offset, value });
         constant_entry_offset += CONSTANT_ENTRY_SIZE;
     }
 
@@ -168,4 +171,10 @@ export interface Curve
     end_frame: number;
     frames: number[];
     keys: vec4[];
+}
+
+export interface AnimationConstant
+{
+    animation_data_offset: number;
+    value: number;
 }

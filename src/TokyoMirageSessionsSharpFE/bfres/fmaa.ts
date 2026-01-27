@@ -1,7 +1,7 @@
 // fmaa.ts
 // Handles FMAA (caFe MAterial Animation) data, which are material animations for a model
 
-import { Curve, parse_constants, parse_curves } from "./animation_common.js";
+import { Curve, AnimationConstant, parse_constants, parse_curves } from "./animation_common.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { read_bfres_string } from "./bfres_switch.js";
 import { user_data, parse_user_data } from "./user_data.js";
@@ -50,7 +50,7 @@ export function parseFMAA(buffer: ArrayBufferSlice, offset: number, count: numbe
                 const integer_curve_count = view.getUint16(shader_param_animation_entry_offset + 0xC, true);
                 const curves = parse_curves(buffer, curve_array_offset, float_curve_count, curve_start_index);
 
-                const constant_start_index = view.getUint16(shader_param_animation_entry_offset + 0x10, true);
+                const constant_start_index = view.getUint16(shader_param_animation_entry_offset + 0xE, true);
                 const constant_count = view.getUint16(shader_param_animation_entry_offset + 0x10, true);
                 const constants = parse_constants(buffer, constant_array_offset, constant_start_index, constant_count);
 
@@ -227,7 +227,7 @@ export interface ShaderParamAnimation
 {
     target_param: string;
     curves: Curve[];
-    constants: number[];
+    constants: AnimationConstant[];
 }
 
 // -1 is constant

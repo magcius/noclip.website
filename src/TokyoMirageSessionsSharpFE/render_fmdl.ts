@@ -3,7 +3,7 @@
 
 import { Curve } from './bfres/animation_common.js';
 import * as BNTX from '../fres_nx/bntx.js';
-import { FMAA } from './bfres/fmaa.js';
+import { FMAA, ShaderParamAnimation } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
@@ -142,13 +142,11 @@ export class fmdl_renderer
         if (this.fska != undefined)
         {
             // this model has an animated skeleton
-            // advance time
             if (this.animation_play)
             {
                 this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
                 this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
             }
-            // update each bone's transformations to the current frame
             current_bones = this.animate_skeleton(this.current_animation_frame);
         }
         else
@@ -178,57 +176,11 @@ export class fmdl_renderer
         }
 
         // animate material
-        this.texture_translations = [];
         if (this.fmaa != undefined)
         {
             this.current_material_animation_frame += viewerInput.deltaTime * FPS_RATE;
             this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frame_count;
-
-            for (let i = 0; i < this.material_to_material_animation_indices.length; i++)
-            {
-                const material_animation_index = this.material_to_material_animation_indices[i];
-
-                if (material_animation_index === -1)
-                {
-                    this.texture_translations.push(vec2.fromValues(0.0, 0.0));
-                }
-                else
-                {
-                    const frame_integer = Math.floor(this.current_material_animation_frame);
-                    const material_animation = this.fmaa.material_animations[material_animation_index];
-                    const shader_param_animation = material_animation.shader_param_animations[0];
-
-                    let translate_x = 0.0;
-                    if (material_animation.albedo0_texsrt.translate_x != undefined)
-                    {
-                        if (material_animation.albedo0_texsrt.translate_x == -1)
-                        {
-                            translate_x = shader_param_animation.constants[0];
-                        }
-                        else
-                        {
-                            const curve = shader_param_animation.curves[material_animation.albedo0_texsrt.translate_x];
-                            translate_x = get_keyframe_value(curve, frame_integer);
-                        }
-                    }
-
-                    let translate_y = 0.0;
-                    if (material_animation.albedo0_texsrt.translate_y != undefined)
-                    {
-                        if (material_animation.albedo0_texsrt.translate_y == -1)
-                        {
-                            translate_y = shader_param_animation.constants[0];
-                        }
-                        else
-                        {
-                            const curve = shader_param_animation.curves[material_animation.albedo0_texsrt.translate_y];
-                            translate_y = get_keyframe_value(curve, frame_integer);
-                        }
-                    }
-
-                    this.texture_translations.push(vec2.fromValues(translate_x, translate_y));
-                }
-            }
+            this.texture_translations = this.animate_materials(this.current_material_animation_frame);
         }
 
         // render all fshp renderers
@@ -279,6 +231,12 @@ export class fmdl_renderer
      */
     animate_skeleton(current_frame: number): FSKL_Bone[]
     {
+        if (this.fska == undefined)
+        {
+            console.error("trying to animate the skeleton of a fmdl with no fska");
+            throw("whoops");
+        }
+
         let bones: FSKL_Bone[] = [];
         for (let bone_index = 0; bone_index < this.fskl.bones.length; bone_index++)
         {
@@ -292,11 +250,6 @@ export class fmdl_renderer
                 continue;
             }
             
-            if (this.fska == undefined)
-            {
-                console.error("trying to animate the skeleton of a fmdl with no fska");
-                throw("whoops");
-            }
             const bone_animation = this.fska.bone_animations[bone_animation_index]
 
             let transformation_flags = bone_animation.flags >> 6;
@@ -342,8 +295,61 @@ export class fmdl_renderer
 
         return bones;
     }
+
+    /**
+     * returns a vec2 array of each material's albedo0 texture translations
+     * @param current_frame the frame to animate each material
+     */
+    animate_materials(current_frame: number): vec2[]
+    {
+        if (this.fmaa == undefined)
+        {
+            console.error("trying to animate materials of a fmdl with no fmaa");
+            throw("whoops");
+        }
+
+        let texture_translations: vec2[] = [];
+            
+        for (let i = 0; i < this.material_to_material_animation_indices.length; i++)
+        {
+            const material_animation_index = this.material_to_material_animation_indices[i];
+
+            if (material_animation_index === -1)
+            {
+                texture_translations.push(vec2.fromValues(0.0, 0.0));
+            }
+            else
+            {
+                // TODO: can i avoid rounding the frame number? currently it causes some animations to display incorrectly
+                const frame_integer = Math.floor(current_frame);
+                const material_animation = this.fmaa.material_animations[material_animation_index];
+                const shader_param_animation = material_animation.shader_param_animations[0];
+
+                let translate_x = 0.0;
+                if (material_animation.albedo0_texsrt.translate_x != undefined)
+                {
+                    translate_x = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.translate_x, frame_integer);
+                }
+
+                let translate_y = 0.0;
+                if (material_animation.albedo0_texsrt.translate_y != undefined)
+                {
+                    translate_y = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.translate_y, frame_integer);
+                }
+
+                texture_translations.push(vec2.fromValues(translate_x, translate_y));
+            }
+        }
+
+        return texture_translations;
+    }
 }
 
+/**
+ * returns the value of an animatino curve at the specified frame
+ * @param curve the curve to read from
+ * @param current_frame which frame of the animation to read the curve at
+ */
 function get_keyframe_value(curve: Curve, current_frame: number): number
 {
     for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
@@ -369,6 +375,27 @@ function get_keyframe_value(curve: Curve, current_frame: number): number
     
     console.error("keyframe value not found");
     throw("whoops");
+}
+
+/**
+ * returns the value of a shader param animation at the specified frame
+ * @param shader_param_animation the shader param animation to read a value from
+ * @param curve_index which curve to read from
+ * @param current_frame which frame of the animation to read the curve at
+ */
+function get_shader_param_animation_value(shader_param_animation: ShaderParamAnimation, curve_index: number, current_frame: number)
+{
+    if (curve_index == -1)
+    {
+        // TODO: properly calculate this
+        const constant_array_index = 0;
+        return shader_param_animation.constants[constant_array_index].value;
+    }
+    else
+    {
+        const curve = shader_param_animation.curves[curve_index];
+        return get_keyframe_value(curve, current_frame);
+    }
 }
 
 const FPS = 30;
