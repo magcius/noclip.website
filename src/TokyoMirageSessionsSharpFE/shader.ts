@@ -6,7 +6,6 @@ import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { FVTX } from "./bfres/fvtx.js";
 import { FMAT } from "./bfres/fmat.js";
 import { FSHP } from './bfres/fshp.js';
-import { FSKL } from './bfres/fskl.js';
 
 export class TMSFEProgram extends DeviceProgram
 {
@@ -33,15 +32,17 @@ layout(std140) uniform ub_SceneParams
     Mat4x4 u_ClipFromViewMatrix;
     Mat3x4 u_ViewFromWorldMatrix;
     Mat3x4 u_TransformationMatrix;
+    vec4 u_DiffuseTranslate;
     Mat3x4 u_BoneMatrices[${this.bone_matrix_array_length}];
 };
 
 uniform sampler2D s_diffuse;
 
+varying vec2 v_TexCoord0;
+
 #ifdef VERT
 ${this.define_inputs()}
 
-out vec2 v_TexCoord0;
 
 void mainVS()
 {
@@ -83,11 +84,10 @@ void mainVS()
 #endif
 
 #ifdef FRAG
-in vec2 v_TexCoord0;
 
 void mainPS()
 {
-    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(s_diffuse), v_TexCoord0.xy);
+    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(s_diffuse), v_TexCoord0.xy + u_DiffuseTranslate.xy);
     gl_FragColor = t_DiffuseMapColor;
     if (gl_FragColor.a < 0.5)
     {

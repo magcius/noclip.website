@@ -4,10 +4,10 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import { FMAA } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
-import { FSKA } from './bfres/fska.js';
+import { Curve, FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { vec3, mat4 } from "gl-matrix";
+import { vec2, vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { computeModelMatrixSRT } from '../MathHelpers.js';
@@ -26,6 +26,7 @@ export class fmdl_renderer
     private bone_to_bone_animation_indices: number[] = [];
     private smooth_rigid_matrix_array: mat4[] = [];
     private material_to_material_animation_indices: number[] = [];
+    private texture_translations: vec2[] = [];
     private transform_matrix: mat4 = mat4.create();
     private fshp_renderers: fshp_renderer[] = [];
     private special_skybox: boolean;
@@ -176,11 +177,56 @@ export class fmdl_renderer
         }
 
         // animate material
+        this.texture_translations = [];
         if (this.fmaa != undefined)
         {
             this.current_material_animation_frame += viewerInput.deltaTime * FPS_RATE;
             this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frame_count;
 
+            for (let i = 0; i < this.material_to_material_animation_indices.length; i++)
+            {
+                const material_animation_index = this.material_to_material_animation_indices[i];
+
+                if (material_animation_index === -1)
+                {
+                    this.texture_translations.push(vec2.fromValues(0.0, 0.0));
+                }
+                else
+                {
+                    const material_animation = this.fmaa.material_animations[material_animation_index];
+                    const parameter_animation = material_animation.parameter_animations[0];
+
+                    let translate_x = 0.0;
+                    if (material_animation.translate_x_curve_index != undefined)
+                    {
+                        if (material_animation.translate_x_curve_index == -1)
+                        {
+                            translate_x = parameter_animation.constants[0];
+                        }
+                        else
+                        {
+                            const curve = parameter_animation.curves[material_animation.translate_x_curve_index];
+                            translate_x = get_keyframe_value(curve, this.current_material_animation_frame);
+                        }
+                    }
+
+                    let translate_y = 0.0;
+                    if (material_animation.translate_y_curve_index != undefined)
+                    {
+                        if (material_animation.translate_y_curve_index == -1)
+                        {
+                            translate_y = parameter_animation.constants[0];
+                        }
+                        else
+                        {
+                            const curve = parameter_animation.curves[material_animation.translate_y_curve_index];
+                            translate_y = get_keyframe_value(curve, this.current_material_animation_frame);
+                        }
+                    }
+
+                    this.texture_translations.push(vec2.fromValues(translate_x, translate_y));
+                }
+            }
         }
 
         // render all fshp renderers
@@ -197,6 +243,12 @@ export class fmdl_renderer
                 bone_matrix_array = this.smooth_rigid_matrix_array;
             }
 
+            let texture_translations: vec2 = vec2.fromValues(0.0, 0.0);
+            if (this.fmaa != undefined)
+            {
+                texture_translations = this.texture_translations[this.fshp_renderers[i].fmat_index];
+            }
+
             this.fshp_renderers[i].render
             (
                 renderHelper,
@@ -205,6 +257,7 @@ export class fmdl_renderer
                 renderInstListSkybox,
                 this.transform_matrix,
                 bone_matrix_array,
+                texture_translations,
                 this.special_skybox,
             );
         }
@@ -259,28 +312,8 @@ export class fmdl_renderer
                     curve_index += 1;
 
                     // look through the keyframes in the animation
-                    for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
-                    {
-                        if (current_frame == curve.frames[frame_index])
-                        {
-                            // interpolation is unnecessary, just return the constant
-                            const value = curve.keys[frame_index][3];
-                            transformation_values.push(value);
-                            break;
-                        }
-                        else if (current_frame < curve.frames[frame_index])
-                        {
-                            // interpolate the value
-                            const before_frame = curve.frames[frame_index - 1];
-                            const after_frame = curve.frames[frame_index];
-                            const frame_delta = after_frame - before_frame;
-                            const t = (current_frame - before_frame) / frame_delta;
-                            const key_frame = curve.keys[frame_index - 1];
-                            const value = getPointCubic(key_frame, t);
-                            transformation_values.push(value);
-                            break;
-                        }
-                    }
+                    const value = get_keyframe_value(curve, current_frame);
+                    transformation_values.push(value);
                 }
                 else
                 {
@@ -307,6 +340,33 @@ export class fmdl_renderer
 
         return bones;
     }
+}
+
+function get_keyframe_value(curve: Curve, current_frame: number): number
+{
+    for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
+    {
+        if (current_frame == curve.frames[frame_index])
+        {
+            // interpolation is unnecessary, just return the constant
+            const value = curve.keys[frame_index][3];
+            return value;
+        }
+        else if (current_frame < curve.frames[frame_index])
+        {
+            // interpolate the value
+            const before_frame = curve.frames[frame_index - 1];
+            const after_frame = curve.frames[frame_index];
+            const frame_delta = after_frame - before_frame;
+            const t = (current_frame - before_frame) / frame_delta;
+            const key_frame = curve.keys[frame_index - 1];
+            const value = getPointCubic(key_frame, t);
+            return value;
+        }
+    }
+    
+    console.error("keyframe value not found");
+    throw("whoops");
 }
 
 const FPS = 30;

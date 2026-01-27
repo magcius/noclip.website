@@ -12,9 +12,9 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
-import { mat4 } from "gl-matrix";
+import { vec2, mat4 } from "gl-matrix";
 import { TMSFEProgram } from './shader.js';
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { ViewerRenderInput } from "../viewer.js";
 
 /**
@@ -150,6 +150,7 @@ export class fshp_renderer
         renderInstListSkybox: GfxRenderInstList,
         transform_matrix: mat4,
         bone_matrix_array: mat4[],
+        texture_translations: vec2,
         special_skybox: boolean,
     ): void
     {
@@ -173,27 +174,29 @@ export class fshp_renderer
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
         // size 16 + 12 + 12 + (12 * bone count)
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 40 + (12 * bone_matrix_array.length));
-        const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
-        uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
+        let uniform_buffer_1_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44 + (12 * bone_matrix_array.length));
+        const mapped1 = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
+        uniform_buffer_1_offset += fillMatrix4x4(mapped1, uniform_buffer_1_offset, viewerInput.camera.projectionMatrix);
 
         if (special_skybox)
         {
             // a matrix without the camera's position, results in the skybox mesh following the camera
             let skybox_view_matrix: mat4 = mat4.create();
             computeViewMatrixSkybox(skybox_view_matrix, viewerInput.camera);
-            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, skybox_view_matrix);
+            uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, skybox_view_matrix);
         }
         else
         {
-            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
+            uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, viewerInput.camera.viewMatrix);
         }
         
-        uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, transform_matrix);
+        uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, transform_matrix);
+
+        uniform_buffer_1_offset += fillVec4(mapped1, uniform_buffer_1_offset, texture_translations[0], texture_translations[1]);
 
         for (let i = 0; i < bone_matrix_array.length; i++)
         {
-            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, bone_matrix_array[i]);
+            uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, bone_matrix_array[i]);
         }
 
         // set sampler

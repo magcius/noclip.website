@@ -89,6 +89,8 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
 {
     let gimmicks: gimmick[] = [];
 
+    // TODO: only load the fres if there are gimmicks
+    
     // yellow treasure boxes
     const treasure_box_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model.apak", "treasurebox_01.bfres", data_fetcher);
     const treasurebox_01_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model_common.apak", "fd_idle_00.anm", data_fetcher);
