@@ -174,29 +174,30 @@ export class fshp_renderer
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
         // size 16 + 12 + 12 + (12 * bone count)
-        let uniform_buffer_1_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44 + (12 * bone_matrix_array.length));
-        const mapped1 = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
-        uniform_buffer_1_offset += fillMatrix4x4(mapped1, uniform_buffer_1_offset, viewerInput.camera.projectionMatrix);
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44 + (12 * bone_matrix_array.length));
+        const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
+        uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
 
         if (special_skybox)
         {
             // a matrix without the camera's position, results in the skybox mesh following the camera
             let skybox_view_matrix: mat4 = mat4.create();
             computeViewMatrixSkybox(skybox_view_matrix, viewerInput.camera);
-            uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, skybox_view_matrix);
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, skybox_view_matrix);
         }
         else
         {
-            uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, viewerInput.camera.viewMatrix);
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
         }
         
-        uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, transform_matrix);
-
-        uniform_buffer_1_offset += fillVec4(mapped1, uniform_buffer_1_offset, texture_translations[0], texture_translations[1]);
+        uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, transform_matrix);
+        
+        // TODO: this is only 2 f32s
+        uniform_buffer_offset += fillVec4(mapped, uniform_buffer_offset, texture_translations[0], texture_translations[1]);
 
         for (let i = 0; i < bone_matrix_array.length; i++)
         {
-            uniform_buffer_1_offset += fillMatrix4x3(mapped1, uniform_buffer_1_offset, bone_matrix_array[i]);
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, bone_matrix_array[i]);
         }
 
         // set sampler

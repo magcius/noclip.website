@@ -25,7 +25,7 @@ export function parseBFRES(buffer: ArrayBufferSlice): FRES
     assert(view.getUint32(0x4, true) === 0x20202020);
 
     const name_offset = view.getUint32(0x20, true);
-    const name = read_bfres_string(buffer, name_offset, true);
+    const name = read_bfres_string(buffer, name_offset);
 
     const memory_pool_info_offset = view.getUint32(0xB0, true);
     const gpu_region_offset = view.getUint32(memory_pool_info_offset + 8, true);
@@ -57,7 +57,7 @@ const RESOURCE_DICTIONARY_ENTRY_SIZE = 0x10;
  * string tables in BFRES files have the length of the string as the first two bytes
  * this reads a string starting two bytes after the specified offset
  */
-export function read_bfres_string(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): string
+export function read_bfres_string(buffer: ArrayBufferSlice, offs: number): string
 {
     return readString(buffer, offs + 0x02, 0xFF, true);
 }
@@ -72,7 +72,7 @@ export function parse_external_files(buffer: ArrayBufferSlice, name_array_offset
     for (let i = 0; i < count; i++)
     {
         const name_offset = view.getUint32(embedded_file_dictionary_entry_offset + 0x8, true);
-        const name = read_bfres_string(buffer, name_offset, true);
+        const name = read_bfres_string(buffer, name_offset);
 
         embedded_file_names.push(name);
         embedded_file_dictionary_entry_offset + RESOURCE_DICTIONARY_ENTRY_SIZE;

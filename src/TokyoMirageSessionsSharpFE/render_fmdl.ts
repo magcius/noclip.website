@@ -1,10 +1,11 @@
 // render_fmdl.ts
 // handles all the common tasks shared between the separate meshes of a model, such as animating the skeleton
 
+import { Curve } from './bfres/animation_common.js';
 import * as BNTX from '../fres_nx/bntx.js';
 import { FMAA } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
-import { Curve, FSKA } from './bfres/fska.js';
+import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec2, vec3, mat4 } from "gl-matrix";
@@ -193,34 +194,35 @@ export class fmdl_renderer
                 }
                 else
                 {
+                    const frame_integer = Math.floor(this.current_material_animation_frame);
                     const material_animation = this.fmaa.material_animations[material_animation_index];
-                    const parameter_animation = material_animation.parameter_animations[0];
+                    const shader_param_animation = material_animation.shader_param_animations[0];
 
                     let translate_x = 0.0;
-                    if (material_animation.translate_x_curve_index != undefined)
+                    if (material_animation.albedo0_texsrt.translate_x != undefined)
                     {
-                        if (material_animation.translate_x_curve_index == -1)
+                        if (material_animation.albedo0_texsrt.translate_x == -1)
                         {
-                            translate_x = parameter_animation.constants[0];
+                            translate_x = shader_param_animation.constants[0];
                         }
                         else
                         {
-                            const curve = parameter_animation.curves[material_animation.translate_x_curve_index];
-                            translate_x = get_keyframe_value(curve, Math.round(this.current_material_animation_frame));
+                            const curve = shader_param_animation.curves[material_animation.albedo0_texsrt.translate_x];
+                            translate_x = get_keyframe_value(curve, frame_integer);
                         }
                     }
 
                     let translate_y = 0.0;
-                    if (material_animation.translate_y_curve_index != undefined)
+                    if (material_animation.albedo0_texsrt.translate_y != undefined)
                     {
-                        if (material_animation.translate_y_curve_index == -1)
+                        if (material_animation.albedo0_texsrt.translate_y == -1)
                         {
-                            translate_y = parameter_animation.constants[0];
+                            translate_y = shader_param_animation.constants[0];
                         }
                         else
                         {
-                            const curve = parameter_animation.curves[material_animation.translate_y_curve_index];
-                            translate_y = get_keyframe_value(curve,Math.round(this.current_material_animation_frame));
+                            const curve = shader_param_animation.curves[material_animation.albedo0_texsrt.translate_y];
+                            translate_y = get_keyframe_value(curve, frame_integer);
                         }
                     }
 

@@ -20,7 +20,7 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
     for (let i = 0; i < count; i++)
     {
         const key_offset = view.getUint32(user_data_entry_offset, true);
-        const key = read_bfres_string(buffer, key_offset, true);
+        const key = read_bfres_string(buffer, key_offset);
         
         const data_offset = view.getUint32(user_data_entry_offset + 0x8, true);
         if (data_offset == null)
@@ -58,7 +58,7 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
                 for (let j = 0; j < data_count; j++)
                 {
                     const string_offset = view.getUint32(data_offset + (j * 0x8), true);
-                    const string = read_bfres_string(buffer, string_offset, true);
+                    const string = read_bfres_string(buffer, string_offset);
                     string_values.push(string);
                 }
                 values = string_values;

@@ -28,7 +28,7 @@ export function parseFMDL(buffer: ArrayBufferSlice, offset: number, count: numbe
         assert(readString(buffer, fmdl_entry_offset, 0x04) === 'FMDL');
 
         const fmdl_name_offset = view.getUint32(fmdl_entry_offset + 0x8, true);
-        const fmdl_name = read_bfres_string(buffer, fmdl_name_offset, true);
+        const fmdl_name = read_bfres_string(buffer, fmdl_name_offset);
 
         const fskl_offset = view.getUint32(fmdl_entry_offset + 0x18, true);
         const fskl = parseFSKL(buffer, fskl_offset);

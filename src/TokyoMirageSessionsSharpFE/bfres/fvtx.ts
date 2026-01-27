@@ -55,7 +55,7 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
         for (let i = 0; i < attribute_count; i++)
         {
             const name_offset = view.getUint32(attribute_entry_offset, true);
-            const name = read_bfres_string(buffer, name_offset, true);
+            const name = read_bfres_string(buffer, name_offset);
             const original_format = view.getUint32(attribute_entry_offset + 0x8, true);
             const bufferOffset = view.getUint16(attribute_entry_offset + 0xC, true);
             const bufferIndex = view.getUint16(attribute_entry_offset + 0xE, true);

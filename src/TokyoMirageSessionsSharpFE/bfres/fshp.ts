@@ -24,7 +24,7 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
     {
         assert(readString(buffer, fshp_entry_offset, 0x04) === 'FSHP');
         const name_offset = view.getUint32(fshp_entry_offset + 0x8, true);
-        const name = read_bfres_string(buffer, name_offset, true);
+        const name = read_bfres_string(buffer, name_offset);
         
         const fmat_index = view.getUint16(fshp_entry_offset + 0x52, true);
         const bone_index = view.getUint16(fshp_entry_offset + 0x54, true);

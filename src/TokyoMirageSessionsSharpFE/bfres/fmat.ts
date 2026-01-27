@@ -24,7 +24,7 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         assert(readString(buffer, fmat_entry_offset, 0x04) === 'FMAT');
 
         const name_offset = view.getUint32(fmat_entry_offset + 0x8, true);
-        const name = read_bfres_string(buffer, name_offset, true);
+        const name = read_bfres_string(buffer, name_offset);
         
         const texture_name_array_offset = view.getUint32(fmat_entry_offset + 0x30, true);
         const texture_count = view.getUint8(fmat_entry_offset + 0x9D);
@@ -33,7 +33,7 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         for (let i = 0; i < texture_count; i++)
         {
             const texture_name_offset = view.getUint32(texture_name_entry_offset, true);
-            const texture_name = read_bfres_string(buffer, texture_name_offset, true);
+            const texture_name = read_bfres_string(buffer, texture_name_offset);
             
             texture_name_array.push(texture_name);
             texture_name_entry_offset += TEXTURE_NAME_ENTRY_SIZE;
@@ -92,7 +92,7 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         for (let i = 0; i < sampler_count; i++)
         {
             const sampler_name_offset = view.getUint32(sampler_name_entry_offset + 0x8, true);
-            const sampler_name = read_bfres_string(buffer, sampler_name_offset, true);
+            const sampler_name = read_bfres_string(buffer, sampler_name_offset);
             
             sampler_name_array.push(sampler_name);
             sampler_name_entry_offset += SAMPLER_NAME_ENTRY_SIZE;
