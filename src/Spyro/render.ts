@@ -11,6 +11,7 @@ import { Skybox, Level, Moby } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
+import { DebugDrawFlags } from "../gfx/helpers/DebugDraw";
 
 class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -287,7 +288,7 @@ export class LevelRenderer {
             renderInst.setDrawCount(this.indexCountTransparent);
             renderInstManager.submitRenderInst(renderInst);
         }
-        if (this.showMobys) {
+        if (this.showMobys && this.mobys !== undefined) {
             this.drawMobys(renderHelper);
         }
 
@@ -318,13 +319,14 @@ export class LevelRenderer {
             // const dirX = Math.sin(radians);
             // const dirZ = Math.cos(radians);
             // const forward = vec3.fromValues(dirX, 0, dirZ);
-            // const color2 = colorNewFromRGBA(1, 1, 0, 1); // Yellow for better visibility
+            // const color2 = colorNewFromRGBA(1, 1, 0, 1);
             // renderHelper.debugDraw.drawLocator(worldPos, 10, color2);
             // renderHelper.debugDraw.drawVector(worldPos, forward, 40, color2);
 
             const labelPos = vec3.clone(worldPos);
-            labelPos[1] += 100;
-            renderHelper.debugDraw.drawWorldTextRU(`${i} class=${m.classId}`, labelPos, White);
+            labelPos[0] -= 75;
+            labelPos[1] += 50;
+            renderHelper.debugDraw.drawWorldTextRU(`i=${i}, t=${m.classId}`, labelPos, White, undefined, undefined, {flags: DebugDrawFlags.WorldSpace});
         }
     }
 

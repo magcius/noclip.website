@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildTileAtlas, buildLevel, buildSkybox, parseTileGroups, VRAM, Skybox, Level, parseMobys, Moby } from "./bin.js"
+import { buildTileAtlas, buildLevel, buildSkybox, VRAM, Skybox, Level, parseMobys, Moby } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -50,10 +50,10 @@ class SpyroRenderer implements SceneGfx {
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox, mobys?: Moby[]) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox, private mobys?: Moby[]) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, level, mobys);
+        this.levelRenderer = new LevelRenderer(cache, level, this.mobys);
         this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
     }
@@ -92,10 +92,12 @@ class SpyroRenderer implements SceneGfx {
     }
 
     public createPanels(): Panel[] {
+        if (this.mobys === undefined)
+            return [];
         const panel = new Panel();
         panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         panel.setTitle(RENDER_HACKS_ICON, "Level Options");
-        const showMobysCheckbox = new Checkbox("Show mobys (Spyro 3 only)", false);
+        const showMobysCheckbox = new Checkbox("Show moby positions", false);
         showMobysCheckbox.onchanged = () => {
             this.levelRenderer.showMobys = showMobysCheckbox.checked
         };
@@ -126,8 +128,7 @@ class SpyroScene implements SceneDesc {
         const textures = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_sky1.bin`);
 
-        const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
-        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, this.gameNumber);
+        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox);
@@ -152,11 +153,10 @@ class SpyroScene2 implements SceneDesc {
         const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
 
-        const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
         const vramObj = new VRAM(vram.copyToBuffer());
         vramObj.applyFontStripFix();
 
-        const tileAtlas = buildTileAtlas(vramObj, tileGroups, this.gameNumber);
+        const tileAtlas = buildTileAtlas(vramObj, textures.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox);
@@ -188,11 +188,11 @@ class SpyroScene3 implements SceneDesc {
         const vram = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_vram.bin`);
         const textures = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
+
         const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.level`);
         const mobys = this.subLevelID === undefined ? parseMobys(levelFile.createDataView()) : [];
 
-        const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
-        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, this.gameNumber);
+        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox, mobys);
@@ -429,7 +429,7 @@ const sceneDescs3 = [
     new SpyroScene3(34, "Cutscene"),
     new SpyroScene3(37, "Cutscene"),
     new SpyroScene3(40, "Cutscene"),
-    // new SpyroScene3(43, "Cutscene"), // this subfile index has a size of zero in the WAD
+    // new SpyroScene3(43, "Cutscene"), // this subfile index has a size of zero in the WAD (cut cutscene?)
     new SpyroScene3(46, "Cutscene"),
     new SpyroScene3(49, "Cutscene"),
     new SpyroScene3(52, "Cutscene"),

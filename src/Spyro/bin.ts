@@ -2,9 +2,6 @@ interface GroundFace {
     indices: number[];
     uvIndices: number[] | null;
     colorIndices: number[] | null;
-    rotation: number | null;
-    bothSides?: boolean;
-    inverse?: boolean;
     isWater?: boolean;
     isTransparent?: boolean;
 }
@@ -24,10 +21,6 @@ interface Tile {
     b: number;
 }
 
-interface TileGroups {
-    lod: Tile[];
-}
-
 interface TileAtlas {
     data: Uint8Array;
     width: number;
@@ -36,7 +29,7 @@ interface TileAtlas {
     tiles?: Tile[];
 }
 
-export type Level = {
+export interface Level {
   vertices: number[][];
   colors: number[][];
   faces: GroundFace[];
@@ -84,25 +77,25 @@ class Header {
 
 class Vertex {
     b1: number; b2: number; b3: number; b4: number;
-    constructor(view: DataView, offs: number) {
-        this.b1 = view.getUint8(offs);
-        this.b2 = view.getUint8(offs+1);
-        this.b3 = view.getUint8(offs+2);
-        this.b4 = view.getUint8(offs+3);
+    constructor(view: DataView, offset: number) {
+        this.b1 = view.getUint8(offset);
+        this.b2 = view.getUint8(offset+1);
+        this.b3 = view.getUint8(offset+2);
+        this.b4 = view.getUint8(offset+3);
     }
 }
 
-class Color {
-    r: number; g: number; b: number; n: number;
-    constructor(view: DataView, offs: number) {
-        this.r = view.getUint8(offs);
-        this.g = view.getUint8(offs+1);
-        this.b = view.getUint8(offs+2);
-        this.n = view.getUint8(offs+3);
+class VertexColor {
+    r: number; g: number; b: number;
+    constructor(view: DataView, offset: number) {
+        this.r = view.getUint8(offset);
+        this.g = view.getUint8(offset+1);
+        this.b = view.getUint8(offset+2);
+        // this.n = view.getUint8(offs+3); not used?
     }
 }
 
-class Poly {
+class Polygon {
     v1: number; v2: number; v3: number; v4: number;
     c1: number; c2: number; c3: number; c4: number;
     t: number; r: number; // S1 only
@@ -143,207 +136,160 @@ export class VRAM {
         if (wordX < 0 || wordX >= 512 || wordY < 0 || wordY >= 512) {
             return 0;
         }
-        const index = wordY * 512 + wordX;
+        return this.data[wordY * 512 + wordX];
+    }
+
+    getWordByIndex(index: number): number {
+        if (index < 0 || index >= this.data.length) {
+            return 0;
+        }
         return this.data[index];
     }
 
-    getWordByIndex(wordIndex: number): number {
-        if (wordIndex < 0 || wordIndex >= this.data.length) {
-            return 0;
-        }
-        return this.data[wordIndex];
-    }
-
     applyFontStripFix() {
+        // S2 only fix
         const width = 512;
         const y = 255;
-        for (let x = 512; x <= 575; x++) {
-            const dstIndex = y * width + x;
-            const srcIndex = (y - 1) * width + (x - 512);
-            this.data[dstIndex] = this.data[srcIndex];
+        for (let x = width; x <= 575; x++) {
+            this.data[y * width + x] = this.data[(y - 1) * width + (x - width)];
         }
     }
 }
 
-function applyTileRotationRGBA(rgba: Uint8Array, tex: Tile, size: number = 32): Uint8Array {
-    const r = tex.r & 7;
-    let out = rgba;
+function applyTileRotationRGBA(rgba: Uint8Array, tile: Tile, size: number = 32): Uint8Array {
+    const rotation = tile.r & 7;
+    let rotatedRGBA = rgba;
 
     function rotate90(src: Uint8Array): Uint8Array {
-        const dst = new Uint8Array(src.length);
+        const dest = new Uint8Array(src.length);
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
                 const s = (y * size + x) * 4;
                 const d = (x * size + (size - 1 - y)) * 4;
-                dst[d + 0] = src[s + 0];
-                dst[d + 1] = src[s + 1];
-                dst[d + 2] = src[s + 2];
-                dst[d + 3] = src[s + 3];
+                dest[d + 0] = src[s + 0];
+                dest[d + 1] = src[s + 1];
+                dest[d + 2] = src[s + 2];
+                dest[d + 3] = src[s + 3];
             }
         }
-        return dst;
+        return dest;
     }
 
     function mirrorX(src: Uint8Array): Uint8Array {
-        const dst = new Uint8Array(src.length);
+        const dest = new Uint8Array(src.length);
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
                 const s = (y * size + x) * 4;
                 const d = (y * size + (size - 1 - x)) * 4;
-                dst[d + 0] = src[s + 0];
-                dst[d + 1] = src[s + 1];
-                dst[d + 2] = src[s + 2];
-                dst[d + 3] = src[s + 3];
+                dest[d + 0] = src[s + 0];
+                dest[d + 1] = src[s + 1];
+                dest[d + 2] = src[s + 2];
+                dest[d + 3] = src[s + 3];
             }
         }
-        return dst;
+        return dest;
     }
 
-    switch (r) {
+    switch (rotation) {
         case 0: // normal
             break;
         case 1: // rotate 90 left
-            out = rotate90(out);
+            rotatedRGBA = rotate90(rotatedRGBA);
             break;
         case 2: // rotate 90 right
-            out = rotate90(rotate90(rotate90(out)));
+            rotatedRGBA = rotate90(rotate90(rotate90(rotatedRGBA)));
             break;
         case 3: // rotate 180
-            out = rotate90(rotate90(out));
+            rotatedRGBA = rotate90(rotate90(rotatedRGBA));
             break;
         case 5: // mirror
-            out = mirrorX(out);
+            rotatedRGBA = mirrorX(rotatedRGBA);
             break;
         case 4: // mirror + 90 left
-            out = rotate90(mirrorX(out));
+            rotatedRGBA = rotate90(mirrorX(rotatedRGBA));
             break;
         case 6: // mirror + 90 right
-            out = rotate90(rotate90(rotate90(mirrorX(out))));
+            rotatedRGBA = rotate90(rotate90(rotate90(mirrorX(rotatedRGBA))));
             break;
         case 7: // mirror + 180
-            out = rotate90(rotate90(mirrorX(out)));
+            rotatedRGBA = rotate90(rotate90(mirrorX(rotatedRGBA)));
             break;
     }
 
-    return out;
+    return rotatedRGBA;
 }
 
 function colorBitsToRGBA(word: number): [number, number, number, number] {
     const r5 = (word) & 0x1F;
     const g5 = (word >> 5) & 0x1F;
     const b5 = (word >> 10) & 0x1F;
-    const stp = (word >> 15) & 0x01; // transparency bit
+    const stp = (word >> 15) & 0x01; // transparency
     const r = (r5 * 255 / 31) | 0;
     const g = (g5 * 255 / 31) | 0;
     const b = (b5 * 255 / 31) | 0;
-    const a = stp ? 0 : 255; // treat stp=1 as transparent
-    return [r, g, b, a];
+    return [r, g, b, stp ? 0 : 255];
 }
 
-function readClut4bpp(vram: VRAM, px: number, py: number): [number, number, number, number][] {
+function readCLUT(vram: VRAM, px: number, py: number, n: number): [number, number, number, number][] {
     const palette: [number, number, number, number][] = [];
-    const baseWordIndex = py * 512 + px;
-    for (let i = 0; i < 16; i++) {
-        const wordIndex = baseWordIndex + i;
-        const word = vram.getWordByIndex(wordIndex);
-        const [r, g, b, a] = colorBitsToRGBA(word);
-        palette.push([r, g, b, a]);
+    for (let i = 0; i < n; i++) {
+        palette.push(colorBitsToRGBA(vram.getWordByIndex((py * 512 + px) + i)));
     }
     return palette;
 }
 
-function readClut8bpp(vram: VRAM, px: number, py: number): [number, number, number, number][] {
-    const palette: [number, number, number, number][] = [];
-    const baseWordIndex = py * 512 + px;
-    for (let i = 0; i < 256; i++) {
-        const wordIndex = baseWordIndex + i;
-        const word = vram.getWordByIndex(wordIndex);
-        const [r, g, b, a] = colorBitsToRGBA(word);
-        palette.push([r, g, b, a]);
-    }
-    return palette;
-}
-
-function decode4bppTile(vram: VRAM, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
-    const out = new Uint8Array(width * height * 4);
-    for (let y = 0; y < height; y++) {
-        for (let xWord = 0; xWord < width / 4; xWord++) {
-            const vramX = tileX + xWord;
-            const vramY = tileY + y;
-            const word = vram.getWord(vramX, vramY);
-            for (let nib = 0; nib < 4; nib++) {
-                const texX = xWord * 4 + nib;
-                const texY = y;
-                const dst = (texY * width + texX) * 4;
-                const index = (word >> (nib * 4)) & 0x0F;
-                const [r, g, b, a] = palette[index];
-                out[dst + 0] = r;
-                out[dst + 1] = g;
-                out[dst + 2] = b;
-                out[dst + 3] = a;
-            }
-        }
-    }
-    return out;
-}
-
-function decode8bppTile(vram: VRAM, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
-    const out = new Uint8Array(width * height * 4);
-
-    for (let y = 0; y < height; y++) {
-        for (let xWord = 0; xWord < width / 2; xWord++) {
-            const vramX = tileX + xWord;
-            const vramY = tileY + y;
-            const word = vram.getWord(vramX, vramY);
-            const index0 = word & 0xFF;
-            const index1 = (word >> 8) & 0xFF;
-
-            // texel 0
-            {
-                const texX = xWord * 2 + 0;
-                const texY = y;
-                const dst = (texY * width + texX) * 4;
-                const [r, g, b, a] = palette[index0];
-                out[dst + 0] = r;
-                out[dst + 1] = g;
-                out[dst + 2] = b;
-                out[dst + 3] = a;
-            }
-
-            // texel 1
-            {
-                const texX = xWord * 2 + 1;
-                const texY = y;
-                const dst = (texY * width + texX) * 4;
-                const [r, g, b, a] = palette[index1];
-                out[dst + 0] = r;
-                out[dst + 1] = g;
-                out[dst + 2] = b;
-                out[dst + 3] = a;
-            }
-        }
-    }
-
-    return out;
-}
-
-function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, height: number = tex.w): Uint8Array {
-    let x4 = tex.x4;
-    const y4 = tex.y4;
-    if (tex.m === 4) {
+function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.w, height: number = tile.w): Uint8Array {
+    let x4 = tile.x4;
+    const y4 = tile.y4;
+    if (tile.m === 4) {
         x4 = x4 >> 2;
-        const palette = readClut4bpp(vram, tex.px, tex.py);
-        return decode4bppTile(vram, x4, y4, width, height, palette);
-    } else if (tex.m === 8) {
+        const palette = readCLUT(vram, tile.px, tile.py, 16);
+        const out = new Uint8Array(width * height * 4);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width / 4; x++) {
+                const word = vram.getWord(x4 + x, y4 + y);
+                for (let nib = 0; nib < 4; nib++) {
+                    const dst = (y * width + (x * 4 + nib)) * 4;
+                    const [r, g, b, a] = palette[(word >> (nib * 4)) & 0x0F];
+                    out[dst + 0] = r;
+                    out[dst + 1] = g;
+                    out[dst + 2] = b;
+                    out[dst + 3] = a;
+                }
+            }
+        }
+        return out;
+    } else if (tile.m === 8) {
         x4 = x4 >> 1;
-        const palette = readClut8bpp(vram, tex.px, tex.py);
-        return decode8bppTile(vram, x4, y4, width, height, palette);
+        const palette = readCLUT(vram, tile.px, tile.py, 256);
+        const out = new Uint8Array(width * height * 4);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width / 2; x++) {
+                const word = vram.getWord(x4 + x, y4 + y);
+                {
+                    const dst = (y * width + (x * 2)) * 4;
+                    const [r, g, b, a] = palette[word & 0xFF];
+                    out[dst + 0] = r;
+                    out[dst + 1] = g;
+                    out[dst + 2] = b;
+                    out[dst + 3] = a;
+                }
+                {
+                    const dst = (y * width + (x * 2 + 1)) * 4;
+                    const [r, g, b, a] = palette[(word >> 8) & 0xFF];
+                    out[dst + 0] = r;
+                    out[dst + 1] = g;
+                    out[dst + 2] = b;
+                    out[dst + 3] = a;
+                }
+            }
+        }
+        return out;
     } else {
         const out = new Uint8Array(width * height * 4);
-        const wordX = tex.x4;
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const word = vram.getWord(wordX + x, y4 + y);
+                const word = vram.getWord(tile.x4 + x, y4 + y);
                 const [r, g, b, a] = colorBitsToRGBA(word);
                 const dst = (y * width + x) * 4;
                 out[dst + 0] = r;
@@ -356,7 +302,7 @@ function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, height: 
     }
 }
 
-function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -364,16 +310,10 @@ function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
     const tileIndex = poly.t & 0x7F;
     if (atlas && tileIndex >= 0 && tileIndex < atlas.uvs.length) {
         const rect = atlas.uvs[tileIndex];
-
-        const uvBL: [number, number] = [rect.u0, rect.v1];
-        const uvBR: [number, number] = [rect.u1, rect.v1];
-        const uvTR: [number, number] = [rect.u1, rect.v0];
-        const uvTL: [number, number] = [rect.u0, rect.v0];
-
-        const uv1 = uvBL; // tex1
-        const uv2 = uvBR; // tex2
-        const uv3 = uvTR; // tex3
-        const uv4 = uvTL; // tex4
+        const uv1 = [rect.u0, rect.v1];
+        const uv2 = [rect.u1, rect.v1];
+        const uv3 = [rect.u1, rect.v0];
+        const uv4 = [rect.u0, rect.v0];
         const ca = mdlColorStart + poly.c1;
         const cb = mdlColorStart + poly.c2;
         const cc = mdlColorStart + poly.c3;
@@ -385,26 +325,25 @@ function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
             const br: [number, number] = [rect.u1, rect.v1];
             const bl: [number, number] = [rect.u0, rect.v1];
             const rr = poly.r & 3;
-            const base = [bl, br, tr, tl]; // tex1, tex2, tex3, tex4
-            const perms = [
+            const base = [bl, br, tr, tl];
+            const permutations = [
                 [0, 1, 2, 3], // r=0
                 [3, 0, 1, 2], // r=1
                 [2, 3, 0, 1], // r=2
                 [1, 2, 3, 0], // r=3
             ];
-            const p = perms[rr];
-            const tex1 = base[p[0]];
-            const tex2 = base[p[1]];
-            const tex3 = base[p[2]];
-            const tex4 = base[p[3]];
+            const permutation = permutations[rr];
+            const tex1 = base[permutation[0]];
+            const tex2 = base[permutation[1]];
+            const tex3 = base[permutation[2]];
+            const tex4 = base[permutation[3]];
             const uv0 = uvs.push(tex4) - 1; // v4
             const uv1 = uvs.push(tex3) - 1; // v3
-            const uv2 = uvs.push(tex1) - 1; // v2
+            const uv2 = uvs.push(tex1) - 1; // v1
             faces.push({
                 indices: [d, c, b],
                 uvIndices: [uv0, uv1, uv2],
-                colorIndices: [cd, cc, ca],
-                rotation: rr
+                colorIndices: [cd, cc, ca]
             });
         } else {
             // v1 -> tex1, v2 -> tex2, v3 -> tex3, v4 -> tex4
@@ -415,37 +354,33 @@ function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
             faces.push({
                 indices: [a, b, c],  // v1, v2, v3
                 uvIndices: [uvA, uvB, uvC],
-                colorIndices:[ca, cb, cc],
-                rotation: 0
+                colorIndices:[ca, cb, cc]
             });
             faces.push({
                 indices: [a, c, d],  // v1, v3, v4
                 uvIndices: [uvA, uvC, uvD],
-                colorIndices:[ca, cc, cd],
-                rotation: 0
+                colorIndices:[ca, cc, cd]
             });
         }
     } else {
         faces.push({
             indices: [a, b, c],
             uvIndices: null,
-            colorIndices: null,
-            rotation: poly.r,
+            colorIndices: null
         });
     }
 }
 
-function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas, waterOverride: boolean) {
+function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas, isWater: boolean) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
     const d = mdlVertStart + poly.v4;
-    const ca = mdlColorStart + poly.c1;
-    const cb = mdlColorStart + poly.c2;
-    const cc = mdlColorStart + poly.c3;
-    const cd = mdlColorStart + poly.c4;
-    const texIndex = poly.tt;
-    const tileIndex = texIndex & 0x7f;
+    const colorA = mdlColorStart + poly.c1;
+    const colorB = mdlColorStart + poly.c2;
+    const colorC = mdlColorStart + poly.c3;
+    const colorD = mdlColorStart + poly.c4;
+    const tileIndex = poly.tt & 0x7f;
     const rect = atlas.uvs[tileIndex];
     let A = [rect.u0, rect.v1];
     let B = [rect.u1, rect.v1];
@@ -454,41 +389,46 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
 
     function rotateUVCorners(rot: number, A: number[], B: number[], C: number[], D: number[]) {
         switch (rot & 3) {
-            case 0: return [A, B, C, D];
-            case 1: return [B, C, D, A];
-            case 2: return [C, D, A, B];
-            case 3: return [D, A, B, C];
-            default: return [A, B, C, D];
+            case 1:
+                return [B, C, D, A];
+            case 2:
+                return [C, D, A, B];
+            case 3:
+                return [D, A, B, C];
+            case 0:
+            default:
+                return [A, B, C, D];
         }
     }
 
-    const tex = atlas.tiles![tileIndex];
-    const isWater = waterOverride;
-    const isTransparent = tex.b > 0;
-    let texRot = tex.r & 7;
+    const tile = atlas.tiles![tileIndex];
+    const isTransparent = tile.b > 0;
     const isTri = (poly.v1 === poly.v2);
-    let polyRot = 0;
+    let polyRotation = 0;
     if (isTri) {
         const rr = (poly.ii >> 4) & 3;
-        polyRot = (texRot - rr) & 3;
-        [A, B, C, D] = rotateUVCorners(polyRot, A, B, C, D);
+        polyRotation = ((tile.r & 7) - rr) & 3;
+        [A, B, C, D] = rotateUVCorners(polyRotation, A, B, C, D);
     }
-    const uvIndexA = uvs.length; uvs.push(A);
-    const uvIndexB = uvs.length; uvs.push(B);
-    const uvIndexC = uvs.length; uvs.push(C);
-    const uvIndexD = uvs.length; uvs.push(D);
+
+    const uvIndexA = uvs.length;
+    uvs.push(A);
+    const uvIndexB = uvs.length;
+    uvs.push(B);
+    const uvIndexC = uvs.length;
+    uvs.push(C);
+    const uvIndexD = uvs.length;
+    uvs.push(D);
     const iByte = poly.ii;
-    const bothSides = !!(iByte & 0x08);
+    // const bothSides = !!(iByte & 0x08);
     const inverse = !!(iByte & 0x04);
+
     if (isTri) {
         if (!inverse) {
             faces.push({
                 indices: [b, c, d],
                 uvIndices: [uvIndexA, uvIndexC, uvIndexD],
-                colorIndices: [cb, cc, cd],
-                rotation: polyRot,
-                bothSides,
-                inverse,
+                colorIndices: [colorB, colorC, colorD],
                 isWater,
                 isTransparent
             });
@@ -496,10 +436,7 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
             faces.push({
                 indices: [d, c, b],
                 uvIndices: [uvIndexD, uvIndexC, uvIndexA],
-                colorIndices: [cd, cc, cb],
-                rotation: polyRot,
-                bothSides,
-                inverse,
+                colorIndices: [colorD, colorC, colorB],
                 isWater,
                 isTransparent
             });
@@ -508,20 +445,14 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
         faces.push({
             indices: [a, b, c],
             uvIndices: [uvIndexA, uvIndexB, uvIndexC],
-            colorIndices: [ca, cb, cc],
-            rotation: 0,
-            bothSides,
-            inverse,
+            colorIndices: [colorA, colorB, colorC],
             isWater,
             isTransparent
         });
         faces.push({
             indices: [a, c, d],
             uvIndices: [uvIndexA, uvIndexC, uvIndexD],
-            colorIndices: [ca, cc, cd],
-            rotation: 0,
-            bothSides,
-            inverse,
+            colorIndices: [colorA, colorC, colorD],
             isWater,
             isTransparent
         });
@@ -531,18 +462,19 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
 export function buildSkybox(view: DataView, gameNumber: number): Skybox {
     const size = view.byteLength;
     let pointer = 0;
-    const bgR = view.getUint8(pointer + 0);
-    const bgG = view.getUint8(pointer + 1);
-    const bgB = view.getUint8(pointer + 2);
+    const backgroundColor: [number, number, number] = [
+        view.getUint8(pointer),
+        view.getUint8(pointer + 1),
+        view.getUint8(pointer + 2)
+    ];
     pointer += 4;
-    const backgroundColor: [number, number, number] = [bgR, bgG, bgB];
     const partOffsets: number[] = [];
     while (pointer + 4 <= size) {
-        const ptr = view.getUint32(pointer, true);
+        const partOffset = view.getUint32(pointer, true);
         pointer += 4;
-        if (ptr === 0) break;
-        if (ptr >= size) break;
-        partOffsets.push(ptr);
+        if (partOffset === 0 || partOffset >= size)
+            break;
+        partOffsets.push(partOffset);
     }
     const uniqueOffsets = Array.from(new Set(partOffsets)).sort((a, b) => a - b);
     const vertices: [number, number, number][] = [];
@@ -563,37 +495,32 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
     const colors: number[][] = [];
     const faces: GroundFace[] = [];
     const uvs: number[][] = [];
-    let offs = 0;
-    let partCount = view.getUint32(offs, true);
-    offs += 4;
+    let offset = 0;
+    let partCount = view.getUint32(offset, true);
+    offset += 4;
     const start = 8;
     const partOffsets: number[] = [];
 
     if (gameNumber > 1) {
-        offs = 0;
-        const partTableOffset = view.getUint32(offs, true);
-        offs += 4;
-        let partTablePos = partTableOffset;
+        offset = 0;
+        let partTablePos = view.getUint32(offset, true);
+        offset += 4;
         partCount = view.getUint32(partTablePos, true);
         partTablePos += 4;
         for (let i = 0; i < partCount; i++) {
-            const off = view.getUint32(partTablePos, true);
+            partOffsets.push(view.getUint32(partTablePos, true));
             partTablePos += 4;
-            partOffsets.push(off);
         }
     }
 
     for (let part = 0; part < partCount; part++) {
-        let abs = 0;
         let pointer = 0;
         if (gameNumber == 1) {
-            const offset = view.getUint32(offs, true);
-            offs += 4;
-            abs = offset + start;
-            pointer = abs;
+            const o = view.getUint32(offset, true);
+            offset += 4;
+            pointer = o + start;
         } else {
-            abs = partOffsets[part] + 8;
-            pointer = abs;
+            pointer = partOffsets[part] + 8;
         }
         const header = new Header(view, pointer);
         pointer += Header.size;
@@ -610,7 +537,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
 
         // LOD colors
         for (let i = 0; i < header.c1; i++) {
-            const c = new Color(view, pointer);
+            const c = new VertexColor(view, pointer);
             pointer += 4;
             colors.push([c.r, c.g, c.b]);
         }
@@ -660,7 +587,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
         // MDL colors
         const mdlColorStart = colors.length;
         for (let i = 0; i < header.c2; i++) {
-            const color = new Color(view, pointer);
+            const color = new VertexColor(view, pointer);
             pointer += 4;
             colors.push([color.r, color.g, color.b]);
         }
@@ -670,7 +597,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
 
         // Textured polys
         for (let i = 0; i < header.p2; i++) {
-            const poly = new Poly(view, pointer, gameNumber);
+            const poly = new Polygon(view, pointer, gameNumber);
             pointer += 16;
             if (gameNumber == 1) {
                 buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
@@ -679,24 +606,26 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             }
         }
     }
+
     return { vertices, colors, faces, uvs, atlas };
 }
 
-export function buildTileAtlas(vram: VRAM, groups: TileGroups, gameNumber: number): TileAtlas {
+export function buildTileAtlas(vram: VRAM, view: DataView, gameNumber: number): TileAtlas {
+    const tiles = parseTiles(view, gameNumber);
     const tilesPerRow = 8;
     const slotSize = 32;
-    const tileCount = groups.lod.length;
+    const tileCount = tiles.length;
     const width = tilesPerRow * slotSize;
     const height = Math.ceil(tileCount / tilesPerRow) * slotSize;
     const data = new Uint8Array(width * height * 4);
     const uvs: { u0: number; v0: number; u1: number; v1: number }[] = [];
     for (let i = 0; i < tileCount; i++) {
-        const tex = groups.lod[i];
-        const w = tex.w;
-        const h = tex.w;
-        let rgba = decodeTileToRGBA(vram, tex, w, h);
+        const tile = tiles[i];
+        const w = tile.w;
+        const h = tile.w;
+        let rgba = decodeTileToRGBA(vram, tile, w, h);
         if (gameNumber == 1) {
-            rgba = applyTileRotationRGBA(rgba, tex, w);
+            rgba = applyTileRotationRGBA(rgba, tile, w);
         }
         const atlasX = (i % tilesPerRow) * slotSize;
         const atlasY = Math.floor(i / tilesPerRow) * slotSize;
@@ -720,27 +649,7 @@ export function buildTileAtlas(vram: VRAM, groups: TileGroups, gameNumber: numbe
     if (gameNumber == 1) {
         return { data, width, height, uvs };
     }
-    return { data, width, height, uvs, tiles: groups.lod };
-}
-
-export function parseTileGroups(view: DataView, gameNumber: number): TileGroups {
-    let offs = 4;
-    const lod: Tile[] = [];
-    let count = view.getUint32(offs, true);
-    offs += 4;
-
-    for (let i = 0; i < count; i++) {
-        offs += 8;
-        const tex = readTile(view, offs);
-        offs += 8;
-        textureCompute(tex, offs - 8, gameNumber);
-        lod.push(tex);
-        if (gameNumber > 1) {
-            offs += 32; // skip unused groups
-        }
-    }
-
-    return { lod };
+    return { data, width, height, uvs, tiles };
 }
 
 export function parseMobys(view: DataView): Moby[] {
@@ -814,46 +723,59 @@ export function parseMobys(view: DataView): Moby[] {
     return mobys;
 }
 
-function readTile(view: DataView, offs: number): Tile {
-    return {
-        x0: view.getUint8(offs + 0),
-        y0: view.getUint8(offs + 1),
-        p1: view.getUint8(offs + 2),
-        p2: view.getUint8(offs + 3),
-        xx: view.getUint8(offs + 4),
-        yy: view.getUint8(offs + 5),
-        ss: view.getUint8(offs + 6),
-        ff: view.getUint8(offs + 7),
-        px:0,py:0,m:4,w:32,
-        x1:0,x2:0,x3:0,x4:0,
-        y1:0,y2:0,y3:0,y4:0,
-        r:0,s:0,off:offs,f:false,b:0
-    };
+function parseTiles(view: DataView, gameNumber: number): Tile[] {
+    const tiles: Tile[] = [];
+    let offset = 4;
+    let count = view.getUint32(offset, true);
+    offset += 4;
+    for (let i = 0; i < count; i++) {
+        offset += 8;
+        const tile: Tile = {
+            x0: view.getUint8(offset + 0), y0: view.getUint8(offset + 1),
+            p1: view.getUint8(offset + 2), p2: view.getUint8(offset + 3),
+            xx: view.getUint8(offset + 4), yy: view.getUint8(offset + 5),
+            ss: view.getUint8(offset + 6), ff: view.getUint8(offset + 7),
+            px: 0, py: 0, m: 4, w: 32,
+            x1: 0, x2: 0, x3: 0, x4: 0,
+            y1: 0, y2: 0, y3: 0, y4: 0,
+            r: 0, s: 0, off: offset, f: false, b: 0
+        };
+        offset += 8;
+        textureCompute(tile, offset - 8, gameNumber);
+        tiles.push(tile);
+        if (gameNumber > 1) {
+            offset += 32; // skip unused groups
+        }
+    }
+    return tiles;
 }
 
 function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyboxFace[]): void {
-    let p = partOffset;
-    if (p + 24 > size) return;
+    let pointer = partOffset;
+    if (pointer + 24 > size)
+        return;
+
     // header_sky1_ (24 bytes)
-    p += 8;
-    const globalY = view.getInt16(p + 0, true);
-    const globalZ = view.getInt16(p + 2, true);
-    const vCount = view.getUint16(p + 4, true);
-    const globalX = view.getInt16(p + 6, true);
-    const pCount = view.getUint16(p + 8, true);
-    const cCount = view.getUint16(p + 10, true);
-    p += 16;
+    pointer += 8;
+    const globalY = view.getInt16(pointer + 0, true);
+    const globalZ = view.getInt16(pointer + 2, true);
+    const vCount = view.getUint16(pointer + 4, true);
+    const globalX = view.getInt16(pointer + 6, true);
+    const pCount = view.getUint16(pointer + 8, true);
+    const cCount = view.getUint16(pointer + 10, true);
+    pointer += 16;
     const baseVertexIndex = vertices.length;
-    const baseColorIndex  = colors.length;
+    const baseColorIndex = colors.length;
 
     // Vertices block: vCount * 4 bytes
     for (let i = 0; i < vCount; i++) {
-        if (p + 4 > size) break;
-        const b1 = view.getUint8(p + 0);
-        const b2 = view.getUint8(p + 1);
-        const b3 = view.getUint8(p + 2);
-        const b4 = view.getUint8(p + 3);
-        p += 4;
+        if (pointer + 4 > size)
+            break;
+        const b1 = view.getUint8(pointer + 0);
+        const b2 = view.getUint8(pointer + 1);
+        const b3 = view.getUint8(pointer + 2);
+        const b4 = view.getUint8(pointer + 3);
+        pointer += 4;
         const packedZ = (b1 | ((b2 & 0x03) << 8));
         const packedY = ((b2 >> 2) | ((b3 & 0x1F) << 6));
         const packedX = ((b3 >> 5) | (b4 << 3));
@@ -865,27 +787,29 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
 
     // Colors block: cCount * 4 bytes
     for (let i = 0; i < cCount; i++) {
-        if (p + 4 > size) break;
-        const r = view.getUint8(p + 0);
-        const g = view.getUint8(p + 1);
-        const b = view.getUint8(p + 2);
+        if (pointer + 4 > size)
+            break;
+        const r = view.getUint8(pointer + 0);
+        const g = view.getUint8(pointer + 1);
+        const b = view.getUint8(pointer + 2);
         // const n = view.getUint8(p + 3);
-        p += 4;
+        pointer += 4;
         colors.push([r, g, b]);
     }
 
     // Polys block: pCount * 8 bytes
     for (let i = 0; i < pCount; i++) {
-        if (p + 8 > size) break;
-        const v1_packed1 = view.getUint8(p + 0);
-        const v1_packed2 = view.getUint8(p + 1);
-        const v1_packed3 = view.getUint8(p + 2);
-        const v1_packed4 = view.getUint8(p + 3);
-        const c1_packed1 = view.getUint8(p + 4);
-        const c1_packed2 = view.getUint8(p + 5);
-        const c1_packed3 = view.getUint8(p + 6);
-        const c1_packed4 = view.getUint8(p + 7);
-        p += 8;
+        if (pointer + 8 > size)
+            break;
+        const v1_packed1 = view.getUint8(pointer + 0);
+        const v1_packed2 = view.getUint8(pointer + 1);
+        const v1_packed3 = view.getUint8(pointer + 2);
+        const v1_packed4 = view.getUint8(pointer + 3);
+        const c1_packed1 = view.getUint8(pointer + 4);
+        const c1_packed2 = view.getUint8(pointer + 5);
+        const c1_packed3 = view.getUint8(pointer + 6);
+        const c1_packed4 = view.getUint8(pointer + 7);
+        pointer += 8;
         const [vi1, vi2, vi3] = unpackSkyIndex(v1_packed1, v1_packed2, v1_packed3, v1_packed4);
         const [ci1, ci2, ci3] = unpackSkyIndex(c1_packed1, c1_packed2, c1_packed3, c1_packed4);
         if (vi1 < vCount && vi2 < vCount && vi3 < vCount && ci1 < cCount && ci2 < cCount && ci3 < cCount) {
@@ -898,32 +822,34 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
 }
 
 function parseSkyboxPart2(view: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyboxFace[]): void {
-    let p = partOffset;
-    if (p + 20 > size) return;
+    let pointer = partOffset;
+    if (pointer + 20 > size)
+        return;
 
     // Header
-    p += 8;
-    const globalY = view.getInt16(p + 0, true);
-    const globalZ = view.getInt16(p + 2, true);
-    const vCount = view.getUint8(p + 4);
-    const cCount = view.getUint8(p + 5);
-    const globalX = view.getInt16(p + 6, true);
-    const miscSize = view.getUint16(p + 8, true);
-    const poly1Size = view.getUint16(p + 10, true); // p1 = size in bytes of main polys
-    p += 12; // total header = 20 bytes
+    pointer += 8;
+    const globalY = view.getInt16(pointer + 0, true);
+    const globalZ = view.getInt16(pointer + 2, true);
+    const vCount = view.getUint8(pointer + 4);
+    const cCount = view.getUint8(pointer + 5);
+    const globalX = view.getInt16(pointer + 6, true);
+    const miscSize = view.getUint16(pointer + 8, true);
+    const poly1Size = view.getUint16(pointer + 10, true);
+    pointer += 12; // total header = 20 bytes
 
     const baseVertexIndex = vertices.length;
     const baseColorIndex  = colors.length;
 
     // Vertices
     for (let i = 0; i < vCount; i++) {
-        if (p + 4 > size) return;
+        if (pointer + 4 > size)
+            return;
 
-        const b1 = view.getUint8(p + 0);
-        const b2 = view.getUint8(p + 1);
-        const b3 = view.getUint8(p + 2);
-        const b4 = view.getUint8(p + 3);
-        p += 4;
+        const b1 = view.getUint8(pointer + 0);
+        const b2 = view.getUint8(pointer + 1);
+        const b3 = view.getUint8(pointer + 2);
+        const b4 = view.getUint8(pointer + 3);
+        pointer += 4;
 
         const packedZ = (b1 | ((b2 & 0x03) << 8));
         const packedY = ((b2 >> 2) | ((b3 & 0x1F) << 6));
@@ -938,16 +864,16 @@ function parseSkyboxPart2(view: DataView, size: number, partOffset: number, vert
 
     // Colors
     for (let i = 0; i < cCount; i++) {
-        if (p + 4 > size) return;
-        const r = view.getUint8(p + 0);
-        const g = view.getUint8(p + 1);
-        const b = view.getUint8(p + 2);
-        p += 4;
+        if (pointer + 4 > size) return;
+        const r = view.getUint8(pointer + 0);
+        const g = view.getUint8(pointer + 1);
+        const b = view.getUint8(pointer + 2);
+        pointer += 4;
         colors.push([r, g, b]);
     }
 
     // Main polys
-    const poly1Start = p;
+    const poly1Start = pointer;
     const poly1End = poly1Start + poly1Size;
     if (poly1End > size) return;
 
@@ -955,19 +881,21 @@ function parseSkyboxPart2(view: DataView, size: number, partOffset: number, vert
     let remaining = poly1Size;
 
     while (remaining > 3) {
-        if (p + 4 > size) return;
+        if (pointer + 4 > size)
+            return;
         remaining -= 4;
 
-        const b1 = view.getUint8(p++);
-        const b2 = view.getUint8(p++);
-        const b3 = view.getUint8(p++);
-        let v0 = view.getUint8(p++);
+        const b1 = view.getUint8(pointer++);
+        const b2 = view.getUint8(pointer++);
+        const b3 = view.getUint8(pointer++);
+        let v0 = view.getUint8(pointer++);
         let c0 = (b1 >> 3) | ((b2 & 0x03) << 5);
         let c1 = (b2 >> 2) | ((b3 & 0x01) << 6);
         const c2 = (b3 >> 1);
         let pp = (b1 & 0x07);
 
-        if (seeker + 2 > size) return;
+        if (seeker + 2 > size)
+            return;
         let v1 = view.getUint8(seeker++);
         let v2 = view.getUint8(seeker++);
 
@@ -992,12 +920,12 @@ function parseSkyboxPart2(view: DataView, size: number, partOffset: number, vert
         let c3 = c0;
         while (pp > 0) {
             pp--;
-            if (seeker + 2 > size) return;
+            if (seeker + 2 > size)
+                return;
             const vN = view.getUint8(seeker++);
             const cm = view.getUint8(seeker++);
             const c2n = cm & 0x7F;
-            if (v0 < vCount && v1 < vCount && vN < vCount &&
-                c0 < cCount && c1 < cCount && c2n < cCount) {
+            if (v0 < vCount && v1 < vCount && vN < vCount && c0 < cCount && c1 < cCount && c2n < cCount) {
                 faces.push({
                     indices: [
                         baseVertexIndex + v0,
@@ -1030,40 +958,48 @@ function unpackSkyIndex(b1: number, b2: number, b3: number, b4: number): [number
     return [i1, i2, i3];
 }
 
-function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
+function textureCompute(tex: Tile, offset: number, gameNumber: number): void {
+    // SWV equivalent of texture_compute
     tex.f = false;
-    tex.off = filePos;
+    tex.off = offset;
 
-    if ((tex.ff & 0x0E) > 0) tex.f = true;
-    if ((tex.ss & 0x08) === 0) tex.f = true;
+    if ((tex.ff & 0x0E) > 0 || (tex.ss & 0x08) === 0)
+        tex.f = true;
 
     if (gameNumber > 1) {
         tex.w = 32;
         tex.b = (tex.ss >> 5) & 0x03;
     } else {
-        if ((tex.ff & 0x80) > 0) tex.w = 32;
-        else tex.w = 16;
-        if (tex.ff & 0x80) {
+        if ((tex.ff & 0x80) > 0)
+            tex.w = 32;
+        else
+            tex.w = 16;
+
+        if (tex.ff & 0x80)
             tex.b = 1 + ((tex.ss & 0x7f) >> 5);
-        } else {
+        else
             tex.b = 0;
-        }
     }
 
-    if ((tex.x0 + tex.w - 1) !== tex.xx) tex.f = true;
-    if (tex.x0 > (256 - tex.w)) tex.f = true;
-    if (tex.y0 > (256 - tex.w)) tex.f = true;
+    if ((tex.x0 + tex.w - 1) !== tex.xx || tex.x0 > (256 - tex.w) || tex.y0 > (256 - tex.w))
+        tex.f = true;
 
-    if ((tex.ff & 0x01) > 0) tex.m = 15;
-    else {
-        if ((tex.ss & 0x80) > 0) tex.m = 8;
-        else tex.m = 4;
+    if ((tex.ff & 0x01) > 0) {
+        tex.m = 15;
+    } else {
+        if ((tex.ss & 0x80) > 0)
+            tex.m = 8;
+        else
+            tex.m = 4;
     }
 
     tex.s = tex.ss & 0x07;
-    if (tex.m === 4) tex.s = 256 * tex.s;
-    if (tex.m === 8) tex.s = 128 * tex.s;
-    if (tex.m === 15) tex.s = 64 * tex.s;
+    if (tex.m === 4)
+        tex.s = 256 * tex.s;
+    if (tex.m === 8)
+        tex.s = 128 * tex.s;
+    if (tex.m === 15)
+        tex.s = 64 * tex.s;
 
     tex.x4 = tex.x0 + tex.s;
     tex.x3 = tex.xx + tex.s;
@@ -1071,7 +1007,8 @@ function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
     tex.x2 = tex.x4 + tex.w;
 
     tex.y4 = tex.y0;
-    if ((tex.ss & 0x10) > 0) tex.y4 += 256;
+    if ((tex.ss & 0x10) > 0)
+        tex.y4 += 256;
     tex.y3 = tex.y4;
     tex.y1 = tex.y4 + tex.w;
     tex.y2 = tex.y4 + tex.w;
@@ -1081,5 +1018,5 @@ function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
 
     tex.r = (tex.ff & 127) >> 4;
 
-    tex.off = filePos - 8;
+    tex.off = offset - 8;
 }
