@@ -371,7 +371,7 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
     }
 }
 
-function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas, isWater: boolean) {
+function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -421,6 +421,7 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
     uvs.push(D);
     const iByte = poly.ii;
     // const bothSides = !!(iByte & 0x08);
+    const isWater = poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0;
     const inverse = !!(iByte & 0x04);
 
     if (isTri) {
@@ -548,8 +549,8 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
         }
 
         // MDL/FAR/TEX vertices
-        let isWaterNonGround = header.w === 0;
-        if (gameNumber > 1 && !isWaterNonGround) {
+        let isWaterNonGround = false;
+        if (gameNumber > 1) {
             let polyPos = pointer + header.v2 * 4 + header.c2 * 4 + header.c2 * 4;
             for (let i = 0; i < header.p2; i++) {
                 const s1 = view.getUint8(polyPos + 8);
@@ -602,7 +603,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             if (gameNumber == 1) {
                 buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
             } else {
-                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas, header.w === 0)
+                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
             }
         }
     }

@@ -13,33 +13,39 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 To-do list
 
     Scrolling textures
-    Better level shader (smoothen the color banding)
+    Better handling of transparency in S2/S3 (don't hardcode transparency value)
+        See Icy Peak in S3 or Metropolis in S2
+    Better handling of water, although it should be mostly accurate
     Clean up functions in bin.ts
+    Render low-poly/untextured faces in addition to existing faces
+        This will make certain scenes look closer to PSX, particularly the title screens where the camera is locked
 
     Spyro 1
         Water in some flight levels/Gnasty's Loot doesn't render correctly (different than ground like the second game?)
         
     Spyro 2
         Fix the credits flyover ("starring") levels. They crash when trying to load
-        The title screen needs its low-poly parts rendered to look correct (and possibly some other levels)
-            All levels currently only show high-poly/textured (see buildLevel in bin.ts)
-        Water is mostly correct but the tinting is hardcoded in the shader and the transparency is arbitrary
-        There are a very small number of incorrect faces (unsure if all the same problem or different. Some could be invisible walls/collision related)
-            Below the Ocean Speedway portal in Summer Forest there's stray faces
+        There are a very small number of incorrect faces (unsure if all the same problem or different. Some are invisible walls/collision related)
+            Most (but not all) portals in homeworlds have black portal-shaped faces under them
             The outdoor waterfall in Idol Springs has two black triangles
             Colossus has a z-fighting face in the hockey rink's ice
-            Hurricos has black polygons in the gates that need spark plugs to open
-            Aquaria Towers has some of the tower numbers' faces being rendered as water (the water at the bottom is expected to be there since you drain it and the textures move up)
-            A missing face next to the destroyable wall in Autumn Plains
-            Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected since you blow it up while playing)
-            Metropolis has some faces at the starting area that are incorrectly rendered as water
-            Dragon Shores has a water triangle along the edge "ocean" that appears much brighter and has z-fighting
-            Dragon Shores also has one of the dragon statues at the entrance with parts of its wings being treated as water
+            Hurricos has black polygons in the gates that need spark plugs to open (Sunny Beach has similar ones on its gates)
+            Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should
+        Mystic Marsh and Shady Oasis have some weird z-scaling problem that requires special handling in buildLevel
+
+    Spyro 3
+        Fix the credits flyover ("starring") levels. They crash when trying to load
+        There are a very small number of incorrect faces
+            Molten Crater has some random ground textures in the trees (could be like that in the game)
+            Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent in the same way as other textures are
+            Icy Peak has some misaligned vertex colors under the ice sections (likely an issue with the game itself)
 
 Nice to have
 
     Gems, level entities, NPCs, etc. rendered in each level
         The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox
+        Positions of mobys in S3 are figured out, but need the models and (maybe) animations
+    Misc level effects, such as vertex color "shimmering" under water sections in S2/S3
     Read directly from WAD.WAD by offset instead of extracting subfiles (if better than extraction)
 */
 
