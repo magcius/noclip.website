@@ -81,8 +81,7 @@ for file in os.listdir(extract_path):
         to_remove.append(file)
 
 # Delete leftover level subfiles
-if game_number < 3: # don't remove S3 for now
-    for file in to_remove:
-        os.remove(f"{extract_path}{file}")
+for file in to_remove:
+    os.remove(f"{extract_path}{file}")
 
 print("Done!")

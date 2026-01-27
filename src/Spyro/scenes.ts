@@ -195,8 +195,8 @@ class SpyroScene3 implements SceneDesc {
         const textures = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
 
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.${this.subFileID < 90 ? 'cutscene' : 'level'}`);
-        const mobys = this.subLevelID === undefined ? parseMobys(levelFile.createDataView()) : [];
+        const varsFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_var.bin`);
+        const mobys = this.subLevelID === undefined ? parseMobys(varsFile.createDataView()) : [];
 
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);

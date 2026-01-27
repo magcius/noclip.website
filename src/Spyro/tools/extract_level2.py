@@ -47,6 +47,7 @@ def extract_level2(level_subfile, game_number):
     sky_file_name = f"{prefix}sky.bin"
     vram_file_name = f"{prefix}vram.bin"
     list_file_name = f"{prefix}list.bin"
+    vars_file_name = f"{prefix}var.bin"
 
     with open(level_subfile, "rb") as stream:
         start = 0
@@ -220,3 +221,13 @@ def extract_level2(level_subfile, game_number):
                 outname = ground_file_name.replace("ground", f"ground{i}")
                 with open(outname, "wb") as save:
                     copy_from(save, stream, offset - 4)
+
+        # Moby vars
+        if game_number == 3:
+            stream.seek(0x18, 0)
+            ssf4_pointer = read_u32(stream)
+            stream.seek(0x1C, 0)
+            ssf4_size = read_u32(stream)
+            stream.seek(ssf4_pointer, os.SEEK_CUR)
+            with open(vars_file_name, "wb") as save:
+                copy_from(save, stream, ssf4_size)
