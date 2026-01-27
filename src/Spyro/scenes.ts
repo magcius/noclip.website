@@ -195,7 +195,7 @@ class SpyroScene3 implements SceneDesc {
         const textures = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
 
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.level`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.${this.subFileID < 90 ? 'cutscene' : 'level'}`);
         const mobys = this.subLevelID === undefined ? parseMobys(levelFile.createDataView()) : [];
 
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
@@ -327,17 +327,6 @@ const sceneDescs2 = [
     new SpyroScene2(90, "Winter Tundra (Intro)"),
     new SpyroScene2(92, "Ripto's Arena (Intro)"),
     new SpyroScene2(94, "Ripto's Arena (Outro)")
-    // "Credits Flyover", // currently broken but these are the valid ids
-    // new SpyroScene2(188, "Flyover"),
-    // new SpyroScene2(189, "Flyover"),
-    // new SpyroScene2(190, "Flyover"),
-    // new SpyroScene2(191, "Flyover"),
-    // new SpyroScene2(192, "Flyover"),
-    // new SpyroScene2(193, "Flyover"),
-    // new SpyroScene2(194, "Flyover"),
-    // new SpyroScene2(195, "Flyover"),
-    // new SpyroScene2(196, "Flyover"),
-    // new SpyroScene2(197, "Flyover")
 ];
 
 const id3 = "Spyro3";
@@ -444,19 +433,6 @@ const sceneDescs3 = [
     new SpyroScene3(61, "Cutscene"),
     new SpyroScene3(64, "Cutscene"),
     new SpyroScene3(67, "Cutscene")
-    // "Credits Flyover",
-    // new SpyroScene3(184, "Flyover"),
-    // new SpyroScene3(185, "Flyover"),
-    // new SpyroScene3(186, "Flyover"),
-    // new SpyroScene3(187, "Flyover"),
-    // new SpyroScene3(188, "Flyover"),
-    // new SpyroScene3(189, "Flyover"),
-    // new SpyroScene3(190, "Flyover"),
-    // new SpyroScene3(191, "Flyover"),
-    // new SpyroScene3(192, "Flyover"),
-    // new SpyroScene3(193, "Flyover"),
-    // new SpyroScene3(194, "Flyover"),
-    // new SpyroScene3(195, "Flyover")
 ];
 
 export const sceneGroup: SceneGroup = {id: id, name: name, sceneDescs: sceneDescs};

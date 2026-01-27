@@ -60,10 +60,11 @@ with open(wad_path, "rb") as f:
                 for t in ["level", "cutscene", "starring"]:
                     if sf_index in subfile_type_map[game_number - 1][t]:
                         extension = t
-                if extension != "bin": # skip non-level subfiles for noclip (overlays, menus, etc.)
-                    print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
-                    with open(f"{extract_path}/sf{sf_index + 1}.{extension}", "wb") as sf:
-                        sf.write(wad[sf_offset:sf_offset+sf_size])
+                if extension != "bin" and sf_size > 0: # skip non-level subfiles for noclip (overlays, menus, etc.)
+                    if game_number == 1 or (game_number > 1 and extension != "starring"): # also skip starring for S2/S3
+                        print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
+                        with open(f"{extract_path}/sf{sf_index + 1}.{extension}", "wb") as sf:
+                            sf.write(wad[sf_offset:sf_offset+sf_size])
             sf_index += 1
 
 print("\nExtracting sub-subfiles...")
@@ -72,7 +73,7 @@ for file in os.listdir(extract_path):
     if ".level" in file or ".cutscene" in file or ".starring" in file:
         if game_number == 1:
             extract_level(f"{extract_path}{file}")
-        else:
+        elif ".starring" not in file: # ignore starring for S2/S3
             try:
                 extract_level2(f"{extract_path}{file}", game_number)
             except Exception as e:
@@ -80,7 +81,8 @@ for file in os.listdir(extract_path):
         to_remove.append(file)
 
 # Delete leftover level subfiles
-for file in to_remove:
-    os.remove(f"{extract_path}{file}")
+if game_number < 3: # don't remove S3 for now
+    for file in to_remove:
+        os.remove(f"{extract_path}{file}")
 
 print("Done!")
