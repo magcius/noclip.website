@@ -230,9 +230,6 @@ export interface ShaderParamAnimation
     constants: AnimationConstant[];
 }
 
-// -1 is constant
-// 0 is curve 0
-// 1 is curve 1
 export interface TextureSRTCurveIndices
 {
     scale_x: number | undefined;

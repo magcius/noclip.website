@@ -14,7 +14,7 @@ import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, Gfx
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { vec2, mat4 } from "gl-matrix";
 import { TMSFEProgram } from './shader.js';
-import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { ViewerRenderInput } from "../viewer.js";
 
 /**
@@ -149,7 +149,7 @@ export class fshp_renderer
         renderInstListSkybox: GfxRenderInstList,
         transform_matrix: mat4,
         bone_matrix_array: mat4[],
-        texture_translations: vec2,
+        albedo0_srt_matrix: mat4,
         special_skybox: boolean,
     ): void
     {
@@ -172,8 +172,8 @@ export class fshp_renderer
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
-        // size 16 + 12 + 12 + (12 * bone count)
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44 + (12 * bone_matrix_array.length));
+        // size 16 + 12 + 12 + 8 + (12 * bone count)
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 48 + (12 * bone_matrix_array.length));
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
 
@@ -190,9 +190,7 @@ export class fshp_renderer
         }
         
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, transform_matrix);
-        
-        // TODO: this is only 2 f32s
-        uniform_buffer_offset += fillVec4(mapped, uniform_buffer_offset, texture_translations[0], texture_translations[1]);
+        uniform_buffer_offset += fillMatrix4x2(mapped, uniform_buffer_offset, albedo0_srt_matrix);
 
         for (let i = 0; i < bone_matrix_array.length; i++)
         {

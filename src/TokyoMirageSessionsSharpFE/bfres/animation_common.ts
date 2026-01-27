@@ -133,7 +133,6 @@ export function parse_constants(buffer: ArrayBufferSlice, offset: number, start_
 {
     const view = buffer.createDataView();
 
-    console.log(`start_index ${start_index} count ${count}`);
     let constants: AnimationConstant[] = [];
     let constant_entry_offset = offset + (start_index * CONSTANT_ENTRY_SIZE);
     for (let i = start_index; i < start_index + count; i++)

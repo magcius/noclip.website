@@ -11,7 +11,7 @@ import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec2, vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
-import { computeModelMatrixSRT } from '../MathHelpers.js';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
 import { fshp_renderer } from "./render_fshp";
 import { getPointCubic } from '../Spline.js';
 import { assert } from '../util.js';
@@ -27,7 +27,7 @@ export class fmdl_renderer
     private bone_to_bone_animation_indices: number[] = [];
     private smooth_rigid_matrix_array: mat4[] = [];
     private material_to_material_animation_indices: number[] = [];
-    private texture_translations: vec2[] = [];
+    private texture_srt_matrices: mat4[] = [];
     private transform_matrix: mat4 = mat4.create();
     private fshp_renderers: fshp_renderer[] = [];
     private special_skybox: boolean;
@@ -180,7 +180,7 @@ export class fmdl_renderer
         {
             this.current_material_animation_frame += viewerInput.deltaTime * FPS_RATE;
             this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frame_count;
-            this.texture_translations = this.animate_materials(this.current_material_animation_frame);
+            this.texture_srt_matrices = this.animate_materials(this.current_material_animation_frame);
         }
 
         // render all fshp renderers
@@ -197,10 +197,15 @@ export class fmdl_renderer
                 bone_matrix_array = this.smooth_rigid_matrix_array;
             }
 
-            let texture_translations: vec2 = vec2.fromValues(0.0, 0.0);
-            if (this.fmaa != undefined)
+            let texture_srt_matrix: mat4;
+            if (this.fmaa === undefined)
             {
-                texture_translations = this.texture_translations[this.fshp_renderers[i].fmat_index];
+                texture_srt_matrix = mat4.create();
+                mat4.identity(texture_srt_matrix);
+            }
+            else
+            {
+                texture_srt_matrix = this.texture_srt_matrices[this.fshp_renderers[i].fmat_index];
             }
 
             this.fshp_renderers[i].render
@@ -211,7 +216,7 @@ export class fmdl_renderer
                 renderInstListSkybox,
                 this.transform_matrix,
                 bone_matrix_array,
-                texture_translations,
+                texture_srt_matrix,
                 this.special_skybox,
             );
         }
@@ -296,10 +301,10 @@ export class fmdl_renderer
     }
 
     /**
-     * returns a vec2 array of each material's albedo0 texture translations
+     * returns an array of transformation matrices for every material
      * @param current_frame the frame to animate each material
      */
-    animate_materials(current_frame: number): vec2[]
+    animate_materials(current_frame: number): mat4[]
     {
         if (this.fmaa == undefined)
         {
@@ -307,15 +312,18 @@ export class fmdl_renderer
             throw("whoops");
         }
 
-        let texture_translations: vec2[] = [];
+        let texture_srt_matrices: mat4[] = [];
             
         for (let i = 0; i < this.material_to_material_animation_indices.length; i++)
         {
+            let texture_srt_matrix = mat4.create();
+            mat4.identity(texture_srt_matrix);
+
             const material_animation_index = this.material_to_material_animation_indices[i];
 
             if (material_animation_index === -1)
             {
-                texture_translations.push(vec2.fromValues(0.0, 0.0));
+                texture_srt_matrices.push(texture_srt_matrix);
             }
             else
             {
@@ -324,23 +332,48 @@ export class fmdl_renderer
                 const material_animation = this.fmaa.material_animations[material_animation_index];
                 const shader_param_animation = material_animation.shader_param_animations[0];
 
+                let scale_x = 1.0;
+                if (material_animation.albedo0_texsrt.scale_x != undefined && material_animation.albedo0_texsrt.scale_x != -1)
+                {
+                    scale_x = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.scale_x, frame_integer);
+                }
+                let scale_y = 1.0;
+                if (material_animation.albedo0_texsrt.scale_y != undefined && material_animation.albedo0_texsrt.scale_y != -1)
+                {
+                    scale_y = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.scale_y, frame_integer);
+                }
+                let rotation = 0.0;
+                if (material_animation.albedo0_texsrt.rotate != undefined && material_animation.albedo0_texsrt.rotate != -1)
+                {
+                    rotation = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.rotate, frame_integer);
+                }
                 let translate_x = 0.0;
-                if (material_animation.albedo0_texsrt.translate_x != undefined)
+                if (material_animation.albedo0_texsrt.translate_x != undefined && material_animation.albedo0_texsrt.translate_x != -1)
                 {
                     translate_x = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.translate_x, frame_integer);
                 }
-
                 let translate_y = 0.0;
-                if (material_animation.albedo0_texsrt.translate_y != undefined)
+                if (material_animation.albedo0_texsrt.translate_y != undefined && material_animation.albedo0_texsrt.translate_y != -1)
                 {
                     translate_y = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.translate_y, frame_integer);
                 }
 
-                texture_translations.push(vec2.fromValues(translate_x, translate_y));
+                // maya style matrix
+                const theta = rotation * MathConstants.DEG_TO_RAD;
+                const sinR = Math.sin(theta);
+                const cosR = Math.cos(theta);
+                texture_srt_matrix[0]  = scale_x *  cosR;
+                texture_srt_matrix[4]  = scale_x *  sinR;
+                texture_srt_matrix[12] = scale_x * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translate_x);
+                texture_srt_matrix[1]  = scale_y * -sinR;
+                texture_srt_matrix[5]  = scale_y *  cosR;
+                texture_srt_matrix[13] = scale_y * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translate_y) + 1.0;
+
+                texture_srt_matrices.push(texture_srt_matrix);
             }
         }
 
-        return texture_translations;
+        return texture_srt_matrices;
     }
 }
 
@@ -384,17 +417,8 @@ function get_keyframe_value(curve: Curve, current_frame: number): number
  */
 function get_shader_param_animation_value(shader_param_animation: ShaderParamAnimation, curve_index: number, current_frame: number)
 {
-    if (curve_index == -1)
-    {
-        // TODO: properly calculate this
-        const constant_array_index = 0;
-        return shader_param_animation.constants[constant_array_index].value;
-    }
-    else
-    {
-        const curve = shader_param_animation.curves[curve_index];
-        return get_keyframe_value(curve, current_frame);
-    }
+    const curve = shader_param_animation.curves[curve_index];
+    return get_keyframe_value(curve, current_frame);
 }
 
 const FPS = 30;

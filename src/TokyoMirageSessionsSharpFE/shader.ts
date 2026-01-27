@@ -31,7 +31,7 @@ layout(std140) uniform ub_SceneParams
     Mat4x4 u_ClipFromViewMatrix;
     Mat3x4 u_ViewFromWorldMatrix;
     Mat3x4 u_TransformationMatrix;
-    vec4 u_DiffuseTranslate;
+    Mat2x4 u_Albedo0SRTMatrix;
     Mat3x4 u_BoneMatrices[${this.bone_matrix_array_length}];
 };
 
@@ -86,8 +86,9 @@ void mainVS()
 
 void mainPS()
 {
-    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(s_diffuse), v_TexCoord0.xy + u_DiffuseTranslate.xy);
-    gl_FragColor = t_DiffuseMapColor;
+    vec2 Albedo0TexCoord =  UnpackMatrix(u_Albedo0SRTMatrix) * vec4(v_TexCoord0.xy, 1.0, 1.0);
+    vec4 Albedo0Color = texture(SAMPLER_2D(s_diffuse), Albedo0TexCoord);
+    gl_FragColor = Albedo0Color;
     if (gl_FragColor.a < 0.5)
     {
         discard;
