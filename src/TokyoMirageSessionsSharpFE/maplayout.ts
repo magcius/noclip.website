@@ -40,12 +40,6 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         const position_z = view.getFloat32(entry_offset + 0x14, true);
         const position = vec3.fromValues(position_x, position_y, position_z);
 
-        // TODO: not actually scale
-        const scale_x = view.getFloat32(entry_offset + 0x18, true);
-        const scale_y = view.getFloat32(entry_offset + 0x1C, true);
-        const scale_z = view.getFloat32(entry_offset + 0x20, true);
-        const unknown = vec3.fromValues(scale_x, scale_y, scale_z);
-
         const rotation_x = view.getFloat32(entry_offset + 0x24, true);
         const rotation_y = view.getFloat32(entry_offset + 0x28, true);
         const rotation_z = view.getFloat32(entry_offset + 0x2C, true);
@@ -58,51 +52,51 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         switch (group_index)
         {
             case 0:
-                group_0.push({ group_index, unk_04, id, position, rotation, unknown });
+                group_0.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case 1:
-                group_1.push({ group_index, unk_04, id, position, rotation, unknown });
+                group_1.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case GROUP_INDEX_TREASURE_BOX_01:
-                treasurebox_01_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                treasurebox_01_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
             
             case GROUP_INDEX_BLOCKSIDE:
-                blockside_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                blockside_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
             
             case GROUP_INDEX_BLOCKWALL:
-                blockwall_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                blockwall_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case GROUP_INDEX_HEAL_POINT:
-                heal_point_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                heal_point_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case GROUP_INDEX_WARP:
-                warp_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                warp_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
             
             case GROUP_INDEX_GATE:
-                gate_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                gate_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case GROUP_INDEX_ELEVATOR:
-                elevator_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                elevator_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case GROUP_INDEX_TRANSPARENT_FLOOR:
-                transparent_floor_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                transparent_floor_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             case GROUP_INDEX_TREASURE_BOX_02:
-                treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation });
                 break;
 
             default:
-                entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                entries.push({ group_index, unk_04, id, position, rotation });
                 break;
             
         }
@@ -231,7 +225,6 @@ export interface MapLayoutEntry
     id: number;
     position: vec3;
     rotation: vec3;
-    unknown: vec3;
 }
 
 export interface LayoutPoint

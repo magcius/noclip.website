@@ -55,9 +55,8 @@ export function parse_curves(buffer: ArrayBufferSlice, offset: number, count: nu
                     break;
 
                 case 2:
-                    // byte
-                    // TODO: is this int or uint?
-                    frames.push(view.getInt8(frame_entry_offset));
+                    // u8
+                    frames.push(view.getUint8(frame_entry_offset));
                     frame_entry_offset += 0x1;
                     break;
 
@@ -132,7 +131,6 @@ export function parse_curves(buffer: ArrayBufferSlice, offset: number, count: nu
  */
 export function parse_constants(buffer: ArrayBufferSlice, offset: number, start_index: number, count: number): AnimationConstant[]
 {
-    // TODO: parse animdata offsets too
     const view = buffer.createDataView();
 
     console.log(`start_index ${start_index} count ${count}`);

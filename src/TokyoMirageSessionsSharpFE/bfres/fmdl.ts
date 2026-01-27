@@ -56,7 +56,7 @@ export function parseFMDL(buffer: ArrayBufferSlice, offset: number, count: numbe
     return fmdl;
 }
 
-const FMDL_ENTRY_SIZE = 0x78; // TODO: not sure if this is the correct size
+const FMDL_ENTRY_SIZE = 0x100;
 
 export interface FMDL
 {

@@ -65,12 +65,11 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
                 break;
             
             case 3:
-                // byte
+                // u8
                 let byte_values: number[] = [];
                 for (let j = 0; j < data_count; j++)
                 {
-                    // TODO: is this signed or unsigned?
-                    byte_values.push(view.getInt8(data_offset + (j * 0x1)));
+                    byte_values.push(view.getUint8(data_offset + (j * 0x1)));
                 }
                 values = byte_values;
                 break;

@@ -95,7 +95,6 @@ export class fshp_renderer
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
         // setup sampler
-        // TODO: sometimes a cubemap isn't being found?? whats up with that
         for (let i = 0; i < fmat.sampler_names.length; i++)
         {
             // TODO: for now just grabbing s_diffuse

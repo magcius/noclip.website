@@ -257,7 +257,6 @@ export class fmdl_renderer
             let curve_index = 0;
 
             // which curve goes to which transformation is stored in the flags, iterate over each bit
-            // TODO: are 10 bits of the flags really used? documentation says 9 but translation didn't line up
             for (let i = 0; i < 10; i++)
             {
                 if (transformation_flags & 0x1)
