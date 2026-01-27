@@ -206,7 +206,7 @@ export class fmdl_renderer
                         else
                         {
                             const curve = parameter_animation.curves[material_animation.translate_x_curve_index];
-                            translate_x = get_keyframe_value(curve, this.current_material_animation_frame);
+                            translate_x = get_keyframe_value(curve, Math.round(this.current_material_animation_frame));
                         }
                     }
 
@@ -220,7 +220,7 @@ export class fmdl_renderer
                         else
                         {
                             const curve = parameter_animation.curves[material_animation.translate_y_curve_index];
-                            translate_y = get_keyframe_value(curve, this.current_material_animation_frame);
+                            translate_y = get_keyframe_value(curve,Math.round(this.current_material_animation_frame));
                         }
                     }
 
