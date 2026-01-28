@@ -43,7 +43,6 @@ export class gimmick
                 fmaa = animation_fres.fmaa[0];
             }
         }
-        console.log(fmaa);
 
         this.fmdl_renderer = new fmdl_renderer
         (

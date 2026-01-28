@@ -359,7 +359,7 @@ export class fmdl_renderer
                 }
 
                 // maya style matrix
-                const theta = rotation * MathConstants.DEG_TO_RAD;
+                const theta = rotation;
                 const sinR = Math.sin(theta);
                 const cosR = Math.cos(theta);
                 texture_srt_matrix[0]  = scale_x *  cosR;
