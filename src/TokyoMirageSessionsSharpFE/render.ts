@@ -10,6 +10,7 @@ import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { vec3 } from "gl-matrix";
 import { fmdl_renderer } from "./render_fmdl.js";
+import { fmdl_renderer_texture_replace } from './render_fmdl_texture_replace.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
@@ -27,8 +28,9 @@ export class TMSFEScene implements SceneGfx
     /**
      * @param level_models array of level_model objects containing groups of FRES objects for a single model
      * @param special_skybox this level has a smaller skybox that follows the camera
+     * @param notice_gfx_texture for displaying dynamic posters, tvs, and advertisements in certain maps
      */
-    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean)
+    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean, notice_gfx_texture: GfxTexture)
     {
         this.renderHelper = new GfxRenderHelper(device);
 
@@ -61,20 +63,43 @@ export class TMSFEScene implements SceneGfx
 
             let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
-            const renderer = new fmdl_renderer
-            (
-                fmdl,
-                bntx,
-                gfx_texture_array,
-                fska,
-                fmaa,
-                vec3.fromValues(0.0, 0.0, 0.0),
-                vec3.fromValues(0.0, 0.0, 0.0),
-                vec3.fromValues(1.0, 1.0, 1.0),
-                special_skybox_model,
-                device,
-                this.renderHelper,
-            );
+            let renderer: fmdl_renderer;
+            if (model_fres.name == "f003_02")
+            {
+                renderer = new fmdl_renderer_texture_replace
+                (
+                    fmdl,
+                    bntx,
+                    gfx_texture_array,
+                    fska,
+                    fmaa,
+                    vec3.fromValues(0.0, 0.0, 0.0),
+                    vec3.fromValues(0.0, 0.0, 0.0),
+                    vec3.fromValues(1.0, 1.0, 1.0),
+                    special_skybox_model,
+                    device,
+                    this.renderHelper,
+                    notice_gfx_texture,
+                );
+            }
+            else
+            {
+                renderer = new fmdl_renderer
+                (
+                    fmdl,
+                    bntx,
+                    gfx_texture_array,
+                    fska,
+                    fmaa,
+                    vec3.fromValues(0.0, 0.0, 0.0),
+                    vec3.fromValues(0.0, 0.0, 0.0),
+                    vec3.fromValues(1.0, 1.0, 1.0),
+                    special_skybox_model,
+                    device,
+                    this.renderHelper,
+                );
+            }
+
             this.fmdl_renderers.push(renderer);
         }
     }

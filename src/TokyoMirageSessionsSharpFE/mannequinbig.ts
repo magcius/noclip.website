@@ -1,8 +1,7 @@
 // mannequinbig.ts
 // the large maid dress mannequins in Illusory 106
 
-import { APAK, get_files_of_type } from "./apak.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import { FRES } from "./bfres/bfres_switch.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";

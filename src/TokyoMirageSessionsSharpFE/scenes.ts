@@ -3,9 +3,11 @@
 
 import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import * as BNTX from '../fres_nx/bntx.js';
+import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { MapLayout, parseLayout } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
@@ -114,7 +116,6 @@ class TMSFESceneDesc implements SceneDesc
                     throw("whoops");
                 }
             }
-            console.log(animation_fres);
 
             level_models.push({ model_fres, animation_fres });
         }
@@ -131,7 +132,12 @@ class TMSFESceneDesc implements SceneDesc
             level_models.push({ model_fres: audience_02_fres, animation_fres: audience_00_animation_fres[0] });
         }
 
-        let scene = new TMSFEScene(device, level_models, this.special_skybox);
+        // get dynamic advertisement textures
+        const notice_bntx_buffer = await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/notice_tex094.gtx");
+        const notice_bntx = BNTX.parse(notice_bntx_buffer);
+        const notice_gfx_texture = deswizzle_and_upload_bntx_textures(notice_bntx, device)[0];
+
+        let scene = new TMSFEScene(device, level_models, this.special_skybox, notice_gfx_texture);
 
         // add gimmicks (only if this level has a maplayout.layout file)
         const maplayout_data = get_file_by_name(apak, "maplayout.layout");
@@ -173,7 +179,7 @@ const sceneDescs =
     new TMSFESceneDesc("f002_03", "Daitama Observatory", ["f002_03", "obj01", "obj02", "obj12", "sky"], ["", "", "obj02", "obj12", ""], create_f002_03_gimmicks),
     "Tokyo",
     new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks),
-    new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks),
+    // new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks),
     new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", ""]),
     new TMSFESceneDesc("f001_03", "Shibuya 3", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", "sky"]),

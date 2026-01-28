@@ -8,10 +8,10 @@ import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { vec2, vec3, mat4 } from "gl-matrix";
+import { vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
+import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { fshp_renderer } from "./render_fshp";
 import { getPointCubic } from '../Spline.js';
 import { assert } from '../util.js';
@@ -21,18 +21,19 @@ export class fmdl_renderer
 {
     public animation_play: boolean = true;
 
-    private fskl: FSKL;
-    private fska: FSKA | undefined;
-    private fmaa: FMAA | undefined;
-    private bone_to_bone_animation_indices: number[] = [];
-    private smooth_rigid_matrix_array: mat4[] = [];
-    private material_to_material_animation_indices: number[] = [];
-    private texture_srt_matrices: mat4[] = [];
-    private transform_matrix: mat4 = mat4.create();
-    private fshp_renderers: fshp_renderer[] = [];
-    private special_skybox: boolean;
-    private current_animation_frame: number = 0.0;
-    private current_material_animation_frame: number = 0.0; // TODO: do I need separate ones? not sure if theres a model with both material and skeletal animations
+    protected fskl: FSKL;
+    protected fska: FSKA | undefined;
+    protected fmaa: FMAA | undefined;
+    protected bone_to_bone_animation_indices: number[] = [];
+    protected current_bones: FSKL_Bone[];
+    protected smooth_rigid_matrix_array: mat4[] = [];
+    protected material_to_material_animation_indices: number[] = [];
+    protected texture_srt_matrices: mat4[] = [];
+    protected transform_matrix: mat4 = mat4.create();
+    protected fshp_renderers: fshp_renderer[] = [];
+    protected special_skybox: boolean;
+    protected current_animation_frame: number = 0.0;
+    protected current_material_animation_frame: number = 0.0; // TODO: do I need separate ones? not sure if theres a model with both material and skeletal animations
 
     constructor
     (
@@ -50,6 +51,7 @@ export class fmdl_renderer
     )
     {
         this.special_skybox = special_skybox;
+        console.log(fmdl);
 
         // setup skeleton
         this.fskl = fmdl.fskl;
@@ -138,6 +140,39 @@ export class fmdl_renderer
 
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
+        this.animate(viewerInput);
+
+        // render all fshp renderers
+        for (let i = 0; i < this.fshp_renderers.length; i++)
+        {
+            let bone_matrix_array = this.get_fshp_bone_matrix(i);
+            let texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
+
+            this.fshp_renderers[i].render
+            (
+                renderHelper,
+                viewerInput,
+                renderInstListMain,
+                renderInstListSkybox,
+                this.transform_matrix,
+                bone_matrix_array,
+                texture_srt_matrix,
+                this.special_skybox,
+                undefined,
+            );
+        }
+    }
+
+    public destroy(device: GfxDevice): void
+    {
+        for (let i = 0; i < this.fshp_renderers.length; i++)
+        {
+            this.fshp_renderers[i].destroy(device);
+        }
+    }
+
+    animate(viewerInput: ViewerRenderInput)
+    {
         let current_bones: FSKL_Bone[] = [];
         if (this.fska != undefined)
         {
@@ -147,12 +182,12 @@ export class fmdl_renderer
                 this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
                 this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
             }
-            current_bones = this.animate_skeleton(this.current_animation_frame);
+            this.current_bones = this.animate_skeleton(this.current_animation_frame);
         }
         else
         {
             // this model doesn't have an animated skeleton
-            current_bones = this.fskl.bones;
+            this.current_bones = this.fskl.bones;
         }
 
         // remake smooth rigid matrix
@@ -181,52 +216,6 @@ export class fmdl_renderer
             this.current_material_animation_frame += viewerInput.deltaTime * FPS_RATE;
             this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frame_count;
             this.texture_srt_matrices = this.animate_materials(this.current_material_animation_frame);
-        }
-
-        // render all fshp renderers
-        for (let i = 0; i < this.fshp_renderers.length; i++)
-        {
-            let bone_matrix_array: mat4[] = [];
-            if (this.fshp_renderers[i].skin_bone_count == 0)
-            {
-                let transformation_matrix = recursive_bone_transform(this.fshp_renderers[i].bone_index, current_bones);
-                bone_matrix_array.push(transformation_matrix);
-            }
-            else
-            {
-                bone_matrix_array = this.smooth_rigid_matrix_array;
-            }
-
-            let texture_srt_matrix: mat4;
-            if (this.fmaa === undefined)
-            {
-                texture_srt_matrix = mat4.create();
-                mat4.identity(texture_srt_matrix);
-            }
-            else
-            {
-                texture_srt_matrix = this.texture_srt_matrices[this.fshp_renderers[i].fmat_index];
-            }
-
-            this.fshp_renderers[i].render
-            (
-                renderHelper,
-                viewerInput,
-                renderInstListMain,
-                renderInstListSkybox,
-                this.transform_matrix,
-                bone_matrix_array,
-                texture_srt_matrix,
-                this.special_skybox,
-            );
-        }
-    }
-
-    public destroy(device: GfxDevice): void
-    {
-        for (let i = 0; i < this.fshp_renderers.length; i++)
-        {
-            this.fshp_renderers[i].destroy(device);
         }
     }
 
@@ -374,6 +363,36 @@ export class fmdl_renderer
         }
 
         return texture_srt_matrices;
+    }
+
+    get_fshp_bone_matrix(fshp_index: number): mat4[]
+    {
+        let bone_matrix_array: mat4[] = [];
+        if (this.fshp_renderers[fshp_index].skin_bone_count == 0)
+        {
+            let transformation_matrix = recursive_bone_transform(this.fshp_renderers[fshp_index].bone_index, this.current_bones);
+            bone_matrix_array.push(transformation_matrix);
+        }
+        else
+        {
+            bone_matrix_array = this.smooth_rigid_matrix_array;
+        }
+        return bone_matrix_array;
+    }
+
+    get_fshp_texture_srt_matrix(fshp_index: number): mat4
+    {
+        let texture_srt_matrix: mat4;
+        if (this.fmaa === undefined)
+        {
+            texture_srt_matrix = mat4.create();
+            mat4.identity(texture_srt_matrix);
+        }
+        else
+        {
+            texture_srt_matrix = this.texture_srt_matrices[this.fshp_renderers[fshp_index].fmat_index];
+        }
+        return texture_srt_matrix;
     }
 }
 

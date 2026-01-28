@@ -12,7 +12,7 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
-import { vec2, mat4 } from "gl-matrix";
+import { mat4 } from "gl-matrix";
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { ViewerRenderInput } from "../viewer.js";
@@ -117,7 +117,7 @@ export class fshp_renderer
                 const gfx_texture = gfx_texture_array[gfx_texture_index];
                 const sampler_descriptor = fmat.sampler_descriptors[i];
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
-                this.sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null })
+                this.sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null });
             }
             else
             {
@@ -151,6 +151,7 @@ export class fshp_renderer
         bone_matrix_array: mat4[],
         albedo0_srt_matrix: mat4,
         special_skybox: boolean,
+        replacement_sampler_binding?: GfxSamplerBinding,
     ): void
     {
         if (this.do_not_render)
@@ -198,7 +199,14 @@ export class fshp_renderer
         }
 
         // set sampler
-        renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
+        if (replacement_sampler_binding != undefined)
+        {
+            renderInst.setSamplerBindingsFromTextureMappings([replacement_sampler_binding]);
+        }
+        else
+        {
+            renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
+        }
 
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         
