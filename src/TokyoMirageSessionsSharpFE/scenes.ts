@@ -21,6 +21,7 @@ import { create_d004_02_gimmicks } from "./maps/d004_02.js";
 import { create_d004_03_gimmicks } from "./maps/d004_03.js";
 import { create_d005_03_gimmicks } from "./maps/d005_03.js";
 import { create_d005_04_gimmicks } from "./maps/d005_04.js";
+import { d006_03_replacement_textures } from "./maps/d006_03.js";
 import { create_d007_01_gimmicks } from "./maps/d007_01.js";
 import { create_d007_02_gimmicks } from "./maps/d007_02.js";
 import { create_d007_03_gimmicks } from "./maps/d007_03.js";
@@ -49,13 +50,14 @@ class TMSFESceneDesc implements SceneDesc
     /**
      * @param id Identifier for each map. Displayed in the URL.
      * @param name The map's display name in the UI
-     * @param level_file_names which bfres files in model.apak to load
+     * @param model_file_names which model files in model.apak to load
+     * @param animation_file_names which animation files in model.apak to load
      * @param map_gimmick_function per map function that spawns interactable objects
      * @param gate_type it's currently unknown how the game chooses which gate model to use. currently just hard coding it
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
      * @param has_battle_audience whether to spawn the audience
-     * @param replacement_texture_function loads replacement textures for dynamic elements such as posters, tvs, and advertisements
+     * @param replacement_texture_function per map function that loads replacement textures for dynamic elements such as posters, tvs, and advertisements
      */
     constructor
     (
@@ -234,7 +236,7 @@ const sceneDescs =
     new TMSFESceneDesc("d006_10", "Illusory Daiba Studio Entrance", ["d006_10", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("d006_01", "Illusory Daiba Studio Monitor Room", ["d006_01", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("d006_02", "Illusory Daiba Studio Main Hallway", ["d006_02", "obj01"], ["", "obj01"]),
-    new TMSFESceneDesc("d006_03", "Illusory Daiba Studio LCD Panels", ["d006_03", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
+    new TMSFESceneDesc("d006_03", "Illusory Daiba Studio LCD Panels", ["d006_03", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, false, d006_03_replacement_textures),
     new TMSFESceneDesc("d006_04", "Illusory Daiba Studio Back Monitor Room", ["d006_04", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("d006_05", "Illusory Daiba Studio Back Alley", ["d006_05"], [""]),
     new TMSFESceneDesc("d006_06", "Illusory Daiba Studio Film Location A", ["d006_06", "obj01"], ["", "obj01"]),
