@@ -193,7 +193,7 @@ export class fmdl_renderer
         this.smooth_rigid_matrix_array = [];
         for (let i = 0; i < this.fskl.smooth_rigid_indices.length; i++)
         {
-            const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], current_bones)
+            const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], this.current_bones)
 
             if (i < this.fskl.bone_local_from_bind_pose_matrices.length)
             {

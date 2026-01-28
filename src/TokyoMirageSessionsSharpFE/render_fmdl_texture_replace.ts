@@ -3,6 +3,8 @@
 // this is used to replace tv screens, posters, advertisements, and the panels in LCD Panels
 
 import * as BNTX from '../fres_nx/bntx.js';
+import { deswizzle_and_upload_bntx_textures } from './bntx_helpers.js';
+import { DataFetcher } from '../DataFetcher.js';
 import { FMAA } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
@@ -41,11 +43,11 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         {
             const replacement_texture = replacement_textures[i];
 
-            const notice_material = fmdl.fmat.find((f) => f.name === replacement_texture.material_name);
-            if (notice_material != undefined)
+            const material = fmdl.fmat.find((f) => f.name === replacement_texture.material_name);
+            if (material != undefined)
             {
-                this.replacement_texture_fmat_indices.push(fmdl.fmat.indexOf(notice_material));
-                const sampler_descriptor = notice_material.sampler_descriptors[0]; // s_diffuse
+                this.replacement_texture_fmat_indices.push(fmdl.fmat.indexOf(material));
+                const sampler_descriptor = material.sampler_descriptors[0]; // s_diffuse
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
                 replacement_texture.sampler_binding = { gfxTexture: replacement_texture.gfx_texture, gfxSampler: gfx_sampler, lateBinding: null };
             }
@@ -87,9 +89,23 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
     }
 }
 
+export interface replacement_texture_group
+{
+    model_name: string;
+    replacement_textures: replacement_texture[];
+}
+
 export interface replacement_texture
 {
     material_name: string;
     gfx_texture: GfxTexture;
     sampler_binding: GfxSamplerBinding | undefined;
+}
+
+export async function create_replacement_texture(texture_path: string, material_name: string, data_fetcher: DataFetcher, device: GfxDevice): Promise<replacement_texture>
+{    
+    const bntx_buffer = await data_fetcher.fetchData(texture_path);
+    const bntx = BNTX.parse(bntx_buffer);
+    const gfx_texture = deswizzle_and_upload_bntx_textures(bntx, device)[0];
+    return { material_name, gfx_texture, sampler_binding: undefined };
 }

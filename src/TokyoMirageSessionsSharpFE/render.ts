@@ -10,7 +10,7 @@ import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { vec3 } from "gl-matrix";
 import { fmdl_renderer } from "./render_fmdl.js";
-import { fmdl_renderer_texture_replace, replacement_texture } from './render_fmdl_texture_replace.js';
+import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
@@ -30,7 +30,7 @@ export class TMSFEScene implements SceneGfx
      * @param special_skybox this level has a smaller skybox that follows the camera
      * @param replacement_textures for displaying dynamic posters, tvs, and advertisements in certain maps
      */
-    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean, replacement_textures: replacement_texture[])
+    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean, replacement_texture_groups: replacement_texture_group[])
     {
         this.renderHelper = new GfxRenderHelper(device);
 
@@ -44,6 +44,7 @@ export class TMSFEScene implements SceneGfx
             // textures are stored in an embedded .bntx file
             const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
             const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
+            const replacement_textures_group = replacement_texture_groups.find((f) => f.model_name === fmdl.name);
             
             // get animations
             let fska: FSKA | undefined = undefined;
@@ -64,7 +65,7 @@ export class TMSFEScene implements SceneGfx
             let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
             let renderer: fmdl_renderer;
-            if (model_fres.name == "f003_02")
+            if (replacement_textures_group != undefined)
             {
                 renderer = new fmdl_renderer_texture_replace
                 (
@@ -79,7 +80,7 @@ export class TMSFEScene implements SceneGfx
                     special_skybox_model,
                     device,
                     this.renderHelper,
-                    replacement_textures,
+                    replacement_textures_group.replacement_textures,
                 );
             }
             else

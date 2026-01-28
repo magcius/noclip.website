@@ -3,8 +3,6 @@
 
 import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
-import * as BNTX from '../fres_nx/bntx.js';
-import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
 import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
@@ -34,14 +32,14 @@ import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 import { create_f002_03_gimmicks } from "./maps/f002_03.js";
-import { create_f003_02_gimmicks, create_f003_02_party_gimmicks } from "./maps/f003_02.js";
+import { create_f003_02_gimmicks, create_f003_02_party_gimmicks, f003_02_replacement_textures } from "./maps/f003_02.js";
 import { create_f003_06_gimmicks } from "./maps/f003_06.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
 import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
 import { create_f010_01_music_fes_gimmicks } from "./maps/f010_01.js";
-import { replacement_texture } from "./render_fmdl_texture_replace.js";
+import { replacement_texture_group } from "./render_fmdl_texture_replace.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -57,6 +55,7 @@ class TMSFESceneDesc implements SceneDesc
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
      * @param has_battle_audience whether to spawn the audience
+     * @param replacement_texture_function loads replacement textures for dynamic elements such as posters, tvs, and advertisements
      */
     constructor
     (
@@ -69,6 +68,7 @@ class TMSFESceneDesc implements SceneDesc
         public is_d018_03?: boolean | undefined,
         public special_skybox?: boolean | undefined,
         public has_battle_audience?: boolean | undefined,
+        public replacement_texture_function?: (data_fetcher: DataFetcher, device: GfxDevice) => Promise<replacement_texture_group[]>,
     ) {}
 
     /**
@@ -134,19 +134,13 @@ class TMSFESceneDesc implements SceneDesc
         }
 
         // get dynamic advertisement textures
-        const replacement_textures: replacement_texture[] = [];
-
-        const notice_bntx_buffer = await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/notice_tex094.gtx");
-        const notice_bntx = BNTX.parse(notice_bntx_buffer);
-        const notice_gfx_texture = deswizzle_and_upload_bntx_textures(notice_bntx, device)[0];
-        replacement_textures.push({ material_name: "notice15", gfx_texture: notice_gfx_texture, sampler_binding: undefined });
-
-        const notice2_bntx_buffer = await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/notice_tex100.gtx");
-        const notice2_bntx = BNTX.parse(notice2_bntx_buffer);
-        const notice2_gfx_texture = deswizzle_and_upload_bntx_textures(notice2_bntx, device)[0];
-        replacement_textures.push({ material_name: "notice16", gfx_texture: notice2_gfx_texture, sampler_binding: undefined });
-
-        let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_textures);
+        let replacement_texture_groups: replacement_texture_group[] = [];
+        if (this.replacement_texture_function != undefined)
+        {
+            replacement_texture_groups = await this.replacement_texture_function(dataFetcher, device);
+        }
+        
+        let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_texture_groups);
 
         // add gimmicks (only if this level has a maplayout.layout file)
         const maplayout_data = get_file_by_name(apak, "maplayout.layout");
@@ -187,8 +181,8 @@ const sceneDescs =
     new TMSFESceneDesc("f002_02", "Daitama Observatory Prologue 2", ["f002_02", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("f002_03", "Daitama Observatory", ["f002_03", "obj01", "obj02", "obj12", "sky"], ["", "", "obj02", "obj12", ""], create_f002_03_gimmicks),
     "Tokyo",
-    new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks),
-    // new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks),
+    new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks, undefined, false, false, false, f003_02_replacement_textures),
+    new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks, undefined, false, false, false, f003_02_replacement_textures),
     new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", ""]),
     new TMSFESceneDesc("f001_03", "Shibuya 3", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", "sky"]),
@@ -274,21 +268,21 @@ const sceneDescs =
     new TMSFESceneDesc("d007_09", "Illusory Dolhr Altitude 634m", ["d007_09", "obj00", "obj01", "obj02", "obj03", "sky"], ["", "obj00", "obj01", "obj02", "obj03", "sky"], create_d007_09_gimmicks, undefined, false, true),
     new TMSFESceneDesc("d007_10", "Illusory Dolhr Shadow Stage", ["d007_10", "d007_10_obj01", "d007_10_obj02", "sky"], ["", "d007_10_obj01", "d007_10_obj02", "sky"]),
     "Battle Maps",
-    new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b005_01", "b005_01", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b006_01", "b006_01", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b007_01", "b007_01", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b008_01", "b008_01", ["b008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b009_01", "b009_01", ["b009_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b010_01", "b010_01", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b005_01", "b005_01", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b006_01", "b006_01", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b007_01", "b007_01", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b008_01", "b008_01", ["b008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b009_01", "b009_01", ["b009_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b010_01", "b010_01", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
     new TMSFESceneDesc("b011_01", "b011_01", ["b011_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", ""]),
-    new TMSFESceneDesc("b012_01", "b012_01", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b013_01", "b013_01", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b014_01", "b014_01", ["b014_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
-    new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b012_01", "b012_01", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b013_01", "b013_01", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b014_01", "b014_01", ["b014_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
     "Cutscene Maps",
     new TMSFESceneDesc("f003_05", "Uzume Lesson Studio", ["f003_05"], [""]),
     new TMSFESceneDesc("f010_03", "Masqueraider Raiga", ["f010_03", "sky"], ["", ""]),
