@@ -95,11 +95,10 @@ export async function create_gimmick
  * These gimmicks are used in every dungeon, and are spawned by the executable instead of a lua script
  * they each have a unique group index in the map layout file
  * @param layout the map layout object for the current level
- * @param gate_type it's currently unknown how the game chooses which gate model to use. currently just hard coding it
  * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
  * @returns an array of all the gimmick objects spawned
  */
-export async function create_common_gimmicks(layout: MapLayout, gate_type:number, is_d018_03: boolean, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_common_gimmicks(layout: MapLayout, is_d018_03: boolean, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     let gimmicks: gimmick[] = [];
 
@@ -249,43 +248,43 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
 
     if (layout.gate_entries.length > 0)
     {
-        // GIMMICK_GATE_L = "common/gate/skin/01"
-        // GIMMICK_GATE_M = "common/gate/skin/02"
-        // GIMMICK_GATE_F004 = "common/gate/skin/05" this model is offset slightly forward so that a wall in daitou TV doesn't clip through
-        // GIMMICK_GATE_BLOOM = "common/gate/skin/06"
-        // GIMMICK_GATE_DLC = "common/gate/skin/07"
-
-        let gate_fres: FRES;
-        switch(gate_type)
-        {
-            case 1:
-                gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model.apak", "gate_01.bfres", data_fetcher);
-                break;
-
-            case 2:
-                gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/02/model.apak", "gate_02.bfres", data_fetcher);
-                break;
-
-            case 5:
-                gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/05/model.apak", "gate_05.bfres", data_fetcher);
-                break;
-
-            case 6:
-                gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/06/model.apak", "gate_06.bfres", data_fetcher);
-                break;
-
-            case 7:
-                gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/07/model.apak", "gate_07.bfres", data_fetcher);
-                break;
-        
-            default:
-                console.error(`invalid gate type ${gate_type}`);
-                throw("whoops");
-        }
-
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
             const entry = layout.gate_entries[i];
+            let gate_fres: FRES;
+            const gate_type = entry.unk_8C;
+            switch(gate_type)
+            {
+                case "":
+                case "1":
+                    // GIMMICK_GATE_L
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model.apak", "gate_01.bfres", data_fetcher);
+                    break;
+
+                case "2":
+                    // GIMMICK_GATE_M
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/02/model.apak", "gate_02.bfres", data_fetcher);
+                    break;
+
+                case "5":
+                    // GIMMICK_GATE_F004 slightly forward version of GIMMICK_GATE_L to avoid clipping in Daitou TV
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/05/model.apak", "gate_05.bfres", data_fetcher);
+                    break;
+
+                case "6":
+                    // GIMMICK_GATE_BLOOM
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/06/model.apak", "gate_06.bfres", data_fetcher);
+                    break;
+
+                case "7":
+                    // GIMMICK_GATE_DLC
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/07/model.apak", "gate_07.bfres", data_fetcher);
+                    break;
+            
+                default:
+                    console.error(`invalid gate type ${gate_type}`);
+                    throw("whoops");
+            }
             gimmicks.push
             (
                 new gimmick

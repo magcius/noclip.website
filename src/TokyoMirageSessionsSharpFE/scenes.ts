@@ -53,7 +53,6 @@ class TMSFESceneDesc implements SceneDesc
      * @param model_file_names which model files in model.apak to load
      * @param animation_file_names which animation files in model.apak to load
      * @param map_gimmick_function per map function that spawns interactable objects
-     * @param gate_type it's currently unknown how the game chooses which gate model to use. currently just hard coding it
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
      * @param has_battle_audience whether to spawn the audience
@@ -66,7 +65,6 @@ class TMSFESceneDesc implements SceneDesc
         public model_file_names: string[],
         public animation_file_names: string[],
         public map_gimmick_function?: (layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice) => Promise<gimmick[]>,
-        public gate_type?: number | undefined,
         public is_d018_03?: boolean | undefined,
         public special_skybox?: boolean | undefined,
         public has_battle_audience?: boolean | undefined,
@@ -82,7 +80,6 @@ class TMSFESceneDesc implements SceneDesc
         const dataFetcher = context.dataFetcher;
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
         
-        if (this.gate_type == undefined) { this.gate_type = 1 };
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
         if (this.special_skybox == undefined) { this.special_skybox = false };
 
@@ -149,7 +146,7 @@ class TMSFESceneDesc implements SceneDesc
         if (maplayout_data != undefined)
         {
             const layout = parseLayout(maplayout_data);
-            scene.common_gimmicks = await create_common_gimmicks(layout, this.gate_type, this.is_d018_03, dataFetcher, device);
+            scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
             if (this.map_gimmick_function != undefined)
             {
                 scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
@@ -183,8 +180,8 @@ const sceneDescs =
     new TMSFESceneDesc("f002_02", "Daitama Observatory Prologue 2", ["f002_02", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("f002_03", "Daitama Observatory", ["f002_03", "obj01", "obj02", "obj12", "sky"], ["", "", "obj02", "obj12", ""], create_f002_03_gimmicks),
     "Tokyo",
-    new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks, undefined, false, false, false, f003_02_replacement_textures),
-    new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks, undefined, false, false, false, f003_02_replacement_textures),
+    new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks, false, false, false, f003_02_replacement_textures),
+    new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks, false, false, false, f003_02_replacement_textures),
     new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", ""]),
     new TMSFESceneDesc("f001_03", "Shibuya 3", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", "sky"]),
@@ -205,7 +202,7 @@ const sceneDescs =
     // new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"], ["", ""]), // not a wii u file, but the map layout file is big endian, which causes it to fail to load. maybe load the wii u version instead?
     new TMSFESceneDesc("f003_08", "Anzu", ["f003_08"], [""], create_f003_08_gimmicks),
     "Illusory 106",
-    new TMSFESceneDesc("d003_01", "Illusory 106 1F to 3F", ["d003_01", "obj01", "obj02"], ["", "obj01", "obj02"], create_d003_01_gimmicks, 2),
+    new TMSFESceneDesc("d003_01", "Illusory 106 1F to 3F", ["d003_01", "obj01", "obj02"], ["", "obj01", "obj02"], create_d003_01_gimmicks),
     new TMSFESceneDesc("d003_04", "Illusory 106 4F", ["d003_04"], [""]),
     new TMSFESceneDesc("d003_02", "Illusory 106 5F to 7F", ["d003_02", "obj01"], ["", "obj01"], create_d003_02_gimmicks),
     new TMSFESceneDesc("d003_06", "Illusory 106 Outside", ["d003_06", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"]),
@@ -219,9 +216,9 @@ const sceneDescs =
     new TMSFESceneDesc("d004_04", "Illusory Shibuya Circular Square", ["d004_04", "obj01", "sky"], ["", "obj01", "sky"]),
     new TMSFESceneDesc("d004_05", "Illusory Shibuya Central Square", ["d004_05", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"]),
     "Daitou TV",
-    new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01"], [""], create_f004_01_gimmicks, 5),
-    new TMSFESceneDesc("f004_01", "Daitou TV 1 Music Fes", ["f004_01"], [""], create_f004_01_music_fes_gimmicks, 5),
-    new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01"], ["", "obj01"], create_f004_01_gimmicks, 5),
+    new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01"], [""], create_f004_01_gimmicks),
+    new TMSFESceneDesc("f004_01", "Daitou TV 1 Music Fes", ["f004_01"], [""], create_f004_01_music_fes_gimmicks),
+    new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01"], ["", "obj01"], create_f004_01_gimmicks),
     new TMSFESceneDesc("d005_01", "Illusory Daitou TV Film Set A: Outdoors", ["d005_01", "obj01", "sky"], ["", "obj01", "sky"]),
     new TMSFESceneDesc("d005_03", "Illusory Daitou TV Film Set A: Indoors", ["d005_03"], [""], create_d005_03_gimmicks),
     new TMSFESceneDesc("d005_02", "Illusory Daitou TV Film Set B: Outdoors", ["d005_02", "obj01", "sky"], ["", "obj01", "sky"]),
@@ -236,7 +233,7 @@ const sceneDescs =
     new TMSFESceneDesc("d006_10", "Illusory Daiba Studio Entrance", ["d006_10", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("d006_01", "Illusory Daiba Studio Monitor Room", ["d006_01", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("d006_02", "Illusory Daiba Studio Main Hallway", ["d006_02", "obj01"], ["", "obj01"]),
-    new TMSFESceneDesc("d006_03", "Illusory Daiba Studio LCD Panels", ["d006_03", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, false, d006_03_replacement_textures),
+    new TMSFESceneDesc("d006_03", "Illusory Daiba Studio LCD Panels", ["d006_03", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, false, d006_03_replacement_textures),
     new TMSFESceneDesc("d006_04", "Illusory Daiba Studio Back Monitor Room", ["d006_04", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("d006_05", "Illusory Daiba Studio Back Alley", ["d006_05"], [""]),
     new TMSFESceneDesc("d006_06", "Illusory Daiba Studio Film Location A", ["d006_06", "obj01"], ["", "obj01"]),
@@ -245,46 +242,46 @@ const sceneDescs =
     new TMSFESceneDesc("d006_09", "Illusory Daiba Studio Film Location D", ["d006_09", "obj01"], ["", "obj01"]),
     "Bloom Palace",
     new TMSFESceneDesc("f003_03", "Bloom Palace", ["f003_03", "obj01", "sky"], ["", "obj", "sky"]),
-    new TMSFESceneDesc("d010_01", "Illusory Area of Memories Great Corridor", ["d010_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d010_01_gimmicks, 6),
+    new TMSFESceneDesc("d010_01", "Illusory Area of Memories Great Corridor", ["d010_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d010_01_gimmicks),
     new TMSFESceneDesc("d010_02", "Illusory Area of Memories Warrior's Hall", ["d010_02"], [""]),
     new TMSFESceneDesc("d010_03", "Illusory Area of Memories Leader's Hall", ["d010_03"], [""]),
     new TMSFESceneDesc("d010_04", "Illusory Area of Memories Hero's Hall", ["d010_04"], [""]),
-    new TMSFESceneDesc("d018_01", "Illusory Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, 7, false, true),
-    new TMSFESceneDesc("d018_02", "Illusory Area of Aspirations 3F", ["d018_02", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, undefined, false, true),
-    new TMSFESceneDesc("d018_03", "Illusory Area of Aspirations 4F to 5F", ["d018_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, undefined, true, true),
-    new TMSFESceneDesc("d018_04", "Illusory Area of Aspirations The Nexus", ["d018_04", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, undefined, false, true),
+    new TMSFESceneDesc("d018_01", "Illusory Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
+    new TMSFESceneDesc("d018_02", "Illusory Area of Aspirations 3F", ["d018_02", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
+    new TMSFESceneDesc("d018_03", "Illusory Area of Aspirations 4F to 5F", ["d018_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, true, true),
+    new TMSFESceneDesc("d018_04", "Illusory Area of Aspirations The Nexus", ["d018_04", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
     new TMSFESceneDesc("d015_01", "Training Area", ["d015_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", ""]),
     new TMSFESceneDesc("d015_02", "Training Area Fighter's Hall", ["d015_02"], [""]),
     "Cosmic Egg",
     new TMSFESceneDesc("f006_01", "Cosmic Egg", ["f006_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"]),
     new TMSFESceneDesc("f006_01", "Cosmic Egg Barrier", ["f006_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], create_f006_01_barrier_gimmicks),
     new TMSFESceneDesc("f006_02", "Cosmic Egg 2", ["f006_02", "obj03"], ["", "obj03"]),
-    new TMSFESceneDesc("d007_01", "Illusory Dolhr Altitude 48m to Altitude 54m", ["d007_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d007_01_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_05", "Illusory Dolhr Altitude 88m", ["d007_05", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_05_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_02", "Illusory Dolhr Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d007_02_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_06", "Illusory Dolhr Altitude 180m", ["d007_06", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_06_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_03", "Illusory Dolhr Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_03_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_07", "Illusory Dolhr Altitude 333m", ["d007_07", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_07_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_04", "Illusory Dolhr Altitude 428m to Altitude 434m", ["d007_04", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d007_04_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_08", "Illusory Dolhr Altitude 525m", ["d007_08", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_08_gimmicks, undefined, false, true),
-    new TMSFESceneDesc("d007_09", "Illusory Dolhr Altitude 634m", ["d007_09", "obj00", "obj01", "obj02", "obj03", "sky"], ["", "obj00", "obj01", "obj02", "obj03", "sky"], create_d007_09_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_01", "Illusory Dolhr Altitude 48m to Altitude 54m", ["d007_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d007_01_gimmicks, false, true),
+    new TMSFESceneDesc("d007_05", "Illusory Dolhr Altitude 88m", ["d007_05", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_05_gimmicks, false, true),
+    new TMSFESceneDesc("d007_02", "Illusory Dolhr Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d007_02_gimmicks, false, true),
+    new TMSFESceneDesc("d007_06", "Illusory Dolhr Altitude 180m", ["d007_06", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_06_gimmicks, false, true),
+    new TMSFESceneDesc("d007_03", "Illusory Dolhr Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_03_gimmicks, false, true),
+    new TMSFESceneDesc("d007_07", "Illusory Dolhr Altitude 333m", ["d007_07", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_07_gimmicks, false, true),
+    new TMSFESceneDesc("d007_04", "Illusory Dolhr Altitude 428m to Altitude 434m", ["d007_04", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d007_04_gimmicks, false, true),
+    new TMSFESceneDesc("d007_08", "Illusory Dolhr Altitude 525m", ["d007_08", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d007_08_gimmicks, false, true),
+    new TMSFESceneDesc("d007_09", "Illusory Dolhr Altitude 634m", ["d007_09", "obj00", "obj01", "obj02", "obj03", "sky"], ["", "obj00", "obj01", "obj02", "obj03", "sky"], create_d007_09_gimmicks, false, true),
     new TMSFESceneDesc("d007_10", "Illusory Dolhr Shadow Stage", ["d007_10", "d007_10_obj01", "d007_10_obj02", "sky"], ["", "d007_10_obj01", "d007_10_obj02", "sky"]),
     "Battle Maps",
-    new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b005_01", "b005_01", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b006_01", "b006_01", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b007_01", "b007_01", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b008_01", "b008_01", ["b008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b009_01", "b009_01", ["b009_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b010_01", "b010_01", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b005_01", "b005_01", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b006_01", "b006_01", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"], undefined, false, false, true),
+    new TMSFESceneDesc("b007_01", "b007_01", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b008_01", "b008_01", ["b008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b009_01", "b009_01", ["b009_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b010_01", "b010_01", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
     new TMSFESceneDesc("b011_01", "b011_01", ["b011_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", ""]),
-    new TMSFESceneDesc("b012_01", "b012_01", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b013_01", "b013_01", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b014_01", "b014_01", ["b014_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
-    new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, false, false, true),
+    new TMSFESceneDesc("b012_01", "b012_01", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b013_01", "b013_01", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b014_01", "b014_01", ["b014_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
     "Cutscene Maps",
     new TMSFESceneDesc("f003_05", "Uzume Lesson Studio", ["f003_05"], [""]),
     new TMSFESceneDesc("f010_03", "Masqueraider Raiga", ["f010_03", "sky"], ["", ""]),

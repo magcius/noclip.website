@@ -49,54 +49,58 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
             rotation_y * MathConstants.DEG_TO_RAD,
             rotation_z * MathConstants.DEG_TO_RAD
         );
+
+        const unk_8C_string_offset = view.getUint32(entry_offset + 0x8C, true);
+        const unk_8C = readString(buffer, unk_8C_string_offset, 0xFF, true);
+
         switch (group_index)
         {
             case 0:
-                group_0.push({ group_index, unk_04, id, position, rotation });
+                group_0.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case 1:
-                group_1.push({ group_index, unk_04, id, position, rotation });
+                group_1.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case GROUP_INDEX_TREASURE_BOX_01:
-                treasurebox_01_entries.push({ group_index, unk_04, id, position, rotation });
+                treasurebox_01_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
             
             case GROUP_INDEX_BLOCKSIDE:
-                blockside_entries.push({ group_index, unk_04, id, position, rotation });
+                blockside_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
             
             case GROUP_INDEX_BLOCKWALL:
-                blockwall_entries.push({ group_index, unk_04, id, position, rotation });
+                blockwall_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case GROUP_INDEX_HEAL_POINT:
-                heal_point_entries.push({ group_index, unk_04, id, position, rotation });
+                heal_point_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case GROUP_INDEX_WARP:
-                warp_entries.push({ group_index, unk_04, id, position, rotation });
+                warp_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
             
             case GROUP_INDEX_GATE:
-                gate_entries.push({ group_index, unk_04, id, position, rotation });
+                gate_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case GROUP_INDEX_ELEVATOR:
-                elevator_entries.push({ group_index, unk_04, id, position, rotation });
+                elevator_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case GROUP_INDEX_TRANSPARENT_FLOOR:
-                transparent_floor_entries.push({ group_index, unk_04, id, position, rotation });
+                transparent_floor_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             case GROUP_INDEX_TREASURE_BOX_02:
-                treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation });
+                treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
 
             default:
-                entries.push({ group_index, unk_04, id, position, rotation });
+                entries.push({ group_index, unk_04, id, position, rotation, unk_8C });
                 break;
             
         }
@@ -225,6 +229,7 @@ export interface MapLayoutEntry
     id: number;
     position: vec3;
     rotation: vec3;
+    unk_8C: string; // has the gate type
 }
 
 export interface LayoutPoint
