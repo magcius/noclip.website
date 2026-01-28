@@ -167,7 +167,7 @@ export class TMSFEScene implements SceneGfx
         }
         for (let i = 0; i < this.map_gimmicks.length; i++)
         {
-            this.common_gimmicks[i].destroy(device);
+            this.map_gimmicks[i].destroy(device);
         }
     }
 }
