@@ -2,6 +2,7 @@ interface GroundFace {
     indices: number[];
     uvIndices: number[] | null;
     colorIndices: number[] | null;
+    isLOD: boolean;
     isWater?: boolean;
     isTransparent?: boolean;
 }
@@ -92,6 +93,38 @@ class VertexColor {
         this.g = view.getUint8(offset+1);
         this.b = view.getUint8(offset+2);
         // this.n = view.getUint8(offs+3); not used?
+    }
+}
+
+class LODPoly {
+    n: number; v1: number; v2: number; v3: number;
+    f: number; c1: number; c2: number; c3: number;
+
+    constructor(view: DataView, offs: number) {
+        this.n = view.getUint8(offs);
+        this.v1 = view.getUint8(offs+1);
+        this.v2 = view.getUint8(offs+2);
+        this.v3 = view.getUint8(offs+3);
+        this.f = view.getUint8(offs+4);
+        this.c1 = view.getUint8(offs+5);
+        this.c2 = view.getUint8(offs+6);
+        this.c3 = view.getUint8(offs+7);
+    }
+}
+
+class LODPoly2 {
+    v1: number; v2: number; v3: number; v4: number;
+    c1: number; c2: number; c3: number; c4: number;
+
+    constructor(view: DataView, offs: number) {
+        this.v1 = view.getUint8(offs);
+        this.v2 = view.getUint8(offs+1);
+        this.v3 = view.getUint8(offs+2);
+        this.v4 = view.getUint8(offs+3);
+        this.c1 = view.getUint8(offs+4);
+        this.c2 = view.getUint8(offs+5);
+        this.c3 = view.getUint8(offs+6);
+        this.c4 = view.getUint8(offs+7);
     }
 }
 
@@ -343,7 +376,8 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
             faces.push({
                 indices: [d, c, b],
                 uvIndices: [uv0, uv1, uv2],
-                colorIndices: [cd, cc, ca]
+                colorIndices: [cd, cc, ca],
+                isLOD: false
             });
         } else {
             // v1 -> tex1, v2 -> tex2, v3 -> tex3, v4 -> tex4
@@ -354,19 +388,22 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
             faces.push({
                 indices: [a, b, c],  // v1, v2, v3
                 uvIndices: [uvA, uvB, uvC],
-                colorIndices:[ca, cb, cc]
+                colorIndices:[ca, cb, cc],
+                isLOD: false
             });
             faces.push({
                 indices: [a, c, d],  // v1, v3, v4
                 uvIndices: [uvA, uvC, uvD],
-                colorIndices:[ca, cc, cd]
+                colorIndices:[ca, cc, cd],
+                isLOD: false
             });
         }
     } else {
         faces.push({
             indices: [a, b, c],
             uvIndices: null,
-            colorIndices: null
+            colorIndices: null,
+            isLOD: false
         });
     }
 }
@@ -431,7 +468,8 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
                 uvIndices: [uvIndexA, uvIndexC, uvIndexD],
                 colorIndices: [colorB, colorC, colorD],
                 isWater,
-                isTransparent
+                isTransparent,
+                isLOD: false
             });
         } else {
             faces.push({
@@ -439,7 +477,8 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
                 uvIndices: [uvIndexD, uvIndexC, uvIndexA],
                 colorIndices: [colorD, colorC, colorB],
                 isWater,
-                isTransparent
+                isTransparent,
+                isLOD: false
             });
         }
     } else {
@@ -448,14 +487,16 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
             uvIndices: [uvIndexA, uvIndexB, uvIndexC],
             colorIndices: [colorA, colorB, colorC],
             isWater,
-            isTransparent
+            isTransparent,
+            isLOD: false
         });
         faces.push({
             indices: [a, c, d],
             uvIndices: [uvIndexA, uvIndexC, uvIndexD],
             colorIndices: [colorA, colorC, colorD],
             isWater,
-            isTransparent
+            isTransparent,
+            isLOD: false
         });
     }
 }
@@ -527,16 +568,22 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
         pointer += Header.size;
 
         // LOD vertices
+        const lodVertStart = vertices.length;
         for (let i = 0; i < header.v1; i++) {
             const v = new Vertex(view, pointer);
             pointer += 4;
-            const z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
+            const zraw = (v.b1 | ((v.b2 & 3) << 8));
+            let z = zraw + header.z;
+            if (gameNumber > 1) {
+                z = (zraw << 1) + header.z; // lazy z-scaling to correct for S2/S3, see proper z-scaling further below
+            }
             const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
             const x = ((v.b3 >> 5) | (v.b4 << 3)) + header.x;
             vertices.push([x, y, z]);
         }
 
         // LOD colors
+        const lodColorStart = colors.length;
         for (let i = 0; i < header.c1; i++) {
             const c = new VertexColor(view, pointer);
             pointer += 4;
@@ -545,7 +592,48 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
 
         // LOD polys
         for (let i = 0; i < header.p1; i++) {
+            const poly = gameNumber > 1 ? new LODPoly2(view, pointer) : new LODPoly(view, pointer);
             pointer += 8;
+
+            let v1 = (poly.v1 & 63);
+            let v2 = (poly.v1 >> 6) | ((poly.v2 & 15) << 2);
+            let v3 = (poly.v2 >> 4) | ((poly.v3 & 3) << 4);
+            let v4 = (poly.v3 >> 2);
+            let c1 = (poly.c1 & 63);
+            let c2 = (poly.c1 >> 6) | ((poly.c2 & 15) << 2);
+            let c3 = (poly.c2 >> 4) | ((poly.c3 & 3) << 4);
+            let c4 = (poly.c3 >> 2);
+            if (gameNumber > 1 && poly instanceof LODPoly2) {
+                v1 = (poly.v1 >> 3) | ((poly.v2 & 3) << 5);
+                v2 = (poly.v2 >> 2) | ((poly.v3 & 1) << 6);
+                v3 = (poly.v3 >> 1);
+                v4 = (poly.v4 & 127);
+                c1 = (poly.c1 >> 4) | ((poly.c2 & 7) << 4);
+                c2 = (poly.c2 >> 3) | ((poly.c3 & 3) << 5);
+                c3 = (poly.c3 >> 2) | ((poly.c4 & 1) << 6);
+                c4 = (poly.c4 >> 1);
+            }
+            const a = lodVertStart + v1;
+            const b = lodVertStart + v2;
+            const c = lodVertStart + v3;
+            const d = lodVertStart + v4;
+            const cA = lodColorStart + c1;
+            const cB = lodColorStart + c2;
+            const cC = lodColorStart + c3;
+            const cD = lodColorStart + c4;
+
+            if (v1 === v2)
+                faces.push({ indices: [b, c, d], uvIndices: null, colorIndices: [cB, cC, cD], isLOD: true });
+            else if (v2 === v3)
+                faces.push({ indices: [a, c, d], uvIndices: null, colorIndices: [cA, cC, cD], isLOD: true });
+            else if (v3 === v4)
+                faces.push({ indices: [a, b, d], uvIndices: null, colorIndices: [cA, cB, cD], isLOD: true });
+            else if (v4 === v1)
+                faces.push({ indices: [a, b, c], uvIndices: null, colorIndices: [cA, cB, cC], isLOD: true });
+            else {
+                faces.push({ indices: [b, a, c], uvIndices: null, colorIndices: [cB, cA, cC], isLOD: true });
+                faces.push({ indices: [b, c, d], uvIndices: null, colorIndices: [cB, cC, cD], isLOD: true });
+            }
         }
 
         // MDL/FAR/TEX vertices

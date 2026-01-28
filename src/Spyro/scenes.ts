@@ -98,11 +98,21 @@ class SpyroRenderer implements SceneGfx {
     }
 
     public createPanels(): Panel[] {
-        if (this.mobys === undefined)
-            return [];
         const panel = new Panel();
         panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         panel.setTitle(RENDER_HACKS_ICON, "Level Options");
+        const toggleLOD = new Checkbox("Toggle LOD", false);
+        toggleLOD.onchanged = () => {
+            this.levelRenderer.showLOD = toggleLOD.checked
+        };
+        panel.contents.appendChild(toggleLOD.elem);
+        const toggleTextures = new Checkbox("Show textures", true);
+        toggleTextures.onchanged = () => {
+            this.levelRenderer.showTextures = toggleTextures.checked
+        };
+        panel.contents.appendChild(toggleTextures.elem);
+        if (this.mobys === undefined)
+            return [panel];
         const showMobysCheckbox = new Checkbox("Show moby positions", false);
         showMobysCheckbox.onchanged = () => {
             this.levelRenderer.showMobys = showMobysCheckbox.checked

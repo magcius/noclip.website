@@ -27,6 +27,7 @@ layout(std140) uniform ub_SceneParams {
     float u_WaterAmp;
     float u_WaterSpeed1;
     float u_WaterSpeed2;
+    float u_LOD;
 };
 
 uniform sampler2D u_Texture;
@@ -69,7 +70,6 @@ void main() {
         }
         float mask = max(texColor.r, max(texColor.g, texColor.b));
         lit = v_Color.rgb * brightness;
-        // (tweak 0.5–0.8 to taste)
         outAlpha = mask * 0.8;
     } else {
         lit = texColor.rgb * v_Color.rgb * brightness;
@@ -90,7 +90,7 @@ void main() {
     vec3 dithered = lit + threshold * (1.0 / 31.0);
     vec3 final5 = floor(dithered * 31.0) / 31.0;
 
-    gl_FragColor = vec4(final5, outAlpha);
+    gl_FragColor = u_LOD == 1.0 ? v_Color : vec4(final5, outAlpha);
 }
 #endif
     `;
@@ -118,11 +118,15 @@ export class LevelRenderer {
     private uvBuffer: GfxBuffer;
     private indexBufferGround: GfxBuffer;
     private indexBufferTransparent: GfxBuffer;
+    private indexBufferLOD: GfxBuffer;
     private indexCountGround: number;
     private indexCountTransparent: number;
+    private indexCountLOD: number;
     private inputLayout: GfxInputLayout;
     private texture: GfxTexture;
     public showMobys: boolean;
+    public showLOD: boolean;
+    public showTextures: boolean = true;
 
     constructor(cache: GfxRenderCache, level: Level, private mobys?: Moby[]) {
         const device = cache.device;
@@ -145,10 +149,11 @@ export class LevelRenderer {
         const expandedUV: number[] = [];
         const expandedIndexGround: number[] = [];
         const expandedIndexTransparent: number[] = [];
+        const expandedIndexLOD: number[] = [];
         let runningIndex = 0;
 
         for (const face of faces) {
-            const { indices, uvIndices, colorIndices, isWater, isTransparent } = face;
+            const { indices, uvIndices, colorIndices, isWater, isTransparent, isLOD } = face;
             for (let k = 0; k < indices.length; k++) {
                 const v = vertices[indices[k]];
                 expandedPos.push(v[0], v[1], v[2]);
@@ -169,7 +174,9 @@ export class LevelRenderer {
                 } else {
                     expandedUV.push(0, 0);
                 }
-                if (isWater || isTransparent) {
+                if (isLOD) {
+                    expandedIndexLOD.push(runningIndex);
+                } else if (isWater || isTransparent) {
                     expandedIndexTransparent.push(runningIndex);
                 } else {
                     expandedIndexGround.push(runningIndex);
@@ -180,13 +187,16 @@ export class LevelRenderer {
 
         const indexGround = new Uint32Array(expandedIndexGround);
         const indexTransparent = new Uint32Array(expandedIndexTransparent);
+        const indexLOD = new Uint32Array(expandedIndexLOD);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedColor).buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
         this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexGround.buffer);
         this.indexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexTransparent.buffer);
+        this.indexBufferLOD = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexLOD.buffer);
         this.indexCountGround = indexGround.length;
         this.indexCountTransparent = indexTransparent.length;
+        this.indexCountLOD = indexLOD.length;
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
@@ -231,6 +241,8 @@ export class LevelRenderer {
         buf[offs++] = 1.0; // u_WaterAmp
         buf[offs++] = 0.50; // u_WaterSpeed1
         buf[offs++] = 0.23; // u_WaterSpeed2
+        const lod = this.showLOD && this.indexCountLOD > 0
+        buf[offs++] = lod || !this.showTextures ? 1.0 : 0.0;
         template.setVertexInput(
             this.inputLayout,
             [
@@ -259,13 +271,13 @@ export class LevelRenderer {
                     { buffer: this.colorBuffer, byteOffset: 0 },
                     { buffer: this.uvBuffer, byteOffset: 0 }
                 ],
-                { buffer: this.indexBufferGround, byteOffset: 0 }
+                { buffer: lod ? this.indexBufferLOD : this.indexBufferGround, byteOffset: 0 }
             );
-            renderInst.setDrawCount(this.indexCountGround);
+            renderInst.setDrawCount(lod ? this.indexCountLOD : this.indexCountGround);
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        if (this.indexCountTransparent > 0) {
+        if (this.indexCountTransparent > 0 && !this.showLOD) {
             const renderInst = renderInstManager.newRenderInst();
             const megaState = renderInst.getMegaStateFlags();
             megaState.cullMode = GfxCullMode.None;
@@ -314,14 +326,6 @@ export class LevelRenderer {
             const b = ((m.classId * 17) & 0xFF) / 255;
             const color = colorNewFromRGBA(r, g, b, 1);
             renderHelper.debugDraw.drawLocator(worldPos, 50, color);
-
-            // const radians = (m.yaw) * Math.PI * 2.0;
-            // const dirX = Math.sin(radians);
-            // const dirZ = Math.cos(radians);
-            // const forward = vec3.fromValues(dirX, 0, dirZ);
-            // const color2 = colorNewFromRGBA(1, 1, 0, 1);
-            // renderHelper.debugDraw.drawLocator(worldPos, 10, color2);
-            // renderHelper.debugDraw.drawVector(worldPos, forward, 40, color2);
 
             const labelPos = vec3.clone(worldPos);
             labelPos[0] -= 75;
