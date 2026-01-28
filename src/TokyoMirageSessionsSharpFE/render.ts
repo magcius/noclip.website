@@ -161,5 +161,13 @@ export class TMSFEScene implements SceneGfx
         {
             this.fmdl_renderers[i].destroy(device);
         }
+        for (let i = 0; i < this.common_gimmicks.length; i++)
+        {
+            this.common_gimmicks[i].destroy(device);
+        }
+        for (let i = 0; i < this.map_gimmicks.length; i++)
+        {
+            this.common_gimmicks[i].destroy(device);
+        }
     }
 }

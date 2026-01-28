@@ -60,6 +60,11 @@ export class gimmick
             renderHelper,
         );
     }
+
+    public destroy(device: GfxDevice): void
+    {
+        this.fmdl_renderer.destroy(device);
+    }
 }
 
 export async function create_gimmick
