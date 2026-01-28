@@ -1,7 +1,7 @@
 // scene.ts
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 
-import { parseAPAK, get_file_by_name, get_files_of_type } from "./apak.js";
+import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
@@ -12,7 +12,6 @@ import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 
-import { create_battle_gimmicks } from "./maps/battle.js";
 import { create_d002_01_gimmicks } from "./maps/d002_01.js";
 import { create_d003_01_gimmicks } from "./maps/d003_01.js";
 import { create_d003_02_gimmicks } from "./maps/d003_02.js";
@@ -54,6 +53,7 @@ class TMSFESceneDesc implements SceneDesc
      * @param gate_type it's currently unknown how the game chooses which gate model to use. currently just hard coding it
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
+     * @param has_battle_audience whether to spawn the audience
      */
     constructor
     (
@@ -65,6 +65,7 @@ class TMSFESceneDesc implements SceneDesc
         public gate_type?: number | undefined,
         public is_d018_03?: boolean | undefined,
         public special_skybox?: boolean | undefined,
+        public has_battle_audience?: boolean | undefined,
     ) {}
 
     /**
@@ -118,6 +119,18 @@ class TMSFESceneDesc implements SceneDesc
             level_models.push({ model_fres, animation_fres });
         }
 
+        if (this.has_battle_audience)
+        {
+            // add the audience models
+            const audience_00_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience00/skin/00/model.apak", "audience00_00.bfres", dataFetcher);
+            const audience_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience01/skin/00/model.apak", "audience01_00.bfres", dataFetcher);
+            const audience_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience02/skin/00/model.apak", "audience02_00.bfres", dataFetcher);
+            const audience_00_animation_fres = await get_animations_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience00/skin/00/model_common.apak", dataFetcher);
+            level_models.push({ model_fres: audience_00_fres, animation_fres: audience_00_animation_fres[0] });
+            level_models.push({ model_fres: audience_01_fres, animation_fres: audience_00_animation_fres[0] });
+            level_models.push({ model_fres: audience_02_fres, animation_fres: audience_00_animation_fres[0] });
+        }
+
         let scene = new TMSFEScene(device, level_models, this.special_skybox);
 
         // add gimmicks (only if this level has a maplayout.layout file)
@@ -131,11 +144,8 @@ class TMSFESceneDesc implements SceneDesc
                 scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
         }
-        // battle maps don't have a maplayout.layout file
-        if (this.id[0] == "b" && this.id != "b011_01")
-        {
-            scene.map_gimmicks = await create_battle_gimmicks(dataFetcher, device);
-        }
+
+
 
         return scene;
     }
@@ -220,21 +230,21 @@ const sceneDescs =
     new TMSFESceneDesc("d015_01", "Training Area", ["d015_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", ""]),
     new TMSFESceneDesc("d015_02", "Fighter's Hall", ["d015_02"], [""]),
     "Battle Maps",
-    new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b005_01", "b005_01", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b006_01", "b006_01", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"]),
-    new TMSFESceneDesc("b007_01", "b007_01", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b008_01", "b008_01", ["b008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b009_01", "b009_01", ["b009_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b010_01", "b010_01", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
+    new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b005_01", "b005_01", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b006_01", "b006_01", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b007_01", "b007_01", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b008_01", "b008_01", ["b008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b009_01", "b009_01", ["b009_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b010_01", "b010_01", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
     new TMSFESceneDesc("b011_01", "b011_01", ["b011_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", ""]),
-    new TMSFESceneDesc("b012_01", "b012_01", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"]),
-    new TMSFESceneDesc("b013_01", "b013_01", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b014_01", "b014_01", ["b014_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"]),
-    new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
+    new TMSFESceneDesc("b012_01", "b012_01", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b013_01", "b013_01", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b014_01", "b014_01", ["b014_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
+    new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, undefined, undefined, undefined, true),
     "Tokyo",
     new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks),
     new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks),
