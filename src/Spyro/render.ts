@@ -24,9 +24,6 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     float u_Time;
-    float u_WaterAmp;
-    float u_WaterSpeed1;
-    float u_WaterSpeed2;
     float u_LOD;
 };
 
@@ -46,9 +43,12 @@ void main() {
 
     vec3 worldPos = a_Position;
     if (a_Color.a < 0.5) {
-        float phase = dot(worldPos.xz, vec2(0.03, 0.04));
-        float wave = sin(u_Time * u_WaterSpeed1 + phase) * 3.0 + sin(u_Time * u_WaterSpeed2 + phase * 1.7) * 1.5;
-        worldPos.z += wave * u_WaterAmp;
+        float waterAmp = 1.1;
+        float waterSpeed1 = 1.0;
+        float waterSpeed2 = 0.12;
+        float phase = dot(worldPos.xz, vec2(0.025, 0.03));
+        float wave = sin(u_Time * waterSpeed1 + phase) * 3.0 + sin(u_Time * waterSpeed2 + phase * 1.7) * 1.5;
+        worldPos.z += wave * waterAmp;
     }
 
     gl_Position = UnpackMatrix(u_ProjectionView) * vec4(worldPos, 1.0);
@@ -65,18 +65,17 @@ void main() {
     float brightness = 1.7;
 
     if (isTransparent) {
-        if (isBlackPixel) {
+        if (isBlackPixel && u_LOD < 1.0) {
             discard;
         }
         float mask = max(texColor.r, max(texColor.g, texColor.b));
         lit = v_Color.rgb * brightness;
-        outAlpha = mask * 0.8;
+        outAlpha = mask;
     } else {
         lit = texColor.rgb * v_Color.rgb * brightness;
         outAlpha = v_Color.a;
     }
 
-    // 4x4 Bayer dither + 5-bit quantization, same as before
     float bayer4x4[16] = float[16](
          0.0,  8.0,  2.0, 10.0,
         12.0,  4.0, 14.0,  6.0,
@@ -89,6 +88,10 @@ void main() {
 
     vec3 dithered = lit + threshold * (1.0 / 31.0);
     vec3 final5 = floor(dithered * 31.0) / 31.0;
+
+    if (isTransparent) {
+        final5 *= 1.4;
+    }
 
     gl_FragColor = u_LOD == 1.0 ? v_Color : vec4(final5, outAlpha);
 }
@@ -238,9 +241,6 @@ export class LevelRenderer {
         mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
         offs += fillMatrix4x4(buf, offs, scratchMat4a);
         buf[offs++] = viewerInput.time * 0.001 * 2; // u_Time
-        buf[offs++] = 1.0; // u_WaterAmp
-        buf[offs++] = 0.50; // u_WaterSpeed1
-        buf[offs++] = 0.23; // u_WaterSpeed2
         const lod = this.showLOD && this.indexCountLOD > 0
         buf[offs++] = lod || !this.showTextures ? 1.0 : 0.0;
         template.setVertexInput(
