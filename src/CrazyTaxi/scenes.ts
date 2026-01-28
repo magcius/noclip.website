@@ -8,7 +8,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GXTexture from '../gx/gx_texture.js';
 import { DataFetcher, NamedArrayBufferSlice } from '../DataFetcher.js';
-import { createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, GXTextureHolder, MaterialParams } from '../gx/gx_render.js';
+import { createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, GXTextureHolder, GXTextureMapping, MaterialParams } from '../gx/gx_render.js';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D, hexdump } from '../DebugJunk.js';
 import { CTFileLoc, CTFileStore, CTShape } from '../../rust/pkg/noclip_support.js';
 import { compilePartialVtxLoader, compileVtxLoader, compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
@@ -16,10 +16,10 @@ import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { assert } from '../util.js';
+import { assert, assertExists } from '../util.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { TextureHolder } from '../TextureHolder.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { CameraController } from '../Camera.js';
 import { addVelocityAwayFromTarget } from '../SuperMarioGalaxy/ActorUtil.js';
 import { Blue, Color, colorFromRGBA, colorNewFromRGBA, Green, Red } from '../Color.js';
@@ -129,16 +129,214 @@ function createVATs(): GX_VtxAttrFmt[][] {
 
 const VATS = createVATs();
 
+interface MaterialInstance {
+    isSkybox: boolean,
+    pos: vec3,
+    scale: vec3,
+    loadedVertexData: LoadedVertexData,
+}
+
+interface MaterialDrawBatch {
+    shapes: Shape[],
+    vertexBufferDescriptors: GfxVertexBufferDescriptor[],
+    indexBuffers: ArrayBufferLike[],
+    indexBufferByteLength: number,
+    indexBufferDescriptor?: GfxIndexBufferDescriptor,
+    indexCount: number,
+}
+
+function appendArrayBuffer(a: ArrayBufferLike, b: ArrayBufferLike): ArrayBufferLike {
+    const result = new Uint8Array(a.byteLength + b.byteLength);
+    result.set(new Uint8Array(a), 0);
+    result.set(new Uint8Array(b), a.byteLength);
+    return result.buffer;
+}
+
+class Material {
+    public batches: MaterialDrawBatch[] = [];
+
+    private materialHelper: GXMaterialHelperGfx;
+    private materialParams = new MaterialParams();
+    private inputLayout: GfxInputLayout;
+    private finished = false;
+
+    constructor(private cache: GfxRenderCache, public name: string, texture: GXTextureMapping, public gxLayout: LoadedVertexLayout) {
+        this.inputLayout = createInputLayout(cache, gxLayout);
+
+        const mb = new GXMaterialBuilder();
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(true);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        this.materialParams.m_TextureMapping[0] = texture;
+    }
+
+    private getCurrentBatch(): MaterialDrawBatch {
+        let batch = this.batches[this.batches.length - 1];
+        if (this.batches.length === 0 || batch.shapes.length === 10) {
+            batch = {
+                shapes: [],
+                vertexBufferDescriptors: [],
+                indexBufferByteLength: 0,
+                indexBuffers: [],
+                indexCount: 0,
+            };
+            this.batches.push(batch);
+        }
+        return batch;
+    }
+
+    public addDraw(shape: Shape, draw: ShapeDrawCall) {
+        const vertexData = draw.vertexData;
+        const batch = this.getCurrentBatch();
+        batch.shapes.push(shape);
+        for (let i = 0; i < vertexData.vertexBuffers.length; i++) {
+            const vertexBuffer = createBufferFromData(
+                this.cache.device,
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Static,
+                vertexData.vertexBuffers[i]
+            );
+            this.cache.device.uploadBufferData(
+                vertexBuffer,
+                0,
+                new Uint8Array(vertexData.vertexBuffers[i])
+            );
+            batch.vertexBufferDescriptors.push({ buffer: vertexBuffer });
+        }
+        batch.indexBuffers.push(vertexData.indexData);
+        batch.indexBufferByteLength += vertexData.indexData.byteLength;
+        batch.indexCount += vertexData.totalIndexCount;
+    }
+
+    public finish() {
+        // concatenate and create each index batch's index buffer
+        for (const batch of this.batches) {
+            const combinedBuffer = new Uint8Array(batch.indexBufferByteLength);
+            let offs = 0;
+            for (const buffer of batch.indexBuffers) {
+                combinedBuffer.set(new Uint8Array(buffer), offs);
+                offs += buffer.byteLength;
+            }
+            const indexBuffer = createBufferFromData(
+                this.cache.device,
+                GfxBufferUsage.Index,
+                GfxBufferFrequencyHint.Static,
+                combinedBuffer.buffer
+            );
+            batch.indexBufferDescriptor = { buffer: indexBuffer };
+        }
+        this.finished = true;
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        assert(this.finished);
+        for (const batch of this.batches) {
+            if (batch.indexCount === 0) continue;
+            const renderInst = renderInstManager.newRenderInst();
+            this.materialHelper.setOnRenderInst(this.cache, renderInst);
+            for (let i = 0; i < batch.shapes.length; i++) {
+                const shape = batch.shapes[i];
+                const m = mat4.create();
+                setMatrixTranslation(m, shape.pos);
+                scaleMatrix(m, m, shape.scale[0]);
+                if (shape.isSkybox) {
+                    m[15] = 0;
+                }
+                mat4.mul(drawParams.u_PosMtx[i], viewerInput.camera.viewMatrix, m);
+            }
+            this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
+            this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
+            renderInst.setVertexInput(
+                this.inputLayout,
+                batch.vertexBufferDescriptors,
+                assertExists(batch.indexBufferDescriptor)
+            );
+            renderInst.setDrawCount(batch.indexCount);
+            renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+            renderInstManager.submitRenderInst(renderInst);
+        }
+    }
+
+    public destroy(device: GfxDevice) {
+        assert(this.finished);
+        // Do not destroy inputLayout; it is owned by the render cache.
+        for (const batch of this.batches) {
+            for (const desc of batch.vertexBufferDescriptors) {
+                device.destroyBuffer(desc.buffer);
+            }
+            device.destroyBuffer(batch.indexBufferDescriptor!.buffer);
+        }
+    }
+}
+
+class MaterialCache {
+    public materials: Map<string, Material> = new Map();
+
+    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder) {
+    }
+
+    public addShape(shape: Shape) {
+        for (const draw of shape.draws) {
+            const textureName = shape.textures[draw.textureIndex];
+            let material = this.materials.get(textureName);
+            if (material === undefined) {
+                const textureMapping = new GXTextureMapping();
+                this.textureHolder.fillTextureMapping(textureMapping, textureName);
+                material = new Material(
+                    this.cache,
+                    textureName,
+                    textureMapping,
+                    draw.vertexLayout
+                );
+                this.materials.set(textureName, material);
+            } else {
+                assert(draw.vertexLayout.indexFormat === material.gxLayout.indexFormat);
+            }
+            material.addDraw(shape, draw);
+        }
+    }
+
+    public finish() {
+        for (const material of this.materials.values()) {
+            material.finish();
+        }
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        for (const material of this.materials.values()) {
+            material.prepareToRender(renderInstManager, viewerInput);
+        }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (const material of this.materials.values()) {
+            material.destroy(device);
+        }
+    }
+}
+
+interface ShapeDrawCall {
+    vertexData: LoadedVertexData,
+    vertexLayout: LoadedVertexLayout,
+    textureIndex: number,
+}
+
 interface Shape {
     name: string,
     pos: vec3,
+    aabb: AABB,
     scale: vec3,
     isSkybox: boolean,
-    vertexData: LoadedVertexData[],
-    vertexLayouts: LoadedVertexLayout[],
+    draws: ShapeDrawCall[],
     vertexFormats: Set<GX.VtxFmt>,
-    textureIndices: number[],
-    bounding_radius: number,
+    boundingRadius: number,
     textures: string[],
 }
 
@@ -147,6 +345,7 @@ const drawParams = new DrawParams();
 class ShapeRenderer {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptors: GfxIndexBufferDescriptor[] = [];
+    public name: string;
     public visible = true;
     public inputLayouts: GfxInputLayout[] = [];
     private vertexBuffers: GfxBuffer[] = [];
@@ -154,9 +353,12 @@ class ShapeRenderer {
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
 
-    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, public shape: Shape, public loadedVertexLayouts: LoadedVertexLayout[], public loadedVertexData: LoadedVertexData[]) {
+    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, public shape: Shape) {
+        this.name = this.shape.name;
         const device = cache.device;
-        for (const data of this.loadedVertexData) {
+        for (const draw of this.shape.draws) {
+            this.inputLayouts.push(createInputLayout(cache, draw.vertexLayout));
+            const data = draw.vertexData;
             for (let i = 0; i < data.vertexBuffers.length; i++) {
                 const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex,
                     GfxBufferFrequencyHint.Static,
@@ -178,10 +380,6 @@ class ShapeRenderer {
                 console.warn(`missing texture ${texture}`)
             }
         })
-
-        for (const layout of this.loadedVertexLayouts) {
-            this.inputLayouts.push(createInputLayout(cache, layout));
-        }
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -209,8 +407,13 @@ class ShapeRenderer {
         //     Red,
         //     20
         // )
+        // drawWorldSpaceAABB(
+        //     getDebugOverlayCanvas2D(),
+        //     viewerInput.camera.clipFromWorldMatrix,
+        //     this.shape.aabb
+        // );
         for (let i = 0; i < this.indexBuffers.length; i++) {
-            if (this.loadedVertexData[i].totalIndexCount === 0)
+            if (this.shape.draws[i].vertexData.totalIndexCount === 0)
                 continue;
             const renderInst = renderInstManager.newRenderInst();
             this.materialHelper.setOnRenderInst(this.cache, renderInst);
@@ -223,10 +426,10 @@ class ShapeRenderer {
             mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, m);
             this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
-            const textureIndex = this.shape.textureIndices[i];
+            const textureIndex = this.shape.draws[i].textureIndex;
             assert(this.textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[0], this.shape.textures[textureIndex]));
             renderInst.setVertexInput(this.inputLayouts[i], [this.vertexBufferDescriptors[i]], this.indexBufferDescriptors[i]);
-            renderInst.setDrawCount(this.loadedVertexData[i].totalIndexCount);
+            renderInst.setDrawCount(this.shape.draws[i].vertexData.totalIndexCount);
             renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -248,19 +451,24 @@ export class Scene implements Viewer.SceneGfx {
 
     private shapes: ShapeRenderer[] = [];
     private skyboxShapes: ShapeRenderer[] = [];
+    private materials: MaterialCache;
+    private scratchVec3a = vec3.create();
+    private scratchVec3b = vec3.create();
 
     constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder, public debugPos: vec3[][], public shapeNames: string[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
         console.log('creating shapes')
+        this.materials = new MaterialCache(this.renderHelper.renderCache, this.textureHolder);
         for (const name of shapeNames) {
             const shape = this.manager.createShape(name);
+            if (shape.name === "course_4b_048_a_ph.shp" || this.materials.materials.size < 4) {
+                this.materials.addShape(shape);
+            }
             const renderer = new ShapeRenderer(
                 this.renderHelper.renderCache,
                 this.textureHolder,
                 shape,
-                shape.vertexLayouts,
-                shape.vertexData
             );
             if (shape.isSkybox) {
                 this.skyboxShapes.push(renderer);
@@ -268,6 +476,7 @@ export class Scene implements Viewer.SceneGfx {
                 this.shapes.push(renderer);
             }
         }
+        this.materials.finish();
         console.log('done')
     }
 
@@ -305,16 +514,19 @@ export class Scene implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
-        const cameraPos = mat4.getTranslation(vec3.create(), viewerInput.camera.worldMatrix)
+        const cameraPos = mat4.getTranslation(this.scratchVec3a, viewerInput.camera.worldMatrix)
         renderInstManager.setCurrentList(this.renderInstListMain);
-        for (const shape of this.shapes) {
-            shape.visible = vec3.dist(cameraPos, shape.shape.pos) < 10_000;
-            shape.prepareToRender(renderInstManager, viewerInput);
-        }
-        renderInstManager.setCurrentList(this.renderInstListSky);
-        for (const shape of this.skyboxShapes) {
-            shape.prepareToRender(renderInstManager, viewerInput);
-        }
+        this.materials.prepareToRender(renderInstManager, viewerInput);
+        // for (const shape of this.shapes) {
+        //     shape.shape.aabb.centerPoint(this.scratchVec3b);
+        //     if (vec3.dist(cameraPos, this.scratchVec3b) < 10_000) {
+        //         shape.prepareToRender(renderInstManager, viewerInput);
+        //     }
+        // }
+        // renderInstManager.setCurrentList(this.renderInstListSky);
+        // for (const shape of this.skyboxShapes) {
+        //     shape.prepareToRender(renderInstManager, viewerInput);
+        // }
 
         renderInstManager.popTemplate();
 
@@ -436,9 +648,9 @@ class FileManager {
     }
 
     public createShape(name: string): Shape {
-        const debug = name === "course_4b_048_a_ph.shp";
+        const debug = name === "cz_chari.shp";
         const shape = this.fileStore.get_shape(name)!;
-        const bounding_radius = shape.bounding_radius();
+        const boundingRadius = shape.bounding_radius();
         let x = shape.pos_and_scale();
         let pos = vec3.fromValues(x[0], x[1], -x[2]); // FIXME why do we negate here
         let scale = vec3.fromValues(x[3], x[4], x[5]);
@@ -463,16 +675,50 @@ class FileManager {
             textures[i] = textures[i].toLowerCase();
         }
 
+        const draws: ShapeDrawCall[] = [];
+        const dlAddrs = [];
+        const textureIdxs = [];
+        const drawsLoc = shape.mystery_loc()!;
+        const drawsData = this.getData(drawsLoc).createDataView();
+        const drawCount = Math.floor(drawsData.byteLength / 36);
+        for (let i = 0; i < drawCount; i++) {
+            const offs = i * 36;
+            const dlAddr = drawsData.getUint32(offs + 0x0);
+            if (dlAddr === 0x38) continue; // the first one seems to always be empty?
+            const vtxAddr = drawsData.getUint32(offs + 0x4);
+            const texIdx = drawsData.getUint32(offs + 0x8);
+            const unkNum0 = drawsData.getFloat32(offs + 0xc);
+            const unkNum1 = drawsData.getFloat32(offs + 0x10);
+            const unkNum2 = drawsData.getFloat32(offs + 0x14);
+            const unkCount1 = drawsData.getUint32(offs + 0x18);
+            const unkBytes = drawsData.buffer.slice(offs + 0x1c, offs + 36);
+            dlAddrs.push(dlAddr);
+            textureIdxs.push(texIdx);
+        }
+
+        const sortedDLAddrs = dlAddrs.slice();
+        sortedDLAddrs.sort((a, b) => a - b);
+        const dlSizesByAddr: Map<number, number> = new Map();
+        for (let i = 0; i < sortedDLAddrs.length - 1; i++) {
+            const size = sortedDLAddrs[i + 1] - sortedDLAddrs[i];
+            assert(size > 0);
+            dlSizesByAddr.set(sortedDLAddrs[i], size);
+        }
+
         // parse each display list. each shape has several display lists
         // concatenated together and aligned on 0x20 blocks
-        const displayListData = this.getData(shape.display_list_loc()!);
-        let offs = 0;
-        const vertexLayouts = [];
+        const dlSection = this.getData(shape.display_list_loc()!);
+        const dlOffset = shape.display_list_offs();
         const vertexFormats: Set<GX.VtxFmt> = new Set();
-        const displayListOffs = shape.display_list_offs();
-        const displayListsByAddr: Map<number, LoadedVertexData> = new Map();
-        while (true) {
-            const vtxFormat = displayListData.slice(offs).createDataView().getUint8(0) & 0x07;
+        for (let i = 0; i < dlAddrs.length; i++) {
+            const addr = dlAddrs[i];
+            const textureIndex = textureIdxs[i];
+            let dlData = dlSection.slice(addr - dlOffset);
+            const size = dlSizesByAddr.get(addr);
+            if (size) {
+                dlData = dlData.slice(0, size);
+            }
+            const vtxFormat = dlData.createDataView().getUint8(0) & 0x07;
             vertexFormats.add(vtxFormat);
             const fmtVat = VATS[vtxFormat];
             const vcd: GX_VtxDesc[] = [];
@@ -481,62 +727,49 @@ class FileManager {
                 if (loc === undefined)
                     continue;
                 vcd[attr] = { type: GX.AttrType.INDEX16 };
-                vtxArrays[attr] = { buffer: this.getData(loc), offs: 0, stride: getAttributeByteSize(fmtVat, attr) };
+                vtxArrays[attr] = {
+                    buffer: this.getData(loc),
+                    offs: 0,
+                    stride: getAttributeByteSize(fmtVat, attr),
+                };
             }
 
             // awkward hack
-            let foo = [];
-            foo[vtxFormat] = fmtVat;
-            const vtxLoader = compileVtxLoaderMultiVat(foo, vcd);
-
-            vertexLayouts.push(vtxLoader.loadedVertexLayout);
-            const data = vtxLoader.runVertices(vtxArrays, displayListData.slice(offs));
-            displayListsByAddr.set(displayListOffs + offs, data);
-            assert(data.endOffs !== null);
-            offs += data.endOffs + (0x20 - (data.endOffs % 0x20));
-            if (offs >= displayListData.byteLength) {
-                break;
-            }
+            let vat = [];
+            vat[vtxFormat] = fmtVat;
+            const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
+            const vertexData = vtxLoader.runVertices(vtxArrays, dlData);
+            draws.push({
+                vertexData,
+                vertexLayout: vtxLoader.loadedVertexLayout,
+                textureIndex,
+            })
         }
 
-        const vertexData: LoadedVertexData[] = [];
-        const textureIndices = [];
-        const mystery = shape.mystery_loc()!;
-        const mysteryData = this.getData(mystery).createDataView();
-        const count = Math.floor(mysteryData.byteLength / 36);
-        for (let i = 0; i < count; i++) {
-            const offs = i * 36;
-            const dlAddr = mysteryData.getUint32(offs + 0x0);
-            const vtxAddr = mysteryData.getUint32(offs + 0x4);
-            const texIdx = mysteryData.getUint32(offs + 0x8);
-            const unkNum0 = mysteryData.getFloat32(offs + 0xc);
-            const unkNum1 = mysteryData.getFloat32(offs + 0x10);
-            const unkNum2 = mysteryData.getFloat32(offs + 0x14);
-            const unkCount1 = mysteryData.getUint32(offs + 0x18);
-            const unkBytes = mysteryData.buffer.slice(offs + 0x1c, offs + 36);
-            const dl = displayListsByAddr.get(dlAddr);
-            if (!dl)
-                continue;
-            vertexData.push(dl);
-            textureIndices.push(texIdx);
-        }
 
-        const drawNames = textureIndices.map(i => textures[i]);
-        if (debug) console.log(drawNames);
-
-        // testing our assumption that VTXFMT1 means meshes are already scaled and translated
-        const prescaled = scale[0] === 1 && scale[1] === 1 && scale[2] === 1;
-        const pretranslated = pos[0] === 0 && pos[1] === 0 && pos[2] === 0;
+        const aabb = new AABB();
         if (vertexFormats.has(1)) {
+            const prescaled = scale[0] === 1 && scale[1] === 1 && scale[2] === 1;
+            const pretranslated = pos[0] === 0 && pos[1] === 0 && pos[2] === 0;
             assert(prescaled && pretranslated);
-        }
-        if (prescaled && pretranslated && !vertexFormats.has(1)) {
-            console.log(name, vertexFormats)
+            const p = vec3.create();
+            for (const draw of draws) {
+                for (const buf of draw.vertexData.vertexBuffers) {
+                    const verts = new Float32Array(buf);
+                    assert(verts.length % 3 === 0);
+                    for (let i = 0; i < verts.length / 3; i += 3) {
+                        vec3.set(p, verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]);
+                        aabb.unionPoint(p);
+                    }
+                }
+            }
+        } else {
+            aabb.setFromCenterAndHalfExtents(pos, vec3.fromValues(boundingRadius, boundingRadius, boundingRadius));
         }
 
         const isSkybox = ['solla.shp', 'enkei4.shp'].includes(name);
 
-        return { name, pos, scale, isSkybox, vertexData, vertexLayouts, vertexFormats, bounding_radius, textures, textureIndices };
+        return { name, pos, aabb, scale, isSkybox, draws, vertexFormats, boundingRadius, textures };
     }
 
     public createTexture(name: string): GXTexture.TextureInputGX {
@@ -576,11 +809,8 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const files = [
-
-        ]
         const manager = new FileManager(context.dataFetcher, [
-            'poldc0.all',
+            "poldc0.all",
             "texDC0.all",
             `pol${this.id}.all`,
             `pol${this.id}_stream.all`,
