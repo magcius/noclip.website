@@ -7,7 +7,7 @@ import { FMAA } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { GfxDevice, GfxSamplerBinding, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { fmdl_renderer } from "./render_fmdl";
@@ -15,8 +15,8 @@ import { ViewerRenderInput } from '../viewer.js';
 
 export class fmdl_renderer_texture_replace extends fmdl_renderer
 {
-    private notice_sampler_binding: GfxSamplerBinding;
-    private notice_fmat_index: number;
+    private replacement_textures: replacement_texture[];
+    private replacement_texture_fmat_indices: number[] = [];
 
     constructor
     (
@@ -31,19 +31,24 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         special_skybox: boolean,
         device: GfxDevice,
         renderHelper: GfxRenderHelper,
-        notice_gfx_texture: GfxTexture,
+        replacement_textures: replacement_texture[],
     )
     {
         super(fmdl, bntx, gfx_texture_array, fska, fmaa, position, rotation, scale, special_skybox, device, renderHelper);
+        this.replacement_textures = replacement_textures;
 
-        // find notice material (the posters in fortuna)
-        const notice_material = fmdl.fmat.find((f) => f.name === "notice15");
-        if (notice_material != undefined && notice_gfx_texture != undefined)
+        for (let i = 0; i < replacement_textures.length; i++)
         {
-            this.notice_fmat_index = fmdl.fmat.indexOf(notice_material);
-            const sampler_descriptor = notice_material.sampler_descriptors[0]; // s_diffuse
-            const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
-            this.notice_sampler_binding = { gfxTexture: notice_gfx_texture, gfxSampler: gfx_sampler, lateBinding: null };
+            const replacement_texture = replacement_textures[i];
+
+            const notice_material = fmdl.fmat.find((f) => f.name === replacement_texture.material_name);
+            if (notice_material != undefined)
+            {
+                this.replacement_texture_fmat_indices.push(fmdl.fmat.indexOf(notice_material));
+                const sampler_descriptor = notice_material.sampler_descriptors[0]; // s_diffuse
+                const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
+                replacement_texture.sampler_binding = { gfxTexture: replacement_texture.gfx_texture, gfxSampler: gfx_sampler, lateBinding: null };
+            }
         }
     }
 
@@ -57,10 +62,13 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
             let bone_matrix_array = this.get_fshp_bone_matrix(i);
             let texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
 
-            let notice_sampler_binding: GfxSamplerBinding | undefined = undefined;
-            if (this.notice_sampler_binding != undefined && this.notice_fmat_index == this.fshp_renderers[i].fmat_index)
+            let replacement_sampler_binding: GfxSamplerBinding | undefined = undefined;
+            for (let replacement_texture_index = 0; replacement_texture_index < this.replacement_textures.length; replacement_texture_index++)
             {
-                notice_sampler_binding = this.notice_sampler_binding;
+                if (this.replacement_texture_fmat_indices[replacement_texture_index] == this.fshp_renderers[i].fmat_index)
+                {
+                    replacement_sampler_binding = this.replacement_textures[replacement_texture_index].sampler_binding;
+                }
             }
 
             this.fshp_renderers[i].render
@@ -73,8 +81,15 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                 bone_matrix_array,
                 texture_srt_matrix,
                 this.special_skybox,
-                notice_sampler_binding,
+                replacement_sampler_binding,
             );
         }
     }
+}
+
+export interface replacement_texture
+{
+    material_name: string;
+    gfx_texture: GfxTexture;
+    sampler_binding: GfxSamplerBinding | undefined;
 }

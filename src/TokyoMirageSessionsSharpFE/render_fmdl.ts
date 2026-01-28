@@ -51,7 +51,6 @@ export class fmdl_renderer
     )
     {
         this.special_skybox = special_skybox;
-        console.log(fmdl);
 
         // setup skeleton
         this.fskl = fmdl.fskl;

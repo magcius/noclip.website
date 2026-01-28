@@ -41,6 +41,7 @@ import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./ma
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
 import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
 import { create_f010_01_music_fes_gimmicks } from "./maps/f010_01.js";
+import { replacement_texture } from "./render_fmdl_texture_replace.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -133,11 +134,19 @@ class TMSFESceneDesc implements SceneDesc
         }
 
         // get dynamic advertisement textures
+        const replacement_textures: replacement_texture[] = [];
+
         const notice_bntx_buffer = await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/notice_tex094.gtx");
         const notice_bntx = BNTX.parse(notice_bntx_buffer);
         const notice_gfx_texture = deswizzle_and_upload_bntx_textures(notice_bntx, device)[0];
+        replacement_textures.push({ material_name: "notice15", gfx_texture: notice_gfx_texture, sampler_binding: undefined });
 
-        let scene = new TMSFEScene(device, level_models, this.special_skybox, notice_gfx_texture);
+        const notice2_bntx_buffer = await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/notice_tex100.gtx");
+        const notice2_bntx = BNTX.parse(notice2_bntx_buffer);
+        const notice2_gfx_texture = deswizzle_and_upload_bntx_textures(notice2_bntx, device)[0];
+        replacement_textures.push({ material_name: "notice16", gfx_texture: notice2_gfx_texture, sampler_binding: undefined });
+
+        let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_textures);
 
         // add gimmicks (only if this level has a maplayout.layout file)
         const maplayout_data = get_file_by_name(apak, "maplayout.layout");

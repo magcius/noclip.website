@@ -10,7 +10,7 @@ import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { vec3 } from "gl-matrix";
 import { fmdl_renderer } from "./render_fmdl.js";
-import { fmdl_renderer_texture_replace } from './render_fmdl_texture_replace.js';
+import { fmdl_renderer_texture_replace, replacement_texture } from './render_fmdl_texture_replace.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
@@ -28,9 +28,9 @@ export class TMSFEScene implements SceneGfx
     /**
      * @param level_models array of level_model objects containing groups of FRES objects for a single model
      * @param special_skybox this level has a smaller skybox that follows the camera
-     * @param notice_gfx_texture for displaying dynamic posters, tvs, and advertisements in certain maps
+     * @param replacement_textures for displaying dynamic posters, tvs, and advertisements in certain maps
      */
-    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean, notice_gfx_texture: GfxTexture)
+    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean, replacement_textures: replacement_texture[])
     {
         this.renderHelper = new GfxRenderHelper(device);
 
@@ -79,7 +79,7 @@ export class TMSFEScene implements SceneGfx
                     special_skybox_model,
                     device,
                     this.renderHelper,
-                    notice_gfx_texture,
+                    replacement_textures,
                 );
             }
             else
