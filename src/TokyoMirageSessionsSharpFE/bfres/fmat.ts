@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { read_bfres_string } from "./bfres_switch.js";
-import { GfxCompareMode, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
+import { GfxCompareMode, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxWrapMode, GfxCullMode, GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform.js";
 import { parse_user_data } from "./user_data.js";
 import { assert, readString } from "../../util.js";
 
@@ -19,7 +19,7 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
 
     const fmat_array: FMAT[] = [];
     let fmat_entry_offset = offset;
-    for (let i = 0; i < count; i++)
+    for (let fmat_index = 0; fmat_index < count; fmat_index++)
     {
         assert(readString(buffer, fmat_entry_offset, 0x04) === 'FMAT');
 
@@ -102,7 +102,34 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         const user_data_count = view.getUint16(fmat_entry_offset + 0xA6, true);
         const user_data = parse_user_data(buffer, user_data_array_offset, user_data_count);
         
-        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, sampler_names: sampler_name_array, user_data });
+        // most of the important information is stored in user data
+        const original_cull_mode = user_data.get("cull_mode");
+        let cull_mode = GfxCullMode.Back; // TODO: some materials don't have user data, I'm under the assumption that these materials are only used on meshes that don't render
+        if (original_cull_mode != undefined)
+        {
+            switch(original_cull_mode[0])
+            {
+                case 1:
+                    cull_mode = GfxCullMode.Back;
+                    break;
+
+                case 2:
+                    cull_mode = GfxCullMode.Front;
+                    break;
+
+                case 3:
+                    cull_mode = GfxCullMode.None;
+                    break;
+
+                default:
+                    console.error(`unknown cull_mode ${original_cull_mode} in fmat ${name}`);
+                    throw("whoops");
+            }
+        }
+        
+        const original_blend_mode = user_data.get("blend_mode");
+
+        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, sampler_names: sampler_name_array, user_data, cull_mode });
         fmat_entry_offset += FMAT_ENTRY_SIZE;
     }
 
@@ -121,6 +148,7 @@ export interface FMAT
     sampler_descriptors: GfxSamplerDescriptor[];
     sampler_names: string[];
     user_data: Map<string, number[] | string[]>;
+    cull_mode: GfxCullMode;
 }
 
 enum WrapMode

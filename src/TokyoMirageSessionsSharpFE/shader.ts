@@ -91,7 +91,7 @@ void mainPS()
     gl_FragColor = Albedo0Color;
     if (gl_FragColor.a < 0.5)
     {
-        discard;
+        // discard;
     }
 }
 #endif

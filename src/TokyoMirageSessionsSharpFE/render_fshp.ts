@@ -35,6 +35,7 @@ export class fshp_renderer
     private input_layout: GfxInputLayout;
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
+    private cull_mode: GfxCullMode;
 
     constructor
     (
@@ -51,6 +52,7 @@ export class fshp_renderer
         this.bone_index = fshp.bone_index;
         this.skin_bone_count = fshp.skin_bone_count;
         this.fmat_index = fshp.fmat_index;
+        this.cull_mode = fmat.cull_mode;
 
         // create vertex buffers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
@@ -208,7 +210,7 @@ export class fshp_renderer
             renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
         }
 
-        renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
+        renderInst.setMegaStateFlags({ cullMode: this.cull_mode });
         
         // submit the draw call
         if (special_skybox)
