@@ -25,7 +25,7 @@ export class fshp_renderer
     public bone_index: number;
     public skin_bone_count: number;
     public fmat_index: number;
-    public do_not_render: boolean = false;
+    public render_mesh: boolean = true;
 
     private vertex_buffers: GfxBuffer[] = [];
     private vertex_buffer_descriptors: GfxVertexBufferDescriptor[] = [];
@@ -107,7 +107,7 @@ export class fshp_renderer
             {
                 // TODO: not sure what to do if there's no texture
                 console.log(`fmat ${fmat.name} has an undefined texture`);
-                this.do_not_render = true;
+                this.render_mesh = false;
                 continue;
             }
             const texture = bntx.textures.find((f) => f.name === texture_name);
@@ -127,7 +127,7 @@ export class fshp_renderer
         }
         if (this.sampler_bindings.length == 0)
         {
-            this.do_not_render = true;
+            this.render_mesh = false;
         }
 
         // initialize shader
@@ -154,7 +154,7 @@ export class fshp_renderer
         replacement_sampler_binding?: GfxSamplerBinding,
     ): void
     {
-        if (this.do_not_render)
+        if (!this.render_mesh)
         {
             return;
         }

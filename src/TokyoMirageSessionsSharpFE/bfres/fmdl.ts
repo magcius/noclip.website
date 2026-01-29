@@ -8,7 +8,7 @@ import { FSKL, parseFSKL } from "./fskl.js";
 import { FVTX, parseFVTX } from "./fvtx.js";
 import { FSHP, parseFSHP } from "./fshp.js";
 import { FMAT, parseFMAT } from "./fmat.js";
-import { user_data, parse_user_data } from "./user_data.js";
+import { parse_user_data } from "./user_data.js";
 
 /**
  * reads from a bfres file and returns an array of FMDL objects
@@ -47,9 +47,9 @@ export function parseFMDL(buffer: ArrayBufferSlice, offset: number, count: numbe
         
         const user_data_array_offset = view.getUint32(fmdl_entry_offset + 0x50, true);
         const user_data_count = view.getUint16(fmdl_entry_offset + 0x70, true);
-        const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_count);
+        const user_data = parse_user_data(buffer, user_data_array_offset, user_data_count);
 
-        fmdl.push({ fskl, name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array, fmat: fmat_array, user_data: user_data_array });
+        fmdl.push({ fskl, name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array, fmat: fmat_array, user_data });
         fmdl_entry_offset += FMDL_ENTRY_SIZE;
     }
 
@@ -65,5 +65,5 @@ export interface FMDL
     fvtx: FVTX[];
     fshp: FSHP[];
     fmat: FMAT[];
-    user_data: user_data[];
+    user_data: Map<string, number[] | string[]>;
 }

@@ -4,7 +4,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { read_bfres_string } from "./bfres_switch.js";
 import { GfxCompareMode, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
-import { user_data, parse_user_data } from "./user_data.js";
+import { parse_user_data } from "./user_data.js";
 import { assert, readString } from "../../util.js";
 
 /**
@@ -100,9 +100,9 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
 
         const user_data_array_offset = view.getUint32(fmat_entry_offset + 0x68, true);
         const user_data_count = view.getUint16(fmat_entry_offset + 0xA6, true);
-        const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_count);
+        const user_data = parse_user_data(buffer, user_data_array_offset, user_data_count);
         
-        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, sampler_names: sampler_name_array, user_data: user_data_array });
+        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, sampler_names: sampler_name_array, user_data });
         fmat_entry_offset += FMAT_ENTRY_SIZE;
     }
 
@@ -120,7 +120,7 @@ export interface FMAT
     texture_names: string[];
     sampler_descriptors: GfxSamplerDescriptor[];
     sampler_names: string[];
-    user_data: user_data[];
+    user_data: Map<string, number[] | string[]>;
 }
 
 enum WrapMode

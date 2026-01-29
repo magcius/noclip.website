@@ -39,7 +39,8 @@ export class TMSFEScene implements SceneGfx
         {
             const model_fres = level_models[level_models_index].model_fres;
             const fmdl = model_fres.fmdl[0];
-
+            console.log(fmdl);
+            
             // initialize textures
             // textures are stored in an embedded .bntx file
             const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);

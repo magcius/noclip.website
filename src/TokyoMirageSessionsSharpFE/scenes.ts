@@ -32,6 +32,7 @@ import { create_d007_07_gimmicks } from "./maps/d007_07.js";
 import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
+import { f001_01_replacement_textures } from "./maps/f001_01.js";
 import { create_f002_03_gimmicks } from "./maps/f002_03.js";
 import { create_f003_02_gimmicks, create_f003_02_party_gimmicks, f003_02_replacement_textures } from "./maps/f003_02.js";
 import { create_f003_06_gimmicks } from "./maps/f003_06.js";
@@ -182,7 +183,7 @@ const sceneDescs =
     "Tokyo",
     new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_gimmicks, false, false, false, f003_02_replacement_textures),
     new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], create_f003_02_party_gimmicks, false, false, false, f003_02_replacement_textures),
-    new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"]),
+    new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"], undefined, false, false, false, f001_01_replacement_textures),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", ""]),
     new TMSFESceneDesc("f001_03", "Shibuya 3", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", "sky"]),
     new TMSFESceneDesc("f001_04", "Shibuya Music Fes", ["f001_04", "obj01", "obj02", "obj10", "obj11", "obj12", "sky"], ["", "obj01", "obj02", "obj10", "obj11", "", "sky"]),

@@ -4,7 +4,7 @@
 import { Curve, AnimationConstant, parse_constants, parse_curves } from "./animation_common.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { read_bfres_string } from "./bfres_switch.js";
-import { user_data, parse_user_data } from "./user_data.js";
+import { parse_user_data } from "./user_data.js";
 import { assert, readString } from "../../util.js";
 
 export function parseFMAA(buffer: ArrayBufferSlice, offset: number, count: number): FMAA[]
@@ -61,135 +61,19 @@ export function parseFMAA(buffer: ArrayBufferSlice, offset: number, count: numbe
             // which curve applies to which texture and transformation is specified in user data
             // the key is the material name
             // the value is a string array: odd indices are the shader param name, even indices are the curve index
-            const albedo0_texsrt: TextureSRTCurveIndices = { scale_x: undefined, scale_y: undefined, rotate: undefined, translate_x: undefined, translate_y: undefined }
-            const albedo1_texsrt: TextureSRTCurveIndices = { scale_x: undefined, scale_y: undefined, rotate: undefined, translate_x: undefined, translate_y: undefined }
-            const emission0_texsrt: TextureSRTCurveIndices = { scale_x: undefined, scale_y: undefined, rotate: undefined, translate_x: undefined, translate_y: undefined }
-            const normal0_texsrt: TextureSRTCurveIndices = { scale_x: undefined, scale_y: undefined, rotate: undefined, translate_x: undefined, translate_y: undefined }
-            const specular0_texsrt: TextureSRTCurveIndices = { scale_x: undefined, scale_y: undefined, rotate: undefined, translate_x: undefined, translate_y: undefined }
-
-            const current_user_data = user_data.find((f) => f.key === target_material);
-            if (current_user_data != undefined)
+            let curve_index_map = new Map<string, string>();
+            const curve_index_table = user_data.get(target_material);
+            if (curve_index_table != undefined)
             {
-                for (let user_data_value_index = 0; user_data_value_index < current_user_data.values.length; user_data_value_index += 2)
+                for (let value_index = 0; value_index < curve_index_table.length; value_index += 2)
                 {
-                    switch (current_user_data.values[user_data_value_index])
-                    {
-                        case "albedo0_scale_x":
-                            albedo0_texsrt.scale_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "albedo0_scale_y":
-                            albedo0_texsrt.scale_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;         
-
-                        case "albedo0_rotate":
-                            albedo0_texsrt.rotate = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                            
-                        case "albedo0_translate_x":
-                            albedo0_texsrt.translate_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                        
-                        case "albedo0_translate_y":
-                            albedo0_texsrt.translate_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "albedo1_scale_x":
-                            albedo1_texsrt.scale_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "albedo1_scale_y":
-                            albedo1_texsrt.scale_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "albedo1_rotate":
-                            albedo1_texsrt.rotate = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "albedo1_translate_x":
-                            albedo1_texsrt.translate_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                        
-                        case "albedo1_translate_y":
-                            albedo1_texsrt.translate_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                       case "emission0_scale_x":
-                            emission0_texsrt.scale_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "emission0_scale_y":
-                            emission0_texsrt.scale_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "emission0_rotate":
-                            emission0_texsrt.rotate = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "emission0_translate_x":
-                            emission0_texsrt.translate_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                        
-                        case "emission0_translate_y":
-                            emission0_texsrt.translate_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "normal0_scale_x":
-                            normal0_texsrt.scale_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "normal0_scale_y":
-                            normal0_texsrt.scale_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;         
-
-                        case "normal0_rotate":
-                            normal0_texsrt.rotate = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                            
-                        case "normal0_translate_x":
-                            normal0_texsrt.translate_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                        
-                        case "normal0_translate_y":
-                            normal0_texsrt.translate_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                        
-                        case "specular0_scale_x":
-                            specular0_texsrt.scale_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-
-                        case "specular0_scale_y":
-                            specular0_texsrt.scale_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;         
-
-                        case "specular0_rotate":
-                            specular0_texsrt.rotate = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                            
-                        case "specular0_translate_x":
-                            specular0_texsrt.translate_x = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                        
-                        case "specular0_translate_y":
-                            specular0_texsrt.translate_y = Number(current_user_data.values[user_data_value_index + 1]);
-                            break;
-                             
-                        default:
-                            console.error(`unhandled shader param ${current_user_data.values[user_data_value_index]} found in ${target_material}`);
-                            throw("whoops");
-                    }
+                    const key: string = String(curve_index_table[value_index]);
+                    const value: string = String(curve_index_table[value_index + 1]);
+                    curve_index_map.set(key, value);
                 }
             }
 
-            material_animations.push
-            ({
-                target_material,
-                shader_param_animations,
-                albedo0_texsrt,
-                albedo1_texsrt,
-                emission0_texsrt,
-                normal0_texsrt,
-                specular0_texsrt,
-            });
+            material_animations.push({ target_material, shader_param_animations, curve_index_map });
             material_animation_entry_offset += MATERIAL_ANIMATION_ENTRY_SIZE;
         }
 
@@ -209,18 +93,14 @@ export interface FMAA
     name: string;
     frame_count: number;
     material_animations: MaterialAnimation[];
-    user_data: user_data[];
+    user_data: Map<string, number[] | string[]>;
 }
 
 export interface MaterialAnimation
 {
     target_material: string;
     shader_param_animations: ShaderParamAnimation[];
-    albedo0_texsrt: TextureSRTCurveIndices;
-    albedo1_texsrt: TextureSRTCurveIndices;
-    emission0_texsrt: TextureSRTCurveIndices;
-    normal0_texsrt: TextureSRTCurveIndices;
-    specular0_texsrt: TextureSRTCurveIndices;
+    curve_index_map: Map<string, string>;
 }
 
 export interface ShaderParamAnimation

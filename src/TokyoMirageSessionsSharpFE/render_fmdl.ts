@@ -123,13 +123,10 @@ export class fmdl_renderer
 
             // disable meshes that are set to not render
             const bone_user_data = fmdl.fskl.bones[fshp.bone_index].user_data;
-            const render_mesh_enable = bone_user_data.find((f) => f.key === "render_mesh_enable");
-            if (render_mesh_enable != undefined)
+            const render_mesh_enable = bone_user_data.get("render_mesh_enable");
+            if (render_mesh_enable != undefined && render_mesh_enable[0] === 0)
             {
-                if (render_mesh_enable.values[0] == 0)
-                {
-                    renderer.do_not_render = true;
-                }
+                renderer.render_mesh = false;
             }
 
             this.fshp_renderers.push(renderer);
@@ -315,36 +312,16 @@ export class fmdl_renderer
             }
             else
             {
-                // TODO: can i avoid rounding the frame number? currently it causes some animations to display incorrectly
+                // TODO: can i avoid rounding the frame number? without it some animations display incorrectly
                 const frame_integer = Math.floor(current_frame);
                 const material_animation = this.fmaa.material_animations[material_animation_index];
                 const shader_param_animation = material_animation.shader_param_animations[0];
 
-                let scale_x = 1.0;
-                if (material_animation.albedo0_texsrt.scale_x != undefined && material_animation.albedo0_texsrt.scale_x != -1)
-                {
-                    scale_x = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.scale_x, frame_integer);
-                }
-                let scale_y = 1.0;
-                if (material_animation.albedo0_texsrt.scale_y != undefined && material_animation.albedo0_texsrt.scale_y != -1)
-                {
-                    scale_y = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.scale_y, frame_integer);
-                }
-                let rotation = 0.0;
-                if (material_animation.albedo0_texsrt.rotate != undefined && material_animation.albedo0_texsrt.rotate != -1)
-                {
-                    rotation = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.rotate, frame_integer);
-                }
-                let translate_x = 0.0;
-                if (material_animation.albedo0_texsrt.translate_x != undefined && material_animation.albedo0_texsrt.translate_x != -1)
-                {
-                    translate_x = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.translate_x, frame_integer);
-                }
-                let translate_y = 0.0;
-                if (material_animation.albedo0_texsrt.translate_y != undefined && material_animation.albedo0_texsrt.translate_y != -1)
-                {
-                    translate_y = get_shader_param_animation_value(shader_param_animation, material_animation.albedo0_texsrt.translate_y, frame_integer);
-                }
+                let scale_x = get_shader_param_animation_value(1.0, material_animation.curve_index_map, "albedo0_scale_x", shader_param_animation, frame_integer);
+                let scale_y = get_shader_param_animation_value(1.0, material_animation.curve_index_map, "albedo0_scale_y", shader_param_animation, frame_integer);
+                let rotation = get_shader_param_animation_value(0.0, material_animation.curve_index_map, "albedo0_rotate", shader_param_animation, frame_integer);
+                let translate_x = get_shader_param_animation_value(0.0, material_animation.curve_index_map, "albedo0_translate_x", shader_param_animation, frame_integer);
+                let translate_y = get_shader_param_animation_value(0.0, material_animation.curve_index_map, "albedo0_translate_y", shader_param_animation, frame_integer);
 
                 // maya style matrix
                 const theta = rotation;
@@ -429,14 +406,24 @@ function get_keyframe_value(curve: Curve, current_frame: number): number
 
 /**
  * returns the value of a shader param animation at the specified frame
+ * @param default_value if the curve index isn't specified or is "-1", an animation curve is not used. return this number instead
+ * @param curve_index_map the material animation's curve index lookup map to search
+ * @param key which key to look for in curve_index_map
  * @param shader_param_animation the shader param animation to read a value from
- * @param curve_index which curve to read from
  * @param current_frame which frame of the animation to read the curve at
  */
-function get_shader_param_animation_value(shader_param_animation: ShaderParamAnimation, curve_index: number, current_frame: number)
+function get_shader_param_animation_value(default_value: number, curve_index_map: Map<string, string>, key: string, shader_param_animation: ShaderParamAnimation, current_frame: number)
 {
-    const curve = shader_param_animation.curves[curve_index];
-    return get_keyframe_value(curve, current_frame);
+    const curve_index = curve_index_map.get(key);
+    if (curve_index === undefined || curve_index === "-1")
+    {
+        return default_value;
+    }
+    else
+    {
+        const curve = shader_param_animation.curves[Number(curve_index)];
+        return get_keyframe_value(curve, current_frame);
+    }
 }
 
 const FPS = 30;

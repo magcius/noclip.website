@@ -11,11 +11,11 @@ import { read_bfres_string } from "./bfres_switch.js";
  * @param offset ostart of the user data array
  * @param count number of user data objects in the array
  */
-export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count: number): user_data[]
+export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count: number): Map<string, number[] | string[]>
 {
     const view = buffer.createDataView();
 
-    let user_data_array: user_data[] = [];
+    let user_data_map = new Map<string, number[] | string[]>();
     let user_data_entry_offset = offset;
     for (let i = 0; i < count; i++)
     {
@@ -74,17 +74,11 @@ export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count:
                 values = byte_values;
                 break;
         }
-        user_data_array.push({ key, values });
+        user_data_map.set(key, values);
         user_data_entry_offset += USER_DATA_ENTRY_SIZE;
     }
 
-    return user_data_array;
+    return user_data_map;
 }
 
 const USER_DATA_ENTRY_SIZE = 0x40;
-
-export interface user_data
-{
-    key: string;
-    values: number[] | string[];
-}
