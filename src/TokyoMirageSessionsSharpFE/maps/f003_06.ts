@@ -2,13 +2,13 @@
 // Café Seiren
 
 import { get_file_by_name, get_fres_from_apak, parseAPAK } from "../apak.js";
+import { parseBFRES } from "../bfres/bfres_switch.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./../gimmick.js";
 import { vec3 } from "gl-matrix";
 import { MapLayout } from "./../maplayout.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
-import { parseBFRES } from "../bfres/bfres_switch.js";
 
 export async function create_f003_06_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
