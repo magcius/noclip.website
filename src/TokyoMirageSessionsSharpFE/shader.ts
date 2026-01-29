@@ -89,10 +89,13 @@ void mainPS()
     vec2 Albedo0TexCoord =  UnpackMatrix(u_Albedo0SRTMatrix) * vec4(v_TexCoord0.xy, 1.0, 1.0);
     vec4 Albedo0Color = texture(SAMPLER_2D(s_diffuse), Albedo0TexCoord);
     gl_FragColor = Albedo0Color;
+
+    #ifdef USE_ALPHA_TEST
     if (gl_FragColor.a < 0.5)
     {
-        // discard;
+        discard;
     }
+    #endif
 }
 #endif
 `;

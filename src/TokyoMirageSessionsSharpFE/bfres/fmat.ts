@@ -109,15 +109,15 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         {
             switch(original_cull_mode[0])
             {
-                case 1:
+                case CullMode.Back:
                     cull_mode = GfxCullMode.Back;
                     break;
 
-                case 2:
+                case CullMode.Front:
                     cull_mode = GfxCullMode.Front;
                     break;
 
-                case 3:
+                case CullMode.None:
                     cull_mode = GfxCullMode.None;
                     break;
 
@@ -128,8 +128,22 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
         }
         
         const original_blend_mode = user_data.get("blend_mode");
+        let blend_mode = BlendMode.Opaque;
+        if (original_blend_mode != undefined)
+        {
+            blend_mode = Number(original_blend_mode[0]);
+        }
 
-        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, sampler_names: sampler_name_array, user_data, cull_mode });
+        fmat_array.push
+        ({
+            name,
+            texture_names: texture_name_array,
+            sampler_descriptors,
+            sampler_names: sampler_name_array,
+            user_data,
+            cull_mode,
+            blend_mode
+        });
         fmat_entry_offset += FMAT_ENTRY_SIZE;
     }
 
@@ -149,6 +163,7 @@ export interface FMAT
     sampler_names: string[];
     user_data: Map<string, number[] | string[]>;
     cull_mode: GfxCullMode;
+    blend_mode: BlendMode;
 }
 
 enum WrapMode
@@ -276,4 +291,18 @@ function convert_depth_compare_mode(depth_compare_mode: DepthCompare): GfxCompar
             console.error(`depth compare mode ${depth_compare_mode} not found`);
             throw "whoops";
     }
+}
+
+export enum CullMode
+{
+    Back = 1,
+    Front = 2,
+    None = 3,
+}
+
+export enum BlendMode
+{
+    Opaque = 1,
+    AlphaTest = 2,
+    Translucent = 3,
 }

@@ -6,7 +6,7 @@ import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { computeViewMatrixSkybox } from '../Camera.js';
 import { FVTX } from "./bfres/fvtx.js";
 import { FSHP } from "./bfres/fshp.js";
-import { FMAT } from "./bfres/fmat.js";
+import { FMAT, BlendMode } from "./bfres/fmat.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
@@ -36,6 +36,7 @@ export class fshp_renderer
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
     private cull_mode: GfxCullMode;
+    private blend_mode: BlendMode;
 
     constructor
     (
@@ -53,6 +54,7 @@ export class fshp_renderer
         this.skin_bone_count = fshp.skin_bone_count;
         this.fmat_index = fshp.fmat_index;
         this.cull_mode = fmat.cull_mode;
+        this.blend_mode = fmat.blend_mode;
 
         // create vertex buffers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
@@ -134,6 +136,13 @@ export class fshp_renderer
 
         // initialize shader
         this.program = new TMSFEProgram(fvtx, fmat, fshp, bone_matrix_array_length);
+
+        let use_alpha_test = false;
+        if(this.blend_mode == BlendMode.AlphaTest)
+        {
+            use_alpha_test = true;
+        }
+        this.program.setDefineBool('USE_ALPHA_TEST', use_alpha_test);
     }
 
     /**
