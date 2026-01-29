@@ -22,7 +22,7 @@ To-do list
         There's a problem with extracting their skyboxes currently so they're not included
 
     Spyro 1
-        "Water" in some flight levels/Gnasty's Loot doesn't look right
+        Per-tile transparency masking (see "water" in Gnasty's Loot or Icy Flight)
         
     Spyro 2
         There are a very small number of incorrect faces (unsure if all the same problem or different. Some are invisible walls/collision related)
@@ -30,24 +30,25 @@ To-do list
             Idol Springs has two black triangles at the top of the outdoor waterfall
             Colossus has a z-fighting face in the hockey rink's ice
             Hurricos has black polygons on the gates that need spark plugs to open (Sunny Beach has similar ones on its gates)
-            Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should
+            Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should (wrong texture?)
         Mystic Marsh and Shady Oasis have weird z-scaling that requires special handling in buildLevel
             This may not be an issue, just something that warrants further investigation
+            LOD toggle does not work on these levels either for some reason
 
     Spyro 3
         There are a very small number of incorrect faces
             Molten Crater has some random ground textures in the trees (could be like that in the game)
             Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent in the same way as other textures are
             Icy Peak has some misaligned vertex colors under the ice sections (likely an issue with the game itself)
-        Sublevels should use their own skybox, not the parent level's
+        Sublevels should extract their own skybox, not default to the parent level's
 
 Nice to have
 
-    Scrolling textures
-    Gems, level entities, NPCs, etc. rendered in each level
-        The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox
+    Scrolling textures determined by levels' data, not hardcoded
+    Render mobys in each level
+        The format will need to be figured out. They're in other level subfiles (S2 grabs from global store instead?)
         Positions of mobys in S3 are figured out, but need the models and (maybe) animations
-    Misc level effects, such as vertex color "shimmering" under water sections in S2/S3
+    Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
     Read directly from WAD.WAD by offset instead of extracting subfiles (if better than extraction)
 */
 
@@ -147,7 +148,7 @@ class SpyroScene implements SceneDesc {
         const sky = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_sky1.bin`);
 
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
+        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox);
 
@@ -175,7 +176,7 @@ class SpyroScene2 implements SceneDesc {
         vramObj.applyFontStripFix();
 
         const tileAtlas = buildTileAtlas(vramObj, textures.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
+        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox);
 
@@ -211,7 +212,7 @@ class SpyroScene3 implements SceneDesc {
         const mobys = this.subLevelID === undefined ? parseMobys(varsFile.createDataView()) : [];
 
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
+        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox, mobys);
 

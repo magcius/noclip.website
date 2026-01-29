@@ -2,9 +2,11 @@ interface GroundFace {
     indices: number[];
     uvIndices: number[] | null;
     colorIndices: number[] | null;
+    tileIndex: number;
     isLOD: boolean;
     isWater?: boolean;
     isTransparent?: boolean;
+    isScrolling?: boolean;
 }
 
 interface SkyboxFace {
@@ -26,7 +28,7 @@ interface TileAtlas {
     data: Uint8Array;
     width: number;
     height: number;
-    uvs: {u0: number; v0: number; u1: number; v1: number}[];
+    uvs: {u0: number; v0: number; u1: number; v1: number, uScale: number, vScale: number}[];
     tiles?: Tile[];
 }
 
@@ -36,6 +38,8 @@ export interface Level {
   faces: GroundFace[];
   uvs: number[][];
   atlas: TileAtlas;
+  game: number;
+  number: number;
 };
 
 export interface Skybox {
@@ -53,24 +57,24 @@ export interface Moby {
     classId: number;
 }
 
-class Header {
+class PartHeader {
     static size = 2+2+2+2 + 1+1+1+1 + 1+1+1+1 + 4;
     y: number; x: number; i0: number; z: number;
-    v1: number; c1: number; p1: number; i1: number;
-    v2: number; c2: number; p2: number; w: number;
+    lodVertexCount: number; lodColorCount: number; lodPolyCount: number; i1: number;
+    mdlVertexCount: number; mdlColorCount: number; mdlPolyCount: number; w: number;
     f: number;
     constructor(view: DataView, offs: number) {
         this.y = view.getInt16(offs, true);
         this.x = view.getInt16(offs+2, true);
         this.i0 = view.getUint16(offs+4, true);
         this.z = view.getInt16(offs+6, true);
-        this.v1 = view.getUint8(offs+8);
-        this.c1 = view.getUint8(offs+9);
-        this.p1 = view.getUint8(offs+10);
+        this.lodVertexCount = view.getUint8(offs+8);
+        this.lodColorCount = view.getUint8(offs+9);
+        this.lodPolyCount = view.getUint8(offs+10);
         this.i1 = view.getUint8(offs+11);
-        this.v2 = view.getUint8(offs+12);
-        this.c2 = view.getUint8(offs+13);
-        this.p2 = view.getUint8(offs+14);
+        this.mdlVertexCount = view.getUint8(offs+12);
+        this.mdlColorCount = view.getUint8(offs+13);
+        this.mdlPolyCount = view.getUint8(offs+14);
         this.w = view.getUint8(offs+15);
         this.f = view.getUint32(offs+16, true);
     }
@@ -188,6 +192,22 @@ export class VRAM {
         }
     }
 }
+
+export const scrollingTilesMap: Record<number, Record<number, number[]>> = {
+    1: {
+        11: [23], 13: [31], 17: [1], 27: [31], 35: [51], 37: [35],
+        49: [54], 55: [66], 59: [12], 63: [77], 67: [55], 69: [29],
+        75: [5], 79: [24]
+    },
+    2: {
+        16: [72], 20: [44], 36: [44], 44: [35], 48: [0], 50: [2],
+        58: [0, 1, 2], 72: [12, 13]
+    },
+    3: {
+        98: [93], 100: [97], 110: [2], 112: [6], 116: [80], 120: [1],
+        124: [77], 138: [72], 152: [27], 156: [7], 170: [29]
+    }
+};
 
 function applyTileRotationRGBA(rgba: Uint8Array, tile: Tile, size: number = 32): Uint8Array {
     const rotation = tile.r & 7;
@@ -377,7 +397,8 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
                 indices: [d, c, b],
                 uvIndices: [uv0, uv1, uv2],
                 colorIndices: [cd, cc, ca],
-                isLOD: false
+                isLOD: false,
+                tileIndex
             });
         } else {
             // v1 -> tex1, v2 -> tex2, v3 -> tex3, v4 -> tex4
@@ -389,22 +410,17 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
                 indices: [a, b, c],  // v1, v2, v3
                 uvIndices: [uvA, uvB, uvC],
                 colorIndices:[ca, cb, cc],
-                isLOD: false
+                isLOD: false,
+                tileIndex
             });
             faces.push({
                 indices: [a, c, d],  // v1, v3, v4
                 uvIndices: [uvA, uvC, uvD],
                 colorIndices:[ca, cc, cd],
-                isLOD: false
+                isLOD: false,
+                tileIndex
             });
         }
-    } else {
-        faces.push({
-            indices: [a, b, c],
-            uvIndices: null,
-            colorIndices: null,
-            isLOD: false
-        });
     }
 }
 
@@ -469,7 +485,8 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
                 colorIndices: [colorB, colorC, colorD],
                 isWater,
                 isTransparent,
-                isLOD: false
+                isLOD: false,
+                tileIndex
             });
         } else {
             faces.push({
@@ -478,7 +495,8 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
                 colorIndices: [colorD, colorC, colorB],
                 isWater,
                 isTransparent,
-                isLOD: false
+                isLOD: false,
+                tileIndex
             });
         }
     } else {
@@ -488,7 +506,8 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
             colorIndices: [colorA, colorB, colorC],
             isWater,
             isTransparent,
-            isLOD: false
+            isLOD: false,
+            tileIndex
         });
         faces.push({
             indices: [a, c, d],
@@ -496,7 +515,8 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
             colorIndices: [colorA, colorC, colorD],
             isWater,
             isTransparent,
-            isLOD: false
+            isLOD: false,
+            tileIndex
         });
     }
 }
@@ -532,7 +552,7 @@ export function buildSkybox(view: DataView, gameNumber: number): Skybox {
     return { backgroundColor, vertices, colors, faces };
 }
 
-export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number): Level {
+export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number, levelNumber: number): Level {
     const vertices: number[][] = [];
     const colors: number[][] = [];
     const faces: GroundFace[] = [];
@@ -564,12 +584,12 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
         } else {
             pointer = partOffsets[part] + 8;
         }
-        const header = new Header(view, pointer);
-        pointer += Header.size;
+        const header = new PartHeader(view, pointer);
+        pointer += PartHeader.size;
 
         // LOD vertices
         const lodVertStart = vertices.length;
-        for (let i = 0; i < header.v1; i++) {
+        for (let i = 0; i < header.lodVertexCount; i++) {
             const v = new Vertex(view, pointer);
             pointer += 4;
             const zraw = (v.b1 | ((v.b2 & 3) << 8));
@@ -584,14 +604,14 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
 
         // LOD colors
         const lodColorStart = colors.length;
-        for (let i = 0; i < header.c1; i++) {
+        for (let i = 0; i < header.lodColorCount; i++) {
             const c = new VertexColor(view, pointer);
             pointer += 4;
             colors.push([c.r, c.g, c.b]);
         }
 
         // LOD polys
-        for (let i = 0; i < header.p1; i++) {
+        for (let i = 0; i < header.lodPolyCount; i++) {
             const poly = gameNumber > 1 ? new LODPoly2(view, pointer) : new LODPoly(view, pointer);
             pointer += 8;
 
@@ -623,24 +643,24 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             const cD = lodColorStart + c4;
 
             if (v1 === v2)
-                faces.push({ indices: [b, c, d], uvIndices: null, colorIndices: [cB, cC, cD], isLOD: true });
+                faces.push({ indices: [b, c, d], uvIndices: null, colorIndices: [cB, cC, cD], tileIndex: 0, isLOD: true });
             else if (v2 === v3)
-                faces.push({ indices: [a, c, d], uvIndices: null, colorIndices: [cA, cC, cD], isLOD: true });
+                faces.push({ indices: [a, c, d], uvIndices: null, colorIndices: [cA, cC, cD], tileIndex: 0, isLOD: true });
             else if (v3 === v4)
-                faces.push({ indices: [a, b, d], uvIndices: null, colorIndices: [cA, cB, cD], isLOD: true });
+                faces.push({ indices: [a, b, d], uvIndices: null, colorIndices: [cA, cB, cD], tileIndex: 0, isLOD: true });
             else if (v4 === v1)
-                faces.push({ indices: [a, b, c], uvIndices: null, colorIndices: [cA, cB, cC], isLOD: true });
+                faces.push({ indices: [a, b, c], uvIndices: null, colorIndices: [cA, cB, cC], tileIndex: 0, isLOD: true });
             else {
-                faces.push({ indices: [b, a, c], uvIndices: null, colorIndices: [cB, cA, cC], isLOD: true });
-                faces.push({ indices: [b, c, d], uvIndices: null, colorIndices: [cB, cC, cD], isLOD: true });
+                faces.push({ indices: [b, a, c], uvIndices: null, colorIndices: [cB, cA, cC], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [b, c, d], uvIndices: null, colorIndices: [cB, cC, cD], tileIndex: 0, isLOD: true });
             }
         }
 
-        // MDL/FAR/TEX vertices
+        // MDL vertices
         let isWaterNonGround = false;
         if (gameNumber > 1) {
-            let polyPos = pointer + header.v2 * 4 + header.c2 * 4 + header.c2 * 4;
-            for (let i = 0; i < header.p2; i++) {
+            let polyPos = pointer + header.mdlVertexCount * 4 + header.mdlColorCount * 4 + header.mdlColorCount * 4;
+            for (let i = 0; i < header.mdlPolyCount; i++) {
                 const s1 = view.getUint8(polyPos + 8);
                 const s2 = view.getUint8(polyPos + 9);
                 const s3 = view.getUint8(polyPos + 10);
@@ -653,7 +673,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             }
         }
         const mdlVertStart = vertices.length;
-        for (let i = 0; i < header.v2; i++) {
+        for (let i = 0; i < header.mdlVertexCount; i++) {
             const vertex = new Vertex(view, pointer);
             pointer += 4;
             const zraw = (vertex.b1 | ((vertex.b2 & 3) << 8));
@@ -661,7 +681,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             if (gameNumber > 1) {
                 // z-scaling
                 // non-ground water is usually flat water, while "ground" water is usually sloped (different signatures)
-                const far = header.v1 === 0 && header.f === 0xFFFFFFFF;
+                const far = header.lodVertexCount === 0 && header.f === 0xFFFFFFFF;
                 if ((far && !isWaterNonGround) || (far && isWaterNonGround && header.w > 0) || (!far && header.w > 0)) {
                     z = (zraw << 1) + header.z;
                 } else if ((far && isWaterNonGround && header.w <= 0) || (!far && header.w <= 0)) {
@@ -675,17 +695,17 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
 
         // MDL colors
         const mdlColorStart = colors.length;
-        for (let i = 0; i < header.c2; i++) {
+        for (let i = 0; i < header.mdlColorCount; i++) {
             const color = new VertexColor(view, pointer);
             pointer += 4;
             colors.push([color.r, color.g, color.b]);
         }
 
         // FAR colors (ignored)
-        pointer += header.c2 * 4;
+        pointer += header.mdlColorCount * 4;
 
-        // Textured polys
-        for (let i = 0; i < header.p2; i++) {
+        // MDL polys
+        for (let i = 0; i < header.mdlPolyCount; i++) {
             const poly = new Polygon(view, pointer, gameNumber);
             pointer += 16;
             if (gameNumber == 1) {
@@ -696,7 +716,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
         }
     }
 
-    return { vertices, colors, faces, uvs, atlas };
+    return { vertices, colors, faces, uvs, atlas, game: gameNumber, number: levelNumber };
 }
 
 export function buildTileAtlas(vram: VRAM, view: DataView, gameNumber: number): TileAtlas {
@@ -707,7 +727,7 @@ export function buildTileAtlas(vram: VRAM, view: DataView, gameNumber: number): 
     const width = tilesPerRow * slotSize;
     const height = Math.ceil(tileCount / tilesPerRow) * slotSize;
     const data = new Uint8Array(width * height * 4);
-    const uvs: { u0: number; v0: number; u1: number; v1: number }[] = [];
+    const uvs: { u0: number; v0: number; u1: number; v1: number, uScale: number, vScale: number }[] = [];
     for (let i = 0; i < tileCount; i++) {
         const tile = tiles[i];
         const w = tile.w;
@@ -733,6 +753,8 @@ export function buildTileAtlas(vram: VRAM, view: DataView, gameNumber: number): 
             v0: atlasY / height,
             u1: (atlasX + slotSize) / width,
             v1: (atlasY + slotSize) / height,
+            uScale: slotSize / width,
+            vScale: slotSize / height
         });
     }
     if (gameNumber == 1) {
