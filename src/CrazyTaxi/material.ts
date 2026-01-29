@@ -16,11 +16,13 @@ import { Shape, ShapeDrawCall } from "./shape";
 
 export interface MaterialDrawBatch {
     shapes: Shape[],
-    vertexBufferDescriptor?: GfxVertexBufferDescriptor,
-    vertexCounts: number[],
-    indexBuffers: ArrayBufferLike[],
+
     vertexBuffers: ArrayBufferLike[],
     totalVertexByteCount: number,
+    vertexBufferDescriptor?: GfxVertexBufferDescriptor,
+
+    indexBuffers: ArrayBufferLike[],
+    vertexCounts: number[],
     totalIndexCount: number,
     indexBufferDescriptor?: GfxIndexBufferDescriptor,
 }
@@ -153,7 +155,6 @@ export class Material {
                 setMatrixTranslation(m, shape.pos);
                 scaleMatrix(m, m, shape.scale[0]);
                 if (shape.isSkybox) {
-                    return;
                     m[15] = 0;
                 }
                 mat4.mul(drawParams.u_PosMtx[i], viewerInput.camera.viewMatrix, m);
@@ -191,7 +192,6 @@ export class MaterialCache {
         for (const draw of shape.draws) {
             const textureName = shape.textures[draw.textureIndex];
             let materials = this.materials.get(textureName);
-            // if (textureName !== "ti_road_14.tex" || (materials && materials[0].batches[0].shapes.length > 1)) continue;
             if (materials === undefined) {
                 materials = [];
                 this.materials.set(textureName, materials);

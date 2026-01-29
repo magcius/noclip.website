@@ -11,7 +11,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { Blue, Color, colorNewFromRGBA, Green, Red } from '../Color.js';
 import { MaterialCache } from './material.js';
-import { createShape } from './shape.js';
+import { createShape, Shape } from './shape.js';
 import { FileManager } from './util.js';
 
 export class Scene implements Viewer.SceneGfx {
@@ -20,19 +20,25 @@ export class Scene implements Viewer.SceneGfx {
     private renderInstListSky = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     private materials: MaterialCache;
+    private skyboxMaterials: MaterialCache;
     private scratchVec3a = vec3.create();
     private scratchVec3b = vec3.create();
 
-    constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder, public debugPos: vec3[][], public shapeNames: string[]) {
+    constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder, public debugPos: vec3[][], public shapes: Shape[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
-        console.log('creating shapes')
+        console.log('adding shapes')
         this.materials = new MaterialCache(this.renderHelper.renderCache, this.textureHolder);
-        for (const name of shapeNames) {
-            const shape = createShape(manager, name);
-            this.materials.addShape(shape);
+        this.skyboxMaterials = new MaterialCache(this.renderHelper.renderCache, this.textureHolder);
+        for (const shape of shapes) {
+            if (shape.isSkybox) {
+                this.skyboxMaterials.addShape(shape);
+            } else {
+                this.materials.addShape(shape);
+            }
         }
         this.materials.finish();
+        this.skyboxMaterials.finish();
         console.log('done')
     }
 
@@ -72,14 +78,16 @@ export class Scene implements Viewer.SceneGfx {
 
         renderInstManager.setCurrentList(this.renderInstListMain);
         this.materials.prepareToRender(renderInstManager, viewerInput);
-        this.drawDebugPoints(this.debugPos[2], viewerInput);
+
+        renderInstManager.setCurrentList(this.renderInstListSky);
+        this.skyboxMaterials.prepareToRender(renderInstManager, viewerInput);
 
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.1);
+        c.setSceneMoveSpeedMult(0.07);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -129,6 +137,7 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        console.log('loading scene data');
         const manager = new FileManager(context.dataFetcher, [
             "poldc0.all",
             "texDC0.all",
@@ -234,7 +243,12 @@ class SceneDesc implements Viewer.SceneDesc {
         for (const texture of textures) {
             textureHolder.addTexture(gfxDevice, texture);
         }
-        const scene = new Scene(gfxDevice, manager, textureHolder, [customerPos, deliveryZones, pos3], names);
+        const shapes = []
+        for (const shapeName of names) {
+            shapes.push(createShape(manager, shapeName));
+        }
+        console.log('done')
+        const scene = new Scene(gfxDevice, manager, textureHolder, [customerPos, deliveryZones, pos3], shapes);
         return scene;
     }
 }
