@@ -147,16 +147,13 @@ export class fshp_renderer
 
     /**
      * produce a draw call for this mesh
-     * @param renderHelper 
-     * @param viewerInput 
-     * @param renderInstListMain 
-     * @returns 
      */
     render
     (
         renderHelper: GfxRenderHelper,
         viewerInput: ViewerRenderInput,
-        renderInstListMain: GfxRenderInstList,
+        renderInstListOpaque: GfxRenderInstList,
+        renderInstListTranslucent: GfxRenderInstList,
         renderInstListSkybox: GfxRenderInstList,
         transform_matrix: mat4,
         bone_matrix_array: mat4[],
@@ -226,12 +223,16 @@ export class fshp_renderer
         {
             renderHelper.renderInstManager.setCurrentList(renderInstListSkybox);
         }
+        else if (this.blend_mode == BlendMode.Opaque || this.blend_mode == BlendMode.AlphaTest)
+        {
+            renderHelper.renderInstManager.setCurrentList(renderInstListOpaque);
+        }
         else
         {
-            renderHelper.renderInstManager.setCurrentList(renderInstListMain);
+            renderHelper.renderInstManager.setCurrentList(renderInstListTranslucent);
         }
-        renderHelper.renderInstManager.submitRenderInst(renderInst);
 
+        renderHelper.renderInstManager.submitRenderInst(renderInst);
         renderHelper.renderInstManager.popTemplate();
     }
 

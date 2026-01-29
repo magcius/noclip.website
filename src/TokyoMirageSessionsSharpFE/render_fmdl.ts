@@ -134,7 +134,7 @@ export class fmdl_renderer
 
     }
 
-    render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
+    render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListOpaque: GfxRenderInstList, renderInstListTranslucent: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
         this.animate(viewerInput);
 
@@ -148,7 +148,8 @@ export class fmdl_renderer
             (
                 renderHelper,
                 viewerInput,
-                renderInstListMain,
+                renderInstListOpaque,
+                renderInstListTranslucent,
                 renderInstListSkybox,
                 this.transform_matrix,
                 bone_matrix_array,
