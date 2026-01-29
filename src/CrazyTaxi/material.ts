@@ -18,12 +18,13 @@ export interface MaterialDrawBatch {
     shapes: Shape[],
 
     vertexBuffers: ArrayBufferLike[],
+    totalVertexCount: number;
     totalVertexByteCount: number,
     vertexBufferDescriptor?: GfxVertexBufferDescriptor,
 
     indexBuffers: ArrayBufferLike[],
-    vertexCounts: number[],
     totalIndexCount: number,
+    totalIndexByteCount: number;
     indexBufferDescriptor?: GfxIndexBufferDescriptor,
 }
 
@@ -36,6 +37,16 @@ function patchPNMTXIDX(layout: LoadedVertexLayout, data: LoadedVertexData, idx: 
         view.setFloat32(offs + 0x0c, idx, true);
         offs += stride;
     }
+}
+
+function concatBuffers(bufs: ArrayBufferLike[], totalByteSize: number): Uint8Array {
+    const result = new Uint8Array(totalByteSize);
+    let offs = 0
+    for (const buf of bufs) {
+        result.set(new Uint8Array(buf), offs);
+        offs += buf.byteLength;
+    }
+    return result;
 }
 
 const drawParams = new DrawParams();
@@ -75,10 +86,11 @@ export class Material {
             batch = {
                 shapes: [],
                 totalIndexCount: 0,
+                totalIndexByteCount: 0,
+                totalVertexCount: 0,
                 totalVertexByteCount: 0,
                 vertexBuffers: [],
                 indexBuffers: [],
-                vertexCounts: [],
             };
             this.batches.push(batch);
         }
@@ -88,45 +100,36 @@ export class Material {
     public addDraw(shape: Shape, draw: ShapeDrawCall) {
         const vertexData = draw.vertexData;
         const batch = this.getCurrentBatch();
-        const batchIndex = batch.shapes.length;
-        patchPNMTXIDX(draw.vertexLayout, vertexData, batchIndex);
         batch.shapes.push(shape);
-        batch.vertexCounts.push(vertexData.totalVertexCount);
-        assert(vertexData.vertexBuffers.length === 1);
+
+        // update the PNMTXIDX value for each vertex, which lets us use instancing
+        patchPNMTXIDX(draw.vertexLayout, vertexData, batch.shapes.length - 1);
+
+        // update the index values to the current total vertex count
+        const indexBuffer = new Uint16Array(vertexData.indexData);
+        for (let i = 0; i < indexBuffer.length; i++) {
+            indexBuffer[i] += batch.totalVertexCount;
+        }
+        batch.totalVertexCount += vertexData.totalVertexCount;
+        batch.indexBuffers.push(indexBuffer.buffer);
+        batch.totalIndexByteCount += vertexData.indexData.byteLength;
         batch.vertexBuffers.push(vertexData.vertexBuffers[0]);
         batch.totalVertexByteCount += vertexData.vertexBuffers[0].byteLength;
-        batch.indexBuffers.push(vertexData.indexData);
         batch.totalIndexCount += vertexData.totalIndexCount;
     }
 
     public finish() {
         for (let batchIdx = 0; batchIdx < this.batches.length; batchIdx++) {
             const batch = this.batches[batchIdx];
-            // concatenate and create each index batch's index buffer
-            const combinedIndexBuffer = new Uint16Array(batch.totalIndexCount);
-            const combinedVertexBuffer = new Uint8Array(batch.totalVertexByteCount)
-            let indexBufferOffs = 0;
-            let vertexBufferOffs = 0;
-            let vertexCount = 0;
-            for (let drawIdx = 0; drawIdx < batch.indexBuffers.length; drawIdx++) {
-                const indexBuffer = new Uint16Array(batch.indexBuffers[drawIdx]);
-                for (let i = 0; i < indexBuffer.length; i++) {
-                    indexBuffer[i] += vertexCount;
-                }
-                combinedIndexBuffer.set(indexBuffer, indexBufferOffs);
-                indexBufferOffs += indexBuffer.length;
-                vertexCount += batch.vertexCounts[drawIdx];
-                combinedVertexBuffer.set(new Uint8Array(batch.vertexBuffers[drawIdx]),  vertexBufferOffs);
-                vertexBufferOffs += batch.vertexBuffers[drawIdx].byteLength;
-            }
             const indexBuffer = createBufferFromData(
                 this.cache.device,
                 GfxBufferUsage.Index,
                 GfxBufferFrequencyHint.Static,
-                combinedIndexBuffer.buffer
+                concatBuffers(batch.indexBuffers, batch.totalIndexByteCount).buffer
             );
             batch.indexBufferDescriptor = { buffer: indexBuffer };
 
+            const combinedVertexBuffer = concatBuffers(batch.vertexBuffers, batch.totalVertexByteCount);
             const vertexBuffer = createBufferFromData(
                 this.cache.device,
                 GfxBufferUsage.Vertex,

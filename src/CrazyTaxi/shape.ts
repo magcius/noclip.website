@@ -219,6 +219,7 @@ export function createShape(fileManager: FileManager, name: string): Shape {
         vat[vtxFormat] = fmtVat;
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         const vertexData = vtxLoader.runVertices(vtxArrays, dlData);
+        assert(vertexData.vertexBuffers.length === 1);
         draws.push({
             vertexData,
             vertexLayout: vtxLoader.loadedVertexLayout,
