@@ -21,6 +21,8 @@ import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { AABB } from '../Geometry.js';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -1647,6 +1649,11 @@ export class FlipbookRenderer {
         if (!this.visible)
             return;
 
+        mat4.getTranslation(scratchVec3, this.modelMatrix);
+        const radius = Math.max(this.flipbookData.flipbook.width, this.flipbookData.flipbook.height) / 2;
+        if (!viewerInput.camera.frustum.containsSphere(scratchVec3, radius))
+            return;
+
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
@@ -1664,15 +1671,11 @@ export class FlipbookRenderer {
         vec3.sub(flipbookScratch[0], flipbookScratch[0], flipbookScratch[1]);
         renderInst.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(flipbookScratch[0]));
 
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
-        const scene = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-        offs += fillMatrix4x4(scene, offs, viewerInput.camera.projectionMatrix);
-
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(texMappingScratch);
         renderInst.setDrawCount(6);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
         const draw = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
