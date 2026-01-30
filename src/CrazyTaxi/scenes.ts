@@ -3,15 +3,15 @@ import * as GXTexture from '../gx/gx_texture.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx, GXTextureHolder } from '../gx/gx_render.js';
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render.js';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { Blue, Color, colorNewFromRGBA, Green, Red } from '../Color.js';
-import { MaterialCache } from './material.js';
-import { createShape, Shape } from './shape.js';
+import { MaterialCache, Texture, TextureCache } from './material.js';
+import { Shape } from './shape.js';
 import { FileManager } from './util.js';
 
 export class Scene implements Viewer.SceneGfx {
@@ -21,15 +21,13 @@ export class Scene implements Viewer.SceneGfx {
 
     private materials: MaterialCache;
     private skyboxMaterials: MaterialCache;
-    private scratchVec3a = vec3.create();
-    private scratchVec3b = vec3.create();
 
-    constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder, public debugPos: vec3[][], public shapes: Shape[]) {
+    constructor(device: GfxDevice, private manager: FileManager, public textureCache: TextureCache, public debugPos: vec3[][], public shapes: Shape[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
         console.log('adding shapes')
-        this.materials = new MaterialCache(this.renderHelper.renderCache, this.textureHolder);
-        this.skyboxMaterials = new MaterialCache(this.renderHelper.renderCache, this.textureHolder);
+        this.materials = new MaterialCache(this.renderHelper.renderCache, this.textureCache);
+        this.skyboxMaterials = new MaterialCache(this.renderHelper.renderCache, this.textureCache);
         for (const shape of shapes) {
             if (shape.isSkybox) {
                 this.skyboxMaterials.addShape(shape);
@@ -230,25 +228,25 @@ class SceneDesc implements Viewer.SceneDesc {
 
         console.log(fuck)
 
-        const textures: GXTexture.TextureInputGX[] = [];
+        const textures: Texture[] = [];
         for (const filename of manager.fileStore.list_textures()) {
-            textures.push(manager.createTexture(filename.toLowerCase()));
+            textures.push(new Texture(filename.toLowerCase(), gfxDevice, manager));
         }
         names = [];
         for (const filename of manager.fileStore.list_shapes()) {
             if (['setdownbox.shp', 'grampus.shp'].includes(filename)) continue;
             names.push(filename);
         }
-        const textureHolder = new GXTextureHolder();
+        const textureCache = new TextureCache();
         for (const texture of textures) {
-            textureHolder.addTexture(gfxDevice, texture);
+            textureCache.addTexture(texture);
         }
         const shapes = []
         for (const shapeName of names) {
-            shapes.push(createShape(manager, shapeName));
+            shapes.push(new Shape(shapeName, manager));
         }
         console.log('done')
-        const scene = new Scene(gfxDevice, manager, textureHolder, [customerPos, deliveryZones, pos3], shapes);
+        const scene = new Scene(gfxDevice, manager, textureCache, [customerPos, deliveryZones, pos3], shapes);
         return scene;
     }
 }

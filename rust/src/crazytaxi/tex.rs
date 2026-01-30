@@ -10,6 +10,11 @@ pub struct TexHeader {
     pub height: u32,
     _unk_0x08: u32,
     pub format: u32,
+    _unk_0x10: u32,
+    _unk_0x14: u32,
+    _unk_0x18: u32,
+    _unk_0x1c: u32,
+    _unk_0x20: u32,
 }
 
 #[wasm_bindgen(js_name = "CTTexture")]
@@ -34,6 +39,25 @@ impl Texture {
 
     pub fn format(&self) -> u32 {
         self.header.format
+    }
+
+    pub fn dbg_unks(&self) -> Vec<u32> {
+        vec![
+            self.header._unk_0x08,
+            self.header._unk_0x10,
+            self.header._unk_0x14,
+            self.header._unk_0x18,
+            self.header._unk_0x1c,
+            self.header._unk_0x20,
+        ]
+    }
+
+    pub fn header_loc(&self) -> FileLoc {
+        FileLoc {
+            file_id: self.file_id,
+            offset: self.offset,
+            length: 0x60,
+        }
     }
 
     pub fn data_loc(&self) -> FileLoc {
