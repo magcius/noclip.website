@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildTileAtlas, buildLevel, buildSkybox, VRAM, Skybox, Level, parseMobys, Moby } from "./bin.js"
+import { buildTileAtlas, buildLevel, buildSkybox, VRAM, Skybox, Level, parseMobyInstances, MobyInstance } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -12,39 +12,39 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 /*
 To-do list
 
-    Better handling of water, although it should be mostly accurate
-        The detection of what is and isn't water could be better to get rid of false positives
+    Better handling of water, although it's mostly accurate
+        The detection of water/not water could be better to get rid of false positives
     Better handling of LOD levels
         Right now it's just a toggle b/t high and low, but it'd be ideal to render both since low LOD usually is larger than high LOD
-        This is will fix some scenes that seem way too small (particularly cutscenes w/ fixed camera) since a lot of their look is from low LOD polys
+        This is will fix some scenes that seem way too small (particularly cutscenes w/ fixed camera) since a lot of their look is from low LOD
     Clean up functions in bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes currently so they're not included
+    Clean up how scrolling textures are handled (it's working fine but messy)
+    LOD toggle does not work on a few levels
 
     Spyro 1
-        Per-tile transparency masking (see "water" in Gnasty's Loot or Icy Flight)
+        Per-tile transparency masking (see edges by the "water" in Gnasty's Loot or Icy Flight)
+            This may need to be hardcoded since there seems to be no transparent flags in tile lists
         
     Spyro 2
         There are a very small number of incorrect faces (unsure if all the same problem or different. Some are invisible walls/collision related)
             Most (but not all) portals in homeworlds have black portal-shaped faces under them
             Idol Springs has two black triangles at the top of the outdoor waterfall
-            Colossus has a z-fighting face in the hockey rink's ice
-            Hurricos has black polygons on the gates that need spark plugs to open (Sunny Beach has similar ones on its gates)
+            Hurricos has black polygons on the gates that need spark plugs to open (Sunny Beach has similar ones on the turtle gates)
             Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should (wrong texture?)
-        Mystic Marsh and Shady Oasis have weird z-scaling that requires special handling in buildLevel
-            This may not be an issue, just something that warrants further investigation
-            LOD toggle does not work on these levels either for some reason
+        Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
 
     Spyro 3
         There are a very small number of incorrect faces
-            Molten Crater has some random ground textures in the trees (could be like that in the game)
-            Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent in the same way as other textures are
-            Icy Peak has some misaligned vertex colors under the ice sections (likely an issue with the game itself)
+            Molten Crater has random ground textures in the trees (might be like that in the game)
+            Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent
+            Icy Peak has some misaligned vertex colors under the ice sections (likely an issue in the game)
         Sublevels should extract their own skybox, not default to the parent level's
 
 Nice to have
 
-    Scrolling textures determined by levels' data, not hardcoded
+    Make scrolling textures and their speed determined by data, not hardcoded
     Render mobys in each level
         The format will need to be figured out. They're in other level subfiles (S2 grabs from global store instead?)
         Positions of mobys in S3 are figured out, but need the models and (maybe) animations
@@ -59,7 +59,7 @@ class SpyroRenderer implements SceneGfx {
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox, private mobys?: Moby[]) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox, private mobys?: MobyInstance[]) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
         this.levelRenderer = new LevelRenderer(cache, level, this.mobys);
@@ -209,7 +209,7 @@ class SpyroScene3 implements SceneDesc {
         const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
 
         const varsFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_var.bin`);
-        const mobys = this.subLevelID === undefined ? parseMobys(varsFile.createDataView()) : [];
+        const mobys = this.subLevelID === undefined ? parseMobyInstances(varsFile.createDataView()) : [];
 
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
