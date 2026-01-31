@@ -260,26 +260,31 @@ export class MaterialCache {
     constructor(private cache: GfxRenderCache, private textureCache: TextureCache) {
     }
 
+    private findOrCreateMaterial(texture: Texture, draw: ShapeDrawCall): Material {
+        let materials = this.materialMap.get(texture.name);
+        if (materials === undefined) {
+            materials = [];
+            this.materialMap.set(texture.name, materials);
+        }
+
+        let material = materials.find(mat => mat.isCompatible(draw));
+        if (material === undefined) {
+            material = new Material(
+                this.cache,
+                texture,
+                draw,
+            );
+            materials.push(material);
+            this.materials.push(material);
+        }
+        return material;
+    }
+
     public addShape(shape: Shape) {
         for (const draw of shape.draws) {
             const textureName = shape.textures[draw.textureIndex];
             const texture = assertExists(this.textureCache.textureMap.get(textureName));
-            let materials = this.materialMap.get(textureName);
-            if (materials === undefined) {
-                materials = [];
-                this.materialMap.set(textureName, materials);
-            }
-
-            let material = materials.find(mat => mat.isCompatible(draw));
-            if (material === undefined) {
-                material = new Material(
-                    this.cache,
-                    texture,
-                    draw,
-                );
-                materials.push(material);
-                this.materials.push(material);
-            }
+            const material = this.findOrCreateMaterial(texture, draw);
             material.addDraw(shape, draw);
         }
     }
