@@ -4,6 +4,12 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice, DataFetcher } from "../DataFetcher";
 import { rust } from "../rustlib";
 
+export interface FriendlyLoc {
+    filename: string,
+    offset: number,
+    length: number,
+}
+
 export class FileManager {
     public fileStore: CTFileStore;
     private fileData: NamedArrayBufferSlice[] = [];
@@ -23,6 +29,14 @@ export class FileManager {
             format: texture.format(),
             data,
         };
+    }
+
+    public getLoc(loc: CTFileLoc): FriendlyLoc {
+        return {
+            filename: this.fileNames[loc.file_id],
+            offset: loc.offset,
+            length: loc.length,
+        }
     }
 
     public getData(loc: CTFileLoc): ArrayBufferSlice {

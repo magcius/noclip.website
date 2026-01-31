@@ -4,7 +4,8 @@ import { AABB } from "../Geometry";
 import { LoadedVertexData, LoadedVertexLayout, GX_VtxDesc, GX_Array, getAttributeByteSize, compileVtxLoaderMultiVat, GX_VtxAttrFmt, VtxLoader } from "../gx/gx_displaylist"
 import * as GX from '../gx/gx_enum.js';
 import { assert } from "../util";
-import { FileManager } from "./util.js";
+import { FileManager, FriendlyLoc } from "./util.js";
+import { hexdump } from "../DebugJunk";
 
 interface GX {
     vat: GX_VtxAttrFmt[][];
@@ -113,7 +114,8 @@ export interface ShapeDrawCall {
     vertexData: LoadedVertexData,
     vertexLayout: LoadedVertexLayout,
     textureIndex: number,
-    otherDrawData: number[],
+    materialId: number,
+    otherDrawData: Uint8Array,
 }
 
 export class Shape {
@@ -122,6 +124,7 @@ export class Shape {
     public visible = true;
     public scale: vec3 = vec3.create();
     public isSkybox: boolean;
+    public loc: FriendlyLoc;
     public draws: ShapeDrawCall[] = [];
     public boundingRadius: number;
     public vertexFormats: Set<GX.VtxFmt> = new Set();
@@ -130,6 +133,7 @@ export class Shape {
     constructor(public name: string, fileManager: FileManager) {
         this.isSkybox = ['solla.shp', 'enkei4.shp'].includes(name);
         const shape = fileManager.fileStore.get_shape(name)!;
+        this.loc = fileManager.getLoc(shape.header_loc());
         this.boundingRadius = shape.bounding_radius();
         let x = shape.pos_and_scale();
         vec3.set(this.pos, x[0], x[1], -x[2]); // FIXME why do we negate here
@@ -142,32 +146,23 @@ export class Shape {
 
         const dlAddrs = [];
         const textureIdxs = [];
-        const otherDrawData: number[][] = [];
+        const otherDrawData: Uint8Array[] = [];
+        let materialIds = [];
         const drawsLoc = shape.mystery_loc()!;
-        const drawsData = fileManager.getData(drawsLoc).createDataView();
+        const drawsData = fileManager.getData(drawsLoc);
+        const drawsDataView = drawsData.createDataView();
         const drawCount = Math.floor(drawsData.byteLength / 36);
         for (let i = 0; i < drawCount; i++) {
             const offs = i * 36;
-            const dlAddr = drawsData.getUint32(offs + 0x0);
+            const dlAddr = drawsDataView.getUint32(offs + 0x0);
             if (dlAddr === 0x38) continue; // the first one seems to always be empty?
-            const vtxAddr = drawsData.getUint32(offs + 0x4);
-            const texIdx = drawsData.getUint32(offs + 0x8);
-            const unkNum0 = drawsData.getUint32(offs + 0xc);
-            const unkNum1 = drawsData.getUint32(offs + 0x10);
-            const unkNum2 = drawsData.getUint32(offs + 0x14);
-            const unkCount1 = drawsData.getUint32(offs + 0x18);
-            const unkBytes = drawsData.buffer.slice(offs + 0x1c, offs + 36);
+            const vtxAddr = drawsDataView.getUint32(offs + 0x4);
+            const texIdx = drawsDataView.getUint32(offs + 0x8);
+            const materialId = drawsDataView.getUint32(offs + 0x18);
+            materialIds.push(materialId);
             dlAddrs.push(dlAddr);
             textureIdxs.push(texIdx);
-            otherDrawData.push([
-                unkNum0,
-                unkNum1,
-                unkNum2,
-                unkCount1,
-            ]);
-            for (const byte of new Uint8Array(unkBytes)) {
-                otherDrawData[otherDrawData.length - 1].push(byte);
-            }
+            otherDrawData.push(drawsData.slice(offs + 0xc, offs + 36).createTypedArray(Uint8Array));
         }
 
         const sortedDLAddrs = dlAddrs.slice();
@@ -199,7 +194,6 @@ export class Shape {
         const vertexFormats: Set<GX.VtxFmt> = new Set();
         for (let i = 0; i < dlAddrs.length; i++) {
             const addr = dlAddrs[i];
-            const textureIndex = textureIdxs[i];
             let dlData = dlSection.slice(addr - dlOffset);
             const size = dlSizesByAddr.get(addr);
             if (size) {
@@ -230,7 +224,8 @@ export class Shape {
             this.draws.push({
                 vertexData,
                 vertexLayout: vtxLoader.loadedVertexLayout,
-                textureIndex,
+                textureIndex: textureIdxs[i],
+                materialId: materialIds[i],
                 otherDrawData: otherDrawData[i],
             })
         }

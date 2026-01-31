@@ -59,6 +59,7 @@ impl FileStore {
                 header,
                 file_id,
                 offset,
+                length,
                 textures: Vec::new(),
             };
             shape.populate_textures(data).map_err(s)?;

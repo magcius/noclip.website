@@ -13,7 +13,7 @@ import * as GX from '../gx/gx_enum.js';
 import { setMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import { Shape, ShapeDrawCall } from "./shape";
-import { FileManager } from "./util.js";
+import { FileManager, FriendlyLoc } from "./util.js";
 
 export class TextureCache {
     public textureMap: Map<string, Texture> = new Map();
@@ -27,10 +27,12 @@ export class Texture {
     public gxTexture: GXTexture.TextureInputGX;
     public gfxTexture: GfxTexture;
     public unks: Uint8Array;
+    public loc: FriendlyLoc;
     public headerData: Uint8Array;
 
     constructor(public name: string, device: GfxDevice, manager: FileManager) {
         const texture = manager.fileStore.get_texture(name)!;
+        this.loc = manager.getLoc(texture.header_loc())
         const data = manager.getData(texture.data_loc());
         const headerData = manager.getData(texture.header_loc());
         this.headerData = headerData.createTypedArray(Uint8Array);
@@ -46,20 +48,6 @@ export class Texture {
         const mipChain = GXTexture.calcMipChain(this.gxTexture, this.gxTexture.mipCount);
         const loadedTexture = loadTextureFromMipChain(device, mipChain);
         this.gfxTexture = loadedTexture.gfxTexture;
-    }
-
-    public setMaterialParams(mb: GXMaterialBuilder) {
-        // FIXME: no idea where these params are set, but this collection seems
-        // to look decent enough for most texture
-        mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
-        mb.setAlphaCompare(GX.CompareType.GREATER, 0x40, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x40);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     }
 
     public fillTextureMapping(dst: GXTextureMapping): boolean {
@@ -108,19 +96,50 @@ function concatBuffers(bufs: ArrayBufferLike[], totalByteSize: number): Uint8Arr
 
 const drawParams = new DrawParams();
 
-export class MaterialLayout {
+export class Material {
     public batches: MaterialDrawBatch[] = [];
-    public otherDrawData: number[][] = [];
+    public draws: ShapeDrawCall[] = [];
+    public name: string;
+    public visible = true;
+    public materialId: number;
+    public gxLayout: LoadedVertexLayout;
 
     private inputLayout: GfxInputLayout;
+    private materialParams = new MaterialParams();
+    private materialHelper: GXMaterialHelperGfx;
     private finished = false;
 
-    constructor(private cache: GfxRenderCache, public name: string, public gxLayout: LoadedVertexLayout, private materialHelper: GXMaterialHelperGfx, private materialParams: MaterialParams) {
-        this.inputLayout = createInputLayout(cache, gxLayout);
+    constructor(private cache: GfxRenderCache, public texture: Texture, draw: ShapeDrawCall) {
+        this.gxLayout = draw.vertexLayout;
+        this.materialId = draw.materialId;
+        this.name = `${texture.name} (mat ${this.materialId})`
+        this.inputLayout = createInputLayout(cache, this.gxLayout);
+
+        const mb = new GXMaterialBuilder();
+        this.setMaterialParams(mb);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(true);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        this.materialParams.m_TextureMapping[0] = new GXTextureMapping();
+        texture.fillTextureMapping(this.materialParams.m_TextureMapping[0]);
     }
 
-    public usesLayout(layout: LoadedVertexLayout): boolean {
-        return JSON.stringify(this.gxLayout) === JSON.stringify(layout);
+    public setMaterialParams(mb: GXMaterialBuilder) {
+        mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0x00, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x00);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    }
+
+    public isCompatible(draw: ShapeDrawCall): boolean {
+        const layoutMatch = JSON.stringify(this.gxLayout) === JSON.stringify(draw.vertexLayout);
+        const materialIdMatch = draw.materialId === this.materialId;
+        return layoutMatch && materialIdMatch;
     }
 
     private getCurrentBatch(): MaterialDrawBatch {
@@ -144,7 +163,7 @@ export class MaterialLayout {
         const vertexData = draw.vertexData;
         const batch = this.getCurrentBatch();
         batch.shapes.push(shape);
-        this.otherDrawData.push(draw.otherDrawData);
+        this.draws.push(draw);
 
         // update the PNMTXIDX value for each vertex, which lets us use instancing
         patchPNMTXIDX(draw.vertexLayout, vertexData, batch.shapes.length - 1);
@@ -192,6 +211,7 @@ export class MaterialLayout {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         assert(this.finished);
+        if (!this.visible) return;
         for (const batch of this.batches) {
             if (batch.totalIndexCount === 0) continue;
             const renderInst = renderInstManager.newRenderInst();
@@ -233,54 +253,8 @@ export class MaterialLayout {
     }
 }
 
-export class Material {
-    public layouts: MaterialLayout[] = [];
-    public visible = true;
-
-    private materialHelper: GXMaterialHelperGfx;
-    private materialParams = new MaterialParams();
-
-    constructor(private cache: GfxRenderCache, public name: string, public texture: Texture) {
-        const mb = new GXMaterialBuilder();
-        texture.setMaterialParams(mb);
-        mb.setCullMode(GX.CullMode.BACK);
-        mb.setUsePnMtxIdx(true);
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
-        this.materialParams.m_TextureMapping[0] = new GXTextureMapping();
-        texture.fillTextureMapping(this.materialParams.m_TextureMapping[0]);
-    }
-
-    public addDraw(shape: Shape, draw: ShapeDrawCall) {
-        let layout = this.layouts.find(layout => layout.usesLayout(draw.vertexLayout));
-        if (!layout) {
-            layout = new MaterialLayout(this.cache, this.name, draw.vertexLayout, this.materialHelper, this.materialParams);
-            this.layouts.push(layout);
-        }
-        layout.addDraw(shape, draw);
-    }
-
-    public finish() {
-        for (const layout of this.layouts) {
-            layout.finish();
-        }
-    }
-
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible) return;
-        for (const layout of this.layouts) {
-            layout.prepareToRender(renderInstManager, viewerInput);
-        }
-    }
-
-    public destroy(device: GfxDevice) {
-        for (const layout of this.layouts) {
-            layout.destroy(device);
-        }
-    }
-}
-
 export class MaterialCache {
-    public materialMap: Map<string, Material> = new Map();
+    public materialMap: Map<string, Material[]> = new Map();
     public materials: Material[] = [];
 
     constructor(private cache: GfxRenderCache, private textureCache: TextureCache) {
@@ -290,14 +264,20 @@ export class MaterialCache {
         for (const draw of shape.draws) {
             const textureName = shape.textures[draw.textureIndex];
             const texture = assertExists(this.textureCache.textureMap.get(textureName));
-            let material = this.materialMap.get(textureName);
+            let materials = this.materialMap.get(textureName);
+            if (materials === undefined) {
+                materials = [];
+                this.materialMap.set(textureName, materials);
+            }
+
+            let material = materials.find(mat => mat.isCompatible(draw));
             if (material === undefined) {
                 material = new Material(
                     this.cache,
-                    textureName,
-                    texture
+                    texture,
+                    draw,
                 );
-                this.materialMap.set(textureName, material);
+                materials.push(material);
                 this.materials.push(material);
             }
             material.addDraw(shape, draw);
@@ -305,19 +285,19 @@ export class MaterialCache {
     }
 
     public finish() {
-        for (const material of this.materialMap.values()) {
+        for (const material of this.materials) {
             material.finish();
         }
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        for (const material of this.materialMap.values()) {
+        for (const material of this.materials) {
             material.prepareToRender(renderInstManager, viewerInput);
         }
     }
 
     public destroy(device: GfxDevice) {
-        for (const material of this.materialMap.values()) {
+        for (const material of this.materials) {
             material.destroy(device);
         }
     }

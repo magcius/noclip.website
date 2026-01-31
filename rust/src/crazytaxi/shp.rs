@@ -52,6 +52,7 @@ pub struct Shape {
     pub header: ShpHeader,
     pub file_id: usize,
     pub offset: usize,
+    pub length: usize,
     pub textures: Vec<String>,
 }
 
@@ -104,6 +105,14 @@ impl Shape {
 
 #[wasm_bindgen(js_class = "CTShape")]
 impl Shape {
+    pub fn header_loc(&self) -> FileLoc {
+        FileLoc {
+            file_id: self.file_id,
+            offset: self.offset,
+            length: self.length,
+        }
+    }
+
     pub fn pos_loc(&self) -> FileLoc {
         let relative_offset = self.header.pos_offset as usize;
         FileLoc {
@@ -223,12 +232,14 @@ mod test {
     #[test]
     fn test() {
         let data = readextract("CT_train.shp");
+        let length = data.len();
         let mut reader = Reader::new(Cursor::new(data));
         let header = ShpHeader::from_reader_with_ctx(&mut reader, ()).unwrap();
         let shape = Shape {
             file_id: 0,
             textures: Vec::new(),
             header,
+            length,
             offset: 0,
         };
         dbg!(shape.display_list_loc());
