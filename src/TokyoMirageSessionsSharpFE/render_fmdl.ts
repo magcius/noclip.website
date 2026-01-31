@@ -3,10 +3,13 @@
 
 import { Curve } from './bfres/animation_common.js';
 import * as BNTX from '../fres_nx/bntx.js';
+import { colorNewFromRGBA } from '../Color.js';
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { FMAA, ShaderParamAnimation } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
+import { AABB } from '../Geometry.js';
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -34,6 +37,7 @@ export class fmdl_renderer
     protected special_skybox: boolean;
     protected current_animation_frame: number = 0.0;
     protected current_material_animation_frame: number = 0.0; // TODO: do I need separate ones? not sure if theres a model with both material and skeletal animations
+    protected override_bounding_box: AABB | undefined;
 
     constructor
     (
@@ -48,9 +52,11 @@ export class fmdl_renderer
         special_skybox: boolean,
         device: GfxDevice,
         renderHelper: GfxRenderHelper,
+        override_bounding_box?: AABB,
     )
     {
         this.special_skybox = special_skybox;
+        this.override_bounding_box = override_bounding_box;
 
         // setup skeleton
         this.fskl = fmdl.fskl;
@@ -143,20 +149,26 @@ export class fmdl_renderer
         {
             let bone_matrix_array = this.get_fshp_bone_matrix(i);
             let texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
+            let bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
 
-            this.fshp_renderers[i].render
-            (
-                renderHelper,
-                viewerInput,
-                renderInstListOpaque,
-                renderInstListTranslucent,
-                renderInstListSkybox,
-                this.transform_matrix,
-                bone_matrix_array,
-                texture_srt_matrix,
-                this.special_skybox,
-                undefined,
-            );
+            // frustrum culling
+            if (viewerInput.camera.frustum.contains(bounding_box) || this.special_skybox)
+            {
+                // drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, bounding_box, null, colorNewFromRGBA(0.0, 0.0, 1.0, 1.0));
+                this.fshp_renderers[i].render
+                (
+                    renderHelper,
+                    viewerInput,
+                    renderInstListOpaque,
+                    renderInstListTranslucent,
+                    renderInstListSkybox,
+                    this.transform_matrix,
+                    bone_matrix_array,
+                    texture_srt_matrix,
+                    this.special_skybox,
+                    undefined,
+                );
+            }
         }
     }
 
@@ -370,6 +382,56 @@ export class fmdl_renderer
             texture_srt_matrix = this.texture_srt_matrices[this.fshp_renderers[fshp_index].fmat_index];
         }
         return texture_srt_matrix;
+    }
+
+    get_fshp_bounding_box(fshp_index: number, bone_matrix_array: mat4[]): AABB
+    {
+        if(this.override_bounding_box != undefined)
+        {
+            // override bounding box doesn't need any transformations
+            return this.override_bounding_box;
+        }
+
+        // last bounding box in the array is the one that covers the entire mesh
+        const last_bounding_box_index = this.fshp_renderers[fshp_index].fshp.bounding_boxes.length - 1;
+        const original_bounding_box = this.fshp_renderers[fshp_index].fshp.bounding_boxes[last_bounding_box_index];
+        let new_bounding_box = new AABB();
+
+        if (this.fshp_renderers[fshp_index].fshp.skin_bone_count == 0)
+        {
+            // non skinned mesh
+            // if this model has a skeletal animation, update it every frame
+            // otherwise only make it once
+            if (this.fska != undefined || this.fshp_renderers[fshp_index].current_bounding_box == undefined)
+            {
+                let world_matrix = mat4.create();
+                mat4.multiply(world_matrix, this.transform_matrix, bone_matrix_array[0]);
+                new_bounding_box.transform(original_bounding_box, world_matrix);
+                this.fshp_renderers[fshp_index].current_bounding_box = new_bounding_box;
+            }
+            else
+            {
+                return this.fshp_renderers[fshp_index].current_bounding_box;
+            }
+        }
+        else
+        {
+            // skinned mesh
+            // transform the bounding box to each bone that contributes to this mesh
+            // then union them all together
+            for (let i = 0; i < this.fshp_renderers[i].fshp.skin_bone_indices.length; i++)
+            {
+                const bone_index = this.fshp_renderers[fshp_index].fshp.skin_bone_indices[i];
+                const bone_matrix = recursive_bone_transform(bone_index, this.current_bones);
+                let world_matrix = mat4.create();
+                mat4.multiply(world_matrix, this.transform_matrix, bone_matrix);
+                const per_bone_bounding_box = new AABB();
+                per_bone_bounding_box.transform(original_bounding_box, world_matrix);
+                new_bounding_box.union(new_bounding_box, per_bone_bounding_box);
+            }
+        }
+
+        return new_bounding_box;
     }
 }
 

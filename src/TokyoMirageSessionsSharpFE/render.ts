@@ -138,13 +138,13 @@ export class TMSFEScene implements SceneGfx
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
 
         // render skybox first, then clear the depth buffer and render everything else
+        const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
         builder.pushPass
         (
             (pass) =>
             {
                 pass.setDebugName('Skybox');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-                const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
                 pass.exec
                 (
@@ -155,13 +155,13 @@ export class TMSFEScene implements SceneGfx
                 );
             }
         );
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass
         (
             (pass) =>
             {
                 pass.setDebugName('Opaque');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-                const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                 pass.exec
                 (
@@ -172,23 +172,22 @@ export class TMSFEScene implements SceneGfx
                 );
             }
         );
-        // builder.pushPass
-        // (
-        //     (pass) =>
-        //     {
-        //         pass.setDebugName('Translucent');
-        //         pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-        //         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        //         pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-        //         pass.exec
-        //         (
-        //             (passRenderer) =>
-        //             {
-        //                 this.renderInstListTranslucent.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-        //             }
-        //         );
-        //     }
-        // );
+        builder.pushPass
+        (
+            (pass) =>
+            {
+                pass.setDebugName('Translucent');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                pass.exec
+                (
+                    (passRenderer) =>
+                    {
+                        this.renderInstListTranslucent.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                    }
+                );
+            }
+        );
 
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);

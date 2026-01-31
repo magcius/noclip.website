@@ -8,6 +8,7 @@ import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
 import { DataFetcher } from "../DataFetcher.js";
 import { FMAA } from './bfres/fmaa.js';
 import { FSKA } from "./bfres/fska.js";
+import { AABB } from "../Geometry.js";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { vec3 } from "gl-matrix";
@@ -21,7 +22,7 @@ export class gimmick
     /**
      * @param rotation euler XYZ rotation in radians
      */
-    constructor (position: vec3, rotation: vec3, scale: vec3, model_fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper, animation_fres?: FRES)
+    constructor (position: vec3, rotation: vec3, scale: vec3, model_fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper, animation_fres?: FRES, override_bounding_box?: AABB)
     {
         // initialize textures
         const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
@@ -57,6 +58,7 @@ export class gimmick
             false,
             device,
             renderHelper,
+            override_bounding_box,
         );
     }
 
@@ -102,7 +104,6 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 {
     let gimmicks: gimmick[] = [];
 
-
     if (layout.treasurebox_01_entries.length > 0 || layout.treasurebox_02_entries.length > 0)
     {
         const treasurebox_01_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model_common.apak", "fd_idle_00.anm", data_fetcher);
@@ -115,6 +116,10 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
             for (let i = 0; i < layout.treasurebox_01_entries.length; i++)
             {
                 const entry = layout.treasurebox_01_entries[i];
+                let bounding_box = new AABB();
+                const bb_center = vec3.fromValues(entry.position[0], entry.position[1] + TREASURE_BOX_BB_HEIGHT_OFFSET, entry.position[2]);
+                const bb_extents = vec3.fromValues(TREASURE_BOX_BB_WIDTH, TREASURE_BOX_BB_HEIGHT, TREASURE_BOX_BB_WIDTH);
+                bounding_box.setFromCenterAndHalfExtents(bb_center, bb_extents);
                 gimmicks.push
                 (
                     new gimmick
@@ -126,6 +131,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
                         device,
                         new GfxRenderHelper(device),
                         treasurebox_01_animation_fres,
+                        bounding_box,
                     )
                 );
             }
@@ -140,11 +146,25 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
             {
                 const entry = layout.treasurebox_02_entries[i];
                 let scale = vec3.fromValues(1.0, 1.0, 1.0);
-                // scale up the special chests at the end of each room
+                let bounding_box = new AABB();
+
                 if (entry.id == 1130 || entry.id == 1230 || entry.id == 1430)
                 {  
+                    // scale up the special chests at the end of each room
                     scale = vec3.fromValues(D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE);
+
+                    const bb_center = vec3.fromValues(entry.position[0], entry.position[1] + TREASURE_BOX_BB_HEIGHT_OFFSET * D018_TREASURE_BOX_SCALE, entry.position[2]);
+                    const large_treasure_box_bb_extents = vec3.create();
+                    vec3.scale(large_treasure_box_bb_extents, vec3.fromValues(TREASURE_BOX_BB_WIDTH, TREASURE_BOX_BB_HEIGHT, TREASURE_BOX_BB_WIDTH), D018_TREASURE_BOX_SCALE)
+                    bounding_box.setFromCenterAndHalfExtents(bb_center, large_treasure_box_bb_extents);
                 }
+                else
+                {
+                    const bb_center = vec3.fromValues(entry.position[0], entry.position[1] + TREASURE_BOX_BB_HEIGHT_OFFSET, entry.position[2]);
+                    const bb_extents = vec3.fromValues(TREASURE_BOX_BB_WIDTH, TREASURE_BOX_BB_HEIGHT, TREASURE_BOX_BB_WIDTH);
+                    bounding_box.setFromCenterAndHalfExtents(bb_center, bb_extents);
+                }
+                
                 gimmicks.push
                 (
                     new gimmick
@@ -156,6 +176,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
                         device,
                         new GfxRenderHelper(device),
                         treasurebox_01_animation_fres,
+                        bounding_box,
                     )
                 );
             }
@@ -303,12 +324,16 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
     return gimmicks;
 }
 
-const WALL_HEIGHT_OFFSET = 30.0;
-const GATE_HEIGHT_OFFSET = 20.0;
 // TODO: not 100% sure these are right
 const D018_TREASURE_BOX_SCALE = 2.0;
 const D018_003_WALL_HEIGHT_OFFSET = 20.0;
 const D018_003_WALL_SCALE = 0.75;
+
+const TREASURE_BOX_BB_HEIGHT_OFFSET = 10.0;
+const TREASURE_BOX_BB_WIDTH = 9.0;
+const TREASURE_BOX_BB_HEIGHT = 5.0;
+const WALL_HEIGHT_OFFSET = 30.0;
+const GATE_HEIGHT_OFFSET = 20.0;
 
 /**
  * port of gimCreateElevator() from lua scripts.

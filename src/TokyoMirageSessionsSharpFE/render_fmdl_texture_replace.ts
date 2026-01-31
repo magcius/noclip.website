@@ -14,6 +14,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { fmdl_renderer } from "./render_fmdl";
 import { ViewerRenderInput } from '../viewer.js';
+import { AABB } from '../Geometry.js';
 
 export class fmdl_renderer_texture_replace extends fmdl_renderer
 {
@@ -34,9 +35,11 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         device: GfxDevice,
         renderHelper: GfxRenderHelper,
         replacement_textures: replacement_texture[],
+        override_bounding_box?: AABB,
+        
     )
     {
-        super(fmdl, bntx, gfx_texture_array, fska, fmaa, position, rotation, scale, special_skybox, device, renderHelper);
+        super(fmdl, bntx, gfx_texture_array, fska, fmaa, position, rotation, scale, special_skybox, device, renderHelper, override_bounding_box);
         this.replacement_textures = replacement_textures;
 
         for (let i = 0; i < replacement_textures.length; i++)
@@ -63,6 +66,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         {
             let bone_matrix_array = this.get_fshp_bone_matrix(i);
             let texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
+            let bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
 
             let replacement_sampler_binding: GfxSamplerBinding | undefined = undefined;
             for (let replacement_texture_index = 0; replacement_texture_index < this.replacement_textures.length; replacement_texture_index++)
@@ -73,19 +77,23 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                 }
             }
 
-            this.fshp_renderers[i].render
-            (
-                renderHelper,
-                viewerInput,
-                renderInstListOpaque,
-                renderInstListTranslucent,
-                renderInstListSkybox,
-                this.transform_matrix,
-                bone_matrix_array,
-                texture_srt_matrix,
-                this.special_skybox,
-                replacement_sampler_binding,
-            );
+            // frustrum culling
+            if (viewerInput.camera.frustum.contains(bounding_box) || this.special_skybox)
+            {
+                this.fshp_renderers[i].render
+                (
+                    renderHelper,
+                    viewerInput,
+                    renderInstListOpaque,
+                    renderInstListTranslucent,
+                    renderInstListSkybox,
+                    this.transform_matrix,
+                    bone_matrix_array,
+                    texture_srt_matrix,
+                    this.special_skybox,
+                    replacement_sampler_binding,
+                );
+            }
         }
     }
 }
