@@ -357,9 +357,9 @@ export class fmdl_renderer
     get_fshp_bone_matrix(fshp_index: number): mat4[]
     {
         let bone_matrix_array: mat4[] = [];
-        if (this.fshp_renderers[fshp_index].skin_bone_count == 0)
+        if (this.fshp_renderers[fshp_index].fshp.skin_bone_count == 0)
         {
-            let transformation_matrix = recursive_bone_transform(this.fshp_renderers[fshp_index].bone_index, this.current_bones);
+            let transformation_matrix = recursive_bone_transform(this.fshp_renderers[fshp_index].fshp.bone_index, this.current_bones);
             bone_matrix_array.push(transformation_matrix);
         }
         else

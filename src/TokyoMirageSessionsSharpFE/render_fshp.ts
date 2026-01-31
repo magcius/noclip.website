@@ -13,7 +13,7 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
-import { vec4, mat4 } from "gl-matrix";
+import { mat4 } from "gl-matrix";
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { ViewerRenderInput } from "../viewer.js";
@@ -24,9 +24,6 @@ import { ViewerRenderInput } from "../viewer.js";
 export class fshp_renderer
 {
     public fshp: FSHP;
-    public bone_index: number;
-    public skin_bone_count: number;
-    public skin_bone_indices: number[];
     public fmat_index: number;
     public render_mesh: boolean = true;
     public current_bounding_box: AABB | undefined = undefined;
@@ -56,12 +53,9 @@ export class fshp_renderer
     {
         // TODO: at this point just store the fshp itself
         this.fshp = fshp;
-        this.bone_index = fshp.bone_index;
-        this.skin_bone_count = fshp.skin_bone_count;
         this.fmat_index = fshp.fmat_index;
         this.cull_mode = fmat.cull_mode;
         this.blend_mode = fmat.blend_mode;
-        this.skin_bone_indices = fshp.skin_bone_indices;
 
         // create vertex buffers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
