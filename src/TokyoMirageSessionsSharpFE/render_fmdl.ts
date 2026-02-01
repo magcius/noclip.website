@@ -166,6 +166,7 @@ export class fmdl_renderer
                     bone_matrix_array,
                     texture_srt_matrix,
                     this.special_skybox,
+                    bounding_box,
                     undefined,
                 );
             }
@@ -402,16 +403,16 @@ export class fmdl_renderer
             // non skinned mesh
             // if this model has a skeletal animation, update it every frame
             // otherwise only make it once
-            if (this.fska != undefined || this.fshp_renderers[fshp_index].current_bounding_box == undefined)
+            if (this.fska != undefined || this.fshp_renderers[fshp_index].stored_bounding_box == undefined)
             {
                 let world_matrix = mat4.create();
                 mat4.multiply(world_matrix, this.transform_matrix, bone_matrix_array[0]);
                 new_bounding_box.transform(original_bounding_box, world_matrix);
-                this.fshp_renderers[fshp_index].current_bounding_box = new_bounding_box;
+                this.fshp_renderers[fshp_index].stored_bounding_box = new_bounding_box;
             }
             else
             {
-                return this.fshp_renderers[fshp_index].current_bounding_box;
+                return this.fshp_renderers[fshp_index].stored_bounding_box;
             }
         }
         else
@@ -419,7 +420,7 @@ export class fmdl_renderer
             // skinned mesh
             // transform the bounding box to each bone that contributes to this mesh
             // then union them all together
-            for (let i = 0; i < this.fshp_renderers[i].fshp.skin_bone_indices.length; i++)
+            for (let i = 0; i < this.fshp_renderers[fshp_index].fshp.skin_bone_indices.length; i++)
             {
                 const bone_index = this.fshp_renderers[fshp_index].fshp.skin_bone_indices[i];
                 const bone_matrix = recursive_bone_transform(bone_index, this.current_bones);

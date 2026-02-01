@@ -1,14 +1,17 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { FMAA } from './bfres/fmaa.js';
 import { FSKA } from "./bfres/fska.js";
+import { AABB } from '../Geometry.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { vec3 } from "gl-matrix";
+import { MapLayout } from './maplayout.js';
 import { fmdl_renderer } from "./render_fmdl.js";
 import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -17,6 +20,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 
 export class TMSFEScene implements SceneGfx
 {
+    public layout: MapLayout | undefined; // this level's MapLayout, containing coordinates and areas to spawn objects or trigger flags
     public common_gimmicks: gimmick[] = [];
     public map_gimmicks: gimmick[] = [];
 
@@ -113,6 +117,8 @@ export class TMSFEScene implements SceneGfx
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
+        // this.debug_draw_layout_entries(viewerInput);
+
         // create draw calls for all the models
         for (let i = 0; i < this.fmdl_renderers.length; i++)
         {
@@ -212,6 +218,22 @@ export class TMSFEScene implements SceneGfx
         for (let i = 0; i < this.map_gimmicks.length; i++)
         {
             this.map_gimmicks[i].destroy(device);
+        }
+    }
+
+    debug_draw_layout_entries(viewerInput: ViewerRenderInput)
+    {
+        if (this.layout != undefined)
+        {
+            const group = this.layout.group_1; // change this to see different groups
+
+            for (let i = 0; i < group.length; i++)
+            {
+                const entry = group[i];
+                const box = new AABB();
+                box.setFromCenterAndHalfExtents(entry.position, entry.half_extents);
+                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, box);
+            }
         }
     }
 }

@@ -91,6 +91,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                     bone_matrix_array,
                     texture_srt_matrix,
                     this.special_skybox,
+                    bounding_box,
                     replacement_sampler_binding,
                 );
             }

@@ -304,5 +304,9 @@ export enum BlendMode
 {
     Opaque = 1,
     AlphaTest = 2,
-    Translucent = 3,
+    BlendMode3 = 3,
+    BlendMode4 = 4,
+    BlendMode5 = 5,
+    BlendMode6 = 6,
+    BlendMode7 = 7,
 }

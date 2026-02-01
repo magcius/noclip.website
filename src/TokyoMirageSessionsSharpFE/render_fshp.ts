@@ -3,16 +3,18 @@
 
 import * as BNTX from '../fres_nx/bntx.js';
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
-import { computeViewMatrixSkybox } from '../Camera.js';
+import { computeViewMatrixSkybox, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
 import { FVTX } from "./bfres/fvtx.js";
 import { FSHP } from "./bfres/fshp.js";
 import { FMAT, BlendMode } from "./bfres/fmat.js";
 import { AABB } from '../Geometry.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
-         GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, GfxSamplerBinding, GfxTexture, GfxMegaStateDescriptor, GfxBlendMode,
+         GfxBlendFactor, GfxChannelWriteMask} from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -26,7 +28,7 @@ export class fshp_renderer
     public fshp: FSHP;
     public fmat_index: number;
     public render_mesh: boolean = true;
-    public current_bounding_box: AABB | undefined = undefined;
+    public stored_bounding_box: AABB | undefined = undefined;
 
     private vertex_buffers: GfxBuffer[] = [];
     private vertex_buffer_descriptors: GfxVertexBufferDescriptor[] = [];
@@ -36,8 +38,8 @@ export class fshp_renderer
     private input_layout: GfxInputLayout;
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
-    private cull_mode: GfxCullMode;
     private blend_mode: BlendMode;
+    private mega_state_flags: Partial<GfxMegaStateDescriptor>;
 
     constructor
     (
@@ -54,7 +56,6 @@ export class fshp_renderer
         // TODO: at this point just store the fshp itself
         this.fshp = fshp;
         this.fmat_index = fshp.fmat_index;
-        this.cull_mode = fmat.cull_mode;
         this.blend_mode = fmat.blend_mode;
 
         // create vertex buffers
@@ -135,6 +136,86 @@ export class fshp_renderer
             this.render_mesh = false;
         }
 
+        // mega state flags
+        this.mega_state_flags = { cullMode: fmat.cull_mode, depthWrite: false };
+        switch(this.blend_mode)
+        {
+            case BlendMode.Opaque:
+            case BlendMode.AlphaTest:
+                // opaque
+                this.mega_state_flags.depthWrite = true;
+                break;
+
+            case BlendMode.BlendMode3:
+                setAttachmentStateSimple
+                (
+                    this.mega_state_flags,
+                    {
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                    }
+                );
+                break;
+
+            case BlendMode.BlendMode4:
+                setAttachmentStateSimple
+                (
+                    this.mega_state_flags,
+                    {
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.One,
+                    }
+                );
+                break;
+
+            case BlendMode.BlendMode5:
+                setAttachmentStateSimple
+                (
+                    this.mega_state_flags,
+                    {
+                        blendMode: GfxBlendMode.ReverseSubtract,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.One,
+                    }
+                );
+                break;
+
+            case BlendMode.BlendMode6:
+                setAttachmentStateSimple
+                (
+                    this.mega_state_flags,
+                    {
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                    }
+                );
+                break;
+
+            case BlendMode.BlendMode7:
+                setAttachmentStateSimple
+                (
+                    this.mega_state_flags,
+                    {
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.One,
+                    }
+                );
+                break;
+
+            default:
+                console.error(`unknown blend mode ${this.blend_mode}`);
+                throw("whoops");
+
+        }
+        if (this.blend_mode > 2)
+        {
+
+        }
+
         // initialize shader
         this.program = new TMSFEProgram(fvtx, fmat, fshp, bone_matrix_array_length);
 
@@ -160,6 +241,7 @@ export class fshp_renderer
         bone_matrix_array: mat4[],
         albedo0_srt_matrix: mat4,
         special_skybox: boolean,
+        bounding_box: AABB,
         replacement_sampler_binding?: GfxSamplerBinding,
     ): void
     {
@@ -218,7 +300,7 @@ export class fshp_renderer
             renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
         }
 
-        renderInst.setMegaStateFlags({ cullMode: this.cull_mode });
+        renderInst.setMegaStateFlags(this.mega_state_flags);
         
         // submit the draw call
         if (special_skybox)
@@ -231,6 +313,10 @@ export class fshp_renderer
         }
         else
         {
+            // translucent material
+            // sort
+            const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bounding_box);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
             renderHelper.renderInstManager.setCurrentList(renderInstListTranslucent);
         }
 
