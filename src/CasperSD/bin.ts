@@ -20,16 +20,16 @@ export interface WorldSector {
 }
 
 export interface WorldData {
-    flags: number;
     materials: string[];
     rootSector: WorldSector;
 }
 
 interface Mesh {
-    materialIndex: number;
-    vertCount: number;
+    vertexCount: number;
     positions: number[];
     indices: number[];
+    uvs: number[];
+    colors: number[];
 }
 
 export class BSPParser {
@@ -50,7 +50,6 @@ export class BSPParser {
 
     public parse(): WorldData {
         const worldData: WorldData = {
-            flags: 0,
             materials: [],
             rootSector: {type: "node", children: []}
         };
@@ -61,7 +60,6 @@ export class BSPParser {
 
             if (header.id === ChunkID.WORLD) {
                 const struct = this.readHeader();
-                worldData.flags = this.view.getUint32(this.offset + 44, true);
                 this.offset += struct.size;
 
                 while (this.offset < endOffset) {
@@ -141,21 +139,22 @@ export class BSPParser {
     }
 
     private parseAtomicSection(): Mesh {
+        // struct has these blocks:
+        // vertices (12), color 1 (4), color 2 (4), uvs (8), ??? (few thousand bytes left usually)
+
         const structHeader = this.readHeader();
         const structEnd = this.offset + structHeader.size;
 
-        const matIndex = this.view.getInt32(this.offset, true);
-        const numTriangles = this.view.getUint32(this.offset + 4, true);
-        const numVertices = this.view.getUint32(this.offset + 8, true);
-        if (numVertices === 0) {
+        // const unknownNum = this.view.getUint32(this.offset + 4, true);
+        const vertexCount = this.view.getUint32(this.offset + 8, true);
+        if (vertexCount === 0) {
             this.offset = structEnd; 
-            return { vertCount: 0, indices: [], positions: [], materialIndex: -1 };
+            return { vertexCount: 0, indices: [], positions: [], uvs: [], colors: [] };
         }
 
-        let pointer = this.offset + 40;
-        pointer += 4; // skip first 4 byte number since always zero
+        let pointer = this.offset + 44; // skip struct header
         const positions: number[] = [];
-        for (let i = 0; i < numVertices; i++) {
+        for (let i = 0; i < vertexCount; i++) {
             positions.push(
                 this.view.getFloat32(pointer, true),
                 this.view.getFloat32(pointer + 4, true),
@@ -164,36 +163,55 @@ export class BSPParser {
             pointer += 12;
         }
 
+        pointer += vertexCount * 4; // skip first color block (rainbow when rendered)
+
+        const colors: number[] = [];
+        for (let i = 0; i < vertexCount; i++) {
+            colors.push(
+                this.view.getUint8(pointer),
+                this.view.getUint8(pointer + 1),
+                this.view.getUint8(pointer + 2)
+            );
+            pointer += 4;
+        }
+
+        const uvs: number[] = [];
+        for (let i = 0; i < vertexCount; i++) {
+            uvs.push(
+                this.view.getFloat32(pointer, true),
+                this.view.getFloat32(pointer + 4, true)
+            );
+            pointer += 8;
+        }
+
         this.offset = structEnd;
         const extHeader = this.readHeader();
         const extEnd = this.offset + extHeader.size;
-
         let indices: number[] = [];
-
         while (this.offset < extEnd - 12) {
             const subHeader = this.readHeader();
             
             if (subHeader.id === ChunkID.BIN_MESH_PLG) {
                 const faceType = this.view.getUint32(this.offset, true);
                 const numSplits = this.view.getUint32(this.offset + 4, true);
-                const totalIndices = this.view.getUint32(this.offset + 8, true);
+                // const totalIndices = this.view.getUint32(this.offset + 8, true);
 
                 let seeker = this.offset + 12;
                 for (let s = 0; s < numSplits; s++) {
                     const count = this.view.getUint32(seeker, true);
-                    const matIndex = this.view.getUint32(seeker + 4, true);
+                    const materialIndex = this.view.getUint32(seeker + 4, true);
                     seeker += 8;
-                    const tempIndices: number[] = [];
+                    const rawIndices: number[] = [];
                     for (let i = 0; i < count; i++) {
                         const val = this.view.getUint32(seeker, true);
-                        tempIndices.push(val);
+                        rawIndices.push(val);
                         seeker += 4;
                     }
                     if (faceType === 1) {
-                        for (let i = 0; i < tempIndices.length - 2; i++) {
-                            const v1 = tempIndices[i];
-                            const v2 = tempIndices[i + 1];
-                            const v3 = tempIndices[i + 2];
+                        for (let i = 0; i < rawIndices.length - 2; i++) {
+                            const v1 = rawIndices[i];
+                            const v2 = rawIndices[i + 1];
+                            const v3 = rawIndices[i + 2];
                             if (v1 !== v2 && v1 !== v3 && v2 !== v3) {
                                 if (i % 2 === 0) {
                                     indices.push(v1, v2, v3);
@@ -203,7 +221,7 @@ export class BSPParser {
                             }
                         }
                     } else {
-                        indices.push(...tempIndices);
+                        indices.push(...rawIndices);
                     }
                 }
                 this.offset += subHeader.size;
@@ -214,12 +232,7 @@ export class BSPParser {
 
         this.offset = extEnd;
 
-        return {
-            vertCount: numVertices,
-            indices: indices, 
-            positions: positions,
-            materialIndex: matIndex
-        };
+        return { vertexCount, indices,  positions, uvs, colors };
     }
 
     private readString(size: number): string {
