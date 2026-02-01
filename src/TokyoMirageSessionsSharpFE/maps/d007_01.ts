@@ -14,7 +14,7 @@ export async function create_d007_01_gimmicks(layout: MapLayout, data_fetcher: D
     const Elevator_toAhead = 1601;
     const Floor_A: number[] = [1500, 1502, 1504, 1506, 1508, 1510, 1512, 1514];
 
-    const elevator_to_ahead_point = get_point_from_group(layout.group_0, Elevator_toAhead);
+    const elevator_to_ahead_point = get_point_from_group(layout.event, Elevator_toAhead);
     gimmicks.push
     (
         await create_gimmick
@@ -31,7 +31,7 @@ export async function create_d007_01_gimmicks(layout: MapLayout, data_fetcher: D
 
     for (let i = 0; i < Floor_A.length; i++)
     {
-        const movable_floor_point = get_point_from_group(layout.group_0, Floor_A[i]);
+        const movable_floor_point = get_point_from_group(layout.event, Floor_A[i]);
         gimmicks.push
         (
             await create_gimmick

@@ -10,13 +10,14 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
-import { vec3 } from "gl-matrix";
+import { vec3, mat4 } from "gl-matrix";
 import { MapLayout } from './maplayout.js';
 import { fmdl_renderer } from "./render_fmdl.js";
 import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { computeModelMatrixSRT } from '../MathHelpers.js';
 
 export class TMSFEScene implements SceneGfx
 {
@@ -117,7 +118,7 @@ export class TMSFEScene implements SceneGfx
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
-        // this.debug_draw_layout_entries(viewerInput);
+        this.debug_draw_layout_entries(viewerInput);
 
         // create draw calls for all the models
         for (let i = 0; i < this.fmdl_renderers.length; i++)
@@ -225,14 +226,27 @@ export class TMSFEScene implements SceneGfx
     {
         if (this.layout != undefined)
         {
-            const group = this.layout.group_1; // change this to see different groups
-
+            const group = this.layout.entries; // change this to see different groups
+            
             for (let i = 0; i < group.length; i++)
             {
+                if (group[i].group_index != 5)
+                {
+                    continue;
+                }
                 const entry = group[i];
                 const box = new AABB();
-                box.setFromCenterAndHalfExtents(entry.position, entry.half_extents);
-                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, box);
+                box.setFromCenterAndHalfExtents(vec3.fromValues(0.0, 0.0, 0.0), entry.half_extents);
+                const transform_matrix = mat4.create();
+                computeModelMatrixSRT
+                (
+                    transform_matrix,
+                    1.0, 1.0, 1.0,
+                    entry.rotation[0], entry.rotation[1], entry.rotation[2],
+                    entry.position[0], entry.position[1], entry.position[2],
+                );
+
+                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, box, transform_matrix);
             }
         }
     }

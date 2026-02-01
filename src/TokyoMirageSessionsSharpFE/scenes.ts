@@ -77,13 +77,13 @@ class TMSFESceneDesc implements SceneDesc
      */
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx>
     {
-        // Load the map file
-        const dataFetcher = context.dataFetcher;
-        const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
-        
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
         if (this.special_skybox == undefined) { this.special_skybox = false };
 
+        // Load the map file
+        const dataFetcher = context.dataFetcher;
+        const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
+    
         // get model files
         let level_models: level_model[] = [];
         let model_fres: FRES;
@@ -133,7 +133,7 @@ class TMSFESceneDesc implements SceneDesc
             level_models.push({ model_fres: audience_02_fres, animation_fres: audience_00_animation_fres[0] });
         }
 
-        // get dynamic advertisement textures
+        // get replacement textures
         let replacement_texture_groups: replacement_texture_group[] = [];
         if (this.replacement_texture_function != undefined)
         {
@@ -147,6 +147,7 @@ class TMSFESceneDesc implements SceneDesc
         if (maplayout_data != undefined)
         {
             const layout = parseLayout(maplayout_data);
+            console.log(layout);
             scene.layout = layout;
             scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
             if (this.map_gimmick_function != undefined)
