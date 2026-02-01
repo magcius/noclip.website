@@ -28,7 +28,6 @@ class CasperRenderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        mainColorDesc.clearColor = {r: 128 / 255, g: 128 / 255, b: 128 / 255, a: 1};
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -57,12 +56,12 @@ const pathBase = "CasperSD";
 class CasperScene implements SceneDesc {
     public id: string;
 
-    constructor(public name: string) {
-        this.id = "0";
+    constructor(private bspPath: string, public name: string) {
+        this.id = Number(bspPath.split("LEVEL")[1].split(".")[0]).toString();
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const file = await context.dataFetcher.fetchData(`${pathBase}/MODELS/MEDIEVAL/LEVEL01.BSP`);
+        const file = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
         const p = new BSPParser(file.createDataView());
         const world = p.parse();
         const renderer = new CasperRenderer(device, world);
@@ -73,7 +72,22 @@ class CasperScene implements SceneDesc {
 const id = "CasperSD";
 const name = "Casper: Spirit Dimensions";
 const sceneDescs = [
-    new CasperScene("Test Level")
+    new CasperScene("MEDIEVAL/LEVEL01.BSP", "Level 1"),
+    new CasperScene("MEDIEVAL/LEVEL02.BSP", "Level 2"),
+    new CasperScene("MEDIEVAL/LEVEL03.BSP", "Level 3"),
+    new CasperScene("MEDIEVAL/LEVEL04.BSP", "Level 4"),
+    new CasperScene("MEDIEVAL/LEVEL05.BSP", "Level 5"),
+    new CasperScene("CARNIVAL/LEVEL06.BSP", "Level 6"),
+    new CasperScene("SPIRIT/LEVEL07.BSP", "Level 7"),
+    new CasperScene("CARNIVAL/LEVEL08.BSP", "Level 8"),
+    new CasperScene("SPIRIT/LEVEL09.BSP", "Level 9"),
+    new CasperScene("SPIRIT/LEVEL10.BSP", "Level 10"),
+    new CasperScene("CARNIVAL/LEVEL11.BSP", "Level 11"),
+    new CasperScene("FACTORY/LEVEL12.BSP", "Level 12"),
+    new CasperScene("FACTORY/LEVEL13.BSP", "Level 13"),
+    new CasperScene("FACTORY/LEVEL14.BSP", "Level 14"),
+    new CasperScene("SPIRIT/LEVEL15.BSP", "Level 15"),
+    new CasperScene("HOUSE/LEVEL16.BSP", "Level 16")
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

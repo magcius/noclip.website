@@ -1,4 +1,3 @@
-import { mat4 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -21,17 +20,27 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
 };
 
+varying vec3 v_Position;
+
 #ifdef VERT
 layout(location = 0) in vec3 a_Position;
 
 void main() {
-    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(a_Position, 1.0);
+    vec4 worldPos = vec4(a_Position, 1.0);
+    v_Position = worldPos.xyz;
+    gl_Position = UnpackMatrix(u_ProjectionView) * worldPos;
 }
 #endif
 
 #ifdef FRAG
 void main() {
-    gl_FragColor = vec4(0.7, 0.7, 0.7, 1.0);
+    vec3 normal = normalize(cross(dFdx(v_Position), dFdy(v_Position)));
+    vec3 lightDir = normalize(vec3(0.3, 0.5, 1.0));
+    float dotProduct = dot(normal, lightDir);
+    // float diffuse = clamp(dotProduct * 0.5 + 0.5, 0.2, 1.0);
+    // vec3 baseColor = vec3(0.7, 0.7, 0.7);
+    // gl_FragColor = vec4(baseColor * diffuse, 1.0);
+    gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
 }
 #endif
     `;
@@ -42,13 +51,7 @@ void main() {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
-const noclipSpaceFromSpyroSpace = mat4.fromValues(
-    1, 0, 0, 0,
-    0, 0, -1, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1,
-);
-const scratchMat4a = mat4.create();
+const WORLD_SCALE = 300;
 
 export class LevelRenderer {
     private vertexBuffer: GfxBuffer;
@@ -83,8 +86,7 @@ export class LevelRenderer {
 
         let offs = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 16);
         const buf = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
-        mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
-        offs += fillMatrix4x4(buf, offs, scratchMat4a);
+        offs += fillMatrix4x4(buf, offs, viewerInput.camera.clipFromWorldMatrix);
         template.setVertexInput(
             this.inputLayout,
             [
@@ -111,7 +113,7 @@ export class LevelRenderer {
             if (node.mesh && node.mesh.vertCount > 0 && node.mesh.positions.length > 0) {
                 const p = node.mesh.positions;
                 for (let i = 0; i < p.length; i++) {
-                    vertices.push(p[i] * 100);
+                    vertices.push(p[i] * WORLD_SCALE);
                 }
                 const idx = node.mesh.indices;
                 for (let i = 0; i < idx.length; i++) {

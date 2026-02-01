@@ -5,9 +5,12 @@ enum ChunkID {
     TEXTURE = 0x06,
     MATERIAL = 0x07,
     MATERIAL_LIST = 0x08,
-    GEOMETRY_LEAF = 0x09,
-    WORLD_NODE = 0x0a,
+    ATOMIC_SECTION = 0x09,
+    PLANE_SECTION = 0x0A,
     WORLD = 0x0B,
+    BIN_MESH_PLG = 0x50E,
+    COLLISION_PLG = 0x11D,
+    MATERIAL_EFFECTS_PLG = 0x120
 }
 
 export interface WorldSector {
@@ -25,7 +28,6 @@ export interface WorldData {
 interface Mesh {
     materialIndex: number;
     vertCount: number;
-    triCount: number;
     positions: number[];
     indices: number[];
 }
@@ -41,9 +43,9 @@ export class BSPParser {
     private readHeader() {
         const id = this.view.getUint32(this.offset, true);
         const size = this.view.getUint32(this.offset + 4, true);
-        const version = this.view.getUint32(this.offset + 8, true);
+        // const version = this.view.getUint32(this.offset + 8, true);
         this.offset += 12;
-        return { id, size, version };
+        return { id, size };
     }
 
     public parse(): WorldData {
@@ -66,7 +68,7 @@ export class BSPParser {
                     const childHeader = this.readHeader();
                     if (childHeader.id === ChunkID.MATERIAL_LIST) {
                         worldData.materials = this.parseMaterialList(childHeader.size);
-                    } else if (childHeader.id === ChunkID.WORLD_NODE) {
+                    } else if (childHeader.id === ChunkID.PLANE_SECTION) {
                         worldData.rootSector = this.processSector(childHeader);
                     } else {
                         this.offset += childHeader.size;
@@ -83,17 +85,17 @@ export class BSPParser {
     private processSector(header: any): WorldSector {
         const endOffset = this.offset + header.size;
         const sector: WorldSector = {
-            type: header.id === ChunkID.GEOMETRY_LEAF ? 'leaf' : 'node',
+            type: header.id === ChunkID.ATOMIC_SECTION ? 'leaf' : 'node',
             children: []
         };
 
-        if (header.id === ChunkID.GEOMETRY_LEAF) {
-            sector.mesh = this.parseGeometryLeaf();
+        if (header.id === ChunkID.ATOMIC_SECTION) {
+            sector.mesh = this.parseAtomicSection();
             this.offset = endOffset;
         } else {
             while (this.offset < endOffset) {
                 const child = this.readHeader();
-                if (child.id === ChunkID.WORLD_NODE || child.id === ChunkID.GEOMETRY_LEAF) {
+                if (child.id === ChunkID.PLANE_SECTION || child.id === ChunkID.ATOMIC_SECTION) {
                     sector.children.push(this.processSector(child));
                 } else {
                     this.offset += child.size;
@@ -138,7 +140,7 @@ export class BSPParser {
         return names;
     }
 
-    private parseGeometryLeaf(): Mesh {
+    private parseAtomicSection(): Mesh {
         const structHeader = this.readHeader();
         const structEnd = this.offset + structHeader.size;
 
@@ -147,18 +149,19 @@ export class BSPParser {
         const numVertices = this.view.getUint32(this.offset + 8, true);
         if (numVertices === 0) {
             this.offset = structEnd; 
-            return { vertCount: 0, triCount: 0, indices: [], positions: [], materialIndex: -1 };
+            return { vertCount: 0, indices: [], positions: [], materialIndex: -1 };
         }
 
-        let current = this.offset + 40; 
+        let pointer = this.offset + 40;
+        pointer += 4; // skip first 4 byte number since always zero
         const positions: number[] = [];
         for (let i = 0; i < numVertices; i++) {
             positions.push(
-                this.view.getFloat32(current, true),
-                this.view.getFloat32(current + 4, true),
-                this.view.getFloat32(current + 8, true)
+                this.view.getFloat32(pointer, true),
+                this.view.getFloat32(pointer + 4, true),
+                this.view.getFloat32(pointer + 8, true)
             );
-            current += 12;
+            pointer += 12;
         }
 
         this.offset = structEnd;
@@ -170,23 +173,39 @@ export class BSPParser {
         while (this.offset < extEnd - 12) {
             const subHeader = this.readHeader();
             
-            if (subHeader.id === 0x50E) {
-                const flags = this.view.getUint32(this.offset, true);
+            if (subHeader.id === ChunkID.BIN_MESH_PLG) {
+                const faceType = this.view.getUint32(this.offset, true);
                 const numSplits = this.view.getUint32(this.offset + 4, true);
                 const totalIndices = this.view.getUint32(this.offset + 8, true);
 
-                let currentPtr = this.offset + 12;
+                let seeker = this.offset + 12;
                 for (let s = 0; s < numSplits; s++) {
-                    const count = this.view.getUint32(currentPtr, true);
-                    const matIndex = this.view.getUint32(currentPtr + 4, true);
-                    currentPtr += 8;
+                    const count = this.view.getUint32(seeker, true);
+                    const matIndex = this.view.getUint32(seeker + 4, true);
+                    seeker += 8;
+                    const tempIndices: number[] = [];
                     for (let i = 0; i < count; i++) {
-                        const val = this.view.getUint32(currentPtr, true);
-                        indices.push(val);
-                        currentPtr += 4;
+                        const val = this.view.getUint32(seeker, true);
+                        tempIndices.push(val);
+                        seeker += 4;
+                    }
+                    if (faceType === 1) {
+                        for (let i = 0; i < tempIndices.length - 2; i++) {
+                            const v1 = tempIndices[i];
+                            const v2 = tempIndices[i + 1];
+                            const v3 = tempIndices[i + 2];
+                            if (v1 !== v2 && v1 !== v3 && v2 !== v3) {
+                                if (i % 2 === 0) {
+                                    indices.push(v1, v2, v3);
+                                } else {
+                                    indices.push(v1, v3, v2);
+                                }
+                            }
+                        }
+                    } else {
+                        indices.push(...tempIndices);
                     }
                 }
-                
                 this.offset += subHeader.size;
             } else {
                 this.offset += subHeader.size;
@@ -197,7 +216,6 @@ export class BSPParser {
 
         return {
             vertCount: numVertices,
-            triCount: numTriangles / 3,
             indices: indices, 
             positions: positions,
             materialIndex: matIndex
