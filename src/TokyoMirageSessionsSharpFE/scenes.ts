@@ -201,7 +201,7 @@ const sceneDescs =
     new TMSFESceneDesc("f003_09", "Hee Ho Mart 2", ["f003_09"], [""]),
     new TMSFESceneDesc("f003_04", "Carabia", ["f003_04", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("f003_06", "Café Seiren", ["f003_06", "sky"], ["", ""], create_f003_06_gimmicks),
-    // new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"], ["", ""]), // not a wii u file, but the map layout file is big endian, which causes it to fail to load. maybe load the wii u version instead?
+    new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"], ["", ""]),
     new TMSFESceneDesc("f003_08", "Anzu", ["f003_08"], [""], create_f003_08_gimmicks),
     "Illusory 106",
     new TMSFESceneDesc("d003_01", "Illusory 106 1F to 3F", ["d003_01", "obj01", "obj02"], ["", "obj01", "obj02"], create_d003_01_gimmicks),

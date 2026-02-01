@@ -13,8 +13,16 @@ import { assert, readString } from "../util.js";
 export function parseLayout(buffer: ArrayBufferSlice): MapLayout
 {
     assert(readString(buffer, 0x0, 0x04) === 'LYTS');
+
     const view = buffer.createDataView();
-    const entry_count = view.getUint32(0x08, true);
+    
+    let little_endian = false;
+    if (view.getUint8(0x4) == 9)
+    {
+        little_endian = true;
+    }
+
+    const entry_count = view.getUint32(0x08, little_endian);
 
     const heal_point_entries: MapLayoutEntry[] = [];
     const treasurebox_01_entries: MapLayoutEntry[] = [];
@@ -31,23 +39,23 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     let entry_offset = ENTRY_START;
     for (let i = 0; i < entry_count; i++)
     {
-        const group_index = view.getUint32(entry_offset + 0x0, true);
-        const unk_04 = view.getUint32(entry_offset + 0x4, true);
-        const id = view.getUint32(entry_offset + 0x08, true);
+        const group_index = view.getUint32(entry_offset + 0x0, little_endian);
+        const unk_04 = view.getUint32(entry_offset + 0x4, little_endian);
+        const id = view.getUint32(entry_offset + 0x08, little_endian);
 
-        const position_x = view.getFloat32(entry_offset + 0xC, true);
-        const position_y = view.getFloat32(entry_offset + 0x10, true);
-        const position_z = view.getFloat32(entry_offset + 0x14, true);
+        const position_x = view.getFloat32(entry_offset + 0xC, little_endian);
+        const position_y = view.getFloat32(entry_offset + 0x10, little_endian);
+        const position_z = view.getFloat32(entry_offset + 0x14, little_endian);
         const position = vec3.fromValues(position_x, position_y, position_z);
 
-        const half_extent_x = view.getFloat32(entry_offset + 0x18, true);
-        const half_extent_y = view.getFloat32(entry_offset + 0x1C, true);
-        const half_extent_z = view.getFloat32(entry_offset + 0x20, true);
+        const half_extent_x = view.getFloat32(entry_offset + 0x18, little_endian);
+        const half_extent_y = view.getFloat32(entry_offset + 0x1C, little_endian);
+        const half_extent_z = view.getFloat32(entry_offset + 0x20, little_endian);
         const half_extents = vec3.fromValues(half_extent_x, half_extent_y, half_extent_z);
 
-        const rotation_x = view.getFloat32(entry_offset + 0x24, true);
-        const rotation_y = view.getFloat32(entry_offset + 0x28, true);
-        const rotation_z = view.getFloat32(entry_offset + 0x2C, true);
+        const rotation_x = view.getFloat32(entry_offset + 0x24, little_endian);
+        const rotation_y = view.getFloat32(entry_offset + 0x28, little_endian);
+        const rotation_z = view.getFloat32(entry_offset + 0x2C, little_endian);
         const rotation = vec3.fromValues
         (
             rotation_x * MathConstants.DEG_TO_RAD,
@@ -55,8 +63,8 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
             rotation_z * MathConstants.DEG_TO_RAD
         );
 
-        const unk_8C_string_offset = view.getUint32(entry_offset + 0x8C, true);
-        const unk_8C = readString(buffer, unk_8C_string_offset, 0xFF, true);
+        const unk_8C_string_offset = view.getUint32(entry_offset + 0x8C, little_endian);
+        const unk_8C = readString(buffer, unk_8C_string_offset, 0xFF, little_endian);
 
         const entry: MapLayoutEntry = { group_index, unk_04, id, position, half_extents, rotation, unk_8C };
         switch (group_index)
