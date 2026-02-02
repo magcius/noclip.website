@@ -410,6 +410,10 @@ export class VTF {
         return !!(this.flags & (VTFFlags.ONEBITALPHA | VTFFlags.EIGHTBITALPHA));
     }
 
+    public isCubemap(): boolean {
+        return !!(this.flags & VTFFlags.ENVMAP);
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.destroyTexture(this.gfxTextures[i]);
