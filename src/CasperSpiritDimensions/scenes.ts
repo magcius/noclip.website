@@ -8,15 +8,24 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 import { Parser, Texture, WorldData } from "./bin.js";
 import { LevelRenderer } from "./render.js";
 
+const clearColors: number[][] = [
+    [34, 35, 45], [128, 128, 128], [128, 128, 128], [128, 128, 128],
+    [128, 128, 128], [128, 128, 128], [128, 128, 128], [128, 128, 128],
+    [128, 128, 128], [128, 128, 128], [128, 128, 128], [128, 128, 128],
+    [128, 128, 128], [128, 128, 128], [128, 128, 128], [7, 19, 34]
+];
+
 class CasperRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
+    private clearColor: number[];
 
-    constructor(device: GfxDevice, world: WorldData, textures: Map<string, Texture>) {
+    constructor(device: GfxDevice, levelNumber: number, world: WorldData, textures: Map<string, Texture>) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
         this.levelRenderer = new LevelRenderer(cache, world, textures);
+        this.clearColor = clearColors[levelNumber - 1];
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -28,7 +37,7 @@ class CasperRenderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        mainColorDesc.clearColor = {r: 128 / 255, g: 128 / 255, b: 128 / 255, a: 1};
+        mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -56,17 +65,19 @@ class CasperRenderer implements SceneGfx {
 const pathBase = "CasperSD";
 class CasperScene implements SceneDesc {
     public id: string;
+    private levelNumber: number;
 
     constructor(private bspPath: string, public name: string) {
         this.id = bspPath.split("/")[1].split(".")[0];
+        this.levelNumber = Number(this.id.split("LEVEL")[1]);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const bspFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
-        const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${Number(this.id.split("LEVEL")[1]).toString()}.DIC`);
+        const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${this.levelNumber}.DIC`);
         const world = new Parser(bspFile.createDataView()).parseBSP();
         const textures = new Parser(dicFile.createDataView()).parseDIC(device, world.materials);
-        return new CasperRenderer(device, world, textures);
+        return new CasperRenderer(device, this.levelNumber, world, textures);
     }
 }
 

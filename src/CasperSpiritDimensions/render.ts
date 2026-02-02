@@ -1,7 +1,8 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
@@ -64,11 +65,11 @@ void main() {
     // gl_FragColor = finalColor;
 
     vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    vec3 ambient = vec3(0.1); // close approx to PS2 appearance
+    vec3 ambient = vec3(0.075); // close approx to PS2 appearance
     vec3 lightColor = v_Color + ambient;
     vec4 finalColor = texColor * vec4(clamp(lightColor, 0.0, 1.0), 1.0);
 
-    if (finalColor.a < 0.1) discard; // temp transparency approx
+    if (finalColor.a < 0.1) discard;
 
     gl_FragColor = finalColor;
 }
@@ -133,12 +134,45 @@ export class LevelRenderer {
             ],
             { buffer: this.indexBuffer, byteOffset: 0 }
         );
+
+        // opaque pass
         for (const batch of this.batches) {
-            const renderInst = renderInstManager.newRenderInst();
             const texture = this.textures.get(batch.textureName);
-            if (texture === undefined) {
+            if (!texture || texture.hasAlpha) {
                 continue;
             }
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.setSamplerBindingsFromTextureMappings([{
+                gfxTexture: texture.gfxTexture,
+                gfxSampler: renderHelper.renderCache.createSampler({
+                    minFilter: GfxTexFilterMode.Bilinear,
+                    magFilter: GfxTexFilterMode.Bilinear,
+                    mipFilter: GfxMipFilterMode.Nearest,
+                    wrapS: GfxWrapMode.Repeat,
+                    wrapT: GfxWrapMode.Repeat
+                }),
+                lateBinding: null
+            }]);
+            renderInst.setDrawCount(batch.indexCount, batch.indexOffset);
+            renderInstManager.submitRenderInst(renderInst);
+        }
+
+        // semi-transparent pass
+        for (const batch of this.batches) {
+            const texture = this.textures.get(batch.textureName);
+            if (!texture || !texture.hasAlpha) {
+                continue;
+            }
+            const renderInst = renderInstManager.newRenderInst();
+            const megaState = renderInst.getMegaStateFlags();
+            megaState.depthCompare = GfxCompareMode.GreaterEqual;
+            setAttachmentStateSimple(megaState, {
+                channelWriteMask: GfxChannelWriteMask.RGB,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            });
+            renderInst.setMegaStateFlags(megaState);
             renderInst.setSamplerBindingsFromTextureMappings([{
                 gfxTexture: texture.gfxTexture,
                 gfxSampler: renderHelper.renderCache.createSampler({
@@ -161,8 +195,8 @@ export class LevelRenderer {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
-        for (const t of this.textures) {
-            t[1].destroy(device);
+        for (const t of this.textures.values()) {
+            device.destroyTexture(t.gfxTexture);
         }
     }
 

@@ -45,7 +45,7 @@ interface Mesh {
 export class Texture {
     public gfxTexture: GfxTexture;
 
-    constructor(device: GfxDevice, rgba: Uint8Array, width: number, height: number) {
+    constructor(device: GfxDevice, public rgba: Uint8Array, public width: number, public height: number, public hasAlpha: boolean = false) {
         const gfxTexture = device.createTexture({
             width, height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -56,10 +56,6 @@ export class Texture {
         });
         device.uploadTextureData(gfxTexture, 0, [rgba]);
         this.gfxTexture = gfxTexture;
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyTexture(this.gfxTexture);
     }
 }
 
@@ -275,9 +271,9 @@ export class Parser {
         const txdHeader = this.readHeader();
         const txdEnd = this.offset + txdHeader.size;
         const txdMetaStructHeader = this.readHeader(); 
-        const materialCount = this.view.getUint8(this.offset);
         this.offset += 4;
-        const textures = new Map();
+
+        const textures: Map<string, Texture> = new Map();
         while (this.offset < txdEnd) {
             const nativeHeader = this.readHeader();
             const nativeEnd = this.offset + nativeHeader.size;
@@ -288,7 +284,7 @@ export class Parser {
             this.offset += structMeta.size;
             const nameHeader = this.readHeader();
             const textureName = this.readString(nameHeader.size);
-            if (materials.indexOf(textureName) === -1) {
+            if (materials.indexOf(textureName) === -1) { // only parse materials with known name
                 this.offset = nativeEnd;
                 continue;
             }
@@ -336,15 +332,26 @@ export class Parser {
                         rgba[outIdx] = cleanPalette[p];
                         rgba[outIdx + 1] = cleanPalette[p + 1];
                         rgba[outIdx + 2] = cleanPalette[p + 2];
-                        rgba[outIdx + 3] = 255; // Math.min(cleanPalette[p + 3] * 2, 255);
+                        rgba[outIdx + 3] = 255;
                     }
                 }
             } else if (bitDepth === 32) {
-                rgba = new Uint8Array(this.view.buffer, this.offset, pixelCount * 4);
+                const rawData = new Uint8Array(this.view.buffer, this.offset + 80, pixelCount * 4);
+                // there's also a copy of the texture at half resolution after another 80-byte offset
+
+                // scale alpha to 255 scale
+                rgba = new Uint8Array(pixelCount * 4);
+                for (let i = 0; i < rgba.length; i += 4) {
+                    rgba[i] = rawData[i];
+                    rgba[i + 1] = rawData[i + 1];
+                    rgba[i + 2] = rawData[i + 2];
+                    rgba[i + 3] = Math.min((rawData[i + 3] * 255) / 128, 255);
+                }
             }
-            textures.set(textureName, new Texture(device, rgba, width, height));
+            textures.set(textureName, new Texture(device, rgba, width, height, alphaName.length > 0));
             this.offset = nativeEnd;
         }
+
         return textures;
     }
 
