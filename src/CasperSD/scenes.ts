@@ -5,7 +5,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { BSPParser, WorldData } from "./bin.js";
+import { Parser, WorldData } from "./bin.js";
 import { LevelRenderer } from "./render.js";
 
 class CasperRenderer implements SceneGfx {
@@ -58,14 +58,14 @@ class CasperScene implements SceneDesc {
     public id: string;
 
     constructor(private bspPath: string, public name: string) {
-        this.id = Number(bspPath.split("LEVEL")[1].split(".")[0]).toString();
+        this.id = bspPath.split("/")[1].split(".")[0];
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const file = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
-        const p = new BSPParser(file.createDataView());
-        const world = p.parse();
-        const renderer = new CasperRenderer(device, world);
+        const bspFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
+        const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.id.replace("0", "")}.DIC`);
+        new Parser(dicFile.createDataView()).parseDIC();
+        const renderer = new CasperRenderer(device, new Parser(bspFile.createDataView()).parseBSP());
         return renderer;
     }
 }

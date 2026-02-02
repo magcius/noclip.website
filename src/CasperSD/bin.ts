@@ -1,16 +1,19 @@
 enum ChunkID {
-    STRUCT = 0x01,
-    STRING = 0x02,
-    EXTENSION = 0x03,
-    TEXTURE = 0x06,
-    MATERIAL = 0x07,
-    MATERIAL_LIST = 0x08,
-    ATOMIC_SECTION = 0x09,
-    PLANE_SECTION = 0x0A,
-    WORLD = 0x0B,
-    BIN_MESH_PLG = 0x50E,
+    STRUCT = 1,
+    STRING = 2,
+    EXTENSION = 3,
+    TEXTURE = 6,
+    MATERIAL = 7,
+    MATERIAL_LIST = 8,
+    ATOMIC_SECTION = 9,
+    PLANE_SECTION = 10,
+    WORLD = 11,
+    TEXTURE_NATIVE = 0x15,
+    TEXTURE_DICTIONARY = 0x16,
+    SKY_MIPMAP_VAL = 0x110,
     COLLISION_PLG = 0x11D,
-    MATERIAL_EFFECTS_PLG = 0x120
+    MATERIAL_EFFECTS_PLG = 0x120,
+    BIN_MESH_PLG = 0x50E
 }
 
 export interface WorldSector {
@@ -32,7 +35,7 @@ interface Mesh {
     colors: number[];
 }
 
-export class BSPParser {
+export class Parser {
     private view: DataView;
     private offset: number = 0;
 
@@ -48,7 +51,7 @@ export class BSPParser {
         return { id, size };
     }
 
-    public parse(): WorldData {
+    public parseBSP(): WorldData {
         const worldData: WorldData = {
             materials: [],
             rootSector: {type: "node", children: []}
@@ -233,6 +236,137 @@ export class BSPParser {
         this.offset = extEnd;
 
         return { vertexCount, indices,  positions, uvs, colors };
+    }
+
+    public parseDIC() {
+        this.offset = 0;
+        const txdHeader = this.readHeader();
+        const txdEnd = this.offset + txdHeader.size;
+        const txdMetaStructHeader = this.readHeader(); 
+        const materialCount = this.view.getUint8(this.offset);
+        this.offset += 4; 
+        let index = -1;
+        let debugWidth = 0;
+        let debugHeight = 0;
+        while (this.offset < txdEnd) {
+            index += 1;
+            const nativeHeader = this.readHeader();
+            if (nativeHeader.id !== 0x15) {
+                this.offset += nativeHeader.size;
+                continue;
+            }
+            const nativeEnd = this.offset + nativeHeader.size;
+            const structMeta1 = this.readHeader();
+            this.offset += structMeta1.size;
+            const nameHeader = this.readHeader();
+            const textureName = this.readString(nameHeader.size);
+            const alphaHeader = this.readHeader();
+            const alphaName = this.readString(alphaHeader.size);
+            const pixelStructHeader = this.readHeader();
+            const pixelStructEnd = this.offset + pixelStructHeader.size;
+            const pixelStructMeta = this.readHeader(); // always 64 bytes
+            const pixelStructMetaEnd = this.offset + pixelStructMeta.size;
+            const pixelStructMetaOffset = this.offset;
+            const width = this.view.getUint16(this.offset, true);
+            const height = this.view.getUint16(this.offset + 4, true);
+            const bitDepth = this.view.getUint8(this.offset + 8);
+            this.offset = pixelStructMetaEnd;
+            const pixelDataHeader = this.readHeader();
+            if (bitDepth === 8) {
+                const indicesOffset = this.offset + 16;
+                const pixelCount = width * height;
+                const indices = new Uint8Array(this.view.buffer, indicesOffset, pixelCount);
+                const paletteOffset = this.offset + pixelDataHeader.size - 1024;
+                const rawPalette = new Uint8Array(this.view.buffer, paletteOffset, 1024);
+                
+                const cleanPalette = new Uint8Array(256 * 4);
+                for (let i = 0; i < 256; i++) {
+                    const swizzledIdx = (i & 0xE7) | ((i & 0x08) << 1) | ((i & 0x10) >> 1);
+                    for (let c = 0; c < 4; c++) {
+                        cleanPalette[i * 4 + c] = rawPalette[swizzledIdx * 4 + c];
+                    }
+                }
+
+                const rgba = new Uint8Array(width * height * 4);
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const sx = (x + 32) % width;
+
+                        const block_location = (y & (~0xf)) * width + (sx & (~0xf)) * 2;
+                        const swap_selector = (((y + 2) >> 2) & 0x1) * 4;
+                        const posY = (((y & (~3)) >> 1) + (y & 1)) & 0x7;
+                        const column_location = posY * width * 2 + ((sx + swap_selector) & 0x7) * 4;
+                        const byte_num = ((y >> 1) & 1) + ((sx >> 2) & 2);
+
+                        const swizzledAddr = block_location + column_location + byte_num;
+
+                        if (swizzledAddr < indices.length) {
+                            const colorIdx = indices[swizzledAddr];
+                            const outIdx = (y * width + x) * 4;
+                            const p = colorIdx * 4;
+
+                            rgba[outIdx + 0] = cleanPalette[p + 0];
+                            rgba[outIdx + 1] = cleanPalette[p + 1];
+                            rgba[outIdx + 2] = cleanPalette[p + 2];
+                            rgba[outIdx + 3] = 255;
+                        }
+                    }
+                }
+                this.debugRenderToCanvas(rgba, width, height, textureName, debugWidth, debugHeight);
+                debugWidth += width + 32;
+                if (debugWidth > 2000) {
+                    debugWidth = 0;
+                    debugHeight += 150;
+                }
+            } else if (bitDepth === 32) {
+                // const rgbaPixels = new Uint8Array(this.view.buffer, this.offset, width * height * 4);
+            }
+            
+            this.offset = nativeEnd;
+        }
+    }
+
+    private getGrayscaleTestPalette(): Uint8Array {
+        const palette = new Uint8Array(1024);
+        for (let i = 0; i < 256; i++) {
+            const offset = i * 4;
+            palette[offset + 0] = i;
+            palette[offset + 1] = i;
+            palette[offset + 2] = i;
+            palette[offset + 3] = 255;
+        }
+        return palette;
+    }
+
+    private unswizzlePalette(rawPalette: Uint8Array): Uint8Array {
+        const cleanPalette = new Uint8Array(1024);
+        for (let i = 0; i < 256; i++) {
+            const p = (Math.floor(i / 8) % 4 === 1) ? i + 8 : (Math.floor(i / 8) % 4 === 2) ? i - 8 : i;
+            cleanPalette[i * 4 + 0] = rawPalette[p * 4 + 0]; // R
+            cleanPalette[i * 4 + 1] = rawPalette[p * 4 + 1]; // G
+            cleanPalette[i * 4 + 2] = rawPalette[p * 4 + 2]; // B
+            const alpha = rawPalette[p * 4 + 3];
+            cleanPalette[i * 4 + 3] = Math.min(255, alpha * 2); 
+        }
+        return cleanPalette;
+    }
+
+    private debugRenderToCanvas(rgba: Uint8Array, width: number, height: number, name: string, dw: number, dh: number) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        const imgData = ctx.createImageData(width, height);
+        imgData.data.set(rgba);
+        ctx.putImageData(imgData, 0, 0);
+        canvas.style.position = 'fixed';
+        canvas.style.top = `${300 + dh}px`;
+        canvas.style.left = `${10 + dw}px`;
+        canvas.style.zIndex = '9999';
+        canvas.style.border = '1px solid red';
+        canvas.style.background = 'black';
+        canvas.title = name;
+        document.body.appendChild(canvas);
     }
 
     private readString(size: number): string {
