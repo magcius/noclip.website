@@ -7,10 +7,10 @@ use crate::unity::types::common::NullTerminatedAsciiString;
 
 #[derive(DekuRead, Debug)]
 pub struct AllHeader {
-    pub n_items: u32,
-    pub unk0: u16,
-    pub unk1: u16,
-    #[deku(pad_bytes_before = "8", count = "n_items")]
+    pub _n_items: u32,
+    pub _unk0: u16,
+    pub _unk1: u16,
+    #[deku(pad_bytes_before = "8", count = "_n_items")]
     pub items: Vec<AllHeaderItem>,
 }
 

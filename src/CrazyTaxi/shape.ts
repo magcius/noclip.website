@@ -166,8 +166,7 @@ export class Shape {
         ];
 
 
-        const drawsLoc = shape.mystery_loc()!;
-        const drawsData = fileManager.getData(drawsLoc);
+        const drawsData = fileManager.getData(shape.mystery_loc()!);
         const draws = shape.parse_draw_data(drawsData.createTypedArray(Uint8Array));
         const dlSection = fileManager.getData(shape.display_list_loc()!);
         const dlOffset = shape.display_list_offs();
@@ -216,6 +215,7 @@ export class Shape {
             const pretranslated = this.pos[0] === 0 && this.pos[1] === 0 && this.pos[2] === 0;
 
             if(!(prescaled && pretranslated)) {
+                // seems to only happen in CrazyBox levels
                 console.warn(`VTXFMT1 shape that's not prescaled or pretranslated: ${this.name}`)
             }
             for (const draw of this.draws) {

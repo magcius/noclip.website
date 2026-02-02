@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Cursor};
+use std::io::Cursor;
 
 use deku::prelude::*;
 use wasm_bindgen::prelude::*;

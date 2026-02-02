@@ -2,7 +2,6 @@ use std::{collections::HashMap, io::Cursor};
 
 use anyhow::{Context, Result};
 use deku::{reader::Reader, DekuReader};
-use nalgebra_glm::normalize;
 use shp::{Shape, ShpHeader};
 use tex::{TexHeader, Texture};
 use wasm_bindgen::prelude::*;
