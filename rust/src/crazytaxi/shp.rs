@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{collections::HashMap, io::Cursor};
 
 use deku::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -60,6 +60,41 @@ pub struct Shape {
 struct TextureName {
     #[deku(pad_bytes_after = "44 - name.bytes.len()")]
     name: NullTerminatedAsciiString,
+}
+
+#[wasm_bindgen(js_name = "CTShapeDrawType")]
+#[derive(Copy, Clone)]
+pub enum ShapeDrawType {
+    Opaque = 0,
+    Transparent = 1,
+    Unk = 2,
+}
+
+impl Default for ShapeDrawType {
+    fn default() -> Self {
+        ShapeDrawType::Opaque
+    }
+}
+
+#[wasm_bindgen(js_name = "CTShapeDrawInfo")]
+#[derive(DekuRead)]
+#[deku(endian = "big")]
+pub struct ShapeDrawInfo {
+    pub display_list_addr: u32,
+    pub display_list_size: u32,
+    pub texture_index: u32,
+    pub unk_0x0c: u32,
+    pub unk_0x10: u32,
+    pub unk_0x14: u32,
+    pub material_id: u32,
+    pub unk_0x1c: u32,
+    pub unk_r: u8,
+    pub unk_g: u8,
+    pub unk_b: u8,
+    pub unk_a: u8,
+
+    #[deku(skip)]
+    pub draw_type: ShapeDrawType,
 }
 
 impl Shape {
@@ -136,6 +171,40 @@ impl Shape {
             offset: self.offset + relative_offset,
             length: self.next_offset(0) - relative_offset,
         }
+    }
+
+    fn get_draw_type(&self, draw_idx: u32) -> ShapeDrawType {
+        if draw_idx < self.header.num_opaque_draws {
+            ShapeDrawType::Opaque
+        } else if draw_idx < self.header.num_opaque_draws + self.header.num_transparent_draws {
+            ShapeDrawType::Transparent
+        } else {
+            ShapeDrawType::Unk
+        }
+    }
+
+    fn total_draw_count(&self) -> u32 {
+        self.header.num_opaque_draws + self.header.num_transparent_draws + self.header.num_unk_draws
+    }
+
+    pub fn parse_draw_data(&self, data: &[u8]) -> Result<Vec<ShapeDrawInfo>, String> {
+        let mut result = Vec::new();
+        let mut reader = Reader::new(Cursor::new(data));
+        let mut dl_addrs = Vec::new();
+
+        // some sanity checks
+        let draw_count = data.len() / 36;
+        assert!(draw_count as u32 == self.total_draw_count());
+
+        for i in 0..draw_count {
+            let mut draw = ShapeDrawInfo::from_reader_with_ctx(&mut reader, ())
+                .map_err(|err| format!("err parsing ShapeDrawInfo {}", err))?;
+            draw.draw_type = self.get_draw_type(i as u32);
+            dl_addrs.push(draw.display_list_addr);
+            result.push(draw);
+        }
+
+        Ok(result)
     }
 
     pub fn nrm_loc(&self) -> Option<FileLoc> {

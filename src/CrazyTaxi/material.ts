@@ -14,6 +14,7 @@ import { setMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import { Shape, ShapeDrawCall, ShapeDrawType } from "./shape";
 import { FileManager, FriendlyLoc } from "./util.js";
+import { CTShapeDrawType } from "../../rust/pkg/noclip_support.js";
 
 export class TextureCache {
     public textureMap: Map<string, Texture> = new Map();
@@ -101,7 +102,7 @@ export class Material {
     public draws: ShapeDrawCall[] = [];
     public name: string;
     public visible = true;
-    public drawType: ShapeDrawType;
+    public drawType: CTShapeDrawType;
     public materialId: number;
     public gxLayout: LoadedVertexLayout;
 
@@ -112,9 +113,9 @@ export class Material {
 
     constructor(private cache: GfxRenderCache, public texture: Texture, draw: ShapeDrawCall) {
         this.gxLayout = draw.vertexLayout;
-        this.drawType = draw.drawType;
-        const dtStr = this.drawType === ShapeDrawType.Opaque ? 'opaque' : this.drawType === ShapeDrawType.Transparent ? 'transparent' : 'unk';
-        this.materialId = draw.materialId;
+        this.drawType = draw.draw.draw_type;
+        const dtStr = this.drawType === CTShapeDrawType.Opaque ? 'opaque' : this.drawType === CTShapeDrawType.Transparent ? 'transparent' : 'unk';
+        this.materialId = draw.draw.material_id;
         this.name = `${texture.name} (mat ${dtStr} ${this.materialId})`
         this.inputLayout = createInputLayout(cache, this.gxLayout);
 
@@ -135,11 +136,11 @@ export class Material {
         mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO); // 0 0xf 8 0xa 0xf
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
 
-        if (this.drawType === ShapeDrawType.Opaque) {
+        if (this.drawType === CTShapeDrawType.Opaque) {
             mb.setBlendMode(GX.BlendMode.NONE, 4, 5, GX.LogicOp.SET);
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0x00, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0x00);
             mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        } else if (this.drawType === ShapeDrawType.Transparent) {
+        } else if (this.drawType === CTShapeDrawType.Transparent) {
             mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
             mb.setAlphaCompare(GX.CompareType.GREATER, 0x40, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x40);
             mb.setZMode(true, GX.CompareType.LEQUAL, true);
@@ -169,8 +170,8 @@ export class Material {
 
     public isCompatible(draw: ShapeDrawCall): boolean {
         const layoutMatch = JSON.stringify(this.gxLayout) === JSON.stringify(draw.vertexLayout);
-        const drawTypeMatch = draw.drawType === this.drawType;
-        const materialIdMatch = draw.materialId === this.materialId;
+        const drawTypeMatch = draw.draw.draw_type === this.drawType;
+        const materialIdMatch = draw.draw.material_id === this.materialId;
         return layoutMatch && drawTypeMatch;
     }
 
@@ -315,13 +316,13 @@ export class MaterialCache {
 
     public addShape(shape: Shape) {
         for (const draw of shape.draws) {
-            let nMaterialIds = this.materialIds.get(draw.materialId);
+            let nMaterialIds = this.materialIds.get(draw.draw.material_id);
             if (!nMaterialIds) {
-                this.materialIds.set(draw.materialId, 0);
+                this.materialIds.set(draw.draw.material_id, 0);
                 nMaterialIds = 0;
             }
-            this.materialIds.set(draw.materialId, nMaterialIds + 1);
-            const textureName = shape.textures[draw.textureIndex];
+            this.materialIds.set(draw.draw.material_id, nMaterialIds + 1);
+            const textureName = shape.textures[draw.draw.texture_index];
             const texture = assertExists(this.textureCache.textureMap.get(textureName));
             const material = this.findOrCreateMaterial(texture, draw);
             material.addDraw(shape, draw);

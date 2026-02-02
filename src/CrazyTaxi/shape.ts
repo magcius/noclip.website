@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { CTFileLoc } from "../../rust/pkg/noclip_support";
+import { CTFileLoc, CTShapeDrawInfo } from "../../rust/pkg/noclip_support";
 import { AABB } from "../Geometry";
 import { LoadedVertexData, LoadedVertexLayout, GX_VtxDesc, GX_Array, getAttributeByteSize, compileVtxLoaderMultiVat, GX_VtxAttrFmt, VtxLoader } from "../gx/gx_displaylist"
 import * as GX from '../gx/gx_enum.js';
@@ -119,10 +119,7 @@ export enum ShapeDrawType {
 export interface ShapeDrawCall {
     vertexData: LoadedVertexData,
     vertexLayout: LoadedVertexLayout,
-    textureIndex: number,
-    drawType: ShapeDrawType,
-    materialId: number,
-    otherDrawData: Uint8Array,
+    draw: CTShapeDrawInfo,
 }
 
 export class Shape {
@@ -134,9 +131,6 @@ export class Shape {
     public defaultMaterialId: number;
     public loc: FriendlyLoc;
     public draws: ShapeDrawCall[] = [];
-    public numOpaqueDraws: number;
-    public numTransparentDraws: number;
-    public numUnkDraws: number;
     public boundingRadius: number;
     public vertexFormats: Set<GX.VtxFmt> = new Set();
     public textures: string[] = [];
@@ -146,9 +140,6 @@ export class Shape {
         const shape = fileManager.fileStore.get_shape(name)!;
         this.loc = fileManager.getLoc(shape.header_loc());
         this.boundingRadius = shape.bounding_radius();
-        this.numOpaqueDraws = shape.num_opaque_draws();
-        this.numTransparentDraws = shape.num_transparent_draws();
-        this.numUnkDraws = shape.num_unk_draws();
         this.defaultMaterialId = shape.default_material_id();
         let x = shape.pos_and_scale();
         vec3.set(this.pos, x[0], x[1], -x[2]); // FIXME why do we negate here
@@ -157,48 +148,6 @@ export class Shape {
         const textures = shape.textures;
         for (let i = 0; i < textures.length; i++) {
             this.textures[i] = textures[i].toLowerCase();
-        }
-
-        const dlAddrs = [];
-        const textureIdxs = [];
-        const otherDrawData: Uint8Array[] = [];
-        const drawTypes: ShapeDrawType[] = [];
-        const materialIds = [];
-        const drawsLoc = shape.mystery_loc()!;
-        const drawsData = fileManager.getData(drawsLoc);
-        const drawsDataView = drawsData.createDataView();
-        const drawCount = Math.floor(drawsData.byteLength / 36);
-        assert(drawCount === this.numOpaqueDraws + this.numTransparentDraws + this.numUnkDraws);
-        for (let i = 0; i < drawCount; i++) {
-            const offs = i * 36;
-            const dlAddr = drawsDataView.getUint32(offs + 0x0);
-            if (dlAddr === 0x38) continue; // the first one seems to always be empty?
-            const vtxAddr = drawsDataView.getUint32(offs + 0x4);
-            const texIdx = drawsDataView.getUint32(offs + 0x8);
-            const materialId = drawsDataView.getUint32(offs + 0x18);
-            if (materialId === this.defaultMaterialId) {
-                console.warn(this.name);
-            }
-            if (i < this.numOpaqueDraws) {
-                drawTypes.push(ShapeDrawType.Opaque);
-            } else if (i < this.numTransparentDraws) {
-                drawTypes.push(ShapeDrawType.Transparent);
-            } else {
-                drawTypes.push(ShapeDrawType.Unk);
-            }
-            materialIds.push(materialId);
-            dlAddrs.push(dlAddr);
-            textureIdxs.push(texIdx);
-            otherDrawData.push(drawsData.slice(offs + 0xc, offs + 36).createTypedArray(Uint8Array));
-        }
-
-        const sortedDLAddrs = dlAddrs.slice();
-        sortedDLAddrs.sort((a, b) => a - b);
-        const dlSizesByAddr: Map<number, number> = new Map();
-        for (let i = 0; i < sortedDLAddrs.length - 1; i++) {
-            const size = sortedDLAddrs[i + 1] - sortedDLAddrs[i];
-            assert(size > 0);
-            dlSizesByAddr.set(sortedDLAddrs[i], size);
         }
 
         const attrs: [GX.Attr, CTFileLoc | undefined][] = [
@@ -216,15 +165,20 @@ export class Shape {
             [GX.Attr.TEX7, shape.tex_loc(7)],
         ];
 
+
+        const drawsLoc = shape.mystery_loc()!;
+        const drawsData = fileManager.getData(drawsLoc);
+        const draws = shape.parse_draw_data(drawsData.createTypedArray(Uint8Array));
         const dlSection = fileManager.getData(shape.display_list_loc()!);
         const dlOffset = shape.display_list_offs();
         const vertexFormats: Set<GX.VtxFmt> = new Set();
-        for (let i = 0; i < dlAddrs.length; i++) {
-            const addr = dlAddrs[i];
-            let dlData = dlSection.slice(addr - dlOffset);
-            const size = dlSizesByAddr.get(addr);
-            if (size) {
-                dlData = dlData.slice(0, size);
+        for (let i = 0; i < draws.length; i++) {
+            const draw = draws[i];
+            assert(draw.material_id !== this.defaultMaterialId);
+            if (draw.display_list_size === 0) continue;
+            let dlData = dlSection.slice(draw.display_list_addr - dlOffset);
+            if (draw.display_list_size) {
+                dlData = dlData.slice(0, draw.display_list_size);
             }
             const vtxFormat = dlData.createDataView().getUint8(0) & 0x07;
             vertexFormats.add(vtxFormat);
@@ -251,10 +205,7 @@ export class Shape {
             this.draws.push({
                 vertexData,
                 vertexLayout: vtxLoader.loadedVertexLayout,
-                materialId: materialIds[i],
-                textureIndex: textureIdxs[i],
-                drawType: drawTypes[i],
-                otherDrawData: otherDrawData[i],
+                draw,
             })
         }
 
