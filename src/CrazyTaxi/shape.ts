@@ -110,10 +110,17 @@ function createVATs(): GX_VtxAttrFmt[][] {
 
 const VATS = createVATs();
 
+export enum ShapeDrawType {
+    Opaque = 1,
+    Transparent = 2,
+    Unk = 3,
+}
+
 export interface ShapeDrawCall {
     vertexData: LoadedVertexData,
     vertexLayout: LoadedVertexLayout,
     textureIndex: number,
+    drawType: ShapeDrawType,
     materialId: number,
     otherDrawData: Uint8Array,
 }
@@ -124,8 +131,12 @@ export class Shape {
     public visible = true;
     public scale: vec3 = vec3.create();
     public isSkybox: boolean;
+    public defaultMaterialId: number;
     public loc: FriendlyLoc;
     public draws: ShapeDrawCall[] = [];
+    public numOpaqueDraws: number;
+    public numTransparentDraws: number;
+    public numUnkDraws: number;
     public boundingRadius: number;
     public vertexFormats: Set<GX.VtxFmt> = new Set();
     public textures: string[] = [];
@@ -135,6 +146,10 @@ export class Shape {
         const shape = fileManager.fileStore.get_shape(name)!;
         this.loc = fileManager.getLoc(shape.header_loc());
         this.boundingRadius = shape.bounding_radius();
+        this.numOpaqueDraws = shape.num_opaque_draws();
+        this.numTransparentDraws = shape.num_transparent_draws();
+        this.numUnkDraws = shape.num_unk_draws();
+        this.defaultMaterialId = shape.default_material_id();
         let x = shape.pos_and_scale();
         vec3.set(this.pos, x[0], x[1], -x[2]); // FIXME why do we negate here
         vec3.set(this.scale, x[3], x[4], x[5]);
@@ -147,11 +162,13 @@ export class Shape {
         const dlAddrs = [];
         const textureIdxs = [];
         const otherDrawData: Uint8Array[] = [];
-        let materialIds = [];
+        const drawTypes: ShapeDrawType[] = [];
+        const materialIds = [];
         const drawsLoc = shape.mystery_loc()!;
         const drawsData = fileManager.getData(drawsLoc);
         const drawsDataView = drawsData.createDataView();
         const drawCount = Math.floor(drawsData.byteLength / 36);
+        assert(drawCount === this.numOpaqueDraws + this.numTransparentDraws + this.numUnkDraws);
         for (let i = 0; i < drawCount; i++) {
             const offs = i * 36;
             const dlAddr = drawsDataView.getUint32(offs + 0x0);
@@ -159,6 +176,16 @@ export class Shape {
             const vtxAddr = drawsDataView.getUint32(offs + 0x4);
             const texIdx = drawsDataView.getUint32(offs + 0x8);
             const materialId = drawsDataView.getUint32(offs + 0x18);
+            if (materialId === this.defaultMaterialId) {
+                console.warn(this.name);
+            }
+            if (i < this.numOpaqueDraws) {
+                drawTypes.push(ShapeDrawType.Opaque);
+            } else if (i < this.numTransparentDraws) {
+                drawTypes.push(ShapeDrawType.Transparent);
+            } else {
+                drawTypes.push(ShapeDrawType.Unk);
+            }
             materialIds.push(materialId);
             dlAddrs.push(dlAddr);
             textureIdxs.push(texIdx);
@@ -224,8 +251,9 @@ export class Shape {
             this.draws.push({
                 vertexData,
                 vertexLayout: vtxLoader.loadedVertexLayout,
-                textureIndex: textureIdxs[i],
                 materialId: materialIds[i],
+                textureIndex: textureIdxs[i],
+                drawType: drawTypes[i],
                 otherDrawData: otherDrawData[i],
             })
         }
@@ -235,7 +263,10 @@ export class Shape {
         if (vertexFormats.has(1)) {
             const prescaled = this.scale[0] === 1 && this.scale[1] === 1 && this.scale[2] === 1;
             const pretranslated = this.pos[0] === 0 && this.pos[1] === 0 && this.pos[2] === 0;
-            assert(prescaled && pretranslated);
+
+            if(!(prescaled && pretranslated)) {
+                console.warn(`VTXFMT1 shape that's not prescaled or pretranslated: ${this.name}`)
+            }
             for (const draw of this.draws) {
                 for (const buf of draw.vertexData.vertexBuffers) {
                     const verts = new Float32Array(buf);

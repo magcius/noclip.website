@@ -12,19 +12,19 @@ pub struct ShpHeader {
     #[deku(assert_eq = "1.0")]
     pub _version: f32,
     pub bounding_radius: f32,
-    pub unk_0x08: u32,
+    pub _xf_reg_mask: u32,
     pub unk_0x0c: u32,
     pub num_textures: u32,
-    pub unk_0x14: u32,
-    pub unk_0x18: u32,
-    pub unk_0x1c: u32,
+    pub num_opaque_draws: u32,
+    pub num_transparent_draws: u32,
+    pub num_unk_draws: u32,
     pub pos_x: f32,
     pub pos_y: f32,
     pub pos_z: f32,
     pub scale_x: f32,
     pub scale_y: f32,
     pub scale_z: f32,
-    pub unk_0x38: u32,
+    pub default_material_id: u32,
     pub unk_0x3c: u32,
     #[deku(pad_bytes_before = "32")]
     pub unk_0x60: u32,
@@ -39,7 +39,7 @@ pub struct ShpHeader {
     pub clr_offsets: [u32; 2],
     pub tex_offsets: [u32; 8],
     #[deku(pad_bytes_before = "20")]
-    pub unk4_0x110_offset: u32,
+    pub draw_list_offset: u32,
     pub _pos_offset_dupe: u32,
     pub display_list_offset: u32,
     pub texture_list_offset: u32,
@@ -90,7 +90,7 @@ impl Shape {
             self.header.tex_offsets[5],
             self.header.tex_offsets[6],
             self.header.tex_offsets[7],
-            self.header.unk4_0x110_offset,
+            self.header.draw_list_offset,
             self.header.display_list_offset,
             self.header.texture_list_offset,
         ];
@@ -111,6 +111,22 @@ impl Shape {
             offset: self.offset,
             length: self.length,
         }
+    }
+
+    pub fn num_unk_draws(&self) -> u32 {
+        self.header.num_unk_draws
+    }
+
+    pub fn num_transparent_draws(&self) -> u32 {
+        self.header.num_transparent_draws
+    }
+
+    pub fn num_opaque_draws(&self) -> u32 {
+        self.header.num_opaque_draws
+    }
+
+    pub fn default_material_id(&self) -> u32 {
+        self.header.default_material_id
     }
 
     pub fn pos_loc(&self) -> FileLoc {
@@ -150,7 +166,7 @@ impl Shape {
     }
 
     pub fn mystery_loc(&self) -> Option<FileLoc> {
-        let relative_offset = self.header.unk4_0x110_offset as usize;
+        let relative_offset = self.header.draw_list_offset as usize;
         if relative_offset == 0 {
             None
         } else {
@@ -179,7 +195,7 @@ impl Shape {
             self.header.norm_offset,
             self.header.clr_offsets[0],
             self.header.tex_offsets[0],
-            self.header.unk4_0x110_offset,
+            self.header.draw_list_offset,
             self.header.display_list_offset,
         ]
     }

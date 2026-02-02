@@ -12,7 +12,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from '../gx/gx_enum.js';
 import { setMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { assert, assertExists } from "../util";
-import { Shape, ShapeDrawCall } from "./shape";
+import { Shape, ShapeDrawCall, ShapeDrawType } from "./shape";
 import { FileManager, FriendlyLoc } from "./util.js";
 
 export class TextureCache {
@@ -101,6 +101,7 @@ export class Material {
     public draws: ShapeDrawCall[] = [];
     public name: string;
     public visible = true;
+    public drawType: ShapeDrawType;
     public materialId: number;
     public gxLayout: LoadedVertexLayout;
 
@@ -111,8 +112,10 @@ export class Material {
 
     constructor(private cache: GfxRenderCache, public texture: Texture, draw: ShapeDrawCall) {
         this.gxLayout = draw.vertexLayout;
+        this.drawType = draw.drawType;
+        const dtStr = this.drawType === ShapeDrawType.Opaque ? 'opaque' : this.drawType === ShapeDrawType.Transparent ? 'transparent' : 'unk';
         this.materialId = draw.materialId;
-        this.name = `${texture.name} (mat ${this.materialId})`
+        this.name = `${texture.name} (mat ${dtStr} ${this.materialId})`
         this.inputLayout = createInputLayout(cache, this.gxLayout);
 
         const mb = new GXMaterialBuilder();
@@ -125,21 +128,50 @@ export class Material {
     }
 
     public setMaterialParams(mb: GXMaterialBuilder) {
-        mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
-        mb.setAlphaCompare(GX.CompareType.GREATER, 0x00, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x00);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY); // 0, 1, 4, 0x3c, 0, 0x7d
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE); // 4 0 1 1 0 0 2
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0); // 0 0 0 7
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0); // 0, 0, 0, 0
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO); // 0 0xf 8 0xa 0xf
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
+
+        if (this.drawType === ShapeDrawType.Opaque) {
+            mb.setBlendMode(GX.BlendMode.NONE, 4, 5, GX.LogicOp.SET);
+            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0x00, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0x00);
+            mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        } else if (this.drawType === ShapeDrawType.Transparent) {
+            mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
+            mb.setAlphaCompare(GX.CompareType.GREATER, 0x40, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x40);
+            mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        } else {
+            mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
+            mb.setAlphaCompare(GX.CompareType.GREATER, 0x00, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x00);
+        }
+
+        if (this.materialId === 2) {
+            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO); // 0 7 5 4 7
+            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
+        } else if (this.materialId === 3) {
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE); // 4 0 1 1 0 0 2
+            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO); // 0 7 5 4 7
+            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
+        } else if (this.materialId === 5) {
+            mb.setBlendMode(GX.BlendMode.BLEND, 0, 4, GX.LogicOp.CLEAR);
+            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA); // 0 7 7 7 5
+            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
+            mb.setZMode(false, GX.CompareType.ALWAYS, false);
+        } else {
+            // TODO: the rest
+            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        }
     }
 
     public isCompatible(draw: ShapeDrawCall): boolean {
         const layoutMatch = JSON.stringify(this.gxLayout) === JSON.stringify(draw.vertexLayout);
+        const drawTypeMatch = draw.drawType === this.drawType;
         const materialIdMatch = draw.materialId === this.materialId;
-        return layoutMatch && materialIdMatch;
+        return layoutMatch && drawTypeMatch;
     }
 
     private getCurrentBatch(): MaterialDrawBatch {
@@ -256,6 +288,7 @@ export class Material {
 export class MaterialCache {
     public materialMap: Map<string, Material[]> = new Map();
     public materials: Material[] = [];
+    public materialIds: Map<number, number> = new Map();
 
     constructor(private cache: GfxRenderCache, private textureCache: TextureCache) {
     }
@@ -282,6 +315,12 @@ export class MaterialCache {
 
     public addShape(shape: Shape) {
         for (const draw of shape.draws) {
+            let nMaterialIds = this.materialIds.get(draw.materialId);
+            if (!nMaterialIds) {
+                this.materialIds.set(draw.materialId, 0);
+                nMaterialIds = 0;
+            }
+            this.materialIds.set(draw.materialId, nMaterialIds + 1);
             const textureName = shape.textures[draw.textureIndex];
             const texture = assertExists(this.textureCache.textureMap.get(textureName));
             const material = this.findOrCreateMaterial(texture, draw);
