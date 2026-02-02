@@ -24,11 +24,11 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
 
     const entry_count = view.getUint32(0x08, little_endian);
 
-    const event: MapLayoutEntry[] = [];
-    const group_1: MapLayoutEntry[] = [];
-    const object: MapLayoutEntry[] = [];
-    const group_4: MapLayoutEntry[] = [];
-    const group_5: MapLayoutEntry[] = [];
+    const event_entries: MapLayoutEntry[] = [];
+    const event_dir_entries: MapLayoutEntry[] = [];
+    const object_entries: MapLayoutEntry[] = [];
+    const enemy_entries: MapLayoutEntry[] = [];
+    const npc_entries: MapLayoutEntry[] = [];
     const heal_point_entries: MapLayoutEntry[] = [];
     const treasurebox_01_entries: MapLayoutEntry[] = [];
     const treasurebox_02_entries: MapLayoutEntry[] = [];
@@ -74,23 +74,23 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         switch (group_index)
         {
             case GROUP_INDEX_EVENT:
-                event.push(entry);
+                event_entries.push(entry);
                 break;
 
-            case GROUP_INDEX_1:
-                group_1.push(entry);
+            case GROUP_INDEX_EVENT_DIR:
+                event_dir_entries.push(entry);
                 break;
 
             case GROUP_INDEX_OBJECT:
-                object.push(entry);
+                object_entries.push(entry);
                 break;
 
-            case GROUP_INDEX_4:
-                group_4.push(entry);
+            case GROUP_INDEX_ENEMY:
+                enemy_entries.push(entry);
                 break;
 
-            case GROUP_INDEX_5:
-                group_5.push(entry);
+            case GROUP_INDEX_NPC:
+                npc_entries.push(entry);
                 break;
             
             case GROUP_INDEX_BLOCKSIDE:
@@ -121,6 +121,10 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
                 transparent_floor_entries.push(entry);
                 break;
 
+            case GROUP_INDEX_TREASURE_BOX_01:
+                treasurebox_01_entries.push(entry);
+                break;
+
             case GROUP_INDEX_TREASURE_BOX_02:
                 treasurebox_02_entries.push(entry);
                 break;
@@ -135,11 +139,11 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
 
     let map_layout =
     {
-        event,
-        group_1,
-        object,
-        group_4,
-        group_5,
+        event_entries,
+        event_dir_entries,
+        object_entries,
+        enemy_entries,
+        npc_entries,
         treasurebox_01_entries,
         treasurebox_02_entries,
         blockside_entries,
@@ -157,11 +161,11 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
 const ENTRY_START = 0x10;
 const ENTRY_SIZE = 0xA0;
 const GROUP_INDEX_EVENT = 0;
-const GROUP_INDEX_1 = 1;
+const GROUP_INDEX_EVENT_DIR = 1;
 const GROUP_INDEX_2 = 2;
 const GROUP_INDEX_OBJECT = 3;
-const GROUP_INDEX_4 = 4;
-const GROUP_INDEX_5 = 5;
+const GROUP_INDEX_ENEMY = 4;
+const GROUP_INDEX_NPC = 5;
 const GROUP_INDEX_TREASURE_BOX_01 = 8;
 const GROUP_INDEX_BLOCKSIDE = 9;
 const GROUP_INDEX_BLOCKWALL = 10;
@@ -184,7 +188,7 @@ const GROUP_INDEX_TREASURE_BOX_02 = 37;
  */
 export function get_layout_point(layout: MapLayout, id: number, offset_x: number, offset_y: number, offset_z: number): LayoutPoint
 {
-    const layout_point = get_point_from_group(layout.group_1, id);
+    const layout_point = get_point_from_group(layout.event_dir_entries, id);
 
     if (offset_x == 0.0 && offset_y == 0.0 && offset_z == 0.0)
     {
@@ -244,11 +248,11 @@ export function get_point_from_group(group: MapLayoutEntry[], id: number): Layou
 
 export interface MapLayout
 {
-    event: MapLayoutEntry[];
-    group_1: MapLayoutEntry[];
-    object: MapLayoutEntry[];
-    group_4: MapLayoutEntry[];
-    group_5: MapLayoutEntry[];
+    event_entries: MapLayoutEntry[];
+    event_dir_entries: MapLayoutEntry[];
+    object_entries: MapLayoutEntry[];
+    enemy_entries: MapLayoutEntry[];
+    npc_entries: MapLayoutEntry[];
     entries: MapLayoutEntry[];
     treasurebox_01_entries: MapLayoutEntry[];
     treasurebox_02_entries: MapLayoutEntry[];

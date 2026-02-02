@@ -15,6 +15,7 @@ export class TMSFEProgram extends DeviceProgram
 
     public static ub_SceneParams = 0;
 
+    // TODO: only get the information i need, not the whole fvtx fmat and fshp objects
     constructor(public fvtx: FVTX, public fmat: FMAT, public fshp: FSHP, public bone_matrix_array_length: number)
     {
         super();
@@ -35,13 +36,10 @@ layout(std140) uniform ub_SceneParams
     Mat3x4 u_BoneMatrices[${this.bone_matrix_array_length}];
 };
 
-uniform sampler2D s_diffuse;
-
 varying vec2 v_TexCoord0;
 
 #ifdef VERT
 ${this.define_inputs()}
-
 
 void mainVS()
 {
@@ -83,6 +81,7 @@ void mainVS()
 #endif
 
 #ifdef FRAG
+${this.define_samplers()}
 
 void mainPS()
 {
@@ -99,8 +98,11 @@ void mainPS()
 }
 #endif
 `;
-    // Meshes can have an arbitrary amount of vertex attributes, so it's necessary to define them in a dynamic way
-    // returns a string with the attribute definitions
+
+    /**
+     * Meshes can have an arbitrary amount of vertex attributes, so it's necessary to define them in a dynamic way
+     * @returns a string with the attribute definitions
+     */
     private define_inputs(): string
     {
         let lines = '';
@@ -158,6 +160,22 @@ void mainPS()
                 }
             }
             lines += `layout(location = ${i}) in ${type} ${attribute_name};\n`;
+        }
+
+        return lines;
+    }
+
+    /**
+     * @returns a string with the sampler definitions
+     */
+    private define_samplers(): string
+    {
+        let lines = '';
+
+        for (let i = 0; i < this.fmat.sampler_names.length; i++)
+        {
+            const name = this.fmat.sampler_names[i];
+            lines += `uniform sampler2D ${name};\n`;
         }
 
         return lines;

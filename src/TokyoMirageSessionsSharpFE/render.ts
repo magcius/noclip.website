@@ -70,44 +70,44 @@ export class TMSFEScene implements SceneGfx
 
             let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
-            let renderer: fmdl_renderer;
-            if (replacement_textures_group != undefined)
-            {
-                renderer = new fmdl_renderer_texture_replace
-                (
-                    fmdl,
-                    bntx,
-                    gfx_texture_array,
-                    fska,
-                    fmaa,
-                    vec3.fromValues(0.0, 0.0, 0.0),
-                    vec3.fromValues(0.0, 0.0, 0.0),
-                    vec3.fromValues(1.0, 1.0, 1.0),
-                    special_skybox_model,
-                    device,
-                    this.renderHelper,
-                    replacement_textures_group.replacement_textures,
-                );
-            }
-            else
-            {
-                renderer = new fmdl_renderer
-                (
-                    fmdl,
-                    bntx,
-                    gfx_texture_array,
-                    fska,
-                    fmaa,
-                    vec3.fromValues(0.0, 0.0, 0.0),
-                    vec3.fromValues(0.0, 0.0, 0.0),
-                    vec3.fromValues(1.0, 1.0, 1.0),
-                    special_skybox_model,
-                    device,
-                    this.renderHelper,
-                );
-            }
+            // let renderer: fmdl_renderer;
+            // if (replacement_textures_group != undefined)
+            // {
+            //     renderer = new fmdl_renderer_texture_replace
+            //     (
+            //         fmdl,
+            //         bntx,
+            //         gfx_texture_array,
+            //         fska,
+            //         fmaa,
+            //         vec3.fromValues(0.0, 0.0, 0.0),
+            //         vec3.fromValues(0.0, 0.0, 0.0),
+            //         vec3.fromValues(1.0, 1.0, 1.0),
+            //         special_skybox_model,
+            //         device,
+            //         this.renderHelper,
+            //         replacement_textures_group.replacement_textures,
+            //     );
+            // }
+            // else
+            // {
+            //     renderer = new fmdl_renderer
+            //     (
+            //         fmdl,
+            //         bntx,
+            //         gfx_texture_array,
+            //         fska,
+            //         fmaa,
+            //         vec3.fromValues(0.0, 0.0, 0.0),
+            //         vec3.fromValues(0.0, 0.0, 0.0),
+            //         vec3.fromValues(1.0, 1.0, 1.0),
+            //         special_skybox_model,
+            //         device,
+            //         this.renderHelper,
+            //     );
+            // }
 
-            this.fmdl_renderers.push(renderer);
+            // this.fmdl_renderers.push(renderer);
         }
     }
 
@@ -118,7 +118,7 @@ export class TMSFEScene implements SceneGfx
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
-        this.debug_draw_layout_entries(viewerInput);
+        // this.debug_draw_layout_entries(viewerInput);
 
         // create draw calls for all the models
         for (let i = 0; i < this.fmdl_renderers.length; i++)
@@ -226,15 +226,15 @@ export class TMSFEScene implements SceneGfx
     {
         if (this.layout != undefined)
         {
-            const group = this.layout.entries; // change this to see different groups
+            const group = this.layout.entries;
             
             for (let i = 0; i < group.length; i++)
             {
-                if (group[i].group_index != 5)
+                const entry = group[i];
+                if (entry.group_index != 12)
                 {
                     continue;
                 }
-                const entry = group[i];
                 const box = new AABB();
                 box.setFromCenterAndHalfExtents(vec3.fromValues(0.0, 0.0, 0.0), entry.half_extents);
                 const transform_matrix = mat4.create();

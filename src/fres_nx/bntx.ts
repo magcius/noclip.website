@@ -1,9 +1,10 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, assert } from "../util.js";
+import { readString, assert, align } from "../util.js";
 import { isMarkerLittleEndian, readBinStr } from "./bfres.js";
 import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat } from "./nngfx_enum.js";
-import { getFormatBlockHeight, isChannelFormatSupported } from "./tegra_texture.js";
+import { getFormatBlockHeight, getFormatBlockWidth, getFormatBytesPerPixel, isChannelFormatSupported, translateImageFormat } from "./tegra_texture.js";
+import { calcMipLevelByteSize } from "../gfx/helpers/TextureHelpers.js";
 
 export interface BNTX {
     textures: BRTI[];
@@ -64,10 +65,21 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         dataOffsTableIdx += 0x08;
     }
 
+    // add an offset for the end of the last mipmap buffer in a single texture
+    // so we can safely index i + 1
+    const single_texture_size = textureDataSize / arraySize;
+    dataOffsets.push(dataOffsets[0] + single_texture_size);
+
     const mipBuffers: ArrayBufferSlice[] = [];
-    for (let i = 0; i < mipCount - 1; i++)
-        mipBuffers.push(buffer.slice(dataOffsets[i], dataOffsets[i + 1]));
-    mipBuffers.push(buffer.slice(dataOffsets[mipCount - 1], dataOffsets[0] + textureDataSize));
+    for (let array_index = 0; array_index < arraySize; array_index++)
+    {
+        for (let mip_index = 0; mip_index < mipCount; mip_index++)
+        {
+            const start = dataOffsets[mip_index] + (array_index * single_texture_size);
+            const end = dataOffsets[mip_index + 1] + (array_index * single_texture_size);
+            mipBuffers.push(buffer.slice(start, end));
+        }
+    }
 
     return { name, imageDimension, imageFormat, width, height, depth, arraySize, mipBuffers, blockHeightLog2, channelMapping };
 }

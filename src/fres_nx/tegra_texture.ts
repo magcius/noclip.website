@@ -84,6 +84,7 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
     case ChannelFormat.Bc5:
     case ChannelFormat.R8_G8_B8_A8:
     case ChannelFormat.B8_G8_R8_A8:
+    case ChannelFormat.R16_G16_B16_A16:
         return true;
     default:
         return false;
@@ -102,6 +103,8 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     case ChannelFormat.R8_G8_B8_A8:
     case ChannelFormat.B8_G8_R8_A8:
         return 4;
+    case ChannelFormat.R16_G16_B16_A16:
+        return 8;
     default:
         throw "whoops";
     }
@@ -147,6 +150,8 @@ export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>):
     case ChannelFormat.R8_G8_B8_A8:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
         return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
+    case ChannelFormat.R16_G16_B16_A16:
+        return { ... textureEntry, flag: 'SRGB', type: 'RGBA', pixels };
     default:
         console.error(channelFormat.toString(16));
         throw "whoops";
@@ -200,6 +205,8 @@ export function translateImageFormat(imageFormat: ImageFormat): GfxFormat {
         return GfxFormat.U8_RGBA_SRGB;
     case TypeFormat.Snorm:
         return GfxFormat.S8_RGBA_NORM;
+    case TypeFormat.Float:
+        return GfxFormat.F16_RGBA;
     default:
         throw "whoops";
     }

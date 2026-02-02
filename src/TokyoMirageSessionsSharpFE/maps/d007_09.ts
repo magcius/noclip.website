@@ -13,7 +13,7 @@ export async function create_d007_09_gimmicks(layout: MapLayout, data_fetcher: D
 
     const Elevator_toBehind = 1600;
 
-    const elevator_to_behind_point = get_point_from_group(layout.event, Elevator_toBehind);
+    const elevator_to_behind_point = get_point_from_group(layout.event_entries, Elevator_toBehind);
     gimmicks.push
     (
         await create_gimmick

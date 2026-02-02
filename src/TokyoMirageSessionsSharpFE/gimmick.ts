@@ -299,7 +299,8 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 
                 case "7":
                     // GIMMICK_GATE_DLC
-                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/07/model.apak", "gate_07.bfres", data_fetcher);
+                    // TODO: this should use skin 7, undo this
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/06/model.apak", "gate_06.bfres", data_fetcher);
                     break;
             
                 default:
