@@ -27,7 +27,8 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
 
         // create gfx textures
         const new_format = translateImageFormat(texture.imageFormat);
-        const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, texture.mipBuffers.length);
+        const mip_count = texture.mipBuffers.length / texture.arraySize;
+        const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
         const gfx_texture = device.createTexture(texture_descriptor);
         gfx_texture_array.push(gfx_texture);
 
@@ -35,7 +36,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
         {
             const channelFormat = getChannelFormat(texture.imageFormat);
 
-            for (let mipLevel = 0; mipLevel < texture.mipBuffers.length; mipLevel++)
+            for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
             {
 
                 const buffer = texture.mipBuffers[mipLevel];
@@ -82,7 +83,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
             // deswizzle textures before uploading
             const channelFormat = getChannelFormat(texture.imageFormat);
 
-            for (let mipLevel = 0; mipLevel < texture.mipBuffers.length; mipLevel++)
+            for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
             {
 
                 const buffer = texture.mipBuffers[mipLevel];
