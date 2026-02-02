@@ -1,3 +1,5 @@
+import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+
 enum ChunkID {
     STRUCT = 1,
     STRING = 2,
@@ -27,12 +29,38 @@ export interface WorldData {
     rootSector: WorldSector;
 }
 
+interface MeshSplit {
+    materialIndex: number;
+    indices: number[];
+}
+
 interface Mesh {
     vertexCount: number;
     positions: number[];
-    indices: number[];
+    splits: MeshSplit[];
     uvs: number[];
     colors: number[];
+}
+
+export class Texture {
+    public gfxTexture: GfxTexture;
+
+    constructor(device: GfxDevice, rgba: Uint8Array, width: number, height: number) {
+        const gfxTexture = device.createTexture({
+            width, height,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            usage: GfxTextureUsage.Sampled,
+            dimension: GfxTextureDimension.n2D,
+            depthOrArrayLayers: 1,
+            numLevels: 1
+        });
+        device.uploadTextureData(gfxTexture, 0, [rgba]);
+        this.gfxTexture = gfxTexture;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
 }
 
 export class Parser {
@@ -121,7 +149,10 @@ export class Parser {
 
             while (this.offset < matEnd) {
                 const child = this.readHeader();
-                if (child.id === ChunkID.TEXTURE) {
+                if (this.view.getUint8(this.offset + 12) === 0) {
+                    names.push("");
+                    this.offset += child.size;
+                } else if (child.id === ChunkID.TEXTURE) {
                     const texEnd = this.offset + child.size;
                     while (this.offset < texEnd) {
                         const texChild = this.readHeader();
@@ -152,7 +183,7 @@ export class Parser {
         const vertexCount = this.view.getUint32(this.offset + 8, true);
         if (vertexCount === 0) {
             this.offset = structEnd; 
-            return { vertexCount: 0, indices: [], positions: [], uvs: [], colors: [] };
+            return { vertexCount: 0, splits: [], positions: [], uvs: [], colors: [] };
         }
 
         let pointer = this.offset + 44; // skip struct header
@@ -190,31 +221,30 @@ export class Parser {
         this.offset = structEnd;
         const extHeader = this.readHeader();
         const extEnd = this.offset + extHeader.size;
-        let indices: number[] = [];
+        const splits: MeshSplit[] = [];
         while (this.offset < extEnd - 12) {
             const subHeader = this.readHeader();
-            
             if (subHeader.id === ChunkID.BIN_MESH_PLG) {
                 const faceType = this.view.getUint32(this.offset, true);
                 const numSplits = this.view.getUint32(this.offset + 4, true);
                 // const totalIndices = this.view.getUint32(this.offset + 8, true);
-
                 let seeker = this.offset + 12;
+
                 for (let s = 0; s < numSplits; s++) {
                     const count = this.view.getUint32(seeker, true);
                     const materialIndex = this.view.getUint32(seeker + 4, true);
                     seeker += 8;
+
+                    const indices: number[] = [];
                     const rawIndices: number[] = [];
                     for (let i = 0; i < count; i++) {
-                        const val = this.view.getUint32(seeker, true);
-                        rawIndices.push(val);
+                        rawIndices.push(this.view.getUint32(seeker, true));
                         seeker += 4;
                     }
-                    if (faceType === 1) {
+
+                    if (faceType === 1) { // triangle strips
                         for (let i = 0; i < rawIndices.length - 2; i++) {
-                            const v1 = rawIndices[i];
-                            const v2 = rawIndices[i + 1];
-                            const v3 = rawIndices[i + 2];
+                            const v1 = rawIndices[i], v2 = rawIndices[i + 1], v3 = rawIndices[i + 2];
                             if (v1 !== v2 && v1 !== v3 && v2 !== v3) {
                                 if (i % 2 === 0) {
                                     indices.push(v1, v2, v3);
@@ -223,9 +253,11 @@ export class Parser {
                                 }
                             }
                         }
-                    } else {
+                    } else { // triangle list
                         indices.push(...rawIndices);
                     }
+
+                    splits.push({ materialIndex, indices });
                 }
                 this.offset += subHeader.size;
             } else {
@@ -235,144 +267,91 @@ export class Parser {
 
         this.offset = extEnd;
 
-        return { vertexCount, indices,  positions, uvs, colors };
+        return { vertexCount, positions, uvs, colors, splits };
     }
 
-    public parseDIC() {
+    public parseDIC(device: GfxDevice, materials: string[]): Map<string, Texture> {
         this.offset = 0;
         const txdHeader = this.readHeader();
         const txdEnd = this.offset + txdHeader.size;
         const txdMetaStructHeader = this.readHeader(); 
         const materialCount = this.view.getUint8(this.offset);
-        this.offset += 4; 
-        let index = -1;
-        let debugWidth = 0;
-        let debugHeight = 0;
+        this.offset += 4;
+        const textures = new Map();
         while (this.offset < txdEnd) {
-            index += 1;
             const nativeHeader = this.readHeader();
-            if (nativeHeader.id !== 0x15) {
-                this.offset += nativeHeader.size;
-                continue;
-            }
             const nativeEnd = this.offset + nativeHeader.size;
-            const structMeta1 = this.readHeader();
-            this.offset += structMeta1.size;
+            if (this.offset >= txdEnd) {
+                break;
+            }
+            const structMeta = this.readHeader(); // this is always just "PS2" (50 53 32 00 00 00 00 00)
+            this.offset += structMeta.size;
             const nameHeader = this.readHeader();
             const textureName = this.readString(nameHeader.size);
+            if (materials.indexOf(textureName) === -1) {
+                this.offset = nativeEnd;
+                continue;
+            }
             const alphaHeader = this.readHeader();
             const alphaName = this.readString(alphaHeader.size);
+
             const pixelStructHeader = this.readHeader();
-            const pixelStructEnd = this.offset + pixelStructHeader.size;
+
             const pixelStructMeta = this.readHeader(); // always 64 bytes
             const pixelStructMetaEnd = this.offset + pixelStructMeta.size;
-            const pixelStructMetaOffset = this.offset;
             const width = this.view.getUint16(this.offset, true);
             const height = this.view.getUint16(this.offset + 4, true);
             const bitDepth = this.view.getUint8(this.offset + 8);
+
+            const pixelCount = width * height;
+            let rgba: Uint8Array = new Uint8Array(pixelCount * 4);
+
             this.offset = pixelStructMetaEnd;
             const pixelDataHeader = this.readHeader();
             if (bitDepth === 8) {
-                const indicesOffset = this.offset + 16;
-                const pixelCount = width * height;
-                const indices = new Uint8Array(this.view.buffer, indicesOffset, pixelCount);
-                const paletteOffset = this.offset + pixelDataHeader.size - 1024;
-                const rawPalette = new Uint8Array(this.view.buffer, paletteOffset, 1024);
-                
-                const cleanPalette = new Uint8Array(256 * 4);
+                const indices = new Uint8Array(this.view.buffer, this.offset + 80, pixelCount);
+                const rawPalette = new Uint8Array(this.view.buffer, this.offset + pixelDataHeader.size - 1024, 1024);
+
+                const cleanPalette = new Uint8Array(1024);
                 for (let i = 0; i < 256; i++) {
-                    const swizzledIdx = (i & 0xE7) | ((i & 0x08) << 1) | ((i & 0x10) >> 1);
+                    const swizzledIdx = (i & 231) | ((i & 8) << 1) | ((i & 16) >> 1);
                     for (let c = 0; c < 4; c++) {
                         cleanPalette[i * 4 + c] = rawPalette[swizzledIdx * 4 + c];
                     }
                 }
 
-                const rgba = new Uint8Array(width * height * 4);
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++) {
-                        const sx = (x + 32) % width;
+                        const blockLocation = (y & -16) * width + (x & -16) * 2;
+                        const swapSelector = (((y + 2) >> 2) & 1) * 4;
+                        const posY = (((y & -4) >> 1) + (y & 1)) & 7;
+                        const columnLocation = posY * width * 2 + ((x + swapSelector) & 7) * 4;
+                        const byteNum = ((y >> 1) & 1) + ((x >> 2) & 2);
 
-                        const block_location = (y & (~0xf)) * width + (sx & (~0xf)) * 2;
-                        const swap_selector = (((y + 2) >> 2) & 0x1) * 4;
-                        const posY = (((y & (~3)) >> 1) + (y & 1)) & 0x7;
-                        const column_location = posY * width * 2 + ((sx + swap_selector) & 0x7) * 4;
-                        const byte_num = ((y >> 1) & 1) + ((sx >> 2) & 2);
+                        const swizzledAddr = blockLocation + columnLocation + byteNum;
 
-                        const swizzledAddr = block_location + column_location + byte_num;
-
-                        if (swizzledAddr < indices.length) {
-                            const colorIdx = indices[swizzledAddr];
-                            const outIdx = (y * width + x) * 4;
-                            const p = colorIdx * 4;
-
-                            rgba[outIdx + 0] = cleanPalette[p + 0];
-                            rgba[outIdx + 1] = cleanPalette[p + 1];
-                            rgba[outIdx + 2] = cleanPalette[p + 2];
-                            rgba[outIdx + 3] = 255;
-                        }
+                        const colorIdx = indices[swizzledAddr];
+                        const outIdx = ((y * width) + x) * 4;
+                        const p = colorIdx * 4;
+                        rgba[outIdx] = cleanPalette[p];
+                        rgba[outIdx + 1] = cleanPalette[p + 1];
+                        rgba[outIdx + 2] = cleanPalette[p + 2];
+                        rgba[outIdx + 3] = 255; // Math.min(cleanPalette[p + 3] * 2, 255);
                     }
                 }
-                this.debugRenderToCanvas(rgba, width, height, textureName, debugWidth, debugHeight);
-                debugWidth += width + 32;
-                if (debugWidth > 2000) {
-                    debugWidth = 0;
-                    debugHeight += 150;
-                }
             } else if (bitDepth === 32) {
-                // const rgbaPixels = new Uint8Array(this.view.buffer, this.offset, width * height * 4);
+                rgba = new Uint8Array(this.view.buffer, this.offset, pixelCount * 4);
             }
-            
+            textures.set(textureName, new Texture(device, rgba, width, height));
             this.offset = nativeEnd;
         }
-    }
-
-    private getGrayscaleTestPalette(): Uint8Array {
-        const palette = new Uint8Array(1024);
-        for (let i = 0; i < 256; i++) {
-            const offset = i * 4;
-            palette[offset + 0] = i;
-            palette[offset + 1] = i;
-            palette[offset + 2] = i;
-            palette[offset + 3] = 255;
-        }
-        return palette;
-    }
-
-    private unswizzlePalette(rawPalette: Uint8Array): Uint8Array {
-        const cleanPalette = new Uint8Array(1024);
-        for (let i = 0; i < 256; i++) {
-            const p = (Math.floor(i / 8) % 4 === 1) ? i + 8 : (Math.floor(i / 8) % 4 === 2) ? i - 8 : i;
-            cleanPalette[i * 4 + 0] = rawPalette[p * 4 + 0]; // R
-            cleanPalette[i * 4 + 1] = rawPalette[p * 4 + 1]; // G
-            cleanPalette[i * 4 + 2] = rawPalette[p * 4 + 2]; // B
-            const alpha = rawPalette[p * 4 + 3];
-            cleanPalette[i * 4 + 3] = Math.min(255, alpha * 2); 
-        }
-        return cleanPalette;
-    }
-
-    private debugRenderToCanvas(rgba: Uint8Array, width: number, height: number, name: string, dw: number, dh: number) {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        const imgData = ctx.createImageData(width, height);
-        imgData.data.set(rgba);
-        ctx.putImageData(imgData, 0, 0);
-        canvas.style.position = 'fixed';
-        canvas.style.top = `${300 + dh}px`;
-        canvas.style.left = `${10 + dw}px`;
-        canvas.style.zIndex = '9999';
-        canvas.style.border = '1px solid red';
-        canvas.style.background = 'black';
-        canvas.title = name;
-        document.body.appendChild(canvas);
+        return textures;
     }
 
     private readString(size: number): string {
         const bytes = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, size);
         const str = new TextDecoder().decode(bytes);
         this.offset += size;
-        return str.replace(/\0/g, '');
+        return str.replace(/\0/g, '').toLowerCase();
     }
 }

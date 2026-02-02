@@ -5,7 +5,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { Parser, WorldData } from "./bin.js";
+import { Parser, Texture, WorldData } from "./bin.js";
 import { LevelRenderer } from "./render.js";
 
 class CasperRenderer implements SceneGfx {
@@ -13,10 +13,10 @@ class CasperRenderer implements SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
 
-    constructor(device: GfxDevice, world: WorldData) {
+    constructor(device: GfxDevice, world: WorldData, textures: Map<string, Texture>) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, world);
+        this.levelRenderer = new LevelRenderer(cache, world, textures);
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -63,10 +63,10 @@ class CasperScene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const bspFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
-        const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.id.replace("0", "")}.DIC`);
-        new Parser(dicFile.createDataView()).parseDIC();
-        const renderer = new CasperRenderer(device, new Parser(bspFile.createDataView()).parseBSP());
-        return renderer;
+        const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${Number(this.id.split("LEVEL")[1]).toString()}.DIC`);
+        const world = new Parser(bspFile.createDataView()).parseBSP();
+        const textures = new Parser(dicFile.createDataView()).parseDIC(device, world.materials);
+        return new CasperRenderer(device, world, textures);
     }
 }
 

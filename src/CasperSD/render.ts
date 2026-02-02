@@ -1,12 +1,25 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { WorldData, WorldSector } from "./bin";
+import { Texture, WorldData, WorldSector } from "./bin";
+
+interface MeshBatch {
+    textureName: string;
+    indexOffset: number;
+    indexCount: number;
+}
+
+interface LevelBuffer {
+    vertices: Float32Array;
+    indices: Uint32Array;
+    colors: Float32Array;
+    uvs: Float32Array;
+}
 
 class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -19,6 +32,8 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
 };
+
+uniform sampler2D u_Texture;
 
 varying vec3 v_Position;
 varying vec3 v_Color;
@@ -40,20 +55,22 @@ void main() {
 
 #ifdef FRAG
 void main() {
-    // vec3 normal = normalize(cross(dFdx(v_Position), dFdy(v_Position)));
-    // vec3 lightDir = normalize(vec3(0.3, 0.5, 1.0));
-    // float dotProduct = dot(normal, lightDir);
-    // // float diffuse = clamp(dotProduct * 0.5 + 0.5, 0.2, 1.0);
-    // // vec3 baseColor = vec3(0.7, 0.7, 0.7);
-    // // gl_FragColor = vec4(baseColor * diffuse, 1.0);
-    // gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
-    // float c = (fract(v_TexCoord.x) + fract(v_TexCoord.y)) * 0.5;
-    // gl_FragColor = vec4(c, c, c, 1.0);
-    // vec2 grid = floor(v_TexCoord * 3.0);
-    // float checker = mod(grid.x + grid.y, 2.0);
-    // vec3 color = checker > 0.5 ? vec3(1.0) : vec3(0.0);
-    // gl_FragColor = vec4(color, 1.0);
-    gl_FragColor = vec4(v_Color, 1.0);
+    // vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    // vec4 finalColor = texColor * vec4(v_Color, 1.0);
+    // if (finalColor.a < 0.1) {
+    //     discard;
+    // }
+    // // gl_FragColor = vec4(v_Color, 1.0);
+    // gl_FragColor = finalColor;
+
+    vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    vec3 ambient = vec3(0.1); // close approx to PS2 appearance
+    vec3 lightColor = v_Color + ambient;
+    vec4 finalColor = texColor * vec4(clamp(lightColor, 0.0, 1.0), 1.0);
+
+    if (finalColor.a < 0.1) discard; // temp transparency approx
+
+    gl_FragColor = finalColor;
 }
 #endif
     `;
@@ -63,7 +80,7 @@ void main() {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 const WORLD_SCALE = 300;
 
 export class LevelRenderer {
@@ -71,17 +88,16 @@ export class LevelRenderer {
     private indexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
-    private indexCount: number;
     private inputLayout: GfxInputLayout;
+    private batches: MeshBatch[] = [];
 
-    constructor(cache: GfxRenderCache, world: WorldData) {
+    constructor(cache: GfxRenderCache, world: WorldData, private textures: Map<string, Texture>) {
         const device = cache.device;
         const { vertices, indices, uvs, colors } = this.buildBuffers(world);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indices.buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, colors.buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, uvs.buffer);
-        this.indexCount = indices.length;
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
@@ -117,9 +133,26 @@ export class LevelRenderer {
             ],
             { buffer: this.indexBuffer, byteOffset: 0 }
         );
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setDrawCount(this.indexCount);
-        renderInstManager.submitRenderInst(renderInst);
+        for (const batch of this.batches) {
+            const renderInst = renderInstManager.newRenderInst();
+            const texture = this.textures.get(batch.textureName);
+            if (texture === undefined) {
+                continue;
+            }
+            renderInst.setSamplerBindingsFromTextureMappings([{
+                gfxTexture: texture.gfxTexture,
+                gfxSampler: renderHelper.renderCache.createSampler({
+                    minFilter: GfxTexFilterMode.Bilinear,
+                    magFilter: GfxTexFilterMode.Bilinear,
+                    mipFilter: GfxMipFilterMode.Nearest,
+                    wrapS: GfxWrapMode.Repeat,
+                    wrapT: GfxWrapMode.Repeat
+                }),
+                lateBinding: null
+            }]);
+            renderInst.setDrawCount(batch.indexCount, batch.indexOffset);
+            renderInstManager.submitRenderInst(renderInst);
+        }
         renderInstManager.popTemplate();
     }
 
@@ -128,35 +161,59 @@ export class LevelRenderer {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
+        for (const t of this.textures) {
+            t[1].destroy(device);
+        }
     }
 
-    private buildBuffers(world: WorldData): { vertices: Float32Array, indices: Uint32Array, colors: Float32Array, uvs: Float32Array } {
+    private buildBuffers(world: WorldData): LevelBuffer {
         let vOffset = 0;
         const vertices: number[] = [];
-        const indices: number[] = [];
         const colors: number[] = [];
         const uvs: number[] = [];
+        const indexGroups = new Map<string, number[]>();
+        this.batches = [];
         const traverse = (node: WorldSector) => {
-            if (node.mesh && node.mesh.vertexCount > 0 && node.mesh.positions.length > 0 && node.mesh.uvs.length > 0) {
-                const pos = node.mesh.positions;
-                for (let i = 0; i < pos.length; i++) {
-                    vertices.push(pos[i] * WORLD_SCALE);
-                }
-                const idx = node.mesh.indices;
-                for (let i = 0; i < idx.length; i++) {
-                    indices.push(idx[i] + vOffset); 
-                }
-                vOffset += node.mesh.vertexCount;
-                for (const c of node.mesh.colors) {
-                    colors.push(c / 255);
-                }
+            if (node.mesh && node.mesh.vertexCount > 0 && node.mesh.positions.length > 0) {
+                const vBase = vOffset;
+                vertices.push(...node.mesh.positions.map(p => p * WORLD_SCALE));
+                colors.push(...node.mesh.colors.map(c => c / 255));
                 uvs.push(...node.mesh.uvs);
+                vOffset += node.mesh.vertexCount;
+                for (const split of node.mesh.splits) {
+                    const textureName = world.materials[split.materialIndex];
+                    if (textureName === undefined || textureName.length === 0) {
+                        continue;
+                    }
+                    if (!indexGroups.has(textureName)) {
+                        indexGroups.set(textureName, []);
+                    }
+                    const groupIndices = indexGroups.get(textureName)!;
+                    for (const i of split.indices) {
+                        groupIndices.push(i + vBase);
+                    }
+                }
             }
             if (node.children) {
                 node.children.forEach(traverse);
             }
         };
         traverse(world.rootSector);
-        return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), colors: new Float32Array(colors), uvs: new Float32Array(uvs) };
+        const finalIndices: number[] = [];
+        indexGroups.forEach((groupIndices, textureName) => {
+            const indexStart = finalIndices.length;
+            finalIndices.push(...groupIndices);
+            this.batches.push({
+                textureName: textureName,
+                indexOffset: indexStart,
+                indexCount: groupIndices.length
+            });
+        });
+        return { 
+            vertices: new Float32Array(vertices), 
+            indices: new Uint32Array(finalIndices), 
+            colors: new Float32Array(colors), 
+            uvs: new Float32Array(uvs) 
+        };
     }
 }
