@@ -200,12 +200,12 @@ export const scrollingTilesMap: Record<number, Record<number, number[]>> = {
         75: [5], 79: [24]
     },
     2: {
-        16: [72], 20: [44], 36: [44], 44: [35], 48: [0], 50: [2],
-        58: [0, 1, 2], 72: [12, 13]
+        16: [72], 20: [44], 36: [44], 38: [48], 44: [35], 48: [0],
+        50: [2], 58: [0, 1, 2], 72: [12, 13]
     },
     3: {
         98: [93], 100: [97], 110: [2], 112: [6], 116: [80], 120: [1],
-        124: [77], 138: [72], 152: [27], 156: [7], 170: [29]
+        124: [77], 138: [72], 152: [27], 156: [7], 158: [80], 170: [29]
     }
 };
 
@@ -804,67 +804,69 @@ function parseTiles(data: DataView, gameNumber: number): Tile[] {
     return tiles;
 }
 
-function parseSkyboxPart(data: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyFace[]): void {
-    let pointer = partOffset;
+function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyFace[]): void {
+    let p = partOffset;
+    if (p + 24 > size) return;
+    // header_sky1_ (24 bytes)
+    p += 8;
+    const globalY = view.getInt16(p + 0, true);
+    const globalZ = view.getInt16(p + 2, true);
+    const vCount = view.getUint16(p + 4, true);
+    const globalX = view.getInt16(p + 6, true);
+    const pCount = view.getUint16(p + 8, true);
+    const cCount = view.getUint16(p + 10, true);
+    p += 16;
     const baseVertexIndex = vertices.length;
-    const baseColorIndex = colors.length;
+    const baseColorIndex  = colors.length;
 
-    // Header (24 bytes)
-    if (pointer + 24 > size) {
-        return;
+    // Vertices block: vCount * 4 bytes
+    for (let i = 0; i < vCount; i++) {
+        if (p + 4 > size) break;
+        const b1 = view.getUint8(p + 0);
+        const b2 = view.getUint8(p + 1);
+        const b3 = view.getUint8(p + 2);
+        const b4 = view.getUint8(p + 3);
+        p += 4;
+        const packedZ = (b1 | ((b2 & 0x03) << 8));
+        const packedY = ((b2 >> 2) | ((b3 & 0x1F) << 6));
+        const packedX = ((b3 >> 5) | (b4 << 3));
+        const z = packedZ - globalZ;
+        const y = packedY - globalY;
+        const x = packedX + globalX;
+        vertices.push([x, y, z]);
     }
-    pointer += 8;
-    const globalY = data.getInt16(pointer, true);
-    const globalZ = data.getInt16(pointer + 2, true);
-    const vertexCount = data.getUint16(pointer + 4, true);
-    const globalX = data.getInt16(pointer + 6, true);
-    const polyCount = data.getUint16(pointer + 8, true);
-    const colorCount = data.getUint16(pointer + 10, true);
-    pointer += 16;
 
-    // Vertices (4 bytes)
-    for (let i = 0; i < vertexCount; i++) {
-        if (pointer + 4 > size) {
-            return;
+    // Colors block: cCount * 4 bytes
+    for (let i = 0; i < cCount; i++) {
+        if (p + 4 > size) break;
+        const r = view.getUint8(p + 0);
+        const g = view.getUint8(p + 1);
+        const b = view.getUint8(p + 2);
+        // const n = view.getUint8(p + 3);
+        p += 4;
+        colors.push([r, g, b]);
+    }
+
+    // Polys block: pCount * 8 bytes
+    for (let i = 0; i < pCount; i++) {
+        if (p + 8 > size) break;
+        const v1_packed1 = view.getUint8(p + 0);
+        const v1_packed2 = view.getUint8(p + 1);
+        const v1_packed3 = view.getUint8(p + 2);
+        const v1_packed4 = view.getUint8(p + 3);
+        const c1_packed1 = view.getUint8(p + 4);
+        const c1_packed2 = view.getUint8(p + 5);
+        const c1_packed3 = view.getUint8(p + 6);
+        const c1_packed4 = view.getUint8(p + 7);
+        p += 8;
+        const [vi1, vi2, vi3] = unpackSkyIndex(v1_packed1, v1_packed2, v1_packed3, v1_packed4);
+        const [ci1, ci2, ci3] = unpackSkyIndex(c1_packed1, c1_packed2, c1_packed3, c1_packed4);
+        if (vi1 < vCount && vi2 < vCount && vi3 < vCount && ci1 < cCount && ci2 < cCount && ci3 < cCount) {
+            faces.push({
+                indices: [baseVertexIndex + vi1, baseVertexIndex + vi2, baseVertexIndex + vi3],
+                colors: [baseColorIndex + ci1, baseColorIndex + ci2, baseColorIndex + ci3,]
+            });
         }
-        const b1 = data.getUint8(pointer);
-        const b2 = data.getUint8(pointer + 1);
-        const b3 = data.getUint8(pointer + 2);
-        const b4 = data.getUint8(pointer + 3);
-        vertices.push([
-            ((b3 >> 5) | (b4 << 3)) + globalX,
-            ((b2 >> 2) | ((b3 & 31) << 6)) - globalY,
-            (b1 | ((b2 & 3) << 8)) - globalZ
-        ]);
-        pointer += 4;
-    }
-
-    // Colors (4 bytes)
-    for (let i = 0; i < colorCount; i++) {
-        if (pointer + 4 > size) {
-            return;
-        }
-        colors.push([data.getUint8(pointer), data.getUint8(pointer + 1), data.getUint8(pointer + 2)]);
-        pointer += 4;
-    }
-
-    // Polys (8 bytes)
-    for (let i = 0; i < polyCount; i++) {
-        const vb1 = data.getUint8(pointer);
-        const vb2 = data.getUint8(pointer + 1);
-        const vb3 = data.getUint8(pointer + 2);
-        const vb4 = data.getUint8(pointer + 3);
-        const cb1 = data.getUint8(pointer + 4);
-        const cb2 = data.getUint8(pointer + 5);
-        const cb3 = data.getUint8(pointer + 6);
-        const cb4 = data.getUint8(pointer + 7);
-        const [v0, v1, v2] = unpackSkyIndex(vb1, vb2, vb3, vb4);
-        const [c0, c1, c2] = unpackSkyIndex(cb1, cb2, cb3, cb4);
-        faces.push({
-            indices: [baseVertexIndex + v0, baseVertexIndex + v1, baseVertexIndex + v2],
-            colors: [baseColorIndex + c0, baseColorIndex + c1, baseColorIndex + c2]
-        });
-        pointer += 8;
     }
 }
 

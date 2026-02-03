@@ -271,19 +271,17 @@ export class LevelRenderer {
         template.setGfxProgram(program);
         template.setBindingLayouts(bindingLayouts);
         template.setUniformBuffer(renderHelper.uniformBuffer);
-        template.setSamplerBindingsFromTextureMappings([
-            {
-                gfxTexture: this.texture,
-                gfxSampler: renderHelper.renderCache.createSampler({
-                    minFilter: GfxTexFilterMode.Point,
-                    magFilter: GfxTexFilterMode.Point,
-                    mipFilter: GfxMipFilterMode.Nearest,
-                    wrapS: GfxWrapMode.Repeat,
-                    wrapT: GfxWrapMode.Repeat
-                }),
-                lateBinding: null
-            }
-        ]);
+        template.setSamplerBindingsFromTextureMappings([{
+            gfxTexture: this.texture,
+            gfxSampler: renderHelper.renderCache.createSampler({
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.Nearest,
+                wrapS: GfxWrapMode.Repeat,
+                wrapT: GfxWrapMode.Repeat
+            }),
+            lateBinding: null
+        }]);
 
         // ub_SceneParams
         const sceneFloats = 16 + 4;
