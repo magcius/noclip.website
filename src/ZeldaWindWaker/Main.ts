@@ -246,9 +246,9 @@ class WindWakerRoom {
 }
 
 class WindWakerLayer implements UI.Layer {
-    constructor(public layerNo: number, public name: string, 
-    ) {}
-    public visible: boolean = true;
+    constructor(public layerNo: number, public name: string, initLayerMask: number
+    ) { this.visible = !!(initLayerMask & (1 << layerNo)); }
+    public visible: boolean;
     public setVisible(v: boolean) { this.visible = v; }
 }
 
@@ -300,8 +300,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public createPanels(): UI.Panel[] {
         const scenarioPanel = new UI.LayerPanel();
-        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
         scenarioPanel.setLayers(this.layers);
         scenarioPanel.onlayertoggled = () => {
             let layerMask = 0;
@@ -954,7 +952,7 @@ class SceneDesc {
         }
 
         // If no layer names were specified, build a list of layers which have actors
-        if( Object.keys(this.layerNames).length === 0 ) {
+        if (Object.keys(this.layerNames).length === 0) {
             let activeLayers = globals.dStage_dt.activeLayers;
             for (let r = 0; r < this.roomList.length; r++) {
                 const roomNo = Math.abs(this.roomList[r]);
@@ -966,9 +964,9 @@ class SceneDesc {
                     this.layerNames[i] = `Layer ${i.toString()}`;
             }
         }
-        
+
         for (const [layerNo, name] of Object.entries(this.layerNames)) {
-            renderer.layers.push(new WindWakerLayer(Number(layerNo), name));
+            renderer.layers.push(new WindWakerLayer(Number(layerNo), name, renderer.roomLayerMask));
         }
 
         return renderer;
