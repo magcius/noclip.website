@@ -299,39 +299,18 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        let scenarioPanel;
-        if( this.layers.length > 0 ) {
-            scenarioPanel = new UI.LayerPanel();
-            scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-            scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
-            scenarioPanel.setLayers(this.layers);
-            scenarioPanel.onlayertoggled = () => {
-                let layerMask = 0;
-                for (let i = 0; i < this.layers.length; i++) {
-                    if (this.layers[i].visible)
-                        layerMask |= (1 << this.layers[i].layerNo);
-                }
-                this.setVisibleLayerMask(layerMask);
-            };
-        } else {
-            scenarioPanel = new UI.Panel();
-            scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-            scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
-            const getScenarioMask = () => {
-                let mask: number = 0;
-                for (let i = 0; i < scenarioSelect.getNumItems(); i++)
-                    if (scenarioSelect.itemIsOn[i])
-                        mask |= (1 << i);
-                return mask;
-            };
-            const scenarioSelect = new UI.MultiSelect();
-            scenarioSelect.onitemchanged = () => {
-                this.setVisibleLayerMask(getScenarioMask());
-            };
-            scenarioSelect.setStrings(range(0, 12).map((i) => `Layer ${i}`));
-            scenarioSelect.setItemsSelected(range(0, 12).map((i) => (this.roomLayerMask & (1 << i)) !== 0));
-            scenarioPanel.contents.append(scenarioSelect.elem);
-        }
+        const scenarioPanel = new UI.LayerPanel();
+        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
+        scenarioPanel.setLayers(this.layers);
+        scenarioPanel.onlayertoggled = () => {
+            let layerMask = 0;
+            for (let i = 0; i < this.layers.length; i++) {
+                if (this.layers[i].visible)
+                    layerMask |= (1 << this.layers[i].layerNo);
+            }
+            this.setVisibleLayerMask(layerMask);
+        };
 
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -974,6 +953,20 @@ class SceneDesc {
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
 
+        if( Object.keys(this.layerNames).length === 0 ) {
+            for (let i = 0; i < 12; i++) {
+                const idxStr = i.toString(16).toLowerCase();
+                let hasLayer = dzs.headers.has('ACT' + idxStr) || dzs.headers.has('SCO' + idxStr);
+                for (let r = 0; r < this.roomList.length; r++) {
+                    const roomNo = Math.abs(this.roomList[r]);
+                    const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
+                    hasLayer = hasLayer || dzr.headers.has('ACT' + idxStr) || dzr.headers.has('SCO' + idxStr);
+                }
+                if (hasLayer)
+                    this.layerNames[i] = `Layer ${i.toString()}`;
+            }
+        }
+        
         for (const [layerNo, name] of Object.entries(this.layerNames)) {
             renderer.layers.push(new WindWakerLayer(Number(layerNo), name));
         }
