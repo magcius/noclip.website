@@ -8,11 +8,11 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 import { Parser, Texture, WorldData } from "./bin.js";
 import { LevelRenderer } from "./render.js";
 
-const clearColors: number[][] = [
-    [34, 35, 45], [128, 128, 128], [128, 128, 128], [128, 128, 128],
-    [128, 128, 128], [128, 128, 128], [128, 128, 128], [128, 128, 128],
-    [128, 128, 128], [128, 128, 128], [128, 128, 128], [128, 128, 128],
-    [128, 128, 128], [128, 128, 128], [128, 128, 128], [7, 19, 34]
+const clearColors: number[][] = [ // hardcode to approx fog colors for now
+    [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
+    [90, 79, 54], [5, 5, 5],     [5, 5, 5],    [5, 5, 5],
+    [5, 5, 5],    [5, 5, 5],     [5, 5, 5],    [77, 50, 52],
+    [12, 12, 39], [5, 5, 5],     [7, 10, 21],  [7, 19, 34]
 ];
 
 class CasperRenderer implements SceneGfx {

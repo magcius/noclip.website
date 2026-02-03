@@ -70,7 +70,6 @@ export class Parser {
     private readHeader() {
         const id = this.view.getUint32(this.offset, true);
         const size = this.view.getUint32(this.offset + 4, true);
-        // const version = this.view.getUint32(this.offset + 8, true);
         this.offset += 12;
         return { id, size };
     }
@@ -170,12 +169,11 @@ export class Parser {
 
     private parseAtomicSection(): Mesh {
         // struct has these blocks:
-        // vertices (12), color 1 (4), color 2 (4), uvs (8), ??? (few thousand bytes left usually)
+        // vertices (12), normals? (4), color (4), uvs (8)
 
         const structHeader = this.readHeader();
         const structEnd = this.offset + structHeader.size;
 
-        // const unknownNum = this.view.getUint32(this.offset + 4, true);
         const vertexCount = this.view.getUint32(this.offset + 8, true);
         if (vertexCount === 0) {
             this.offset = structEnd; 
@@ -193,7 +191,7 @@ export class Parser {
             pointer += 12;
         }
 
-        pointer += vertexCount * 4; // skip first color block (rainbow when rendered)
+        pointer += vertexCount * 4; // skip block, these could be normals
 
         const colors: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
@@ -215,6 +213,7 @@ export class Parser {
         }
 
         this.offset = structEnd;
+
         const extHeader = this.readHeader();
         const extEnd = this.offset + extHeader.size;
         const splits: MeshSplit[] = [];
@@ -223,7 +222,6 @@ export class Parser {
             if (subHeader.id === ChunkID.BIN_MESH_PLG) {
                 const faceType = this.view.getUint32(this.offset, true);
                 const numSplits = this.view.getUint32(this.offset + 4, true);
-                // const totalIndices = this.view.getUint32(this.offset + 8, true);
                 let seeker = this.offset + 12;
 
                 for (let s = 0; s < numSplits; s++) {
@@ -280,7 +278,7 @@ export class Parser {
             if (this.offset >= txdEnd) {
                 break;
             }
-            const structMeta = this.readHeader(); // this is always just "PS2" (50 53 32 00 00 00 00 00)
+            const structMeta = this.readHeader(); // this always has "PS2" (50 53 32 ...)
             this.offset += structMeta.size;
             const nameHeader = this.readHeader();
             const textureName = this.readString(nameHeader.size);
