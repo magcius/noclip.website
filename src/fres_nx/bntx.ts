@@ -18,9 +18,13 @@ export interface BRTI {
     height: number;
     depth: number;
     arraySize: number;
-    mipBuffers: ArrayBufferSlice[];
+    textureDataArray: TextureData[];
     blockHeightLog2: number;
     channelMapping: number[];
+}
+export interface TextureData
+{
+    mipBuffers: ArrayBufferSlice[];
 }
 
 function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): BRTI | null {
@@ -67,21 +71,23 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
 
     // add an offset for the end of the last mipmap buffer in a single texture
     // so we can safely index i + 1
-    const single_texture_size = textureDataSize / arraySize;
-    dataOffsets.push(dataOffsets[0] + single_texture_size);
+    const singleTextureSize = textureDataSize / arraySize;
+    dataOffsets.push(dataOffsets[0] + singleTextureSize);
 
-    const mipBuffers: ArrayBufferSlice[] = [];
-    for (let array_index = 0; array_index < arraySize; array_index++)
+    const textureDataArray: TextureData[] = [];
+    for (let arrayIndex = 0; arrayIndex < arraySize; arrayIndex++)
     {
-        for (let mip_index = 0; mip_index < mipCount; mip_index++)
+        const mipBuffers: ArrayBufferSlice[] = [];
+        for (let mipIndex = 0; mipIndex < mipCount; mipIndex++)
         {
-            const start = dataOffsets[mip_index] + (array_index * single_texture_size);
-            const end = dataOffsets[mip_index + 1] + (array_index * single_texture_size);
+            const start = dataOffsets[mipIndex] + (arrayIndex * singleTextureSize);
+            const end = dataOffsets[mipIndex + 1] + (arrayIndex * singleTextureSize);
             mipBuffers.push(buffer.slice(start, end));
         }
+        textureDataArray.push({ mipBuffers });
     }
 
-    return { name, imageDimension, imageFormat, width, height, depth, arraySize, mipBuffers, blockHeightLog2, channelMapping };
+    return { name, imageDimension, imageFormat, width, height, depth, arraySize, textureDataArray, blockHeightLog2, channelMapping };
 }
 
 export function parse(buffer: ArrayBufferSlice): BNTX {

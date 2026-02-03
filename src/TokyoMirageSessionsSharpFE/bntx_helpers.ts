@@ -3,9 +3,11 @@
 // these functions build off that code
 
 import * as BNTX from '../fres_nx/bntx.js';
-import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat } from '../gfx/platform/GfxPlatform.js';
-import { getChannelFormat } from '../fres_nx/nngfx_enum.js';
+import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat, GfxTextureDimension, GfxTextureUsage } from '../gfx/platform/GfxPlatform.js';
+import { getChannelFormat, ChannelFormat } from '../fres_nx/nngfx_enum.js';
+import { rust } from "../rustlib.js";
 import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
+import { assert } from '../util.js';
 
 /**
  * textures in a bntx file are swizzled, where the texture data is rearranged for performance reasons.
@@ -22,71 +24,23 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
     for (let texture_index = 0; texture_index < bntx.textures.length; texture_index++)
     {
         const texture = bntx.textures[texture_index];
-        // console.log(`${texture.name} ${texture.imageFormat}`);
-        console.log(texture);
 
-        // create gfx textures
-        const new_format = translateImageFormat(texture.imageFormat);
-        const mip_count = texture.mipBuffers.length / texture.arraySize;
-        const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
-        const gfx_texture = device.createTexture(texture_descriptor);
-        gfx_texture_array.push(gfx_texture);
-
-        if (new_format == GfxFormat.F16_RGBA)
+        // normal texture
+        if (texture.imageDimension === 1)
         {
-            const channelFormat = getChannelFormat(texture.imageFormat);
+            // create gfx textures
+            const new_format = translateImageFormat(texture.imageFormat);
+            const mip_count = texture.textureDataArray[0].mipBuffers.length;
+            const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
+            const gfx_texture = device.createTexture(texture_descriptor);
+            gfx_texture_array.push(gfx_texture);
 
-            for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
-            {
-
-                const buffer = texture.mipBuffers[mipLevel];
-                const width = Math.max(texture.width >>> mipLevel, 1);
-                const height = Math.max(texture.height >>> mipLevel, 1);
-                const depth = 1;
-                const blockHeightLog2 = texture.blockHeightLog2;
-                deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 })
-                .then
-                (
-                    (deswizzled) =>
-                    {
-                        const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
-                        const rgbaPixels = rgbaTexture.pixels;
-
-                        // const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
-                        // const test = texture.mipBuffers[mipLevel].createTypedArray(Uint16Array);
-                        
-                        // const test2 = buffer.createTypedArray(Uint8Array);
-                        const test = new Uint16Array(rgbaPixels.buffer);
-                        
-                        // const test = new Uint16Array(rgbaPixels.buffer);
-                        // let offset = 0;
-                        // let offset2 = 0;
-                        // for (let i = 0; i < rgbaPixels.byteLength / 2; i++)
-                        // {
-                        //     const byte1 = rgbaPixels[offset2++];
-                        //     const byte2 = rgbaPixels[offset2++];
-                        //     const combined = (byte2 << 0x8) + byte1;
-                        //     test[offset++] = combined;
-                        // }
-
-
-                        device.uploadTextureData(gfx_texture, mipLevel, [test]);
-                    }
-                );
-
-                // don't deswizzle for now
-                // const buffer = texture.mipBuffers[mipLevel].createTypedArray(Uint16Array);
-            }
-        }
-        else
-        {
             // deswizzle textures before uploading
             const channelFormat = getChannelFormat(texture.imageFormat);
 
             for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
             {
-
-                const buffer = texture.mipBuffers[mipLevel];
+                const buffer = texture.textureDataArray[0].mipBuffers[mipLevel];
                 const width = Math.max(texture.width >>> mipLevel, 1);
                 const height = Math.max(texture.height >>> mipLevel, 1);
                 const depth = 1;
@@ -98,8 +52,104 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                     {
                         const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                         const rgbaPixels = rgbaTexture.pixels;
+                        // TODO remap for uint16 arrays
                         const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
                         device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
+                    }
+                );
+            }
+        }
+        // cubemap
+        else
+        {
+            assert(texture.imageDimension === 3);
+
+            // create gfx texture
+            const new_format = translateImageFormat(texture.imageFormat);
+            const mip_count = texture.textureDataArray[0].mipBuffers.length;
+
+            const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
+            const gfx_texture = device.createTexture(texture_descriptor);
+            gfx_texture_array.push(gfx_texture);
+
+            // const gfx_texture = device.createTexture
+            // ({
+            //     dimension: GfxTextureDimension.Cube,
+            //     pixelFormat: new_format,
+            //     width: texture.width,
+            //     height: texture.width,
+            //     depthOrArrayLayers: 6,
+            //     numLevels: mip_count,
+            //     usage: GfxTextureUsage.Sampled
+            // });
+            // gfx_texture_array.push(gfx_texture);
+
+            // TODO: this somehow causes a memory leak
+            // rearrange the mip buffers
+            // each buffer is all the textures at a mip level smashed together
+            // const new_mip_buffer_array: Uint8Array[] = [];
+            // for (let mip_level = 0; mip_level < mip_count; mip_level++)
+            // {
+            //     const original_byte_length = texture.textureDataArray[0].mipBuffers[mip_level].byteLength;
+            //     const new_byte_length = original_byte_length * texture.arraySize
+            //     const new_mip_buffer = new Uint8Array(new_byte_length);
+            //     for(texture_index = 0; texture_index < texture.arraySize; texture_index++)
+            //     {
+            //         const old_mip_buffer = texture.textureDataArray[texture_index].mipBuffers[mip_level].createTypedArray(Uint8Array);
+            //         const offset = original_byte_length * texture_index;
+            //         new_mip_buffer.set(old_mip_buffer, offset);
+            //     }
+            //     new_mip_buffer_array.push(new_mip_buffer);
+            // }
+
+            // deswizzle textures before uploading
+            // for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
+            // {
+            //     const buffer = new_mip_buffer_array[mipLevel];
+            //     const width = Math.max(texture.width >>> mipLevel, 1);
+            //     const height = Math.max(texture.height >>> mipLevel, 1);
+            //     const depth = 1;
+            //     const blockHeightLog2 = texture.blockHeightLog2;
+
+            //     deswizzle_uint8_array(buffer, width, height, blockHeightLog2)
+            //     .then
+            //     (
+            //         (deswizzled) =>
+            //         {
+            //             const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
+            //             const rgbaPixels = rgbaTexture.pixels;
+            //             const test = new Uint16Array(rgbaPixels.buffer);
+            //             // const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
+            //             device.uploadTextureData(gfx_texture, mipLevel, [test]);
+            //         }
+            //     );
+            // }
+            const channelFormat = getChannelFormat(texture.imageFormat);
+
+            for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
+            {
+                const buffer = texture.textureDataArray[0].mipBuffers[mipLevel];
+                const width = Math.max(texture.width >>> mipLevel, 1);
+                const height = Math.max(texture.height >>> mipLevel, 1);
+                const depth = 1;
+                const blockHeightLog2 = texture.blockHeightLog2;
+                deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 })
+                .then
+                (
+                    (deswizzled) =>
+                    {
+                        const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
+                        const rgbaPixels = rgbaTexture.pixels;
+                        if (channelFormat === ChannelFormat.R16_G16_B16_A16)
+                        {
+                            const test = new Uint16Array(rgbaPixels.buffer);
+                            device.uploadTextureData(gfx_texture, mipLevel, [test]);
+                        }
+                        else
+                        {
+                            const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
+                            device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
+                        }
                     }
                 );
             }
@@ -135,3 +185,15 @@ function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_mapping: nu
 
     return rgba_pixels;
 }
+
+// export async function deswizzle_uint8_array(buffer: Uint8Array, channel_format: ChannelFormat, width: number, height: number, blockHeightLog2: number): Promise<Uint8Array<ArrayBuffer>>
+// {
+//     const compression_type =
+//     channel_format === ChannelFormat.Bc1 ? rust.CompressionType.Bc1 :
+//     channel_format === ChannelFormat.Bc2 ? rust.CompressionType.Bc2 :
+//     channel_format === ChannelFormat.Bc3 ? rust.CompressionType.Bc3 :
+//     channel_format === ChannelFormat.Bc4 ? rust.CompressionType.Bc4 :
+//     channel_format === ChannelFormat.Bc5 ? rust.CompressionType.Bc5 :
+//     rust.CompressionType.None;
+//     return rust.tegra_deswizzle(buffer, compression_type, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
+// }

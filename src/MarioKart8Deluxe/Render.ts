@@ -50,15 +50,15 @@ export class BRTITextureHolder extends TextureHolder {
         if (this.textureNames.includes(textureEntry.name))
             return;
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.textureDataArray[0].mipBuffers.length));
         const canvases: HTMLCanvasElement[] = [];
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
 
-        for (let i = 0; i < textureEntry.mipBuffers.length; i++) {
+        for (let i = 0; i < textureEntry.textureDataArray[0].mipBuffers.length; i++) {
             const mipLevel = i;
 
-            const buffer = textureEntry.mipBuffers[i];
+            const buffer = textureEntry.textureDataArray[0].mipBuffers[i];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;

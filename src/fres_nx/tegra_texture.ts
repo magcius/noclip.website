@@ -95,6 +95,7 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
     case ChannelFormat.Bc1:
     case ChannelFormat.Bc4:
+    case ChannelFormat.R16_G16_B16_A16:
         return 8;
     case ChannelFormat.Bc2:
     case ChannelFormat.Bc3:
@@ -103,8 +104,6 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     case ChannelFormat.R8_G8_B8_A8:
     case ChannelFormat.B8_G8_R8_A8:
         return 4;
-    case ChannelFormat.R16_G16_B16_A16:
-        return 8;
     default:
         throw "whoops";
     }
@@ -126,7 +125,7 @@ export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8
         channelFormat === ChannelFormat.Bc3 ? rust.CompressionType.Bc3 :
         channelFormat === ChannelFormat.Bc4 ? rust.CompressionType.Bc4 :
         channelFormat === ChannelFormat.Bc5 ? rust.CompressionType.Bc5 :
-        undefined!;
+        rust.CompressionType.None;
     return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
 }
 

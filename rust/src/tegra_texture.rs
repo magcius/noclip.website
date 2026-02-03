@@ -13,12 +13,13 @@ pub enum CompressionType {
     Bc3,
     Bc4,
     Bc5,
+    None,
 }
 
 const fn get_format_bytes_per_block(channel_format: CompressionType) -> usize {
     use CompressionType::*;
     match channel_format {
-        Bc1 | Bc4 => 8,
+        Bc1 | Bc4 | None => 8,
         Bc2 | Bc3 | Bc5 => 16,
     }
 }
@@ -27,6 +28,7 @@ const fn get_format_block_width(channel_format: CompressionType) -> usize {
     use CompressionType::*;
     match channel_format {
         Bc1 | Bc2 | Bc3 | Bc4 | Bc5 => 4,
+        None => 1,
     }
 }
 
@@ -34,6 +36,7 @@ const fn get_format_block_height(channel_format: CompressionType) -> usize {
     use CompressionType::*;
     match channel_format {
         Bc1 | Bc2 | Bc3 | Bc4 | Bc5 => 4,
+        None => 1,
     }
 }
 
