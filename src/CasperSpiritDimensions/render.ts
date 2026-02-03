@@ -32,11 +32,11 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
+    vec4 u_Options; // x = show textures (0, 1)
 };
 
 uniform sampler2D u_Texture;
 
-varying vec3 v_Position;
 varying vec3 v_Color;
 varying vec2 v_TexCoord;
 
@@ -48,30 +48,24 @@ layout(location = 2) in vec2 a_UV;
 void main() {
     v_Color = a_Color;
     v_TexCoord = a_UV;
-    vec4 worldPos = vec4(a_Position, 1.0);
-    v_Position = worldPos.xyz;
-    gl_Position = UnpackMatrix(u_ProjectionView) * worldPos;
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(a_Position, 1.0);
 }
 #endif
 
 #ifdef FRAG
 void main() {
-    // vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    // vec4 finalColor = texColor * vec4(v_Color, 1.0);
-    // if (finalColor.a < 0.1) {
-    //     discard;
-    // }
-    // // gl_FragColor = vec4(v_Color, 1.0);
-    // gl_FragColor = finalColor;
-
-    vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    vec3 ambient = vec3(0.075); // close approx to PS2 appearance
-    vec3 lightColor = v_Color + ambient;
-    vec4 finalColor = texColor * vec4(clamp(lightColor, 0.0, 1.0), 1.0);
-
-    if (finalColor.a < 0.1) discard;
-
-    gl_FragColor = finalColor;
+    if (u_Options.x > 0.1) {
+        vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+        vec3 ambient = vec3(0.075); // close approx to PS2 appearance
+        vec3 lightColor = v_Color + ambient;
+        vec4 finalColor = texColor * vec4(clamp(lightColor, 0.0, 1.0), 1.0);
+        if (finalColor.a < 0.1) {
+            discard;
+        }
+        gl_FragColor = finalColor;
+    } else {
+        gl_FragColor = vec4(v_Color, 1.0);
+    }
 }
 #endif
     `;
@@ -82,7 +76,8 @@ void main() {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
-const WORLD_SCALE = 300;
+const WORLD_SCALE = 300; // xyz are extremely small in the data
+const BACK_CULL_LEVELS = [5, 8, 9, 11, 12, 14]; // levels that are mostly interior
 
 export class LevelRenderer {
     private vertexBuffer: GfxBuffer;
@@ -91,8 +86,13 @@ export class LevelRenderer {
     private uvBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private batches: MeshBatch[] = [];
+    public showTextures: boolean = true;
+    public cullMode: GfxCullMode = GfxCullMode.None;
 
-    constructor(cache: GfxRenderCache, world: WorldData, private textures: Map<string, Texture>) {
+    constructor(cache: GfxRenderCache, number: number, world: WorldData, private textures: Map<string, Texture>) {
+        if (BACK_CULL_LEVELS.includes(number)) {
+            this.cullMode = GfxCullMode.Back;
+        }
         const device = cache.device;
         const { vertices, indices, uvs, colors } = this.buildBuffers(world);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer);
@@ -121,12 +121,7 @@ export class LevelRenderer {
         template.setGfxProgram(program);
         template.setBindingLayouts(bindingLayouts);
         template.setUniformBuffer(renderHelper.uniformBuffer);
-
-        let offs = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 16);
-        const buf = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
-        offs += fillMatrix4x4(buf, offs, viewerInput.camera.clipFromWorldMatrix);
-        template.setVertexInput(
-            this.inputLayout,
+        template.setVertexInput(this.inputLayout,
             [
                 { buffer: this.vertexBuffer, byteOffset: 0 },
                 { buffer: this.colorBuffer, byteOffset: 0 },
@@ -135,6 +130,16 @@ export class LevelRenderer {
             { buffer: this.indexBuffer, byteOffset: 0 }
         );
 
+        let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 20);
+        const buffer = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
+        // u_ProjectionView (16)
+        offset += fillMatrix4x4(buffer, offset, viewerInput.camera.clipFromWorldMatrix);
+        // u_Options (4)
+        buffer[offset++] = this.showTextures ? 1.0 : 0.0;
+        buffer[offset++] = 0.0;
+        buffer[offset++] = 0.0;
+        buffer[offset++] = 0.0;
+
         // opaque pass
         for (const batch of this.batches) {
             const texture = this.textures.get(batch.textureName);
@@ -142,6 +147,9 @@ export class LevelRenderer {
                 continue;
             }
             const renderInst = renderInstManager.newRenderInst();
+            const megaState = renderInst.getMegaStateFlags();
+            megaState.cullMode = this.cullMode;
+            renderInst.setMegaStateFlags(megaState);
             renderInst.setSamplerBindingsFromTextureMappings([{
                 gfxTexture: texture.gfxTexture,
                 gfxSampler: renderHelper.renderCache.createSampler({
@@ -157,7 +165,7 @@ export class LevelRenderer {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        // semi-transparent pass
+        // alpha pass
         for (const batch of this.batches) {
             const texture = this.textures.get(batch.textureName);
             if (!texture || !texture.hasAlpha) {
@@ -165,6 +173,7 @@ export class LevelRenderer {
             }
             const renderInst = renderInstManager.newRenderInst();
             const megaState = renderInst.getMegaStateFlags();
+            megaState.cullMode = this.cullMode;
             megaState.depthCompare = GfxCompareMode.GreaterEqual;
             setAttachmentStateSimple(megaState, {
                 channelWriteMask: GfxChannelWriteMask.RGB,

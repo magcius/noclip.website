@@ -1,5 +1,7 @@
 import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 
+// Credit to the "RW Analyze" tool by Steve M. for helping to parse the RenderWare files
+
 enum ChunkID {
     STRUCT = 1,
     STRING = 2,
@@ -316,6 +318,7 @@ export class Parser {
 
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++) {
+                        // https://ps2linux.no-ip.info/playstation2-linux.com/docs/howto/display_docef7c.html?docid=75
                         const blockLocation = (y & -16) * width + (x & -16) * 2;
                         const swapSelector = (((y + 2) >> 2) & 1) * 4;
                         const posY = (((y & -4) >> 1) + (y & 1)) & 7;
@@ -337,7 +340,7 @@ export class Parser {
                 const rawData = new Uint8Array(this.view.buffer, this.offset + 80, pixelCount * 4);
                 // there's also a copy of the texture at half resolution after another 80-byte offset
 
-                // scale alpha to 255 scale
+                // scale alpha to 255
                 rgba = new Uint8Array(pixelCount * 4);
                 for (let i = 0; i < rgba.length; i += 4) {
                     rgba[i] = rawData[i];

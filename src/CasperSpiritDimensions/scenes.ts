@@ -1,19 +1,34 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxCullMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { Parser, Texture, WorldData } from "./bin.js";
 import { LevelRenderer } from "./render.js";
+import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 
-const clearColors: number[][] = [ // hardcode to approx fog colors for now
+const CLEAR_COLORS: number[][] = [ // hardcode to approx fog colors for now
     [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
     [90, 79, 54], [5, 5, 5],     [5, 5, 5],    [5, 5, 5],
     [5, 5, 5],    [5, 5, 5],     [5, 5, 5],    [77, 50, 52],
     [12, 12, 39], [5, 5, 5],     [7, 10, 21],  [7, 19, 34]
 ];
+
+/*
+Game uses the RenderWare engine. Some files have their extensions changed (such as .TXD to .DIC) and may contain custom structs
+
+TODO
+
+Fix transparency issue (incorrect overlap of multiple alphas)
+Dynamic objects
+    Correctly positioned and rotated static models at a minimum
+    Idle animations would be nice, but not needed
+    Even better, figure out AI pathing and have certain enemies/NPCs follow a default path
+Figure out how the skybox and water works
+Implement mipmapping? Textures are present for it, at least for 32-bit ones
+*/
 
 class CasperRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
@@ -24,8 +39,8 @@ class CasperRenderer implements SceneGfx {
     constructor(device: GfxDevice, levelNumber: number, world: WorldData, textures: Map<string, Texture>) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, world, textures);
-        this.clearColor = clearColors[levelNumber - 1];
+        this.levelRenderer = new LevelRenderer(cache, levelNumber, world, textures);
+        this.clearColor = CLEAR_COLORS[levelNumber - 1];
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -54,6 +69,23 @@ class CasperRenderer implements SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
+    }
+
+    public createPanels(): Panel[] {
+        const panel = new Panel();
+        panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        panel.setTitle(RENDER_HACKS_ICON, "Render Hacks");
+        const toggleBackFaceCull = new Checkbox("Enable back-face culling", this.levelRenderer.cullMode == GfxCullMode.Back);
+        toggleBackFaceCull.onchanged = () => {
+            this.levelRenderer.cullMode = toggleBackFaceCull.checked ? GfxCullMode.Back : GfxCullMode.None
+        };
+        panel.contents.appendChild(toggleBackFaceCull.elem);
+        const toggleTextures = new Checkbox("Enable textures", true);
+        toggleTextures.onchanged = () => {
+            this.levelRenderer.showTextures = toggleTextures.checked
+        };
+        panel.contents.appendChild(toggleTextures.elem);
+        return [panel];
     }
 
     public destroy(device: GfxDevice): void {

@@ -132,7 +132,6 @@ import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
-    Scenes_CasperSD.sceneGroup,
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
@@ -213,6 +212,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Elebits.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
+    Scenes_CasperSD.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
