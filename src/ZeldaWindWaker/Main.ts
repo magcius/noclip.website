@@ -1194,7 +1194,7 @@ const sceneDescs = [
     "Outset Island",
     // See dComIfG_play_c::getLayerNo()
     new SceneDesc("sea_T", "Title Screen", [44]),
-    new SceneDesc("sea", "Outset Island", [44], {0: 'Intro (Day)', 1: 'Intro (Night)', 2: 'Pirates Arrived', 4: 'Day', 5: 'Endless Night',  8: 'Demo: Ending', 9: 'Demo: Sister Kidnapped', 10: 'Demo: Departure'}),
+    new SceneDesc("sea", "Outset Island", [44], {0: 'Intro (Day)', 1: 'Intro (Night)', 2: 'Pirates Arrived', 4: 'Day', 5: 'Night',  8: 'Demo: Ending', 9: 'Demo: Sister Kidnapped', 10: 'Demo: Departure'}),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),
