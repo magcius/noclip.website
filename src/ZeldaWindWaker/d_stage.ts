@@ -54,6 +54,9 @@ class dStage_dt {
     public roomNo: number = -1;
     public rpat: dPath[] = [];
     public rppn: dPath__Point[] = [];
+    
+    // noclip modification: Record the layers which have objects in them.
+    public activeLayers: number = 0;
 }
 
 export class stage_palet_info_class__DifAmb {
@@ -306,6 +309,9 @@ function dStage_actorInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferS
         dStage_actorCreate(globals, name, prm);
         offs += 0x20;
     }
+    if (layer >= 0 && count > 0) {
+        dt.activeLayers |= (1 << layer);
+    } 
 }
 
 function dStage_tgscInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number = -1): void {

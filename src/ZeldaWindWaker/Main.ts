@@ -953,16 +953,16 @@ class SceneDesc {
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
 
+        // If no layer names were specified, build a list of layers which have actors
         if( Object.keys(this.layerNames).length === 0 ) {
+            let activeLayers = globals.dStage_dt.activeLayers;
+            for (let r = 0; r < this.roomList.length; r++) {
+                const roomNo = Math.abs(this.roomList[r]);
+                activeLayers = activeLayers | globals.roomCtrl.status[roomNo].data.activeLayers;
+            }
+
             for (let i = 0; i < 12; i++) {
-                const idxStr = i.toString(16).toLowerCase();
-                let hasLayer = dzs.headers.has('ACT' + idxStr) || dzs.headers.has('SCO' + idxStr);
-                for (let r = 0; r < this.roomList.length; r++) {
-                    const roomNo = Math.abs(this.roomList[r]);
-                    const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-                    hasLayer = hasLayer || dzr.headers.has('ACT' + idxStr) || dzr.headers.has('SCO' + idxStr);
-                }
-                if (hasLayer)
+                if (activeLayers & (1 << i))
                     this.layerNames[i] = `Layer ${i.toString()}`;
             }
         }
