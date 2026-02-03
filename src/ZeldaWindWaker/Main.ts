@@ -245,6 +245,13 @@ class WindWakerRoom {
     public setVisible(v: boolean) { this.visible = v; }
 }
 
+class WindWakerLayer implements UI.Layer {
+    constructor(public layerNo: number, public name: string, 
+    ) {}
+    public visible: boolean = true;
+    public setVisible(v: boolean) { this.visible = v; }
+}
+
 enum EffectDrawGroup {
     Main = 0,
     Indirect = 1,
@@ -259,6 +266,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: WindWakerRoom[] = [];
+    public layers: WindWakerLayer[] = [];
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
@@ -291,23 +299,39 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        const getScenarioMask = () => {
-            let mask: number = 0;
-            for (let i = 0; i < scenarioSelect.getNumItems(); i++)
-                if (scenarioSelect.itemIsOn[i])
-                    mask |= (1 << i);
-            return mask;
-        };
-        const scenarioPanel = new UI.Panel();
-        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
-        const scenarioSelect = new UI.MultiSelect();
-        scenarioSelect.onitemchanged = () => {
-            this.setVisibleLayerMask(getScenarioMask());
-        };
-        scenarioSelect.setStrings(range(0, 12).map((i) => `Layer ${i}`));
-        scenarioSelect.setItemsSelected(range(0, 12).map((i) => (this.roomLayerMask & (1 << i)) !== 0));
-        scenarioPanel.contents.append(scenarioSelect.elem);
+        let scenarioPanel;
+        if( this.layers.length > 0 ) {
+            scenarioPanel = new UI.LayerPanel();
+            scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+            scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
+            scenarioPanel.setLayers(this.layers);
+            scenarioPanel.onlayertoggled = () => {
+                let layerMask = 0;
+                for (let i = 0; i < this.layers.length; i++) {
+                    if (this.layers[i].visible)
+                        layerMask |= (1 << this.layers[i].layerNo);
+                }
+                this.setVisibleLayerMask(layerMask);
+            };
+        } else {
+            scenarioPanel = new UI.Panel();
+            scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+            scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
+            const getScenarioMask = () => {
+                let mask: number = 0;
+                for (let i = 0; i < scenarioSelect.getNumItems(); i++)
+                    if (scenarioSelect.itemIsOn[i])
+                        mask |= (1 << i);
+                return mask;
+            };
+            const scenarioSelect = new UI.MultiSelect();
+            scenarioSelect.onitemchanged = () => {
+                this.setVisibleLayerMask(getScenarioMask());
+            };
+            scenarioSelect.setStrings(range(0, 12).map((i) => `Layer ${i}`));
+            scenarioSelect.setItemsSelected(range(0, 12).map((i) => (this.roomLayerMask & (1 << i)) !== 0));
+            scenarioPanel.contents.append(scenarioSelect.elem);
+        }
 
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -824,7 +848,7 @@ class SceneDesc {
     public id: string;
     protected globals: dGlobals;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0]) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public layerNames: Record<number, string> = []) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -948,6 +972,10 @@ class SceneDesc {
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
+        }
+
+        for (const [layerNo, name] of Object.entries(this.layerNames)) {
+            renderer.layers.push(new WindWakerLayer(Number(layerNo), name));
         }
 
         return renderer;
@@ -1173,8 +1201,9 @@ const sceneDescs = [
     new DemoDesc("Hyrule", "Hyrule Barrier Break", [0], "seal.stb", 4, 1, [0.0, 0.0, 0.0], 0, 0, 0), // ?t=6046s
 
     "Outset Island",
+    // See dComIfG_play_c::getLayerNo()
     new SceneDesc("sea_T", "Title Screen", [44]),
-    new SceneDesc("sea", "Outset Island", [44]),
+    new SceneDesc("sea", "Outset Island", [44], {0: 'Intro (Day)', 1: 'Intro (Night)', 2: 'Pirates Arrived', 4: 'Day', 5: 'Endless Night',  8: 'Demo: Ending', 9: 'Demo: Sister Kidnapped', 10: 'Demo: Departure'}),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),
