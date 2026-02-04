@@ -49,10 +49,12 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     const arraySize = view.getUint32(offs + 0x30, littleEndian);
     // layout, the first element of which appears to be blockHeightLog2
     const blockHeightLog2 = view.getUint32(offs + 0x34, littleEndian);
-    const channelFormat = getChannelFormat(imageFormat);
+    let channelFormat = getChannelFormat(imageFormat);
     if (!isChannelFormatSupported(channelFormat))
+    {
+        console.error(`texture ${name} has unsupported channel format ${channelFormat} image format ${imageFormat}`);
         return null;
-
+    }
     const textureDataSize = view.getUint32(offs + 0x50, littleEndian);
     const alignment = view.getUint32(offs + 0x54, littleEndian);
     let channelMapping: number[] = [];

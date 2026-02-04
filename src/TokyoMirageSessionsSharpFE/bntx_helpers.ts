@@ -4,7 +4,7 @@
 
 import * as BNTX from '../fres_nx/bntx.js';
 import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat, GfxTextureDimension, GfxTextureUsage } from '../gfx/platform/GfxPlatform.js';
-import { getChannelFormat, ChannelFormat } from '../fres_nx/nngfx_enum.js';
+import { getChannelFormat, ChannelFormat, getTypeFormat, TypeFormat } from '../fres_nx/nngfx_enum.js';
 import { rust } from "../rustlib.js";
 import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
 import { assert } from '../util.js';
@@ -85,6 +85,8 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
             // gfx_texture_array.push(gfx_texture);
 
             // TODO: this somehow causes a memory leak
+            // this should be done after deswizzle
+
             // rearrange the mip buffers
             // each buffer is all the textures at a mip level smashed together
             // const new_mip_buffer_array: Uint8Array[] = [];
@@ -140,9 +142,11 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                     {
                         const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                         const rgbaPixels = rgbaTexture.pixels;
-                        if (channelFormat === ChannelFormat.R16_G16_B16_A16)
+                        const type_format = getTypeFormat(texture.imageFormat);
+                        if (type_format === TypeFormat.Float)
                         {
                             const test = new Uint16Array(rgbaPixels.buffer);
+                            // TODO: remap channels
                             device.uploadTextureData(gfx_texture, mipLevel, [test]);
                         }
                         else
