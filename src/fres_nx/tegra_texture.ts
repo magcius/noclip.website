@@ -177,35 +177,40 @@ function convertFloatR11_G11_B10(textureEntry: BRTI, pixels: Uint8Array<ArrayBuf
 
         // layout 10 bits blue, 11 bits green, 11 bits red
         const b = (oldPixel >> 22) & 0x3FF;
+
+        // these have no sign bit, so we can ignore it
+        // the exponent is still 5 bits, so leave it as is
         const bExponent = b >> 5;
-        const bMantissa = b & 0x1F;
+        // the mantissa will expand from 5/6 bits to 10 bits.
+        const bMantissa = (b & 0x1F) / 0x1F * 0x3FF;
+
+        // the sign bit will remain 0
+        // the exponent needs to be from bits 2 to 7 of the first byte, so shift them up 2
+        // bits 1 and 2 need to be the top 2 bits of the mantissa
+        const b1 = (bExponent << 2) + (bMantissa >> 8);
+        // the second byte is the lower 8 bits of the mantissa
+        const b2 = bMantissa;
 
         const g = (oldPixel >> 11) & 0x7FF;
         const gExponent = g >> 6;
-        const gMantissa = g & 0x3F;
+        const gMantissa = (g & 0x3F) / 0x3F * 0x3FF;
+        const g1 = (gExponent << 2) + (gMantissa >> 8);
+        const g2 = gMantissa;
 
         const r = oldPixel & 0x7FF;
         const rExponent = r >> 6;
-        const rMantissa = r & 0x3F;    
-
-        if (i == 0)
-        {
-            console.log(`oldPixel ${oldPixel}`);
-            // console.log(`r ${r}`);
-            // console.log(`g ${g}`);
-            // console.log(`b ${b}`);
-        }
+        const rMantissa = (r & 0x3F) / 0x3F * 0x3FF;    
+        const r1 = (rExponent << 2) + (rMantissa >> 8);
+        const r2 = rMantissa;
 
         const newPixelOffset = i * 0x8;
-        // these have no sign bit, so we can ignore it
-        // the exponent needs to be from bits 2 to 7, so shift them up 2
-        // the mantissa will occupy the rest of the bits. it expands from 5/6 bits to 10 bits
-        newBuffer[newPixelOffset + 0] = rMantissa;
-        newBuffer[newPixelOffset + 1] = rExponent << 2;
-        newBuffer[newPixelOffset + 2] = gMantissa;
-        newBuffer[newPixelOffset + 3] = gExponent << 2;
-        newBuffer[newPixelOffset + 4] = bMantissa;
-        newBuffer[newPixelOffset + 5] = bExponent << 2;
+        // write them in little endian
+        newBuffer[newPixelOffset + 0] = r2;
+        newBuffer[newPixelOffset + 1] = r1;
+        newBuffer[newPixelOffset + 2] = g2;
+        newBuffer[newPixelOffset + 3] = g1;
+        newBuffer[newPixelOffset + 4] = b2;
+        newBuffer[newPixelOffset + 5] = b1;
         newBuffer[newPixelOffset + 6] = 0;
         newBuffer[newPixelOffset + 7] = 0x3C;
     }
