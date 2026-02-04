@@ -82,9 +82,9 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
     case ChannelFormat.R11_G11_B10:
     case ChannelFormat.R16_G16_B16_A16:
     case ChannelFormat.Bc1:
-    case ChannelFormat.Bc4:
     case ChannelFormat.Bc2:
     case ChannelFormat.Bc3:
+    case ChannelFormat.Bc4:
     case ChannelFormat.Bc5:
         return true;
     default:
@@ -121,10 +121,10 @@ export interface SwizzledSurface {
 
 export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array<ArrayBuffer>> {
     const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
-    const block_width = getFormatBlockWidth(channelFormat);
-    const block_height = getFormatBlockHeight(channelFormat);
-    const bytes_per_pixel = getFormatBytesPerPixel(channelFormat);
-    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), block_width, block_height, bytes_per_pixel, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
+    const blockWidth = getFormatBlockWidth(channelFormat);
+    const blockHeight = getFormatBlockHeight(channelFormat);
+    const bytesPerPixel = getFormatBytesPerPixel(channelFormat);
+    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), blockWidth, blockHeight, bytesPerPixel, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
@@ -166,38 +166,37 @@ function convertFloatR11_G11_B10(textureEntry: BRTI, pixels: Uint8Array<ArrayBuf
     const pixelCount = pixels.byteLength / 4;
     const newBufferLength = pixels.byteLength * 2;
     let newBuffer = new Uint8Array(newBufferLength)
-    for (let i = 0; i < pixelCount; i++)
-    {
-        const oldPixelOffset = i * 0x4;
+    for (let i = 0; i < pixelCount; i++) {
+        const originalPixelOffset = i * 0x4;
         // read 4 bytes little endian
-        const oldPixel = (pixels[oldPixelOffset + 3] << 24) +
-                         (pixels[oldPixelOffset + 2] << 16) +
-                         (pixels[oldPixelOffset + 1] << 8) +
-                         (pixels[oldPixelOffset + 0] << 0);
+        const originalPixel = (pixels[originalPixelOffset + 3] << 24) +
+                         (pixels[originalPixelOffset + 2] << 16) +
+                         (pixels[originalPixelOffset + 1] << 8) +
+                         (pixels[originalPixelOffset + 0] << 0);
 
         // layout 10 bits blue, 11 bits green, 11 bits red
-        const b = (oldPixel >> 22) & 0x3FF;
+        const b = (originalPixel >> 22) & 0x3FF;
 
-        // these have no sign bit, so we can ignore it
+        // these have no sign bit
         // the exponent is still 5 bits, so leave it as is
         const bExponent = b >> 5;
         // the mantissa will expand from 5/6 bits to 10 bits.
         const bMantissa = (b & 0x1F) / 0x1F * 0x3FF;
 
-        // the sign bit will remain 0
+        // the sign bit will be 0
         // the exponent needs to be from bits 2 to 7 of the first byte, so shift them up 2
         // bits 1 and 2 need to be the top 2 bits of the mantissa
         const b1 = (bExponent << 2) + (bMantissa >> 8);
         // the second byte is the lower 8 bits of the mantissa
         const b2 = bMantissa;
 
-        const g = (oldPixel >> 11) & 0x7FF;
+        const g = (originalPixel >> 11) & 0x7FF;
         const gExponent = g >> 6;
         const gMantissa = (g & 0x3F) / 0x3F * 0x3FF;
         const g1 = (gExponent << 2) + (gMantissa >> 8);
         const g2 = gMantissa;
 
-        const r = oldPixel & 0x7FF;
+        const r = originalPixel & 0x7FF;
         const rExponent = r >> 6;
         const rMantissa = (r & 0x3F) / 0x3F * 0x3FF;    
         const r1 = (rExponent << 2) + (rMantissa >> 8);
@@ -208,7 +207,7 @@ function convertFloatR11_G11_B10(textureEntry: BRTI, pixels: Uint8Array<ArrayBuf
         const a2 = 0x0;
 
         const newPixelOffset = i * 0x8;
-        // write them in little endian
+        // output in little endian
         newBuffer[newPixelOffset + 0] = r2;
         newBuffer[newPixelOffset + 1] = r1;
         newBuffer[newPixelOffset + 2] = g2;
@@ -233,6 +232,10 @@ function getChannelFormatString(channelFormat: ChannelFormat): string {
         return 'BC5';
     case ChannelFormat.R8_G8_B8_A8:
         return 'R8_G8_B8_A8';
+    case ChannelFormat.R11_G11_B10:
+        return 'R11_G11_B10';
+    case ChannelFormat.R16_G16_B16_A16:
+        return 'R16_G16_B16_A16';
     default:
         throw "whoops";
     }
@@ -244,6 +247,8 @@ function getTypeFormatString(typeFormat: TypeFormat): string {
         return 'UNORM';
     case TypeFormat.Snorm:
         return 'SNORM';
+    case TypeFormat.Float:
+        return 'Float';
     case TypeFormat.UnormSrgb:
         return 'SRGB';
     default:

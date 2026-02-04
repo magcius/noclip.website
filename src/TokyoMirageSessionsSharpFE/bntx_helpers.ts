@@ -53,7 +53,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                         const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                         const rgbaPixels = rgbaTexture.pixels;
                         // TODO remap for uint16 arrays
-                        const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
+                        const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelSource);
                         device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
                     }
                 );
@@ -151,7 +151,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                         }
                         else
                         {
-                            const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
+                            const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelSource);
                             device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
                         }
                     }
@@ -168,10 +168,10 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
  * for example, a monochrome texture might use the red channel for RGB, and use the green channel for A.
  * before uploading the texture to the gpu, we need to apply this mapping to get the final texture data.
  * @param rgba_pixels the texture data in RGBA format
- * @param channel_mapping an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
+ * @param channel_source an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
  * @returns a remapped rgba_pixels array
  */
-function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_mapping: number[]): Uint8Array | Int8Array
+function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: number[]): Uint8Array | Int8Array
 {
     let offset = 0;
     for (let i = 0; i < rgba_pixels.byteLength / 4; i++)
@@ -181,10 +181,10 @@ function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_mapping: nu
         const blue = rgba_pixels[i * 4 + 2];
         const alpha = rgba_pixels[i * 4 + 3];
         const channel_array = [0, 0xFF, red, green, blue, alpha];
-        rgba_pixels[offset++] = channel_array[channel_mapping[0]];
-        rgba_pixels[offset++] = channel_array[channel_mapping[1]];
-        rgba_pixels[offset++] = channel_array[channel_mapping[2]];
-        rgba_pixels[offset++] = channel_array[channel_mapping[3]];
+        rgba_pixels[offset++] = channel_array[channel_source[0]];
+        rgba_pixels[offset++] = channel_array[channel_source[1]];
+        rgba_pixels[offset++] = channel_array[channel_source[2]];
+        rgba_pixels[offset++] = channel_array[channel_source[3]];
     }
 
     return rgba_pixels;

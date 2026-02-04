@@ -1,10 +1,8 @@
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, assert, align } from "../util.js";
+import { readString, assert } from "../util.js";
 import { isMarkerLittleEndian, readBinStr } from "./bfres.js";
 import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat } from "./nngfx_enum.js";
-import { getFormatBlockHeight, getFormatBlockWidth, getFormatBytesPerPixel, isChannelFormatSupported, translateImageFormat } from "./tegra_texture.js";
-import { calcMipLevelByteSize } from "../gfx/helpers/TextureHelpers.js";
+import { getFormatBlockHeight, isChannelFormatSupported } from "./tegra_texture.js";
 
 export interface BNTX {
     textures: BRTI[];
@@ -20,10 +18,10 @@ export interface BRTI {
     arraySize: number;
     textureDataArray: TextureData[];
     blockHeightLog2: number;
-    channelMapping: number[];
+    channelSource: number[];
 }
-export interface TextureData
-{
+
+export interface TextureData {
     mipBuffers: ArrayBufferSlice[];
 }
 
@@ -50,18 +48,17 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     // layout, the first element of which appears to be blockHeightLog2
     const blockHeightLog2 = view.getUint32(offs + 0x34, littleEndian);
     let channelFormat = getChannelFormat(imageFormat);
-    if (!isChannelFormatSupported(channelFormat))
-    {
-        console.error(`texture ${name} has unsupported channel format ${channelFormat} image format ${imageFormat}`);
+    if (!isChannelFormatSupported(channelFormat)) {
+        console.error(`texture ${name} has unsupported channel format ${channelFormat}`);
         return null;
     }
     const textureDataSize = view.getUint32(offs + 0x50, littleEndian);
     const alignment = view.getUint32(offs + 0x54, littleEndian);
-    let channelMapping: number[] = [];
-    channelMapping.push(view.getUint8(offs + 0x58));
-    channelMapping.push(view.getUint8(offs + 0x59));
-    channelMapping.push(view.getUint8(offs + 0x5A));
-    channelMapping.push(view.getUint8(offs + 0x5B));
+    let channelSource: number[] = [];
+    channelSource.push(view.getUint8(offs + 0x58));
+    channelSource.push(view.getUint8(offs + 0x59));
+    channelSource.push(view.getUint8(offs + 0x5A));
+    channelSource.push(view.getUint8(offs + 0x5B));
     const imageDimension = view.getUint8(offs + 0x5C);
 
     const dataOffsets: number[] = [];
@@ -71,25 +68,22 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         dataOffsTableIdx += 0x08;
     }
 
-    // add an offset for the end of the last mipmap buffer in a single texture
-    // so we can safely index i + 1
+    // to allow indexing at i + 1, add an offset for the end of the last mipmap buffer in a single texture
     const singleTextureSize = textureDataSize / arraySize;
     dataOffsets.push(dataOffsets[0] + singleTextureSize);
 
     const textureDataArray: TextureData[] = [];
-    for (let arrayIndex = 0; arrayIndex < arraySize; arrayIndex++)
-    {
+    for (let arrayIndex = 0; arrayIndex < arraySize; arrayIndex++) {
         const mipBuffers: ArrayBufferSlice[] = [];
-        for (let mipIndex = 0; mipIndex < mipCount; mipIndex++)
-        {
-            const start = dataOffsets[mipIndex] + (arrayIndex * singleTextureSize);
-            const end = dataOffsets[mipIndex + 1] + (arrayIndex * singleTextureSize);
+        for (let mipLevel = 0; mipLevel < mipCount; mipLevel++) {
+            const start = dataOffsets[mipLevel] + (arrayIndex * singleTextureSize);
+            const end = dataOffsets[mipLevel + 1] + (arrayIndex * singleTextureSize);
             mipBuffers.push(buffer.slice(start, end));
         }
         textureDataArray.push({ mipBuffers });
     }
 
-    return { name, imageDimension, imageFormat, width, height, depth, arraySize, textureDataArray, blockHeightLog2, channelMapping };
+    return { name, imageDimension, imageFormat, width, height, depth, arraySize, textureDataArray, blockHeightLog2, channelSource };
 }
 
 export function parse(buffer: ArrayBufferSlice): BNTX {
