@@ -3,21 +3,14 @@ import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage 
 // Credit to the "RW Analyze" tool by Steve M. for helping to parse the RenderWare files
 
 enum ChunkID {
-    STRUCT = 1,
-    STRING = 2,
-    EXTENSION = 3,
-    TEXTURE = 6,
-    MATERIAL = 7,
-    MATERIAL_LIST = 8,
-    ATOMIC_SECTION = 9,
-    PLANE_SECTION = 10,
-    WORLD = 11,
-    TEXTURE_NATIVE = 0x15,
-    TEXTURE_DICTIONARY = 0x16,
-    SKY_MIPMAP_VAL = 0x110,
-    COLLISION_PLG = 0x11D,
-    MATERIAL_EFFECTS_PLG = 0x120,
-    BIN_MESH_PLG = 0x50E
+    STRUCT = 1, STRING = 2, EXTENSION = 3, TEXTURE = 6,
+    MATERIAL = 7, MATERIAL_LIST = 8, ATOMIC_SECTION = 9,
+    PLANE_SECTION = 10, WORLD = 11, FRAME_LIST = 14,
+    GEOMETRY = 15, CLUMP = 16, ATOMIC = 0x14, TEXTURE_NATIVE = 0x15,
+    TEXTURE_DICTIONARY = 0x16, GEOMETRY_LIST = 0x1A,
+    MORPH_PLG = 0x105, SKY_MIPMAP_VAL = 0x110,
+    PARTICLES_PLG = 0x118, COLLISION_PLG = 0x11D,
+    MATERIAL_EFFECTS_PLG = 0x120, BIN_MESH_PLG = 0x50E
 }
 
 export interface WorldSector {
@@ -28,7 +21,21 @@ export interface WorldSector {
 
 export interface WorldData {
     materials: string[];
+    tomMeshes: DFFMesh[];
     rootSector: WorldSector;
+}
+
+export class TOMInstance {
+    name: string;
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+    properties: string[];
+}
+
+export class ObjectDefintion {
+    names: string[];
+    dffPath: string;
 }
 
 interface MeshSplit {
@@ -38,10 +45,14 @@ interface MeshSplit {
 
 interface Mesh {
     vertexCount: number;
-    positions: number[];
-    splits: MeshSplit[];
+    vertices: number[];
     uvs: number[];
     colors: number[];
+    splits: MeshSplit[];
+}
+
+export interface DFFMesh extends Mesh {
+    materials: string[];
 }
 
 export class Texture {
@@ -79,6 +90,7 @@ export class Parser {
     public parseBSP(): WorldData {
         const worldData: WorldData = {
             materials: [],
+            tomMeshes: [],
             rootSector: {type: "node", children: []}
         };
 
@@ -179,13 +191,13 @@ export class Parser {
         const vertexCount = this.view.getUint32(this.offset + 8, true);
         if (vertexCount === 0) {
             this.offset = structEnd; 
-            return { vertexCount: 0, splits: [], positions: [], uvs: [], colors: [] };
+            return { vertexCount: 0, splits: [], vertices: [], uvs: [], colors: [] };
         }
 
         let pointer = this.offset + 44; // skip struct header
-        const positions: number[] = [];
+        const vertices: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
-            positions.push(
+            vertices.push(
                 this.view.getFloat32(pointer, true),
                 this.view.getFloat32(pointer + 4, true),
                 this.view.getFloat32(pointer + 8, true)
@@ -222,48 +234,53 @@ export class Parser {
         while (this.offset < extEnd - 12) {
             const subHeader = this.readHeader();
             if (subHeader.id === ChunkID.BIN_MESH_PLG) {
-                const faceType = this.view.getUint32(this.offset, true);
-                const numSplits = this.view.getUint32(this.offset + 4, true);
-                let seeker = this.offset + 12;
-
-                for (let s = 0; s < numSplits; s++) {
-                    const count = this.view.getUint32(seeker, true);
-                    const materialIndex = this.view.getUint32(seeker + 4, true);
-                    seeker += 8;
-
-                    const indices: number[] = [];
-                    const rawIndices: number[] = [];
-                    for (let i = 0; i < count; i++) {
-                        rawIndices.push(this.view.getUint32(seeker, true));
-                        seeker += 4;
-                    }
-
-                    if (faceType === 1) { // triangle strips
-                        for (let i = 0; i < rawIndices.length - 2; i++) {
-                            const v1 = rawIndices[i], v2 = rawIndices[i + 1], v3 = rawIndices[i + 2];
-                            if (v1 !== v2 && v1 !== v3 && v2 !== v3) {
-                                if (i % 2 === 0) {
-                                    indices.push(v1, v2, v3);
-                                } else {
-                                    indices.push(v1, v3, v2);
-                                }
-                            }
-                        }
-                    } else { // triangle list
-                        indices.push(...rawIndices);
-                    }
-
-                    splits.push({ materialIndex, indices });
-                }
-                this.offset += subHeader.size;
-            } else {
-                this.offset += subHeader.size;
+                splits.push(...this.parseBinMesh());
             }
+            this.offset += subHeader.size;
         }
 
         this.offset = extEnd;
 
-        return { vertexCount, positions, uvs, colors, splits };
+        return { vertexCount, vertices, uvs, colors, splits };
+    }
+
+    private parseBinMesh(): MeshSplit[] {
+        const faceType = this.view.getUint32(this.offset, true);
+        const numSplits = this.view.getUint32(this.offset + 4, true);
+        let seeker = this.offset + 12;
+        const splits: MeshSplit[] = [];
+        for (let s = 0; s < numSplits; s++) {
+            const count = this.view.getUint32(seeker, true);
+            const materialIndex = this.view.getUint32(seeker + 4, true);
+            seeker += 8;
+
+            const indices: number[] = [];
+            const rawIndices: number[] = [];
+            for (let i = 0; i < count; i++) {
+                rawIndices.push(this.view.getUint32(seeker, true));
+                seeker += 4;
+            }
+
+            if (faceType === 1) {
+                // triangle strips
+                for (let i = 0; i < rawIndices.length - 2; i++) {
+                    const v1 = rawIndices[i], v2 = rawIndices[i + 1], v3 = rawIndices[i + 2];
+                    if (v1 !== v2 && v1 !== v3 && v2 !== v3) {
+                        if (i % 2 === 0) {
+                            indices.push(v1, v2, v3);
+                        } else {
+                            indices.push(v1, v3, v2);
+                        }
+                    }
+                }
+            } else {
+                // triangle list
+                indices.push(...rawIndices);
+            }
+
+            splits.push({ materialIndex, indices });
+        }
+        return splits;
     }
 
     public parseDIC(device: GfxDevice, materials: string[]): Map<string, Texture> {
@@ -356,10 +373,204 @@ export class Parser {
         return textures;
     }
 
+    public parseTOM(): TOMInstance[] {
+        const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.view.buffer, this.view.byteOffset, this.view.byteLength));
+        const lines = rawText.split("\n");
+        const instances: TOMInstance[] = [];
+        let currentObj;
+        let inProperties = false;
+
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) {
+                continue;
+            }
+
+            if (line.startsWith("BEGIN_OBJ:")) {
+                currentObj = new TOMInstance();
+                const nameMatch = line.match(/"([^"]+)"/);
+                let name = nameMatch ? nameMatch[1] : "";
+                if (name.includes(",")) {
+                    name = name.split(",")[0]
+                }
+                currentObj.name = name;
+                currentObj.properties = [];
+                inProperties = false;
+            } else if (currentObj) {
+                if (line.startsWith("END_OBJ:")) {
+                    instances.push(currentObj);
+                    currentObj = new TOMInstance();
+                } else if (line.startsWith("BEGIN_USERPROPS:")) {
+                    inProperties = true;
+                } else if (line.startsWith("END_USERPROPS:")) {
+                    inProperties = false;
+                } else if (!inProperties) {
+                    const parts = line.split(/\s+/);
+                    const key = parts[0].replace(":", "");
+                    const values = parts.slice(1).map(Number);
+                    if (key === "POS") {
+                        currentObj.position = { x: values[0], y: values[1], z: values[2] };
+                    } else if (key === "ROTATE") {
+                        currentObj.rotation = { x: values[0], y: values[1], z: values[2] };
+                    } else if (key === "SCALE") {
+                        currentObj.scale = { x: values[0], y: values[1], z: values[2] };
+                    }
+                } else {
+                    currentObj.properties.push(line.replace("\t", ""));
+                }
+            }
+        }
+
+        return instances;
+    }
+
+    public parseOBD(): ObjectDefintion[] {
+        const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.view.buffer, this.view.byteOffset, this.view.byteLength));
+        const lines = rawText.split("\n");
+        const objDefs: ObjectDefintion[] = [];
+
+        function extractQuotedStrings(line: string): string[] {
+            const matches = line.match(/"([^"]*)"/g);
+            if (!matches) return [];
+            return matches.map(s => s.slice(1, -1));
+        }
+
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) {
+                continue;
+            }
+            if (line.startsWith("DEFINE_OBJ:")) {
+                const elems = extractQuotedStrings(line.substring("DEFINE_OBJ: ".length, line.lastIndexOf("\"") + 1));
+                const name = elems[0].toLowerCase();
+                const type = elems[1].toLowerCase();
+                const val1 = elems[2];
+                // const val2 = elems.length > 3 ? elems[3] : "";
+                if (type === "alias") {
+                    for (const o of objDefs) {
+                        if (o.names.includes(val1)) {
+                            o.names.push(name);
+                            break;
+                        }
+                    }
+                } else if (type === "anim" || type === "basic") {
+                    objDefs.push({ names: [name], dffPath: val1.toUpperCase() });
+                }
+            }
+        }
+
+        return objDefs;
+    }
+
+    public parseDFF(): DFFMesh {
+        this.offset = 0;
+        const clumpHeader = this.readHeader();
+        const clumpEnd = this.offset + clumpHeader.size;
+        const clumpStructHeader = this.readHeader(); // struct is just object count, ignore
+        this.offset += clumpStructHeader.size;
+        const frameListHeader = this.readHeader(); // skip for now
+        this.offset += frameListHeader.size;
+        const atomicHeader = this.readHeader();
+        const atomicStructHeader = this.readHeader(); // frame and geometry index numbers
+        this.offset += atomicStructHeader.size;
+        const geometryHeader = this.readHeader();
+        if (geometryHeader.id === ChunkID.GEOMETRY) {
+            const geometryStructHeader = this.readHeader();
+            const geometryStructEnd = this.offset + geometryStructHeader.size;
+            const { vertexCount, vertices, uvs, colors } = this.parseGeometryStruct(this.offset, geometryStructEnd);
+            this.offset = geometryStructEnd;
+            const materialListHeader = this.readHeader();
+            const materials = this.parseMaterialList(materialListHeader.size);
+            if (materials[0].length > 0) { // temp don't build meshes without textures
+                const extensionHeader = this.readHeader();
+                const splits: MeshSplit[] = [];
+                if (extensionHeader.id === ChunkID.EXTENSION) {
+                    const binMeshHeader = this.readHeader();
+                    if (binMeshHeader.id === ChunkID.BIN_MESH_PLG) {
+                        splits.push(...this.parseBinMesh());
+                        return { vertexCount, vertices, uvs, colors, splits, materials };
+                    }
+                }
+            }
+        }
+        return { vertexCount: 0, vertices: [], uvs: [], colors: [], splits: [], materials: [] };
+    }
+
+    private parseGeometryStruct(start: number, end: number): { vertexCount: number, vertices: number[], uvs: number[], colors: number[] } {
+        // header (28)
+        // bitwise flags (1), ? (3), face num (4), vertex num (4), frame num (4), c1 (4), c2 (4), c3 (4)
+        this.offset = start;
+        const flags = this.view.getUint8(this.offset);
+        // const geoTriStrip = (flags & 1) === 1;
+        // const geoPositions = ((flags >> 1) & 1) === 1;
+        const geoTextured = ((flags >> 2) & 1) === 1;
+        const geoPrelit = ((flags >> 3) & 1) === 1;
+        const geoNormals = ((flags >> 4) & 1) === 1;
+        // const geoLight = ((flags >> 5) & 1) === 1;
+        // const geoModulate = ((flags >> 6) & 1) === 1;
+        // const geoTextured2 = ((flags >> 7) & 1) === 1;
+        const faceCount = this.view.getUint32(this.offset + 4, true);
+        const vertexCount = this.view.getUint32(this.offset + 8, true);
+        this.offset += 28; // skip over internal header
+        let pointer = this.offset;
+
+        // colors (4)
+        const colors: number[] = [];
+        for (let i = 0; i < vertexCount; i++) {
+            if (geoPrelit) {
+                colors.push(
+                    this.view.getUint8(pointer),
+                    this.view.getUint8(pointer + 1),
+                    this.view.getUint8(pointer + 2)
+                );
+                pointer += 4;
+            } else {
+                colors.push(180, 180, 180);
+            }
+        }
+
+        // uvs (8)
+        const uvs: number[] = [];
+        for (let i = 0; i < vertexCount; i++) {
+            if (geoTextured) {
+                uvs.push(
+                    this.view.getFloat32(pointer, true),
+                    this.view.getFloat32(pointer + 4, true)
+                );
+                pointer += 8;
+            } else {
+                uvs.push(0, 0);
+            }
+        }
+
+        // faces (8)
+        pointer += 8 * faceCount;
+
+        // skip bounding sphere and unknown nums and work backwards to get to vertices
+        pointer = end - (12 * vertexCount);
+        if (geoNormals) {
+            // skip normals if present
+            pointer -= 12 * vertexCount;
+        }
+
+        // vertices (12)
+        const vertices: number[] = [];
+        for (let i = 0; i < vertexCount; i++) {
+            vertices.push(
+                this.view.getFloat32(pointer, true),
+                this.view.getFloat32(pointer + 4, true),
+                this.view.getFloat32(pointer + 8, true)
+            );
+            pointer += 12;
+        }
+
+        return { vertexCount, vertices, uvs, colors };
+    }
+
     private readString(size: number): string {
         const bytes = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, size);
         const str = new TextDecoder().decode(bytes);
         this.offset += size;
-        return str.replace(/\0/g, '').toLowerCase();
+        return str.replace(/\0/g, '').toLowerCase().replace(/[^a-zA-Z0-9_,]/g, "");
     }
 }

@@ -5,9 +5,10 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { Parser, Texture, WorldData } from "./bin.js";
+import { DFFMesh, ObjectDefintion, Parser, Texture, TOMInstance, WorldData } from "./bin.js";
 import { LevelRenderer } from "./render.js";
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
+import { DataFetcher } from "../DataFetcher.js";
 
 const CLEAR_COLORS: number[][] = [ // hardcode to approx fog colors for now
     [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
@@ -36,10 +37,10 @@ class CasperRenderer implements SceneGfx {
     private levelRenderer: LevelRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, levelNumber: number, world: WorldData, textures: Map<string, Texture>) {
+    constructor(device: GfxDevice, levelNumber: number, world: WorldData, textures: Map<string, Texture>, tomInstances: TOMInstance[], dffs: Map<string, DFFMesh>) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, levelNumber, world, textures);
+        this.levelRenderer = new LevelRenderer(cache, levelNumber, world, textures, tomInstances, dffs);
         this.clearColor = CLEAR_COLORS[levelNumber - 1];
     }
 
@@ -107,10 +108,43 @@ class CasperScene implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const bspFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
         const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${this.levelNumber}.DIC`);
+        const tomFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/${this.id}/M${this.id}.TOM`);
+        const obdFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/CASPER.OBD`);
         const world = new Parser(bspFile.createDataView()).parseBSP();
+        const objDefs = new Parser(obdFile.createDataView()).parseOBD();
+        const tomInstances = new Parser(tomFile.createDataView()).parseTOM();
+        const dffMeshes = await buildDFFMeshes(context.dataFetcher, pathBase, world, objDefs, tomInstances);
+        console.log("Built", dffMeshes.size, "DFF meshes");
         const textures = new Parser(dicFile.createDataView()).parseDIC(device, world.materials);
-        return new CasperRenderer(device, this.levelNumber, world, textures);
+        return new CasperRenderer(device, this.levelNumber, world, textures, tomInstances, dffMeshes);
     }
+}
+
+async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, world: WorldData, objDefs: ObjectDefintion[], tomInstances: TOMInstance[]): Promise<Map<string, DFFMesh>> {
+    const meshes = new Map<string, DFFMesh>();
+    for (const tom of tomInstances) {
+        if (meshes.has(tom.name)) {
+            continue;
+        }
+        let dffPath = "";
+        for (const def of objDefs) {
+            if (def.names.includes(tom.name)) {
+                dffPath = def.dffPath;
+                break;
+            }
+        }
+        if (dffPath === "") {
+            continue;
+        }
+        const dffFile = await dataFetcher.fetchData(`${pathBase}/${dffPath}`);
+        const mesh = new Parser(dffFile.createDataView()).parseDFF();
+        if (mesh.vertexCount === 0) {
+            continue;
+        }
+        world.materials.push(...mesh.materials);
+        meshes.set(tom.name, mesh);
+    }
+    return meshes;
 }
 
 const id = "CasperSD";
