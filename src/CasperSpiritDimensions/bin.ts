@@ -408,10 +408,11 @@ export class Parser {
                     const parts = line.split(/\s+/);
                     const key = parts[0].replace(":", "");
                     const values = parts.slice(1).map(Number);
+                    // y and z are flipped for pos and rot, but not scale, for some reason
                     if (key === "POS") {
-                        currentObj.position = { x: values[0], y: values[1], z: values[2] };
+                        currentObj.position = { x: values[0], y: values[2], z: values[1] };
                     } else if (key === "ROTATE") {
-                        currentObj.rotation = { x: values[0], y: values[1], z: values[2] };
+                        currentObj.rotation = { x: values[0], y: values[2], z: values[1] };
                     } else if (key === "SCALE") {
                         currentObj.scale = { x: values[0], y: values[1], z: values[2] };
                     }

@@ -93,6 +93,7 @@ export class LevelRenderer {
     private inputLayout: GfxInputLayout;
     private batches: MeshBatch[] = [];
     public showTextures: boolean = true;
+    public showObjects: boolean = true;
     public cullMode: GfxCullMode = GfxCullMode.None;
 
     constructor(cache: GfxRenderCache, number: number, world: WorldData, private textures: Map<string, Texture>, private tomInstances: TOMInstance[], private dffs: Map<string, DFFMesh>) {
@@ -113,7 +114,6 @@ export class LevelRenderer {
             const ub = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, u.buffer);
             this.dffBuffers.set(name, [vb, ib, cb, ub]);
         }
-        console.log("Built buffers for", this.dffs.size, "DFFs");
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
@@ -161,32 +161,34 @@ export class LevelRenderer {
         this.submitBatches(renderInstManager, this.batches, renderHelper);
 
         // render objects
-        for (const tom of this.tomInstances) {
-            const mesh = this.dffs.get(tom.name);
-            const buffers = this.dffBuffers.get(tom.name);
-            if (!mesh || !buffers) {
-                continue;
+        if (this.showObjects) {
+            for (const tom of this.tomInstances) {
+                const mesh = this.dffs.get(tom.name);
+                const buffers = this.dffBuffers.get(tom.name);
+                if (!mesh || !buffers) {
+                    continue;
+                }
+                const shiftMatrix = this.buildShiftMatrix(tom);
+                const instanceTemplate = renderInstManager.pushTemplate();
+                let instanceOffset = instanceTemplate.allocateUniformBuffer(LevelProgram.ub_SceneParams, 36);
+                const instanceBuffer = instanceTemplate.mapUniformBufferF32(LevelProgram.ub_SceneParams);
+                // u_ProjectionView (16)
+                instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, viewerInput.camera.clipFromWorldMatrix);
+                // u_ShiftMatrix (16)
+                instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, shiftMatrix);
+                // u_Options (4)
+                instanceBuffer[instanceOffset++] = this.showTextures ? 1.0 : 0.0;
+                instanceBuffer[instanceOffset++] = 0.0;
+                instanceBuffer[instanceOffset++] = 0.0;
+                instanceBuffer[instanceOffset++] = 0.0;
+                instanceTemplate.setVertexInput(this.inputLayout, [
+                    { buffer: buffers[0], byteOffset: 0 },
+                    { buffer: buffers[2], byteOffset: 0 },
+                    { buffer: buffers[3], byteOffset: 0 }
+                ], { buffer: buffers[1], byteOffset: 0 });
+                this.submitBatches(renderInstManager, this.dffBatches.get(tom.name)!, renderHelper, false);
+                renderInstManager.popTemplate();
             }
-            const shiftMatrix = this.buildShiftMatrix(tom);
-            const instanceTemplate = renderInstManager.pushTemplate();
-            let instanceOffset = instanceTemplate.allocateUniformBuffer(LevelProgram.ub_SceneParams, 36);
-            const instanceBuffer = instanceTemplate.mapUniformBufferF32(LevelProgram.ub_SceneParams);
-            // u_ProjectionView (16)
-            instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, viewerInput.camera.clipFromWorldMatrix);
-            // u_ShiftMatrix (16)
-            instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, shiftMatrix);
-            // u_Options (4)
-            instanceBuffer[instanceOffset++] = this.showTextures ? 1.0 : 0.0;
-            instanceBuffer[instanceOffset++] = 0.0;
-            instanceBuffer[instanceOffset++] = 0.0;
-            instanceBuffer[instanceOffset++] = 0.0;
-            instanceTemplate.setVertexInput(this.inputLayout, [
-                { buffer: buffers[0], byteOffset: 0 },
-                { buffer: buffers[2], byteOffset: 0 },
-                { buffer: buffers[3], byteOffset: 0 }
-            ], { buffer: buffers[1], byteOffset: 0 });
-            this.submitBatches(renderInstManager, this.dffBatches.get(tom.name)!, renderHelper, false);
-            renderInstManager.popTemplate();
         }
 
         renderInstManager.popTemplate();
@@ -348,11 +350,11 @@ export class LevelRenderer {
         const out = mat4.create();
         const q = quat.create();
         const posX = tom.position.x * WORLD_SCALE;
-        const posY = tom.position.z * WORLD_SCALE;
-        const posZ = -tom.position.y * WORLD_SCALE;
-        quat.rotateY(q, q, (tom.rotation.z * Math.PI / 180));
-        quat.rotateZ(q, q, (tom.rotation.y * Math.PI / 180));
-        quat.rotateX(q, q, (tom.rotation.x * Math.PI / 180));
+        const posY = tom.position.y * WORLD_SCALE;
+        const posZ = -tom.position.z * WORLD_SCALE;
+        quat.rotateY(q, q, (tom.rotation.y * Math.PI / 180));
+        // quat.rotateZ(q, q, (tom.rotation.y * Math.PI / 180));
+        // quat.rotateX(q, q, (tom.rotation.x * Math.PI / 180));
         mat4.fromRotationTranslationScale(out, q, [posX, posY, posZ],
             [tom.scale.x, tom.scale.z, tom.scale.y]
         );

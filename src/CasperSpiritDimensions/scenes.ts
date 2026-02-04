@@ -86,6 +86,11 @@ class CasperRenderer implements SceneGfx {
             this.levelRenderer.showTextures = toggleTextures.checked
         };
         panel.contents.appendChild(toggleTextures.elem);
+        const toggleObjects = new Checkbox("Show objects", true);
+        toggleObjects.onchanged = () => {
+            this.levelRenderer.showObjects = toggleObjects.checked
+        };
+        panel.contents.appendChild(toggleObjects.elem);
         return [panel];
     }
 
@@ -114,7 +119,6 @@ class CasperScene implements SceneDesc {
         const objDefs = new Parser(obdFile.createDataView()).parseOBD();
         const tomInstances = new Parser(tomFile.createDataView()).parseTOM();
         const dffMeshes = await buildDFFMeshes(context.dataFetcher, pathBase, world, objDefs, tomInstances);
-        console.log("Built", dffMeshes.size, "DFF meshes");
         const textures = new Parser(dicFile.createDataView()).parseDIC(device, world.materials);
         return new CasperRenderer(device, this.levelNumber, world, textures, tomInstances, dffMeshes);
     }
