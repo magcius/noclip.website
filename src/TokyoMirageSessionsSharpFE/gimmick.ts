@@ -269,6 +269,8 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 
     if (layout.gate_entries.length > 0)
     {
+        const gate_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model_common.apak", "fd_idle_00.anm", data_fetcher);
+
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
             const entry = layout.gate_entries[i];
@@ -316,6 +318,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
                     gate_fres,
                     device,
                     new GfxRenderHelper(device),
+                    gate_animation_fres,
                 )
             );
         }

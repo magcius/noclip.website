@@ -4,7 +4,7 @@
 
 import * as BNTX from '../fres_nx/bntx.js';
 import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat, GfxTextureDimension, GfxTextureUsage } from '../gfx/platform/GfxPlatform.js';
-import { getChannelFormat, ChannelFormat, getTypeFormat, TypeFormat } from '../fres_nx/nngfx_enum.js';
+import { getChannelFormat, ChannelFormat, getTypeFormat, TypeFormat, ChannelSource } from '../fres_nx/nngfx_enum.js';
 import { rust } from "../rustlib.js";
 import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
 import { assert } from '../util.js';
@@ -171,7 +171,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
  * @param channel_source an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
  * @returns a remapped rgba_pixels array
  */
-function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: number[]): Uint8Array | Int8Array
+function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint8Array | Int8Array
 {
     let offset = 0;
     for (let i = 0; i < rgba_pixels.byteLength / 4; i++)

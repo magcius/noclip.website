@@ -1,7 +1,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString, assert } from "../util.js";
 import { isMarkerLittleEndian, readBinStr } from "./bfres.js";
-import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat } from "./nngfx_enum.js";
+import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat, ChannelSource } from "./nngfx_enum.js";
 import { getFormatBlockHeight, isChannelFormatSupported } from "./tegra_texture.js";
 
 export interface BNTX {
@@ -54,7 +54,7 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     }
     const textureDataSize = view.getUint32(offs + 0x50, littleEndian);
     const alignment = view.getUint32(offs + 0x54, littleEndian);
-    let channelSource: number[] = [];
+    let channelSource: ChannelSource[] = [];
     channelSource.push(view.getUint8(offs + 0x58));
     channelSource.push(view.getUint8(offs + 0x59));
     channelSource.push(view.getUint8(offs + 0x5A));
