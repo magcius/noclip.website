@@ -203,6 +203,10 @@ function convertFloatR11_G11_B10(textureEntry: BRTI, pixels: Uint8Array<ArrayBuf
         const r1 = (rExponent << 2) + (rMantissa >> 8);
         const r2 = rMantissa;
 
+        // alpha is 1.0
+        const a1 = 0x3C;
+        const a2 = 0x0;
+
         const newPixelOffset = i * 0x8;
         // write them in little endian
         newBuffer[newPixelOffset + 0] = r2;
@@ -211,8 +215,8 @@ function convertFloatR11_G11_B10(textureEntry: BRTI, pixels: Uint8Array<ArrayBuf
         newBuffer[newPixelOffset + 3] = g1;
         newBuffer[newPixelOffset + 4] = b2;
         newBuffer[newPixelOffset + 5] = b1;
-        newBuffer[newPixelOffset + 6] = 0;
-        newBuffer[newPixelOffset + 7] = 0x3C;
+        newBuffer[newPixelOffset + 6] = a2;
+        newBuffer[newPixelOffset + 7] = a1;
     }
     return { ... textureEntry, flag: 'SRGB', type: 'RGBA', pixels: newBuffer };
 }

@@ -14,7 +14,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { MapLayout } from './maplayout.js';
 import { fmdl_renderer } from "./render_fmdl.js";
 import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { computeModelMatrixSRT } from '../MathHelpers.js';
@@ -140,8 +140,8 @@ export class TMSFEScene implements SceneGfx
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
 
         // render skybox first, then clear the depth buffer and render everything else

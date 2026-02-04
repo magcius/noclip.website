@@ -103,11 +103,6 @@ export class fshp_renderer
         // setup sampler
         for (let i = 0; i < fmat.sampler_names.length; i++)
         {
-            // TODO: for now just grabbing s_diffuse
-            // if (fmat.sampler_names[i] != "s_diffuse")
-            // {
-            //     continue;
-            // }
             const texture_name = fmat.texture_names[i];
             if (texture_name == undefined)
             {
@@ -116,7 +111,7 @@ export class fshp_renderer
                 this.render_mesh = false;
                 continue;
             }
-            const texture = bntx.textures.find((f) => f.name === "d018_01_Water01dds");
+            const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {
                 const gfx_texture_index = bntx.textures.indexOf(texture);
@@ -209,11 +204,6 @@ export class fshp_renderer
             default:
                 console.error(`unknown blend mode ${this.blend_mode}`);
                 throw("whoops");
-
-        }
-        if (this.blend_mode > 2)
-        {
-
         }
 
         // initialize shader

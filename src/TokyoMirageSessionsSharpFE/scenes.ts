@@ -148,10 +148,10 @@ class TMSFESceneDesc implements SceneDesc
         {
             const layout = parseLayout(maplayout_data);
             scene.layout = layout;
-            // scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
+            scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
             if (this.map_gimmick_function != undefined)
             {
-                // scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
+                scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
         }
 
@@ -207,8 +207,7 @@ const sceneDescs =
     new TMSFESceneDesc("d003_01", "Illusory 106 1F to 3F", ["d003_01", "obj01", "obj02"], ["", "obj01", "obj02"], create_d003_01_gimmicks),
     new TMSFESceneDesc("d003_04", "Illusory 106 4F", ["d003_04"], [""]),
     new TMSFESceneDesc("d003_02", "Illusory 106 5F to 7F", ["d003_02", "obj01"], ["", "obj01"], create_d003_02_gimmicks),
-    // new TMSFESceneDesc("d003_06", "Illusory 106 Outside", ["d003_06", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("d003_06", "Illusory 106 Outside", ["obj01"], ["obj01"]),
+    new TMSFESceneDesc("d003_06", "Illusory 106 Outside", ["d003_06", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"]),
     new TMSFESceneDesc("d003_03", "Illusory 106 B1F to B3F", ["d003_03", "obj01"], ["", "obj01"], create_d003_03_gimmicks),
     new TMSFESceneDesc("d003_07", "Illusory 106 B4F", ["d003_07"], [""]),
     new TMSFESceneDesc("d003_08", "Illusory 106 Outside 2", ["d003_08", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"]),
@@ -249,8 +248,7 @@ const sceneDescs =
     new TMSFESceneDesc("d010_02", "Illusory Area of Memories Warrior's Hall", ["d010_02"], [""]),
     new TMSFESceneDesc("d010_03", "Illusory Area of Memories Leader's Hall", ["d010_03"], [""]),
     new TMSFESceneDesc("d010_04", "Illusory Area of Memories Hero's Hall", ["d010_04"], [""]),
-    // new TMSFESceneDesc("d018_01", "Illusory Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
-    new TMSFESceneDesc("d018_01", "Illusory Area of Aspirations 1F to 2F", ["obj01"], ["obj01"], undefined, false, true),
+    new TMSFESceneDesc("d018_01", "Illusory Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
     new TMSFESceneDesc("d018_02", "Illusory Area of Aspirations 3F", ["d018_02", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
     new TMSFESceneDesc("d018_03", "Illusory Area of Aspirations 4F to 5F", ["d018_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, true, true),
     new TMSFESceneDesc("d018_04", "Illusory Area of Aspirations The Nexus", ["d018_04", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
