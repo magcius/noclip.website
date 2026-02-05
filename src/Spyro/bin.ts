@@ -1,5 +1,7 @@
 // Credit to "Spyro World Viewer" by Kly_Men_COmpany for most of the data structures and parsing logic
 
+import ArrayBufferSlice from "../ArrayBufferSlice";
+
 interface GroundFace {
     indices: number[];
     uvs: number[] | null;
@@ -35,14 +37,23 @@ interface TileAtlas {
 }
 
 export interface Level {
-  vertices: number[][];
-  colors: number[][];
-  faces: GroundFace[];
-  uvs: number[][];
-  atlas: TileAtlas;
-  game: number;
-  id: number;
+    vertices: number[][];
+    colors: number[][];
+    faces: GroundFace[];
+    uvs: number[][];
+    atlas: TileAtlas;
+    game: number;
+    id: number;
 };
+
+export interface LevelData {
+    vram: VRAM;
+    textureList: ArrayBufferSlice;
+    ground: ArrayBufferSlice;
+    grounds?: ArrayBufferSlice[];
+    sky: ArrayBufferSlice;
+    subfile4?: ArrayBufferSlice;
+}
 
 export interface Skybox {
     backgroundColor: [number, number, number];
@@ -161,6 +172,7 @@ class Polygon {
     }
 }
 
+const VRAM_SIZE = 524288
 export class VRAM {
     private data: Uint16Array;
 
@@ -182,8 +194,7 @@ export class VRAM {
         return this.data[index];
     }
 
-    applyFontStripFix() {
-        // S2 only fix
+    applyFontStripFix() { // S2 only fix
         const width = 512;
         const y = 255;
         for (let x = width; x <= 575; x++) {
@@ -778,6 +789,200 @@ export function parseMobyInstances(data: DataView): MobyInstance[] {
     return mobys;
 }
 
+export function parseLevelData(data: ArrayBufferSlice): LevelData {
+    let pointer = 0;
+    function getUint32() {
+        return new Uint32Array(data.arrayBuffer, pointer, 4)[0];
+    }
+
+    // VRAM
+    const subFile1Offset = getUint32();
+    const vram = data.subarray(subFile1Offset, VRAM_SIZE);
+
+    // Texture list
+    pointer = 8;
+    const subFile2Offset = getUint32();
+    pointer = subFile2Offset;
+    const textureListSize = getUint32();
+    const textureList = data.subarray(pointer, textureListSize + 16);
+
+    // Ground
+    pointer = subFile2Offset;
+    pointer += textureListSize;
+    const groundSize = getUint32() - 4;
+    pointer += 4;
+    const ground = data.subarray(pointer, groundSize);
+
+    // Sky
+    pointer += groundSize;
+    let skyVar = getUint32();
+    pointer += 4;
+    const pos = pointer;
+    const skyCount = skyVar;
+    pointer += skyVar - 4;
+    skyVar = getUint32();
+    if (skyVar > 3) {
+        pointer += skyVar;
+        skyVar = getUint32();
+        pointer += skyVar;
+        skyVar = getUint32();
+        pointer += 4;
+    } else {
+        pointer = pos;
+        skyVar = skyCount;
+    }
+    const sky = data.subarray(pointer, skyVar);
+
+    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky };
+}
+
+export function parseLevelData2(data: ArrayBufferSlice, gameNumber: number = 2): LevelData {
+    let pointer = 0;
+    function getUint32() {
+        pointer += 4;
+        return new Uint32Array(data.arrayBuffer, pointer - 4, 4)[0];
+    }
+
+    const levelFileSize = data.byteLength;
+    const subSize = levelFileSize;
+
+    // VRAM
+    pointer += getUint32();
+    let vramSize = VRAM_SIZE;
+    const remainingVram = subSize - (pointer);
+    if (remainingVram < vramSize) {
+        vramSize = remainingVram;
+    }
+    const vram = data.subarray(pointer, vramSize);
+
+    // Texture list
+    pointer = 8;
+    const subfile2Offset = getUint32();
+    pointer = subfile2Offset;
+    const listSize = getUint32();
+    pointer -= 4;
+    const textureList = data.subarray(pointer, listSize + 16);
+
+    // Sky
+    pointer = subfile2Offset;
+    let offset = getUint32();
+    pointer += offset - 4;
+    offset = getUint32();
+    pointer += offset - 4;
+    offset = getUint32();
+    pointer += offset - 4;
+    offset = getUint32();
+    pointer += offset - 4;
+    const skyStart = pointer;
+    const pattern = new Uint8Array(data.arrayBuffer, pointer, 12);
+    function checkPattern(p: Uint8Array) {
+        return !(((p[0] & 15) === 0) && ((p[1] >> 4) === 0) && (p[2] === 0) &&
+            (p[3] === 0) && ((p[4] & 15) === 0) && ((p[5] >> 4) === 0) &&
+            (p[6] === 0) && (p[7] === 0) && ((p[8] & 15) === 0) &&
+            ((p[9] >> 4) === 0) && (p[10] === 0) && (p[11] === 0))
+    }
+    pointer += 12;
+    if (checkPattern(pattern)) {
+        pointer = skyStart;
+        offset = getUint32();
+        pointer += offset - 4;
+        offset = getUint32();
+        if (offset === 0) {
+            pointer = skyStart + 4;
+        } else {
+            pointer += offset - 4;
+            offset = getUint32();
+            if (offset === 0) {
+                pointer = skyStart + 4;
+            } else {
+                pointer += 8;
+            }
+        }
+    }
+    offset = getUint32();
+    pointer += offset - 4;
+    offset = getUint32();
+    const sky = data.subarray(pointer, offset - 4);
+
+    // Ground
+    pointer = subfile2Offset;
+    offset = getUint32();
+    pointer += offset - 4;
+    offset = getUint32();
+    const ground = data.subarray(pointer, offset - 4);
+    pointer += offset - 4;
+
+    // Sublevels' ground
+    const grounds: ArrayBufferSlice[] = [];
+    if (gameNumber === 3) {
+        let i = 1;
+        while (true) {
+            i += 1;
+            pointer = 16 * i;
+            offset = getUint32();
+            const size3 = getUint32();
+            const start = offset;
+            if (start + size3 > data.byteLength) {
+                break;
+            }
+            pointer = start;
+            offset = getUint32();
+            if ((pointer - start + offset - 8) > size3 || offset < 4) {
+                break;
+            }
+            pointer += offset - 4;
+            while (true) {
+                offset = getUint32();
+                if (offset !== 0) {
+                    break
+                }
+            }
+            while (true) {
+                offset = getUint32();
+                if (offset === 0) {
+                    break
+                }
+            }
+            while (true) {
+                offset = getUint32();
+                if (offset !== 0) {
+                    break
+                }
+            }
+            while (true) {
+                offset = getUint32();
+                if (offset === 0) {
+                    break
+                }
+            }
+            while (true) {
+                offset = getUint32();
+                if (offset !== 0) {
+                    break
+                }
+            }
+            if ((pointer - start + offset - 8) > size3 || offset < 4) {
+                break;
+            }
+            grounds.push(data.subarray(pointer, offset - 4));
+        }
+    }
+
+    // Moby instances
+    let subfile4;
+    if (gameNumber === 3) {
+        pointer = 24;
+        const subfile4Offset = getUint32();
+        const subfile4Size = getUint32();
+        pointer += subfile4Offset;
+        if (pointer + subfile4Size < data.byteLength) {
+            subfile4 = data.subarray(pointer, subfile4Size);
+        }
+    }
+
+    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, grounds, sky, subfile4 };
+}
+
 function parseTiles(data: DataView, gameNumber: number): Tile[] {
     const tiles: Tile[] = [];
     const count = data.getUint32(4, true);
@@ -785,7 +990,7 @@ function parseTiles(data: DataView, gameNumber: number): Tile[] {
     for (let i = 0; i < count; i++) {
         offset += 8;
         const tile: Tile = {
-            mainX: data.getUint8(offset + 0), mainY: data.getUint8(offset + 1),
+            mainX: data.getUint8(offset), mainY: data.getUint8(offset + 1),
             p1: data.getUint8(offset + 2), p2: data.getUint8(offset + 3),
             xx: data.getUint8(offset + 4), yy: data.getUint8(offset + 5),
             ss: data.getUint8(offset + 6), ff: data.getUint8(offset + 7),

@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildTileAtlas, buildLevel, buildSkybox, VRAM, Skybox, Level, parseMobyInstances, MobyInstance } from "./bin.js"
+import { buildTileAtlas, buildLevel, buildSkybox, VRAM, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -12,14 +12,13 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 /*
 To-do list
 
-    Better handling of water, although it's mostly accurate
-        The detection of water/not water could be better to get rid of false positives
+    Better water rendering, although it's mostly accurate
     Better handling of LOD levels
         Right now it's just a toggle b/t high and low, but it'd be ideal to render both since low LOD usually is larger than high LOD
         This is will fix some scenes that seem way too small (particularly cutscenes w/ fixed camera) since a lot of their look is from low LOD
     Clean up functions in bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
-        There's a problem with extracting their skyboxes currently so they're not included
+        There's a problem with extracting their skyboxes so they're not included
     Clean up how scrolling textures are handled (it's working fine but messy)
     LOD toggle does not work on a few levels
 
@@ -49,7 +48,6 @@ Nice to have
         The format will need to be figured out. They're in other level subfiles (S2 grabs from global store instead?)
         Positions of mobys in S3 are figured out, but need the models and (maybe) animations
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
-    Read directly from WAD.WAD by offset instead of extracting subfiles (if better than extraction)
 */
 
 class SpyroRenderer implements SceneGfx {
@@ -103,7 +101,7 @@ class SpyroRenderer implements SceneGfx {
     public createPanels(): Panel[] {
         const panel = new Panel();
         panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
-        panel.setTitle(RENDER_HACKS_ICON, "Level Options");
+        panel.setTitle(RENDER_HACKS_ICON, "Render Hacks");
         const toggleLOD = new Checkbox("Toggle LOD", false);
         toggleLOD.onchanged = () => {
             this.levelRenderer.showLOD = toggleLOD.checked
@@ -142,17 +140,12 @@ class SpyroScene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const ground = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_vram.bin`);
-        const textures = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_list.bin`);
-        const sky = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_sky1.bin`);
-
-        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}.bin`);
+        const { vram, textureList, ground, sky } = parseLevelData(levelFile);
+        const tileAtlas = buildTileAtlas(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const renderer = new SpyroRenderer(device, level, skybox);
-
-        return renderer;
+        return new SpyroRenderer(device, level, skybox);
     }
 }
 
@@ -167,20 +160,13 @@ class SpyroScene2 implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const ground = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
-        const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
-        const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
-
-        const vramObj = new VRAM(vram.copyToBuffer());
-        vramObj.applyFontStripFix();
-
-        const tileAtlas = buildTileAtlas(vramObj, textures.createDataView(), this.gameNumber);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}.bin`);
+        const { vram, textureList, ground, sky } = parseLevelData2(levelFile);
+        vram.applyFontStripFix();
+        const tileAtlas = buildTileAtlas(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const renderer = new SpyroRenderer(device, level, skybox);
-
-        return renderer;
+        return new SpyroRenderer(device, level, skybox);
     }
 }
 
@@ -198,25 +184,17 @@ class SpyroScene3 implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        let ground = null;
-        if (this.subLevelID === undefined) {
-            ground = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_ground.bin`);
-        } else {
-            ground = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_ground${this.subLevelID}.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.bin`);
+        const { vram, textureList, ground: g, grounds, sky, subfile4 } = parseLevelData2(levelFile, this.gameNumber);
+        const mobys = (this.subLevelID === undefined && subfile4) ? parseMobyInstances(subfile4!.createDataView()) : [];
+        let ground = g;
+        if (this.subLevelID && grounds && grounds.length > 0) {
+            ground = grounds[this.subLevelID - 1];
         }
-        const vram = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_vram.bin`);
-        const textures = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_list.bin`);
-        const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
-
-        const varsFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_var.bin`);
-        const mobys = this.subLevelID === undefined ? parseMobyInstances(varsFile.createDataView()) : [];
-
-        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), textures.createDataView(), this.gameNumber);
+        const tileAtlas = buildTileAtlas(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const renderer = new SpyroRenderer(device, level, skybox, mobys);
-
-        return renderer;
+        return new SpyroRenderer(device, level, skybox, mobys);
     }
 }
 
@@ -348,18 +326,18 @@ const sceneDescs3 = [
     "Sunrise Spring",
     new SpyroScene3(98, "Sunrise Spring"),
     new SpyroScene3(100, "Sunny Villa"),
-    new SpyroScene3(100, "Sunny Villa (Sheila)", 2),
-    new SpyroScene3(100, "Sunny Villa (Skate)", 3),
+    new SpyroScene3(100, "Sunny Villa (Sheila)", 1),
+    new SpyroScene3(100, "Sunny Villa (Skate)", 2),
     new SpyroScene3(102, "Cloud Spires"),
-    new SpyroScene3(102, "Cloud Spires (Sublevel 1)", 2),
-    new SpyroScene3(102, "Cloud Spires (Sublevel 2)", 3),
+    new SpyroScene3(102, "Cloud Spires (Sublevel 1)", 1),
+    new SpyroScene3(102, "Cloud Spires (Sublevel 2)", 2),
     new SpyroScene3(104, "Molten Crater"),
-    new SpyroScene3(104, "Molten Crater (Sgt. Byrd)", 2),
-    new SpyroScene3(104, "Molten Crater (Sublevel)", 3),
+    new SpyroScene3(104, "Molten Crater (Sgt. Byrd)", 1),
+    new SpyroScene3(104, "Molten Crater (Sublevel)", 2),
     new SpyroScene3(106, "Seashell Shore"),
-    new SpyroScene3(106, "Seashell Shore (Sheila)", 2),
-    new SpyroScene3(106, "Seashell Shore (Sublevel 1)", 3),
-    new SpyroScene3(106, "Seashell Shore (Sublevel 2)", 4),
+    new SpyroScene3(106, "Seashell Shore (Sheila)", 1),
+    new SpyroScene3(106, "Seashell Shore (Sublevel 1)", 2),
+    new SpyroScene3(106, "Seashell Shore (Sublevel 2)", 3),
     new SpyroScene3(108, "Mushroom Speedway"),
     new SpyroScene3(110, "Sheila's Alp"),
     new SpyroScene3(112, "Buzz's Dungeon"),
@@ -367,17 +345,17 @@ const sceneDescs3 = [
     "Midday Gardens",
     new SpyroScene3(116, "Midday Gardens"),
     new SpyroScene3(118, "Icy Peak"),
-    new SpyroScene3(118, "Icy Peak (Sublevel 1)", 2),
-    new SpyroScene3(118, "Icy Peak (Sublevel 2)", 3),
+    new SpyroScene3(118, "Icy Peak (Sublevel 1)", 1),
+    new SpyroScene3(118, "Icy Peak (Sublevel 2)", 2),
     new SpyroScene3(120, "Enchanted Towers"),
-    new SpyroScene3(120, "Enchanted Towers (Skate)", 2),
-    new SpyroScene3(120, "Enchanted Towers (Sublevel)", 3),
+    new SpyroScene3(120, "Enchanted Towers (Skate)", 1),
+    new SpyroScene3(120, "Enchanted Towers (Sublevel)", 2),
     new SpyroScene3(122, "Spooky Swamp"),
-    new SpyroScene3(122, "Spooky Swamp (Sheila)", 3),
-    new SpyroScene3(122, "Spooky Swamp (Sublevel)", 2),
+    new SpyroScene3(122, "Spooky Swamp (Sheila)", 2),
+    new SpyroScene3(122, "Spooky Swamp (Sublevel)", 1),
     new SpyroScene3(124, "Bamboo Terrace"),
-    new SpyroScene3(124, "Bamboo Terrace (Bentley)", 3),
-    new SpyroScene3(124, "Bamboo Terrace (Sublevel)", 2),
+    new SpyroScene3(124, "Bamboo Terrace (Bentley)", 2),
+    new SpyroScene3(124, "Bamboo Terrace (Sublevel)", 1),
     new SpyroScene3(126, "Country Speedway"),
     new SpyroScene3(128, "Sgt. Byrd's Base"),
     new SpyroScene3(130, "Spike's Arena"),
@@ -385,18 +363,18 @@ const sceneDescs3 = [
     "Evening Lake",
     new SpyroScene3(134, "Evening Lake"),
     new SpyroScene3(136, "Frozen Altars"),
-    new SpyroScene3(136, "Frozen Altars (Bentley)", 2),
-    new SpyroScene3(136, "Frozen Altars (Sublevel)", 3),
+    new SpyroScene3(136, "Frozen Altars (Bentley)", 1),
+    new SpyroScene3(136, "Frozen Altars (Sublevel)", 2),
     new SpyroScene3(138, "Lost Fleet"),
-    new SpyroScene3(138, "Lost Fleet (Sublevel)", 2),
-    new SpyroScene3(138, "Lost Fleet (Skate)", 3),
+    new SpyroScene3(138, "Lost Fleet (Sublevel)", 1),
+    new SpyroScene3(138, "Lost Fleet (Skate)", 2),
     new SpyroScene3(140, "Fireworks Factory"),
-    new SpyroScene3(140, "Fireworks Factory (Agent 9)", 3),
-    new SpyroScene3(140, "Fireworks Factory (Sublevel 1)", 2),
-    new SpyroScene3(140, "Fireworks Factory (Sublevel 2)", 4),
+    new SpyroScene3(140, "Fireworks Factory (Agent 9)", 2),
+    new SpyroScene3(140, "Fireworks Factory (Sublevel 1)", 1),
+    new SpyroScene3(140, "Fireworks Factory (Sublevel 2)", 3),
     new SpyroScene3(142, "Charmed Ridge"),
-    new SpyroScene3(142, "Charmed Ridge (Sgt. Byrd)", 2),
-    new SpyroScene3(142, "Charmed Ridge (Sublevel)", 3),
+    new SpyroScene3(142, "Charmed Ridge (Sgt. Byrd)", 1),
+    new SpyroScene3(142, "Charmed Ridge (Sublevel)", 2),
     new SpyroScene3(144, "Honey Speedway"),
     new SpyroScene3(146, "Bentley's Outpost"),
     new SpyroScene3(148, "Scorch's Pit"),
@@ -404,26 +382,26 @@ const sceneDescs3 = [
     "Midnight Mountain",
     new SpyroScene3(152, "Midnight Mountain"),
     new SpyroScene3(154, "Crystal Islands"),
-    new SpyroScene3(154, "Crystal Islands (Bentley)", 3),
-    new SpyroScene3(154, "Crystal Islands (Sublevel)", 2),
+    new SpyroScene3(154, "Crystal Islands (Bentley)", 2),
+    new SpyroScene3(154, "Crystal Islands (Sublevel)", 1),
     new SpyroScene3(156, "Desert Ruins"),
-    new SpyroScene3(156, "Desert Ruins (Sheila)", 2),
-    new SpyroScene3(156, "Desert Ruins (Sublevel)", 3),
+    new SpyroScene3(156, "Desert Ruins (Sheila)", 1),
+    new SpyroScene3(156, "Desert Ruins (Sublevel)", 2),
     new SpyroScene3(158, "Haunted Tomb"),
-    new SpyroScene3(158, "Haunted Tomb (Agent 9)", 3),
-    new SpyroScene3(158, "Haunted Tomb (Sublevel)", 2),
+    new SpyroScene3(158, "Haunted Tomb (Agent 9)", 2),
+    new SpyroScene3(158, "Haunted Tomb (Sublevel)", 1),
     new SpyroScene3(160, "Dino Mines"),
-    new SpyroScene3(160, "Dino Mines (Agent 9)", 4),
-    new SpyroScene3(160, "Dino Mines (Sublevel)", 3),
-    new SpyroScene3(160, "Dino Mines (Unused Sublevel)", 2),
+    new SpyroScene3(160, "Dino Mines (Agent 9)", 3),
+    new SpyroScene3(160, "Dino Mines (Sublevel)", 2),
+    new SpyroScene3(160, "Dino Mines (Unused Sublevel)", 1),
     new SpyroScene3(162, "Harbor Speedway"),
     new SpyroScene3(164, "Agent 9's Lab"),
     new SpyroScene3(166, "Sorceress's Lair"),
     new SpyroScene3(168, "Bugbot Factory"),
     new SpyroScene3(170, "Super Bonus Round"),
-    new SpyroScene3(170, "Super Bonus Round (Sublevel 1)", 2),
-    new SpyroScene3(170, "Super Bonus Round (Sublevel 2)", 3),
-    new SpyroScene3(170, "Super Bonus Round (Sublevel 3)", 4),
+    new SpyroScene3(170, "Super Bonus Round (Sublevel 1)", 1),
+    new SpyroScene3(170, "Super Bonus Round (Sublevel 2)", 2),
+    new SpyroScene3(170, "Super Bonus Round (Sublevel 3)", 3),
     "Cutscenes", // names as they appear in game with incorrect capitalization
     new SpyroScene3(7, "Title Screen"),
     new SpyroScene3(10, "An Evil Plot Unfolds..."),
