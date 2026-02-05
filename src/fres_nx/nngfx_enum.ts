@@ -149,3 +149,7 @@ export enum FilterMode {
     Minimum     = 1 << 8,
     Maximum     = 1 << 9,
 };
+
+export enum ChannelSource {
+    Zero, One, Red, Green, Blue, Alpha,
+}
