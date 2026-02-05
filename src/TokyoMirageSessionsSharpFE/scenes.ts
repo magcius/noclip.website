@@ -5,7 +5,7 @@ import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_ap
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
-import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { MapLayout, parseLayout } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
@@ -56,7 +56,7 @@ class TMSFESceneDesc implements SceneDesc
      * @param map_gimmick_function per map function that spawns interactable objects
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
-     * @param has_battle_audience whether to spawn the audience
+     * @param has_battle_audience whether to add the audience models
      * @param replacement_texture_function per map function that loads replacement textures for dynamic elements such as posters, tvs, and advertisements
      */
     constructor
@@ -244,14 +244,14 @@ const sceneDescs =
     new TMSFESceneDesc("d006_09", "Illusory Daiba Studio Film Location D", ["d006_09", "obj01"], ["", "obj01"]),
     "Bloom Palace",
     new TMSFESceneDesc("f003_03", "Bloom Palace", ["f003_03", "obj01", "sky"], ["", "obj", "sky"]),
-    new TMSFESceneDesc("d010_01", "Illusory Area of Memories Great Corridor", ["d010_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d010_01_gimmicks),
-    new TMSFESceneDesc("d010_02", "Illusory Area of Memories Warrior's Hall", ["d010_02"], [""]),
-    new TMSFESceneDesc("d010_03", "Illusory Area of Memories Leader's Hall", ["d010_03"], [""]),
-    new TMSFESceneDesc("d010_04", "Illusory Area of Memories Hero's Hall", ["d010_04"], [""]),
-    new TMSFESceneDesc("d018_01", "Illusory Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
-    new TMSFESceneDesc("d018_02", "Illusory Area of Aspirations 3F", ["d018_02", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
-    new TMSFESceneDesc("d018_03", "Illusory Area of Aspirations 4F to 5F", ["d018_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, true, true),
-    new TMSFESceneDesc("d018_04", "Illusory Area of Aspirations The Nexus", ["d018_04", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
+    new TMSFESceneDesc("d010_01", "Area of Memories Great Corridor", ["d010_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], create_d010_01_gimmicks),
+    new TMSFESceneDesc("d010_02", "Area of Memories Warrior's Hall", ["d010_02"], [""]),
+    new TMSFESceneDesc("d010_03", "Area of Memories Leader's Hall", ["d010_03"], [""]),
+    new TMSFESceneDesc("d010_04", "Area of Memories Hero's Hall", ["d010_04"], [""]),
+    new TMSFESceneDesc("d018_01", "Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
+    new TMSFESceneDesc("d018_02", "Area of Aspirations 3F", ["d018_02", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
+    new TMSFESceneDesc("d018_03", "Area of Aspirations 4F to 5F", ["d018_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, true, true),
+    new TMSFESceneDesc("d018_04", "Area of Aspirations The Nexus", ["d018_04", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
     new TMSFESceneDesc("d015_01", "Training Area", ["d015_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", ""]),
     new TMSFESceneDesc("d015_02", "Training Area Fighter's Hall", ["d015_02"], [""]),
     "Cosmic Egg",
@@ -277,7 +277,7 @@ const sceneDescs =
     new TMSFESceneDesc("b010_01", "Bloom Palace Battle", ["b010_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
     new TMSFESceneDesc("b005_01", "Illusory Daitou TV Battle", ["b005_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
     new TMSFESceneDesc("b006_01", "Illusory Daiba Studio Battle", ["b006_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", "obj04"], undefined, false, false, true),
-    new TMSFESceneDesc("b012_01", "Area of Memories", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, false, false, true),
+    new TMSFESceneDesc("b012_01", "Area of Memories Battle", ["b012_01", "obj01", "obj02", "obj03"], ["", "obj01", "", "obj03"], undefined, false, false, true),
     new TMSFESceneDesc("b013_01", "Gharnef Fight", ["b013_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
     new TMSFESceneDesc("b007_01", "Illusory Dohlr Battle", ["b007_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"], undefined, false, false, true),
     new TMSFESceneDesc("b011_01", "Medeus Fight", ["b011_01", "obj01", "obj02", "obj03", "obj04"], ["", "obj01", "obj02", "obj03", ""]),
@@ -287,18 +287,19 @@ const sceneDescs =
     "Cutscene Maps",
     new TMSFESceneDesc("f003_05", "Uzume Lesson Studio", ["f003_05"], [""]),
     new TMSFESceneDesc("f010_03", "Quarry", ["f010_03", "sky"], ["", ""]),
-    // new TMSFESceneDesc("f010_04", "Gongen Hot Springs"), wii u file
+    // new TMSFESceneDesc("f010_04", "Gongen Hot Springs"), wii u file v3.5.0.2
     new TMSFESceneDesc("f010_05", "Kitchen Set", ["f010_05"], [""]),
     new TMSFESceneDesc("f010_06", "Dressing Room", ["f010_06"], [""]),
     new TMSFESceneDesc("f010_07", "Tokyo Millennium Collection Venue", ["f010_07", "f010_07_obj01", "f010_07_obj02"], ["", "f010_07_obj01", "f010_07_obj02"]),
     new TMSFESceneDesc("guambeach_00", "Guam Beach Day", ["guambeach_00"], [""]),
     new TMSFESceneDesc("guambeach_02", "Guam Beach Sunset", ["guambeach_02"], [""]),
     "Extra",
+    // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
+    // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
     // new TMSFESceneDesc("d002_04", "d003_02_PLAN_TEST_STAND", ["d002_04", "sky"], ["", "sky"]), wii u file v3.4.0.2
     // new TMSFESceneDesc("d003_05", "d003_05_PLAN", ["d003_05", "sky"], ["", "sky"]), wii u file v3.4.0.2
     // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
-    // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
-    // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
+    // new TMSFESceneDesc("f000_00", "f000_00", ["f000_00", "sky"], ["", ""]), wii u v3.4.0.2
     new TMSFESceneDesc("f003_07", "Office Storage", ["f003_07", "sky"], ["", ""]),
     new TMSFESceneDesc("f007_02", "Izuhara Entertainment Agency", ["f007_02", "sky"], ["", ""]),
 ];
