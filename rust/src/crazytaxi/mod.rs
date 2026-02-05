@@ -8,7 +8,6 @@ use wasm_bindgen::prelude::*;
 
 mod archive;
 mod shp;
-mod util;
 mod tex;
 
 fn s(err: anyhow::Error) -> String {
