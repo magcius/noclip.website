@@ -1,5 +1,4 @@
 import * as Viewer from '../viewer.js';
-import * as GXTexture from '../gx/gx_texture.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -7,12 +6,13 @@ import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_rende
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { mat4, vec3 } from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
-import { Blue, Color, colorNewFromRGBA, Green, Red } from '../Color.js';
+import { Color, colorNewFromRGBA } from '../Color.js';
 import { MaterialCache, Texture, TextureCache } from './material.js';
 import { Shape } from './shape.js';
 import { FileManager } from './util.js';
+import { NamedArrayBufferSlice } from '../DataFetcher.js';
 
 export class Scene implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
@@ -130,6 +130,101 @@ export class Scene implements Viewer.SceneGfx {
     }
 }
 
+function parseCustomerData(mainData: NamedArrayBufferSlice): vec3[] {
+    const customerPos = [];
+    const posData = mainData.slice(0x1e5aac).createDataView();
+    const N_SHAPES = 982;
+    const stride = 10 * 4;
+    for (let i = 0; i < 982; i++) {
+        const offs = i * stride;
+        const x = posData.getFloat32(offs);
+        const y = posData.getFloat32(offs + 0x4);
+        const z = posData.getFloat32(offs + 0x8);
+        const unk0 = posData.getUint32(offs + 0xc);
+        const unk1 = posData.getUint32(offs + 0x10);
+        const unk2 = posData.getFloat32(offs + 0x14);
+        const unk3 = posData.getFloat32(offs + 0x18);
+        const unk4 = posData.getFloat32(offs + 0x1c);
+        const unk5 = posData.getUint32(offs + 0x20);
+        const unk6 = posData.getUint32(offs + 0x24);
+        customerPos.push(vec3.fromValues(x, y, z));
+    }
+    return customerPos;
+}
+
+function parseDeliveryZones(mainData: NamedArrayBufferSlice): vec3[] {
+    const deliveryZones = [];
+    const deliveryZoneData = mainData
+        .slice(0xFB818, 0x101434)
+        .createDataView();
+    let offs = 0;
+    while (offs < deliveryZoneData.byteLength) {
+        deliveryZones.push(vec3.fromValues(
+            deliveryZoneData.getFloat32(offs + 0),
+            deliveryZoneData.getFloat32(offs + 4),
+            deliveryZoneData.getFloat32(offs + 8),
+        ));
+        offs += 3 * 4;
+    }
+    return deliveryZones;
+}
+
+function parseUnkPosData(mainData: NamedArrayBufferSlice): vec3[] {
+    const pos3: vec3[] = [];
+    const pos3Data = mainData.slice(0xe4ecc, 0xe69e4).createDataView();
+    let offs = 0;
+    while (offs < pos3Data.byteLength) {
+        try {
+            pos3.push(vec3.fromValues(
+                pos3Data.getFloat32(offs + 0),
+                pos3Data.getFloat32(offs + 4),
+                pos3Data.getFloat32(offs + 8),
+            ));
+        } catch (err) { }
+        offs += 3 * 4;
+    }
+    return pos3;
+}
+
+function parseUnkNames1(mainData: NamedArrayBufferSlice): [string, number][][] {
+    const indexNameData = mainData.slice(0x15f18c, 0x1942c0 + 0x44).createDataView();
+    let offs = 0;
+    let names: [string, number][][] = [];
+    while (offs < indexNameData.byteLength) {
+        let name = '';
+        let nameOffs = 0;
+        while (indexNameData.getUint8(offs + nameOffs) !== 0) {
+            name += String.fromCharCode(indexNameData.getUint8(offs + nameOffs));
+            nameOffs += 1;
+        }
+        offs += 0x42;
+        let index = indexNameData.getUint16(offs);
+        if (index === 0) {
+            names.push([]);
+        }
+        names[names.length - 1].push([name, index]);
+        offs += 0x2;
+    }
+    return names;
+}
+
+function parseUnkNames2(mainData: NamedArrayBufferSlice): string[] {
+    const nameData = mainData.slice(0x12a884, 0x12fb40).createTypedArray(Uint8Array);
+    let names = [];
+    let offs = 0;
+    let name = '';
+    while (offs < nameData.byteLength) {
+        if (nameData[offs] !== 0) {
+            name += String.fromCharCode(nameData[offs]);
+        } else if (name.length > 0) {
+            names.push(name);
+            name = '';
+        }
+        offs += 1;
+    }
+    return names;
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -147,92 +242,20 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
         await manager.fetch();
         const mainData = await context.dataFetcher.fetchData("CrazyTaxi/sys/main.dol");
-        const customerPos = [];
-        const posData = mainData.slice(0x1e5aac).createDataView();
-        const N_SHAPES = 982;
-        const stride = 10 * 4;
-        for (let i = 0; i < 982; i++) {
-            const offs = i * stride;
-            const x = posData.getFloat32(offs);
-            const y = posData.getFloat32(offs + 0x4);
-            const z = posData.getFloat32(offs + 0x8);
-            const unk0 = posData.getUint32(offs + 0xc);
-            const unk1 = posData.getUint32(offs + 0x10);
-            const unk2 = posData.getFloat32(offs + 0x14);
-            const unk3 = posData.getFloat32(offs + 0x18);
-            const unk4 = posData.getFloat32(offs + 0x1c);
-            const unk5 = posData.getUint32(offs + 0x20);
-            const unk6 = posData.getUint32(offs + 0x24);
-            customerPos.push(vec3.fromValues(x, y, z));
-        }
 
-        const deliveryZones = [];
-        const pos2Data = mainData.slice(0xFB818, 0x101434).createDataView();
-        let offs = 0;
-        while (offs < pos2Data.byteLength) {
-            deliveryZones.push(vec3.fromValues(
-                pos2Data.getFloat32(offs + 0),
-                pos2Data.getFloat32(offs + 4),
-                pos2Data.getFloat32(offs + 8),
-            ));
-            offs += 3 * 4;
-        }
-
-        const pos3: vec3[] = [];
-        const pos3Data = mainData.slice(0xe4ecc, 0xe69e4).createDataView();
-        offs = 0;
-        while (offs < pos3Data.byteLength) {
-            try {
-                pos3.push(vec3.fromValues(
-                    pos3Data.getFloat32(offs + 0),
-                    pos3Data.getFloat32(offs + 4),
-                    pos3Data.getFloat32(offs + 8),
-                ));
-            } catch (err) { }
-            offs += 3 * 4;
-        }
-
-        // const nameData = mainData.slice(0x12a884, 0x12fb40).createTypedArray(Uint8Array);
-        // hexdump(mainData.slice(0x12a884));
-        let names = [];
-        // let offs = 0;
-        // let name = '';
-        // while (offs < nameData.byteLength) {
-        //     if (nameData[offs] !== 0) {
-        //         name += String.fromCharCode(nameData[offs]);
-        //     } else if (name.length > 0) {
-        //         names.push(name);
-        //         name = '';
-        //     }
-        //     offs += 1;
-        // }
-
-        const indexNameData = mainData.slice(0x15f18c, 0x1942c0 + 0x44).createDataView();
-        offs = 0;
-        let fuck: [string, number][][] = [];
-        while (offs < indexNameData.byteLength) {
-            let name = '';
-            let nameOffs = 0;
-            while (indexNameData.getUint8(offs + nameOffs) !== 0) {
-                name += String.fromCharCode(indexNameData.getUint8(offs + nameOffs));
-                nameOffs += 1;
-            }
-            offs += 0x42;
-            let index = indexNameData.getUint16(offs);
-            if (index === 0) {
-                fuck.push([]);
-            }
-            fuck[fuck.length - 1].push([name, index]);
-            offs += 0x2;
-        }
-
-        console.log(fuck)
+        let debugPos = [
+            parseCustomerData(mainData),
+            parseDeliveryZones(mainData),
+            parseUnkPosData(mainData),
+        ];
+        let unkNames1 = parseUnkNames1(mainData);
+        let unkNames2 = parseUnkNames2(mainData);
 
         const textures: Texture[] = [];
         for (const filename of manager.fileStore.list_textures()) {
             textures.push(new Texture(filename.toLowerCase(), gfxDevice, manager));
         }
-        names = [];
+        let names = [];
         for (const filename of manager.fileStore.list_shapes()) {
             if (['setdownbox.shp', 'grampus.shp'].includes(filename)) continue;
             names.push(filename);
@@ -246,7 +269,7 @@ class SceneDesc implements Viewer.SceneDesc {
             shapes.push(new Shape(shapeName, manager));
         }
         console.log('done')
-        const scene = new Scene(gfxDevice, manager, textureCache, [customerPos, deliveryZones, pos3], shapes);
+        const scene = new Scene(gfxDevice, manager, textureCache, debugPos, shapes);
         return scene;
     }
 }

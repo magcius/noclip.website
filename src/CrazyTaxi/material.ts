@@ -7,7 +7,7 @@ import { GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { LoadedVertexLayout, LoadedVertexData } from "../gx/gx_displaylist";
-import { GXMaterialHelperGfx, MaterialParams, GXTextureMapping, createInputLayout, DrawParams, loadTextureFromMipChain } from "../gx/gx_render";
+import { GXMaterialHelperGfx, MaterialParams, GXTextureMapping, createInputLayout, DrawParams, loadTextureFromMipChain, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from '../gx/gx_enum.js';
 import { setMatrixTranslation, scaleMatrix } from "../MathHelpers";
@@ -120,11 +120,14 @@ export class Material {
         this.inputLayout = createInputLayout(cache, this.gxLayout);
 
         const mb = new GXMaterialBuilder();
-        this.setMaterialParams(mb);
         mb.setCullMode(GX.CullMode.BACK);
         mb.setUsePnMtxIdx(true);
+        this.setMaterialParams(mb);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
         this.materialParams.m_TextureMapping[0] = new GXTextureMapping();
+        // for (let i = 0; i < ColorKind.COUNT; i++) {
+        //     this.materialParams.u_Color[i] = White;
+        // }
         texture.fillTextureMapping(this.materialParams.m_TextureMapping[0]);
     }
 
@@ -147,20 +150,35 @@ export class Material {
         } else {
             mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
             mb.setAlphaCompare(GX.CompareType.GREATER, 0x00, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x00);
+            // mb.setZMode(true, GX.CompareType.LEQUAL, true);
+            // mb.setColorUpdate(true);
+            // mb.setAlphaUpdate(false);
         }
 
         if (this.materialId === 2) {
+            // setMaterial0(white)
+            // setAmbientColor0(someGrayscale)
+            mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE); // 2 0 0 0 0 0 0 2
+            mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
             mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO); // 0 7 5 4 7
+            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
             mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
         } else if (this.materialId === 3) {
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE); // 4 0 1 1 0 0 2
-            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO); // 0 7 5 4 7
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+            mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         } else if (this.materialId === 5) {
             mb.setBlendMode(GX.BlendMode.BLEND, 0, 4, GX.LogicOp.CLEAR);
-            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA); // 0 7 7 7 5
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
-            mb.setZMode(false, GX.CompareType.ALWAYS, false);
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+            mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+            mb.setZMode(false, GX.CompareType.ALWAYS, false); // can't actually find this in the decomp, but it's needed or things are fucked
         } else {
             // TODO: the rest
             mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
