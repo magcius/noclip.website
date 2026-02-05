@@ -1,6 +1,5 @@
 
 pub mod compression;
-pub mod deku_common;
 pub mod glsl_compile;
 pub mod gx_texture;
 pub mod halo;
