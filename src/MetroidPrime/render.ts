@@ -460,6 +460,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
+        endOffs: null,
         draws,
         drawCalls: null,
         dlView: null,
