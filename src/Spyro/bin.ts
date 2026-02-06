@@ -1,4 +1,4 @@
-// Credit to "Spyro World Viewer" by Kly_Men_COmpany for most of the data structures and parsing logic
+// Credit to "Spyro World Viewer" by Kly_Men_COmpany for a majority of the data structures, reverse-engineering and parsing logic
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
@@ -14,18 +14,8 @@ interface GroundFace {
 }
 
 interface SkyFace {
-    indices: [number, number, number];
-    colors: [number, number, number];
-}
-
-interface Tile {
-    mainX: number; mainY: number; p1: number; p2: number;
-    xx: number; yy: number; ss: number; ff: number;
-    px: number; py: number; m: 4 | 8 | 15; size: number;
-    x1: number; x2: number; x3: number; x4: number;
-    y1: number; y2: number; y3: number; y4: number;
-    rotation: number; s: number; offset: number; f: boolean;
-    transparent: number;
+    indices: number[];
+    colors: number[];
 }
 
 interface TileAtlas {
@@ -56,9 +46,9 @@ export interface LevelData {
 }
 
 export interface Skybox {
-    backgroundColor: [number, number, number];
-    vertices: [number, number, number][];
-    colors: [number, number, number][]; 
+    backgroundColor: number[];
+    vertices: number[][];
+    colors: number[][]; 
     faces: SkyFace[];
 }
 
@@ -70,35 +60,55 @@ export interface MobyInstance {
     classId: number;
 }
 
+class Tile {
+    mainX: number; mainY: number; p1: number; p2: number;
+    xx: number; yy: number; ss: number; ff: number;
+    px: number = 0; py: number = 0;
+    m: 4 | 8 | 15 = 4; size: number = 32;
+    x1: number = 0; x2: number = 0; x3: number = 0; x4: number = 0;
+    y1: number = 0; y2: number = 0; y3: number = 0; y4: number = 0;
+    rotation: number = 0; s: number = 0; offset: number = 0;
+    f: boolean = false; transparent: number = 0;
+    constructor(data: DataView, offset: number) {
+        this.mainX = data.getUint8(offset);
+        this.mainY = data.getUint8(offset + 1);
+        this.p1 = data.getUint8(offset + 2);
+        this.p2 = data.getUint8(offset + 3);
+        this.xx = data.getUint8(offset + 4);
+        this.yy = data.getUint8(offset + 5);
+        this.ss = data.getUint8(offset + 6);
+        this.ff = data.getUint8(offset + 7);
+    }
+}
+
 class PartHeader {
-    y: number; x: number; i0: number; z: number;
+    y: number; x: number; i0: number; z: number; flag: number;
     lodVertexCount: number; lodColorCount: number; lodPolyCount: number; i1: number;
     mdlVertexCount: number; mdlColorCount: number; mdlPolyCount: number; water: number;
-    flag: number;
-    constructor(view: DataView, offs: number) {
-        this.y = view.getInt16(offs, true);
-        this.x = view.getInt16(offs + 2, true);
-        this.i0 = view.getUint16(offs + 4, true);
-        this.z = view.getInt16(offs + 6, true);
-        this.lodVertexCount = view.getUint8(offs + 8);
-        this.lodColorCount = view.getUint8(offs + 9);
-        this.lodPolyCount = view.getUint8(offs + 10);
-        this.i1 = view.getUint8(offs+11);
-        this.mdlVertexCount = view.getUint8(offs + 12);
-        this.mdlColorCount = view.getUint8(offs + 13);
-        this.mdlPolyCount = view.getUint8(offs + 14);
-        this.water = view.getUint8(offs + 15);
-        this.flag = view.getUint32(offs + 16, true);
+    constructor(data: DataView, offs: number) {
+        this.y = data.getInt16(offs, true);
+        this.x = data.getInt16(offs + 2, true);
+        this.i0 = data.getUint16(offs + 4, true);
+        this.z = data.getInt16(offs + 6, true);
+        this.lodVertexCount = data.getUint8(offs + 8);
+        this.lodColorCount = data.getUint8(offs + 9);
+        this.lodPolyCount = data.getUint8(offs + 10);
+        this.i1 = data.getUint8(offs + 11);
+        this.mdlVertexCount = data.getUint8(offs + 12);
+        this.mdlColorCount = data.getUint8(offs + 13);
+        this.mdlPolyCount = data.getUint8(offs + 14);
+        this.water = data.getUint8(offs + 15);
+        this.flag = data.getUint32(offs + 16, true);
     }
 }
 
 class Vertex {
-    b1: number; b2: number; b3: number; b4: number;
-    constructor(view: DataView, offset: number) {
-        this.b1 = view.getUint8(offset);
-        this.b2 = view.getUint8(offset+1);
-        this.b3 = view.getUint8(offset+2);
-        this.b4 = view.getUint8(offset+3);
+    byte1: number; byte2: number; byte3: number; byte4: number;
+    constructor(data: DataView, offset: number) {
+        this.byte1 = data.getUint8(offset);
+        this.byte2 = data.getUint8(offset + 1);
+        this.byte3 = data.getUint8(offset + 2);
+        this.byte4 = data.getUint8(offset + 3);
     }
 }
 
@@ -106,41 +116,38 @@ class VertexColor {
     r: number; g: number; b: number;
     constructor(view: DataView, offset: number) {
         this.r = view.getUint8(offset);
-        this.g = view.getUint8(offset+1);
-        this.b = view.getUint8(offset+2);
-        // this.n = view.getUint8(offs+3); not used?
+        this.g = view.getUint8(offset + 1);
+        this.b = view.getUint8(offset + 2);
     }
 }
 
 class LODPoly {
     n: number; v1: number; v2: number; v3: number;
     f: number; c1: number; c2: number; c3: number;
-
     constructor(view: DataView, offs: number) {
         this.n = view.getUint8(offs);
-        this.v1 = view.getUint8(offs+1);
-        this.v2 = view.getUint8(offs+2);
-        this.v3 = view.getUint8(offs+3);
-        this.f = view.getUint8(offs+4);
-        this.c1 = view.getUint8(offs+5);
-        this.c2 = view.getUint8(offs+6);
-        this.c3 = view.getUint8(offs+7);
+        this.v1 = view.getUint8(offs + 1);
+        this.v2 = view.getUint8(offs + 2);
+        this.v3 = view.getUint8(offs + 3);
+        this.f = view.getUint8(offs + 4);
+        this.c1 = view.getUint8(offs + 5);
+        this.c2 = view.getUint8(offs + 6);
+        this.c3 = view.getUint8(offs + 7);
     }
 }
 
 class LODPoly2 {
     v1: number; v2: number; v3: number; v4: number;
     c1: number; c2: number; c3: number; c4: number;
-
     constructor(view: DataView, offs: number) {
         this.v1 = view.getUint8(offs);
-        this.v2 = view.getUint8(offs+1);
-        this.v3 = view.getUint8(offs+2);
-        this.v4 = view.getUint8(offs+3);
-        this.c1 = view.getUint8(offs+4);
-        this.c2 = view.getUint8(offs+5);
-        this.c3 = view.getUint8(offs+6);
-        this.c4 = view.getUint8(offs+7);
+        this.v2 = view.getUint8(offs + 1);
+        this.v3 = view.getUint8(offs + 2);
+        this.v4 = view.getUint8(offs + 3);
+        this.c1 = view.getUint8(offs + 4);
+        this.c2 = view.getUint8(offs + 5);
+        this.c3 = view.getUint8(offs + 6);
+        this.c4 = view.getUint8(offs + 7);
     }
 }
 
@@ -166,7 +173,7 @@ class Polygon {
             this.s2 = view.getUint8(offs + 9);
             this.s3 = view.getUint8(offs + 10);
             this.s4 = view.getUint8(offs + 11);
-            this.tt = view.getUint8(offs + 12) & 0x7F;
+            this.tt = view.getUint8(offs + 12) & 127;
             this.ii = view.getUint8(offs + 13);
         }
     }
@@ -203,8 +210,7 @@ export class VRAM {
     }
 }
 
-// list of tile indices per game, per level, to set as scrolling
-export const scrollingTilesMap: Record<number, Record<number, number[]>> = {
+export const TILE_SCROLL_MAP: Record<number, Record<number, number[]>> = {
     1: {
         11: [23], 13: [31], 17: [1], 27: [31], 35: [51], 37: [35],
         49: [54], 55: [66], 59: [12], 63: [77], 67: [55], 69: [29],
@@ -283,19 +289,20 @@ function applyTileRotationRGBA(rgba: Uint8Array, tile: Tile, size: number = 32):
 }
 
 function colorBitsToRGBA(word: number): [number, number, number, number] {
-    const r = (((word) & 31) * 255 / 31) | 0;
-    const g = (((word >> 5) & 31) * 255 / 31) | 0;
-    const b = (((word >> 10) & 31) * 255 / 31) | 0;
-    const a = (word >> 15) & 1;
-    return [r, g, b, a ? 0 : 255];
+    return [
+        (((word) & 31) * 255 / 31) | 0,
+        (((word >> 5) & 31) * 255 / 31) | 0,
+        (((word >> 10) & 31) * 255 / 31) | 0,
+        ((word >> 15) & 1) ? 0 : 255
+    ];
 }
 
-function readCLUT(vram: VRAM, px: number, py: number, n: number): [number, number, number, number][] {
-    const palette: [number, number, number, number][] = [];
+function readColorLookupTable(vram: VRAM, px: number, py: number, n: number): [number, number, number, number][] {
+    const clut: [number, number, number, number][] = [];
     for (let i = 0; i < n; i++) {
-        palette.push(colorBitsToRGBA(vram.getWordByIndex((py * 512 + px) + i)));
+        clut.push(colorBitsToRGBA(vram.getWordByIndex((py * 512 + px) + i)));
     }
-    return palette;
+    return clut;
 }
 
 function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, height: number = tile.size): Uint8Array {
@@ -303,7 +310,7 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
     const y4 = tile.y4;
     if (tile.m === 4) {
         x4 = x4 >> 2;
-        const palette = readCLUT(vram, tile.px, tile.py, 16);
+        const palette = readColorLookupTable(vram, tile.px, tile.py, 16);
         const out = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width / 4; x++) {
@@ -321,7 +328,7 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
         return out;
     } else if (tile.m === 8) {
         x4 = x4 >> 1;
-        const palette = readCLUT(vram, tile.px, tile.py, 256);
+        const palette = readColorLookupTable(vram, tile.px, tile.py, 256);
         const out = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width / 2; x++) {
@@ -378,16 +385,10 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
         const cb = mdlColorStart + poly.c2;
         const cc = mdlColorStart + poly.c3;
         const cd = mdlColorStart + poly.c4;
-
         if (poly.v1 === poly.v2) {
-            const tl: [number, number] = [rect.u0, rect.v0];
-            const tr: [number, number] = [rect.u1, rect.v0];
-            const br: [number, number] = [rect.u1, rect.v1];
-            const bl: [number, number] = [rect.u0, rect.v1];
-            const rr = poly.r & 3;
-            const base = [bl, br, tr, tl];
+            const base = [[rect.u0, rect.v1], [rect.u1, rect.v1], [rect.u1, rect.v0], [rect.u0, rect.v0]];
             const permutations = [[0, 1, 2, 3], [3, 0, 1, 2], [2, 3, 0, 1], [1, 2, 3, 0]];
-            const permutation = permutations[rr];
+            const permutation = permutations[poly.r & 3];
             const tex1 = base[permutation[0]];
             const tex2 = base[permutation[1]];
             const tex3 = base[permutation[2]];
@@ -522,14 +523,9 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
 
 export function buildSkybox(data: DataView, gameNumber: number): Skybox {
     const size = data.byteLength;
-    let pointer = 0;
-    // Background color (4 bytes)
-    const backgroundColor: [number, number, number] = [
-        data.getUint8(pointer),
-        data.getUint8(pointer + 1),
-        data.getUint8(pointer + 2)
-    ];
-    pointer += 4;
+    // Background color (4)
+    const backgroundColor = [data.getUint8(0), data.getUint8(1), data.getUint8(2)];
+    let pointer = 4;
     const partOffsets: number[] = [];
     while (pointer + 4 <= size) {
         const offset = data.getUint32(pointer, true);
@@ -539,8 +535,8 @@ export function buildSkybox(data: DataView, gameNumber: number): Skybox {
         }
         partOffsets.push(offset);
     }
-    const vertices: [number, number, number][] = [];
-    const colors: [number, number, number][] = [];
+    const vertices: number[][] = [];
+    const colors: number[][] = [];
     const faces: SkyFace[] = [];
     for (const offset of Array.from(new Set(partOffsets)).sort((a, b) => a - b)) {
         if (gameNumber == 1) {
@@ -557,10 +553,8 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
     const colors: number[][] = [];
     const faces: GroundFace[] = [];
     const uvs: number[][] = [];
-    let offset = 0;
-    let partCount = data.getUint32(offset, true);
-    offset += 4;
-    const start = 8;
+    let partCount = data.getUint32(0, true);
+    let offset = 4;
     const partOffsets: number[] = [];
 
     if (gameNumber > 1) {
@@ -580,7 +574,7 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
         if (gameNumber == 1) {
             const o = data.getUint32(offset, true);
             offset += 4;
-            pointer = o + start;
+            pointer = o + 8;
         } else {
             pointer = partOffsets[part] + 8;
         }
@@ -592,13 +586,13 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
         for (let i = 0; i < header.lodVertexCount; i++) {
             const v = new Vertex(data, pointer);
             pointer += 4;
-            const zraw = (v.b1 | ((v.b2 & 3) << 8));
+            const zraw = (v.byte1 | ((v.byte2 & 3) << 8));
             let z = zraw + header.z;
             if (gameNumber > 1) {
                 z = (zraw << 1) + header.z; // lazy z-scaling to correct for S2/S3, see proper z-scaling further below
             }
-            const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
-            const x = ((v.b3 >> 5) | (v.b4 << 3)) + header.x;
+            const y = ((v.byte2 >> 2) | ((v.byte3 & 31) << 6)) + header.y;
+            const x = ((v.byte3 >> 5) | (v.byte4 << 3)) + header.x;
             vertices.push([x, y, z]);
         }
 
@@ -676,7 +670,7 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
         for (let i = 0; i < header.mdlVertexCount; i++) {
             const vertex = new Vertex(data, pointer);
             pointer += 4;
-            const zraw = (vertex.b1 | ((vertex.b2 & 3) << 8));
+            const zraw = (vertex.byte1 | ((vertex.byte2 & 3) << 8));
             let z = zraw + header.z;
             if (gameNumber > 1) {
                 // z-scaling
@@ -688,8 +682,8 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
                     z = (zraw >> 2) + header.z;
                 }
             }
-            const y = ((vertex.b2 >> 2) | ((vertex.b3 & 31) << 6)) + header.y;
-            const x = ((vertex.b3 >> 5) | (vertex.b4 << 3)) + header.x;
+            const y = ((vertex.byte2 >> 2) | ((vertex.byte3 & 31) << 6)) + header.y;
+            const x = ((vertex.byte3 >> 5) | (vertex.byte4 << 3)) + header.x;
             vertices.push([x, y, z]);
         }
 
@@ -761,30 +755,36 @@ export function buildTileAtlas(vram: VRAM, textureList: DataView, gameNumber: nu
     return { data, width, height, uvs, tiles };
 }
 
-export function parseMobyInstances(data: DataView): MobyInstance[] {
-    const size = data.byteLength;
+export function parseMobyInstances(subfile4: DataView): MobyInstance[] {
+    const size = subfile4.byteLength;
     let pointer = 16;
     let index = 0;
+    // jump sections until reaching the 13th one
     while (pointer < size - 8 && index < 12) {
-        const sectionSize = data.getUint32(pointer, true);
+        const sectionSize = subfile4.getUint32(pointer, true);
         pointer += sectionSize;
         index += 1;
     }
-
     pointer += 4;
+
+    // Moby instances (88)
     const mobys: MobyInstance[] = [];
-    for (let i = 0; i < data.getUint32(pointer, true); i++) {
+    for (let i = 0; i < subfile4.getUint32(pointer, true); i++) {
         const pos = pointer + 4 + (i * 88);
         if (pos + 88 > size) {
             break;
         }
-        const x = data.getInt32(pos + 12, true);
-        const y = data.getInt32(pos + 16, true);
-        const z = data.getInt32(pos + 20, true);
+        // ??? (12), x (4), y (4), z (4), ??? (30), classId (1)
+        const x = subfile4.getInt32(pos + 12, true);
+        const y = subfile4.getInt32(pos + 16, true);
+        const z = subfile4.getInt32(pos + 20, true);
+        const classId = subfile4.getUint8(pos + 54);
+        // unlikely to have a moby at origin and there's lots of "empty" moby instances (these are filled at runtime if at all?)
         if (x === 0 && y === 0 && z === 0) {
-            continue; // unlikely to have a moby at origin and there's lots of "empty" moby instances
+            continue;
         }
-        mobys.push({ x, y, z, yaw: 0, classId: data.getUint8(pos + 54) });
+        // unsure which byte is the rotation/yaw so hardcode to 0 for now
+        mobys.push({ x, y, z, yaw: 0, classId });
     }
     return mobys;
 }
@@ -875,14 +875,16 @@ export function parseLevelData2(data: ArrayBufferSlice, gameNumber: number = 2):
     pointer += offset - 4;
     const skyStart = pointer;
     const pattern = new Uint8Array(data.arrayBuffer, pointer, 12);
-    function checkPattern(p: Uint8Array) {
+    pointer += 12;
+
+    function isValidPattern(p: Uint8Array) {
         return !(((p[0] & 15) === 0) && ((p[1] >> 4) === 0) && (p[2] === 0) &&
             (p[3] === 0) && ((p[4] & 15) === 0) && ((p[5] >> 4) === 0) &&
             (p[6] === 0) && (p[7] === 0) && ((p[8] & 15) === 0) &&
             ((p[9] >> 4) === 0) && (p[10] === 0) && (p[11] === 0))
     }
-    pointer += 12;
-    if (checkPattern(pattern)) {
+
+    if (isValidPattern(pattern)) {
         pointer = skyStart;
         offset = getUint32();
         pointer += offset - 4;
@@ -989,18 +991,8 @@ function parseTiles(data: DataView, gameNumber: number): Tile[] {
     let offset = 8;
     for (let i = 0; i < count; i++) {
         offset += 8;
-        const tile: Tile = {
-            mainX: data.getUint8(offset), mainY: data.getUint8(offset + 1),
-            p1: data.getUint8(offset + 2), p2: data.getUint8(offset + 3),
-            xx: data.getUint8(offset + 4), yy: data.getUint8(offset + 5),
-            ss: data.getUint8(offset + 6), ff: data.getUint8(offset + 7),
-            px: 0, py: 0, m: 4, size: 32,
-            x1: 0, x2: 0, x3: 0, x4: 0,
-            y1: 0, y2: 0, y3: 0, y4: 0,
-            rotation: 0, s: 0, offset, f: false, transparent: 0
-        };
+        const tile = buildTile(data, offset, gameNumber);
         offset += 8;
-        textureCompute(tile, offset - 8, gameNumber);
         tiles.push(tile);
         if (gameNumber > 1) {
             offset += 32; // skip unused groups
@@ -1009,78 +1001,77 @@ function parseTiles(data: DataView, gameNumber: number): Tile[] {
     return tiles;
 }
 
-function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyFace[]): void {
-    let p = partOffset;
-    if (p + 24 > size) return;
-    // header_sky1_ (24 bytes)
-    p += 8;
-    const globalY = view.getInt16(p + 0, true);
-    const globalZ = view.getInt16(p + 2, true);
-    const vCount = view.getUint16(p + 4, true);
-    const globalX = view.getInt16(p + 6, true);
-    const pCount = view.getUint16(p + 8, true);
-    const cCount = view.getUint16(p + 10, true);
-    p += 16;
+function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
+    let pointer = partOffset;
+    if (pointer + 24 > size) {
+        return;
+    }
     const baseVertexIndex = vertices.length;
-    const baseColorIndex  = colors.length;
+    const baseColorIndex = colors.length;
 
-    // Vertices block: vCount * 4 bytes
-    for (let i = 0; i < vCount; i++) {
-        if (p + 4 > size) break;
-        const b1 = view.getUint8(p + 0);
-        const b2 = view.getUint8(p + 1);
-        const b3 = view.getUint8(p + 2);
-        const b4 = view.getUint8(p + 3);
-        p += 4;
-        const packedZ = (b1 | ((b2 & 0x03) << 8));
-        const packedY = ((b2 >> 2) | ((b3 & 0x1F) << 6));
-        const packedX = ((b3 >> 5) | (b4 << 3));
-        const z = packedZ - globalZ;
-        const y = packedY - globalY;
-        const x = packedX + globalX;
-        vertices.push([x, y, z]);
+    // Header (24)
+    pointer += 8; // skip first 8 bytes
+    const globalY = view.getInt16(pointer, true);
+    const globalZ = view.getInt16(pointer + 2, true);
+    const vertexCount = view.getUint16(pointer + 4, true);
+    const globalX = view.getInt16(pointer + 6, true);
+    const polyCount = view.getUint16(pointer + 8, true);
+    const colorCount = view.getUint16(pointer + 10, true);
+    pointer += 16;
+
+    // Vertices (4)
+    for (let i = 0; i < vertexCount; i++) {
+        if (pointer + 4 > size) {
+            break;
+        }
+        const b1 = view.getUint8(pointer);
+        const b2 = view.getUint8(pointer + 1);
+        const b3 = view.getUint8(pointer + 2);
+        const b4 = view.getUint8(pointer + 3);
+        vertices.push([
+            ((b3 >> 5) | (b4 << 3)) + globalX,
+            ((b2 >> 2) | ((b3 & 31) << 6)) - globalY,
+            (b1 | ((b2 & 3) << 8)) - globalZ
+        ]);
+        pointer += 4;
     }
 
-    // Colors block: cCount * 4 bytes
-    for (let i = 0; i < cCount; i++) {
-        if (p + 4 > size) break;
-        const r = view.getUint8(p + 0);
-        const g = view.getUint8(p + 1);
-        const b = view.getUint8(p + 2);
-        // const n = view.getUint8(p + 3);
-        p += 4;
-        colors.push([r, g, b]);
+    // Colors (4)
+    for (let i = 0; i < colorCount; i++) {
+        if (pointer + 4 > size) {
+            break;
+        }
+        colors.push([view.getUint8(pointer), view.getUint8(pointer + 1), view.getUint8(pointer + 2)]);
+        pointer += 4;
     }
 
-    // Polys block: pCount * 8 bytes
-    for (let i = 0; i < pCount; i++) {
-        if (p + 8 > size) break;
-        const v1_packed1 = view.getUint8(p + 0);
-        const v1_packed2 = view.getUint8(p + 1);
-        const v1_packed3 = view.getUint8(p + 2);
-        const v1_packed4 = view.getUint8(p + 3);
-        const c1_packed1 = view.getUint8(p + 4);
-        const c1_packed2 = view.getUint8(p + 5);
-        const c1_packed3 = view.getUint8(p + 6);
-        const c1_packed4 = view.getUint8(p + 7);
-        p += 8;
-        const [vi1, vi2, vi3] = unpackSkyIndex(v1_packed1, v1_packed2, v1_packed3, v1_packed4);
-        const [ci1, ci2, ci3] = unpackSkyIndex(c1_packed1, c1_packed2, c1_packed3, c1_packed4);
-        if (vi1 < vCount && vi2 < vCount && vi3 < vCount && ci1 < cCount && ci2 < cCount && ci3 < cCount) {
+    function unpackSkyIndex(b1: number, b2: number, b3: number, b4: number): [number, number, number] {
+        return [(b1 >> 2) | ((b2 & 15) << 6), (b2 >> 4) | ((b3 & 63) << 4), (b3 >> 6) | (b4 << 2)];
+    }
+
+    // Polygons (8)
+    for (let i = 0; i < polyCount; i++) {
+        if (pointer + 8 > size) {
+            break;
+        }
+        const [vi1, vi2, vi3] = unpackSkyIndex(view.getUint8(pointer), view.getUint8(pointer + 1), view.getUint8(pointer + 2), view.getUint8(pointer + 3));
+        const [ci1, ci2, ci3] = unpackSkyIndex(view.getUint8(pointer + 4), view.getUint8(pointer + 5), view.getUint8(pointer + 6), view.getUint8(pointer + 7));
+        if (vi1 < vertexCount && vi2 < vertexCount && vi3 < vertexCount && ci1 < colorCount && ci2 < colorCount && ci3 < colorCount) {
             faces.push({
                 indices: [baseVertexIndex + vi1, baseVertexIndex + vi2, baseVertexIndex + vi3],
                 colors: [baseColorIndex + ci1, baseColorIndex + ci2, baseColorIndex + ci3,]
             });
         }
+        pointer += 8;
     }
 }
 
-function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyFace[]): void {
+function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
     let pointer = partOffset;
     const baseVertexIndex = vertices.length;
     const baseColorIndex = colors.length;
 
-    // Header (20 bytes)
+    // Header (20)
     if (pointer + 20 > partSize) {
         return;
     }
@@ -1093,7 +1084,7 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
     const polyCount = data.getUint16(pointer + 10, true);
     pointer += 12;
 
-    // Vertices (4 bytes)
+    // Vertices (4)
     for (let i = 0; i < vertexCount; i++) {
         const b1 = data.getUint8(pointer);
         const b2 = data.getUint8(pointer + 1);
@@ -1107,10 +1098,16 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
         pointer += 4;
     }
 
-    // Colors (4 bytes)
+    // Colors (4)
     for (let i = 0; i < colorCount; i++) {
         colors.push([data.getUint8(pointer), data.getUint8(pointer + 1), data.getUint8(pointer + 2)]);
         pointer += 4;
+    }
+
+    function isSkyFaceInBounds(v: [number, number, number], c: [number, number, number], vc: number, cc: number) {
+        // this check wouldn't be needed if the parsing was 100% correct
+        // without it, over x2 amount of faces get pushed for skys that look wrong
+        return v[0] < vc && v[1] < vc && v[2] < vc && c[0] < cc && c[1] < cc && c[2] < cc;
     }
 
     // Polys
@@ -1171,21 +1168,8 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
     }
 }
 
-function isSkyFaceInBounds(v: [number, number, number], c: [number, number, number], vc: number, cc: number) {
-    // this check wouldn't be needed if the binary parsing was 100% correct
-    // without it, over x2 amount of faces get pushed for skys that look wrong
-    return v[0] < vc && v[1] < vc && v[2] < vc && c[0] < cc && c[1] < cc && c[2] < cc;
-}
-
-function unpackSkyIndex(b1: number, b2: number, b3: number, b4: number): [number, number, number] {
-    return [(b1 >> 2) | ((b2 & 15) << 6), (b2 >> 4) | ((b3 & 63) << 4), (b3 >> 6) | (b4 << 2)];
-}
-
-function textureCompute(tile: Tile, offset: number, gameNumber: number): void {
-    tile.f = false;
-    if (gameNumber > 1) {
-        tile.size = 32;
-    }
+function buildTile(data: DataView, offset: number, gameNumber: number): Tile {
+    const tile = new Tile(data, offset);
     if ((tile.ff & 14) > 0 || (tile.ss & 8) === 0) {
         tile.f = true;
     }
@@ -1247,4 +1231,5 @@ function textureCompute(tile: Tile, offset: number, gameNumber: number): void {
             tile.transparent = 0;
         }
     }
+    return tile;
 }

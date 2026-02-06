@@ -58,8 +58,7 @@ with open(wad_path, "rb") as f:
                     if sf_index in subfile_type_map[game_number - 1][t]:
                         extension = t
                 if extension != "bin" and sf_size > 0: # skip non-level subfiles for noclip (overlays, menus, etc.)
-                    if game_number == 1 or (game_number > 1 and extension != "starring"): # also skip starring for S2/S3
-                        print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
-                        with open(f"{extract_path}/sf{sf_index + 1}.bin", "wb") as sf:
-                            sf.write(wad[sf_offset:sf_offset+sf_size])
+                    print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
+                    with open(f"{extract_path}/sf{sf_index + 1}.bin", "wb") as sf:
+                        sf.write(wad[sf_offset:sf_offset+sf_size])
             sf_index += 1

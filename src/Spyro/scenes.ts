@@ -1,8 +1,8 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxCullMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildTileAtlas, buildLevel, buildSkybox, VRAM, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
+import { buildTileAtlas, buildLevel, buildSkybox, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -10,7 +10,7 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 
 /*
-To-do list
+TODO
 
     Better water rendering, although it's mostly accurate
     Better handling of LOD levels
@@ -19,11 +19,11 @@ To-do list
     Clean up functions in bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
-    Clean up how scrolling textures are handled (it's working fine but messy)
-    LOD toggle does not work on a few levels
+    Clean up scrolling textures (they're a mess but working as intended)
+    Overhaul texture and UV parsing. It's a port of SWV for now, but it can be massively simplified
 
     Spyro 1
-        Per-tile transparency masking (see edges by the "water" in Gnasty's Loot or Icy Flight)
+        Per-tile transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
             This may need to be hardcoded since there seems to be no transparent flags in tile lists
         
     Spyro 2
@@ -33,20 +33,22 @@ To-do list
             Hurricos has black polygons on the gates that need spark plugs to open (Sunny Beach has similar ones on the turtle gates)
             Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should (wrong texture?)
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
+            This may not be an issue, just something worth investigating to see if the polygon parsing needs to be more robust
+            These levels also don't have LOD versions for some reason
 
     Spyro 3
         There are a very small number of incorrect faces
             Molten Crater has random ground textures in the trees (might be like that in the game)
-            Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent
+            Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent (at least in the same way as water)
             Icy Peak has some misaligned vertex colors under the ice sections (likely an issue in the game)
-        Sublevels should extract their own skybox, not default to the parent level's
+        Sublevels should extract their own skybox, not default to the parent level
 
 Nice to have
 
     Make scrolling textures and their speed determined by data, not hardcoded
-    Render mobys in each level
+    Render mobys (gems, NPCs, enemies, etc.) in each level
         The format will need to be figured out. They're in other level subfiles (S2 grabs from global store instead?)
-        Positions of mobys in S3 are figured out, but need the models and (maybe) animations
+        Only their per-level instances in S3 have been RE-ed
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
 */
 
@@ -186,7 +188,7 @@ class SpyroScene3 implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.bin`);
         const { vram, textureList, ground: g, grounds, sky, subfile4 } = parseLevelData2(levelFile, this.gameNumber);
-        const mobys = (this.subLevelID === undefined && subfile4) ? parseMobyInstances(subfile4!.createDataView()) : [];
+        const mobys = (this.subLevelID === undefined && subfile4) ? parseMobyInstances(subfile4.createDataView()) : [];
         let ground = g;
         if (this.subLevelID && grounds && grounds.length > 0) {
             ground = grounds[this.subLevelID - 1];
@@ -402,7 +404,7 @@ const sceneDescs3 = [
     new SpyroScene3(170, "Super Bonus Round (Sublevel 1)", 1),
     new SpyroScene3(170, "Super Bonus Round (Sublevel 2)", 2),
     new SpyroScene3(170, "Super Bonus Round (Sublevel 3)", 3),
-    "Cutscenes", // names as they appear in game with incorrect capitalization
+    "Cutscenes",
     new SpyroScene3(7, "Title Screen"),
     new SpyroScene3(10, "An Evil Plot Unfolds..."),
     new SpyroScene3(52, "A Powerful Villain Emerges..."),
@@ -425,6 +427,6 @@ const sceneDescs3 = [
     new SpyroScene3(49, "THE END")
 ];
 
-export const sceneGroup: SceneGroup = {id: id, name: name, sceneDescs: sceneDescs};
-export const sceneGroup2: SceneGroup = {id: id2, name: name2, sceneDescs: sceneDescs2};
-export const sceneGroup3: SceneGroup = {id: id3, name: name3, sceneDescs: sceneDescs3};
+export const sceneGroup: SceneGroup = { id: id, name: name, sceneDescs: sceneDescs };
+export const sceneGroup2: SceneGroup = { id: id2, name: name2, sceneDescs: sceneDescs2 };
+export const sceneGroup3: SceneGroup = { id: id3, name: name3, sceneDescs: sceneDescs3 };

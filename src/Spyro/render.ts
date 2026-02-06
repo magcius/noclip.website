@@ -7,7 +7,7 @@ import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatfo
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { Skybox, Level, MobyInstance, scrollingTilesMap } from "./bin";
+import { Skybox, Level, MobyInstance, TILE_SCROLL_MAP } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
@@ -24,8 +24,8 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_TimeLOD; // x = time, y = LOD flag
-    vec4 u_UV[${maxTiles}]; // xy = offset, zw = scale
-    vec4 u_TileFlags[${maxTiles}]; // x = scroll
+    vec4 u_UV[${MAX_TILES}]; // xy = offset, zw = scale
+    vec4 u_TileFlags[${MAX_TILES}]; // x = scroll
 };
 
 uniform sampler2D u_Texture;
@@ -132,9 +132,13 @@ const spaceCorrection = mat4.fromValues(
 const scratchMat4a = mat4.create();
 const scratchViewNoTransform = mat4.create();
 const scratchClipFromWorldNoTransform = mat4.create();
-const maxTiles = 144;
+const MAX_TILES = 144;
 
 export class LevelRenderer {
+    public showMobys: boolean = false;
+    public showLOD: boolean = false;
+    public showTextures: boolean = true;
+    public cullMode: GfxCullMode = GfxCullMode.None;
     private vertexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
@@ -142,17 +146,14 @@ export class LevelRenderer {
     private indexBufferGround: GfxBuffer;
     private indexBufferTransparent: GfxBuffer;
     private indexBufferLOD: GfxBuffer;
+    private texture: GfxTexture;
+    private inputLayout: GfxInputLayout;
     private indexCountGround: number;
     private indexCountTransparent: number;
     private indexCountLOD: number;
-    private inputLayout: GfxInputLayout;
-    private texture: GfxTexture;
     private gameNumber: number;
     private tileParams: Float32Array;
     private scrollFlags: Float32Array;
-    public showMobys: boolean;
-    public showLOD: boolean;
-    public showTextures: boolean = true;
 
     constructor(cache: GfxRenderCache, level: Level, private mobys?: MobyInstance[]) {
         const device = cache.device;
@@ -189,8 +190,8 @@ export class LevelRenderer {
             this.tileParams[base + 2] = t.uScale;
             this.tileParams[base + 3] = t.vScale;
         }
-        if (level.id in scrollingTilesMap[level.game]) {
-            for (const ti of scrollingTilesMap[level.game][level.id]) {
+        if (level.id in TILE_SCROLL_MAP[level.game]) {
+            for (const ti of TILE_SCROLL_MAP[level.game][level.id]) {
                 if (ti != null && ti >= 0 && ti < tileCount) {
                     this.scrollFlags[ti] = 1.0;
                 }
@@ -285,8 +286,8 @@ export class LevelRenderer {
 
         // ub_SceneParams
         const sceneFloats = 16 + 4;
-        const tileFloats = maxTiles * 4;
-        const scrollFloats = maxTiles * 4;
+        const tileFloats = MAX_TILES * 4;
+        const scrollFloats = MAX_TILES * 4;
         const totalFloats = sceneFloats + tileFloats + scrollFloats;
         let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, totalFloats);
         const sceneBuffer = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
@@ -300,7 +301,7 @@ export class LevelRenderer {
         sceneBuffer[offset++] = 0.0;
         // u_Tile
         const tileCount = this.tileParams.length / 4;
-        for (let i = 0; i < maxTiles; i++) {
+        for (let i = 0; i < MAX_TILES; i++) {
             const base = i * 4;
             sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 0] : 0.0; // x = u0
             sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 1] : 0.0; // y = v0
@@ -308,7 +309,7 @@ export class LevelRenderer {
             sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 3] : 0.0; // w = vScale
         }
         // u_TileFlags
-        for (let i = 0; i < maxTiles; i++) {
+        for (let i = 0; i < MAX_TILES; i++) {
             sceneBuffer[offset++] = i < tileCount ? this.scrollFlags[i] : 0.0; // x = scroll
             sceneBuffer[offset++] = 0.0;
             sceneBuffer[offset++] = 0.0;
@@ -318,7 +319,7 @@ export class LevelRenderer {
         {
             const renderInst = renderInstManager.newRenderInst();
             const megaState = renderInst.getMegaStateFlags();
-            megaState.cullMode = GfxCullMode.None;
+            megaState.cullMode = this.cullMode;
             setAttachmentStateSimple(megaState, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
                 blendMode: GfxBlendMode.Add,
@@ -342,7 +343,7 @@ export class LevelRenderer {
         if (this.indexCountTransparent > 0 && !this.showLOD) {
             const renderInst = renderInstManager.newRenderInst();
             const megaState = renderInst.getMegaStateFlags();
-            megaState.cullMode = GfxCullMode.None;
+            megaState.cullMode = this.cullMode;
             setAttachmentStateSimple(megaState, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
                 blendMode: GfxBlendMode.Add,
@@ -398,8 +399,10 @@ export class LevelRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
+        device.destroyBuffer(this.tileBuffer);
         device.destroyBuffer(this.indexBufferGround);
         device.destroyBuffer(this.indexBufferTransparent);
+        device.destroyBuffer(this.indexBufferLOD);
         device.destroyTexture(this.texture);
     }
 }
