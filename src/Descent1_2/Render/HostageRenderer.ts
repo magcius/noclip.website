@@ -59,7 +59,7 @@ class DescentBillboardProgram extends DeviceProgram {
 
     public override both = `
 ${GfxShaderLibrary.MatrixLibrary}
-precision mediump float;
+precision highp float;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_matProjection;
@@ -189,7 +189,7 @@ function buildBillboardCollection(
     const objectsGrouped = new MultiMap<number, DescentObject>();
     for (const object of level.objects) {
         let render = getObjectVclipRenderer(object);
-        if (level.objectShouldBeVisible(object) && render != null) {
+        if (level.objectShouldBeVisible(object) && render !== null) {
             objectsGrouped.add(render.vclip_num, object);
         }
     }
@@ -200,7 +200,7 @@ function buildBillboardCollection(
 
     for (const [vclipId, objects] of objectsGrouped.entries()) {
         const texture = textureList.resolveVclipToTexture(vclipId);
-        if (texture == null) continue;
+        if (texture === null) continue;
 
         const indexOffset = indices.length;
         for (const object of objects)

@@ -49,7 +49,7 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (defines !== null)
         definesString = [... defines.entries()].map(([k, v]) => defineStr(k, v)).join('\n');
 
-    let precision = lines.filter((line) => line.startsWith('precision')).join('\n') || 'precision mediump float;';
+    let precision = lines.filter((line) => line.startsWith('precision')).join('\n') || 'precision highp float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
     let extraDefines = `
 #define GFX_CLIPSPACE_NEAR_Z()     (${glslGenerateFloat(vendorInfo.clipSpaceNearZ)})

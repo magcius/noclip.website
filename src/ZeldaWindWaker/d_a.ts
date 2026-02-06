@@ -1,8 +1,8 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
+import { OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
-import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { J3DModelData, J3DModelInstance, ShapeInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
@@ -24,20 +24,24 @@ import { dGlobals } from "./Main.js";
 import { cLib_addCalc, cLib_addCalc0, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
-import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
+import { EDemoActorFlags, dDemo_actor_c, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
-import { dComIfGd_addRealShadow, dComIfGd_setShadow, dDlst_alphaModel__Type } from "./d_drawlist.js";
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dComIfGd_setSimpleShadow2, dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
+import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_delete, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
 import { base_process_class, cPhs__Status, fGlobals, fpcEx_Search, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { parseTParagraphData, TParseData_fixed } from "../Common/JSYSTEM/JStudio.js";
+import { AABB } from "../Geometry.js";
+import { d_a_noclip_legacy } from "./LegacyActor.js";
+import { ShapeInst } from "../SuperMonkeyBall/Shape.js";
 
 // Framework'd actors
 
@@ -49,6 +53,8 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
+const scratchBboxA = new AABB();
+const scratchBboxB = new AABB();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_grass;
@@ -369,7 +375,7 @@ class d_a_ep extends fopAc_ac_c {
 
         // When hit with an attack, emit a quick burst of flame before returning to normal
         if (this.burstTimer >= 0) {
-            if (this.burstTimer == 0x28 && !this.burstEmitter) {
+            if (this.burstTimer === 0x28 && !this.burstEmitter) {
                 const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 8, this.posTop[2]);
                 this.burstEmitter = globals.particleCtrl.set(globals, 0, 0x01EA, pos)!;
             }
@@ -2407,6 +2413,9 @@ class d_a_sie_flag extends fopAc_ac_c {
 
         this.set_mtx();
 
+        if (!this.cullingCheck(globals.camera))
+            return;
+
         // TODO(jstpierre): addCalcPos2 windvec
         vec3.add(scratchVec3a, this.pos, this.flagOffset);
         dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
@@ -2492,6 +2501,9 @@ class d_a_tori_flag extends fopAc_ac_c {
         super.execute(globals, deltaTimeFrames);
 
         this.set_mtx();
+
+        if (!this.cullingCheck(globals.camera))
+            return;
 
         vec3.add(scratchVec3a, this.pos, this.flagOffset);
         dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
@@ -2896,6 +2908,9 @@ class d_a_majuu_flag extends fopAc_ac_c {
     }
 
     private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
+        if (!this.cullingCheck(globals.camera))
+            return;
+
         this.wave += this.waveSpeed * deltaTimeFrames;
         const windSpeed = lerp(this.windSpeed1, this.windSpeed2, Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
@@ -3207,10 +3222,10 @@ class d_a_kamome extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
         this.morf.entryDL(globals, renderInstManager);
-        
+
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 10.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk); // TODO: This should return non-inf when over the sea, a la ObjAcch
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr);
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
@@ -3246,9 +3261,9 @@ function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T
 }
 
 function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
-    actor.curMode = mode;
-    const func = mode_tbl[actor.curMode * 2 + 0];
+    const func = mode_tbl[mode * 2 + 0];
     func.call(actor, globals, 0);
+    actor.curMode = mode;
 }
 
 type dPathMoveCB = (dst: vec3, curr: dPath__Point, next: dPath__Point, speed: number) => boolean;
@@ -4987,12 +5002,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         }
     }
 
-    private drawShadow( globals: dGlobals ) {
+    private drawShadow(globals: dGlobals) {
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
 
-        if(this.itemModel) {
+        if (this.itemModel) {
             dComIfGd_addRealShadow(globals, this.shadowId, this.itemModel);
         }
     }
@@ -5083,10 +5098,10 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
         if (this.btkAnim.anm) this.btkAnim.entry(this.morf.model);
 
         this.morf.entryDL(globals, renderInstManager);
-        
+
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -5116,6 +5131,8 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
     }
 }
 
+const scratchDemoParagraphData: TParseData_fixed = { entryCount: 0, entrySize: 0, entryOffset: 0, entryNext: null };
+
 enum LkAnim {
     WAITS = 0x00,
     WALK = 0x01,
@@ -5130,10 +5147,10 @@ enum LinkDemoMode {
     Wait = 0x01,
     Walk = 0x02,
     Dash = 0x03,
-    SetPosRotEquip = 0x04,
+    InitWait = 0x04,
     WaitTurn = 0x05,
-    SetRot = 0x2B,
-    SetPosRot = 0x2C,
+    CutRoll = 0x2B,
+    PosInit = 0x2C,
     MAX = 0x4B,
 
     Tool = 0x200,
@@ -5165,16 +5182,9 @@ enum LkEquipItem {
     Sword = 0x103,
 }
 
-enum LkHandStyle {
-    Idle = 0,
-    HoldSword = 3,
-    HoldWindWaker = 5,
-    HoldShield = 8,
-}
-
 enum LkJoint {
     HandL = 0x08,
-    HandR = 0x0D,
+    HandR = 0x0C,
     Head = 0x0F,
     Waist = 0x1E,
     FootL = 0x22,
@@ -5213,18 +5223,21 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
     private static LINK_BDL_CL = 0x18;
+    private static LINK_BDL_HANDS = 0x1D;
     private static LINK_BTI_LINKTEXBCI4 = 0x71;
     private static LINK_CLOTHES_TEX_IDX = 0x22;
     private static LINK_BDL_KATSURA = 0x20;
     private static LINK_BDL_SWA = 0x25; // Hero's sword blade
     private static LINK_BDL_SWGRIPA = 0x26 // Hero's sword hilt
+    private static LINK_BDL_SWMS = 0x46 // Master sword blade
+    private static LINK_BDL_SWGRIPMS = 0x45 // Master sword hilt
     private static TOE_POS = vec3.fromValues(6.0, 3.25, 0.0);
     private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
     public curMode = d_a_py_lk_mode.wait;
-    public prevMode = d_a_py_lk_mode.wait;
 
     private model: J3DModelInstance;
+    private modelHands: J3DModelInstance;
     private modelSwordHilt: J3DModelInstance;
     private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
 
@@ -5246,20 +5259,32 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
     private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
     private vel = vec3.create(); // TODO: This should be part of fopAc_ac_c
+    private targetSpeed: number = 0;
+    private maxSpeed: number = 17;
+    private shouldChangeMode = false;
 
     private frontFoot: number = 2;
     private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
     private anmTranslation = vec3.create();
 
-    private handStyleLeft: LkHandStyle; // @TODO: Handle non-standard hand rendering. See setDrawHandModel().
-    private handStyleRight: LkHandStyle;
-    private equippedItem: LkEquipItem;
-    private equippedItemModel: J3DModelInstance | null = null;
+    private handStyleLeft: number;
+    private handStyleRight: number;
+    private handShapeLeft: ShapeInstance;
+    private handShapeRight: ShapeInstance;
+
+    // Sword, Shield, X, Y, Z
+    private equippedItems: ItemNo[] = nArray(5, () => ItemNo.InvalidItem);
+
+    // The item that Link is currently holding in his right hand
+    private heldItem = LkEquipItem.None;
+    private heldItemModel: J3DModelInstance | null = null;
+    private equipShieldModel: J3DModelInstance | null = null;
 
     private mode_tbl = [
         this.procUnkInit, this.procUnk,
         this.procWaitInit, this.procWait,
         this.procToolInit, this.procTool,
+        this.procMoveInit, this.procMove,
     ];
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
@@ -5355,52 +5380,72 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
             setLightTevColorType(globals, this.modelKatsura, this.tevStr, globals.camera);
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager);
+        } else {
+            this.model.setShapeVisible(LkModelShape.Hat, true);
+            this.model.setShapeVisible(LkModelShape.Scabbard, globals.scnPlay.demo.getName() !== 'tale');
+            this.model.setShapeVisible(LkModelShape.Buckle, true);
         }
 
-        if (this.equippedItem === LkEquipItem.Sword) {
-            setLightTevColorType(globals, this.equippedItemModel!, this.tevStr, globals.camera);
-            mDoExt_modelEntryDL(globals, this.equippedItemModel!, renderInstManager);
+        if (this.anmBtp.anm) this.anmBtp.entry(this.model);
+        if (this.anmBtk.anm) this.anmBtk.entry(this.model);
 
+        this.setDrawHandModel();
+        setLightTevColorType(globals, this.modelHands, this.tevStr, globals.camera);
+        mDoExt_modelEntryDL(globals, this.modelHands, renderInstManager);
+
+        if (this.equippedItems[0] !== ItemNo.InvalidItem /* && checkDemoSwordNoDraw(1) */) {
             setLightTevColorType(globals, this.modelSwordHilt, this.tevStr, globals.camera);
             mDoExt_modelEntryDL(globals, this.modelSwordHilt, renderInstManager);
         }
 
+        if (this.heldItem !== LkEquipItem.None && this.heldItemModel) {
+            setLightTevColorType(globals, this.heldItemModel, this.tevStr, globals.camera);
+            mDoExt_modelEntryDL(globals, this.heldItemModel, renderInstManager);
+
+            // TODO: Sword glow
+        }
+
         // TODO:
-        // if (!checkNormalSwordEquip() && dStage_stagInfo_GetSTType(dComIfGp_getStageStagInfo()) != dStageType_FF1_e ||
+        // if (!checkNormalSwordEquip() && dStage_stagInfo_GetSTType(dComIfGp_getStageStagInfo()) !== dStageType_FF1_e ||
         //     checkCaughtShapeHide() || checkDemoShieldNoDraw()) {
         //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->hide(); // cl_podA joint
         // } else {
         //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->show(); // cl_podA joint
         // }
 
-        if (this.anmBtp.anm) this.anmBtp.entry(this.model);
-        if (this.anmBtk.anm) this.anmBtk.entry(this.model);
-
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager);
 
-        // if (mCurProc != daPyProc_DEMO_CAUGHT_e && !dComIfGp_checkPlayerStatus0(0, daPyStts0_SHIP_RIDE_e)) {
+        // if (mCurProc !== daPyProc_DEMO_CAUGHT_e && !dComIfGp_checkPlayerStatus0(0, daPyStts0_SHIP_RIDE_e)) {
         this.drawShadow(globals);
     }
 
-    private drawShadow(globals: dGlobals) {
-        let shadowmapSize = 0;
-        if (globals.stageName === "M_DaiB" || globals.stageName === "Xboss2") {
-            shadowmapSize = 1400.0;
-        } else {
-            shadowmapSize = 800; // TODO: m_HIO->mBasic.m.field_0x10;
-        }
+    private setDrawHandModel() {
+        this.handShapeLeft.visible = false;
+        this.handShapeRight.visible = false;
 
-        // TODO:
-        // if (checkNoResetFlg1(daPyFlg1_CASUAL_CLOTHES)) {
-        //     J3DMaterial* mtl = link_root_joint->getMesh();
-        //     // Hide material:
-        //     // * "ear(3)" (hat)
-        //     for (int i = 0; i < 4; i++) {
-        //         mtl = mtl->getNext();
-        //     }
-        //     mtl->getShape()->hide();
-        // }
+        if (this.handStyleLeft === 0 || this.handStyleLeft === undefined) {
+            this.handShapeLeft = this.model.shapeInstances[LkModelShape.HandL];
+        } else {
+            this.handShapeLeft = this.modelHands.shapeInstances[this.handStyleLeft];
+            mat4.copy(this.modelHands.shapeInstanceState.jointToWorldMatrixArray[this.handStyleLeft], this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandL]);
+        }
+        this.handShapeLeft.visible = true;
+
+        if (this.handStyleRight === 0 || this.handStyleRight === undefined) {
+            this.handShapeRight = this.model.shapeInstances[LkModelShape.HandR];
+        } else {
+            this.handShapeRight = this.modelHands.shapeInstances[this.handStyleRight];
+            mat4.copy(this.modelHands.shapeInstanceState.jointToWorldMatrixArray[this.handStyleRight], this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandR]);
+        }
+        this.handShapeRight.visible = true;
+    }
+
+    private drawShadow(globals: dGlobals) {
+        this.model.shapeInstances[LkModelShape.HandR].visible = true;
+        this.model.shapeInstances[LkModelShape.HandL].visible = true;
+
+        let shadowmapSize = (globals.stageName === "M_DaiB" || globals.stageName === "Xboss2") ? 1400 : 700;
 
         const casterPos = scratchVec3a;
         getMatrixTranslation(casterPos, this.model.shapeInstanceState.jointToWorldMatrixArray[0]);
@@ -5412,22 +5457,29 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             if (this.isWearingCasualClothes && this.modelKatsura && /* !checkCaughtShapeHide() */ true) {
                 dComIfGd_addRealShadow(globals, this.shadowId, this.modelKatsura);
             }
-            // Add shadow for sword if equipped and not hidden by demo
-            if (this.equippedItem === LkEquipItem.Sword && this.equippedItemModel && /* !checkDemoSwordNoDraw(1) */ true) {
-                dComIfGd_addRealShadow(globals, this.shadowId, this.equippedItemModel);
+            // Add shadow for sword hilt if equipped and not hidden by demo
+            if (this.equippedItems[0] !== ItemNo.InvalidItem && /* !checkDemoSwordNoDraw(1) */ true) {
+                dComIfGd_addRealShadow(globals, this.shadowId, this.modelSwordHilt);
             }
             // Add shadow for equipped item if not hidden by demo and not bow/guard
-            if (this.equippedItemModel && /* !checkDemoSwordNoDraw(0) */ true /* && (!checkBowItem(mEquipItem) || !checkPlayerGuard()) */) {
-                dComIfGd_addRealShadow(globals, this.shadowId, this.equippedItemModel);
+            if (this.heldItemModel && /* !checkDemoSwordNoDraw(0) */ true /* && (!checkBowItem(mEquipItem) || !checkPlayerGuard()) */) {
+                dComIfGd_addRealShadow(globals, this.shadowId, this.heldItemModel);
             }
         }
+
+        this.model.shapeInstances[LkModelShape.HandR].visible = false;
+        this.model.shapeInstances[LkModelShape.HandL].visible = false;
     }
 
     private playerInit(globals: dGlobals) {
         // createHeap()
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
+        this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
         this.modelKatsura = this.initModel(globals, d_a_py_lk.LINK_BDL_KATSURA);
-        this.modelSwordHilt = this.initModel(globals, d_a_py_lk.LINK_BDL_SWGRIPA);
+
+        // Save the basic hand shapes. These will be reselected each frame by setDrawHandModel()
+        this.handShapeRight = this.model.shapeInstances[LkModelShape.HandR];
+        this.handShapeLeft = this.model.shapeInstances[LkModelShape.HandL];
 
         // Fetch the casual clothes and the hero texture. They'll be be selected by the ShapeID set by a demo.
         const casualTexData = globals.resCtrl.getObjectRes(ResType.Bti, d_a_py_lk.ARC_NAME, d_a_py_lk.LINK_BTI_LINKTEXBCI4);
@@ -5465,6 +5517,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         let targetPos: ReadonlyVec3 = this.pos;
         let targetRot: number = this.rot[1];
+        let demoMode = LinkDemoMode.Wait;
 
         const enable = demoActor.checkEnable(0xFF);
         if (enable & EDemoActorFlags.HasPos) { targetPos = demoActor.translation; }
@@ -5473,7 +5526,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
         // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
         if (enable & EDemoActorFlags.HasAnim) {
-            this.demoMode = demoActor.nextBckId;
+            demoMode = demoActor.nextBckId;
         }
 
         if (enable & EDemoActorFlags.HasShape) {
@@ -5485,14 +5538,14 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
-        switch (this.demoMode) {
-            case LinkDemoMode.SetPosRotEquip:
-            case LinkDemoMode.SetPosRot:
+        switch (demoMode) {
+            case LinkDemoMode.InitWait:
+            case LinkDemoMode.PosInit:
                 vec3.copy(this.pos, targetPos);
                 this.rot[1] = targetRot;
                 break;
 
-            case LinkDemoMode.SetRot: {
+            case LinkDemoMode.CutRoll: {
                 debugger;
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
@@ -5503,33 +5556,70 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             case LinkDemoMode.Walk:
             case LinkDemoMode.Dash: {
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+
+                if (this.targetSpeed / this.maxSpeed < 0.5) {
+                    demoMode = LinkDemoMode.Walk;
+                }
+
+                const distXZ = moveVec[0] * moveVec[0] + moveVec[2] * moveVec[2];
+                if (distXZ < 100.0 || (distXZ < 2500.0 && this.targetSpeed < 0.001)) {
+                    demoMode = LinkDemoMode.Wait;
+                    this.targetSpeed = 0;
+                } else if ((demoMode === LinkDemoMode.Walk && distXZ < 400.0) || distXZ < 2500.0) {
+                    this.targetSpeed = 12;
+                } else {
+                    this.targetSpeed = this.maxSpeed;
+                }
+
+                // Immediately after setDemoData(), setStickData() is called. If the mode is Dash or Walk, set the stick to 1.0
+                // This value is used in procMove() to determine speed, which determines the blend of Walk vs Dash to play.
+
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
                 this.rot[1] = newRot;
-                this.setSingleMoveAnime(globals, (this.demoMode === LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
                 break;
             }
         }
 
+        this.demoMode = demoMode;
+
         return true;
     }
+
+    private checkNextMode(globals: dGlobals): boolean {
+        if (Math.abs(this.targetSpeed) <= 0.001) {
+            // Handle WaitTurn
+            return this.procWaitInit(globals);
+        } else {
+            return this.procMoveInit(globals);
+        }
+    };
 
     private changeDemoProc(globals: dGlobals): boolean {
         assert(this.demoMode < LinkDemoMode.MAX || this.demoMode === LinkDemoMode.Tool)
 
         switch (this.demoMode) {
             case LinkDemoMode.None: return false;
-            case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
-            case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+            case LinkDemoMode.Tool:
+                this.shouldChangeMode = true;
+                modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool);
+                return true;
+
+            case LinkDemoMode.InitWait: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+
+            case LinkDemoMode.Wait:
+            case LinkDemoMode.Walk:
+            case LinkDemoMode.Dash:
+                if (this.shouldChangeMode) {
+                    this.shouldChangeMode = false;
+                    this.checkNextMode(globals);
+                }
+                return true;
 
             default:
-                if (this.prevMode !== d_a_py_lk_mode.unk) {
-                    console.warn('Unsupported demo mode:', this.demoMode);
-                    modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.unk);
-                }
+                console.warn('Unsupported demo mode:', this.demoMode);
+                modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait);
                 break;
         }
-
-        this.prevMode = this.curMode;
         return true;
     }
 
@@ -5618,6 +5708,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         moveVec[1] = 0;
         let moveVel = vec3.length(moveVec);
 
+        // TODO: Blend between foot movement and targetSpeed
+        moveVel *= this.targetSpeed / this.maxSpeed;
+
         // Adjust speed when on slopes
         let groundAngle = 0;
         if (this.gndChk.polyInfo.bgIdx >= 0 && this.gndChk.polyInfo.triIdx >= 0) { // @TODO: Should be in cBgS::ChkPolySafe()
@@ -5691,12 +5784,10 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
         if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
-        if (demoActor.flags & EDemoActorFlags.HasFrame) { anmFrame = demoActor.animFrame; }
+        if (demoActor.flags & EDemoActorFlags.HasAnimFrame) { anmFrame = demoActor.animFrame; }
 
         if (demoActor.flags & EDemoActorFlags.HasData) {
             const status = demoActor.stbData.getUint8(0);
-            let handIdxRight;
-            let handIdxLeft;
 
             switch (demoActor.stbDataId) {
                 case 3:
@@ -5704,14 +5795,24 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 // Fall through
                 case 1:
                 case 5:
-                    const count = demoActor.stbData.getUint8(1);
-                    assert(count === 3)
-                    anmBckId = demoActor.stbData.getUint16(2);
-                    anmBtpId = demoActor.stbData.getUint16(4);
-                    anmBtkId = demoActor.stbData.getUint16(6);
+                    const data = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
+                    assert(data.entryCount === 3)
+                    anmBckId = demoActor.stbData.getUint16(data.entryOffset + 0);
+                    anmBtpId = demoActor.stbData.getUint16(data.entryOffset + 2);
+                    anmBtkId = demoActor.stbData.getUint16(data.entryOffset + 4);
 
-                    handIdxRight = demoActor.stbData.getUint8(9);
-                    handIdxLeft = demoActor.stbData.getUint8(10);
+                    const handData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(data.entryNext))!;
+                    this.handStyleLeft = demoActor.stbData.getUint8(handData.entryOffset + 0);
+                    this.handStyleRight = demoActor.stbData.getUint8(handData.entryOffset + 1);
+                    if (handData.entryCount === 3) {
+                        // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(handData.entryOffset + 2);
+                    }
+
+                    if (demoActor.stbDataId === 3) {
+                        // TODO: UNK = 1
+                    } else if (demoActor.stbDataId === 5) {
+                        // TODO: yRotCamDiff = 1;
+                    }
                     break;
 
                 case 2:
@@ -5719,7 +5820,21 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 // Fall through
                 case 0:
                 case 4:
-                    anmBckId = demoActor.stbData.getUint16(1);
+                    const bckData = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
+                    anmBckId = demoActor.stbData.getUint16(bckData.entryOffset);
+
+                    const extraData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(bckData.entryNext))!;
+                    this.handStyleLeft = demoActor.stbData.getUint8(extraData.entryOffset + 0);
+                    this.handStyleRight = demoActor.stbData.getUint8(extraData.entryOffset + 1);
+                    if (extraData.entryCount === 3) {
+                        // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(extraData.entryOffset + 2);
+                    }
+
+                    if (demoActor.stbDataId === 2) {
+                        // TODO: UNK = 1
+                    } else if (demoActor.stbDataId === 4) {
+                        // TODO: yRotCamDiff = 1;
+                    }
                     break;
 
                 default:
@@ -5727,62 +5842,62 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             }
 
             // Set the hand model and/or equipped item based on the demo data
-            let item = ItemNo.InvalidItem;
-            if (handIdxLeft === 0xC8) { item = ItemNo.HerosSword; }
-            else if (handIdxLeft === 0xC9) { item = ItemNo.MasterSwordPowerless; }
-            else if (handIdxLeft === 0xCA) { item = ItemNo.MasterSwordHalfPower; }
-            else if (handIdxLeft === 0xCB) { item = ItemNo.MasterSwordFullPower; }
+            let sword = ItemNo.InvalidItem;
+            if (this.handStyleLeft === 0xC8) { sword = ItemNo.HerosSword; }
+            else if (this.handStyleLeft === 0xC9) { sword = ItemNo.MasterSwordPowerless; }
+            else if (this.handStyleLeft === 0xCA) { sword = ItemNo.MasterSwordHalfPower; }
+            else if (this.handStyleLeft === 0xCB) { sword = ItemNo.MasterSwordFullPower; }
 
-            if (item === ItemNo.InvalidItem) {
-                if (handIdxLeft === 0xCC) {
-                    this.handStyleLeft = LkHandStyle.HoldWindWaker;
+            if (sword === ItemNo.InvalidItem) {
+                if (this.handStyleLeft === 0xCC) {
+                    this.handStyleLeft = 5;
                     // Set the Wind Waker as the equipped item
-                } else if (this.equippedItem !== LkEquipItem.None) {
+                } else if (this.heldItem !== LkEquipItem.None) {
                     this.deleteEquipItem();
-                    this.handStyleLeft = handIdxLeft as LkHandStyle;
                 }
             } else {
-                this.handStyleLeft = LkHandStyle.HoldSword;
-                if (this.equippedItem !== LkEquipItem.Sword) {
-                    // d_com_inf_game::dComIfGs_setSelectEquip(0, item);
+                this.handStyleLeft = 3;
+                if (this.equippedItems[0] !== sword) {
+                    this.equippedItems[0] = sword;
                     this.deleteEquipItem();
                     this.setSwordModel(globals);
                 }
             }
 
-            if (handIdxRight === 0xC8 || handIdxRight === 0xC9) {
-                this.handStyleRight = LkHandStyle.HoldShield;
-                if (handIdxRight === 0xC8) { /* equip HerosShield */ }
+            if (this.handStyleRight === 0xC8 || this.handStyleRight === 0xC9) {
+                this.handStyleRight = 8;
+                if (this.handStyleRight === 0xC8) { /* equip HerosShield */ }
                 else { /* equip MirrorShield */ }
             } else {
-                if (handIdxRight !== 0) {
-                    this.handStyleRight = (handIdxRight as LkHandStyle) + 6;
+                if (this.handStyleRight !== 0) {
+                    this.handStyleRight = (this.handStyleRight) + 6;
                 } else {
-                    this.handStyleRight = LkHandStyle.Idle;
+                    this.handStyleRight = 0;
                 }
             }
         }
 
         if (anmBckId === 0xFFFF || this.anmBckId === anmBckId) {
-            if (demoActor.flags & EDemoActorFlags.HasFrame) {
+            if (demoActor.flags & EDemoActorFlags.HasAnimFrame) {
                 this.anmBck.frameCtrl.setFrame(this.anmBck.frameCtrl.applyLoopMode(anmFrame));
                 this.anmBtp.frameCtrl.setFrame(this.anmBtp.frameCtrl.applyLoopMode(anmFrame));
                 demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
             }
         } else {
-            // TODO: How should LkD00 arc be loaded?
-            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmBckId);
+            // The demo anim archive is toggled based on if Aryll has been rescued. See dComIfGp_getLkDemoAnmArchive() 
+            const arcName = (globals.scnPlay.linkDemoAnmNo === 1) ? 'LkD01' : 'LkD00';
+            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, anmBckId);
             this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
             this.anmBck.frameCtrl.setFrame(anmFrame);
             this.anmBckId = anmBckId;
 
             if (anmBtpId !== 0xFFFF) {
-                const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
+                const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, anmBtpId);
                 this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
             }
 
             if (anmBtkId !== 0xFFFF) {
-                const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, 'LkD00', anmBtkId);
+                const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, anmBtkId);
                 this.anmBtk.init(this.model.modelData, btk, true, btk.loopMode, 1.0, 0, btk.duration);
             }
         }
@@ -5796,37 +5911,75 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 
     private procWaitInit(globals: dGlobals) {
-        if (this.prevMode !== d_a_py_lk_mode.wait) {
+        if (this.curMode === d_a_py_lk_mode.wait) {
+            return false;
+        }
+
+        this.setSingleMoveAnime(globals, LkAnim.WAITS);
+        return true;
+    }
+
+    private procWait(globals: dGlobals) {
+        const modeChanged = this.checkNextMode(globals);
+        if (!modeChanged) {
+            // Wait animations
             this.setSingleMoveAnime(globals, LkAnim.WAITS);
         }
     }
 
-    private procWait() {
+    private procMoveInit(globals: dGlobals) {
+        // setBlendMoveAnime(m_HIO->mBasic.m.field_0xC);
+        this.setSingleMoveAnime(globals, LkAnim.WALK);
+        return true;
+    }
 
+    private procMove(globals: dGlobals) {
+        const modeChanged = this.checkNextMode(globals);
+        if (!modeChanged) {
+            if (this.demoMode === LinkDemoMode.Walk) {
+                this.targetSpeed = Math.min(this.targetSpeed, this.maxSpeed * 0.5);
+            }
+
+            // TODO: setBlendMoveAnime(-1.0f) blends between walk and dash based on speed.
+            if (this.demoMode === LinkDemoMode.Walk)
+                this.setSingleMoveAnime(globals, LkAnim.WALK);
+            else
+                this.setSingleMoveAnime(globals, LkAnim.DASH);
+        }
     }
 
     private setSwordModel(globals: dGlobals) {
-        this.equippedItem = LkEquipItem.Sword;
-        this.equippedItemModel = this.initModel(globals, d_a_py_lk.LINK_BDL_SWA);
+        this.heldItem = LkEquipItem.Sword;
+
+        const isMasterSword = (this.equippedItems[0] !== ItemNo.HerosSword);
+        if (isMasterSword) {
+            this.heldItemModel = this.initModel(globals, d_a_py_lk.LINK_BDL_SWMS);
+            this.modelSwordHilt = this.initModel(globals, d_a_py_lk.LINK_BDL_SWGRIPMS);
+        } else {
+            this.heldItemModel = this.initModel(globals, d_a_py_lk.LINK_BDL_SWA);
+            this.modelSwordHilt = this.initModel(globals, d_a_py_lk.LINK_BDL_SWGRIPA);
+        }
+
+        // TODO: Glow
     }
 
     private deleteEquipItem() {
-        this.equippedItem = LkEquipItem.None;
-        this.equippedItemModel = null;
+        this.heldItem = LkEquipItem.None;
+        this.heldItemModel = null;
     }
 
     private setItemModel() {
-        if (!this.equippedItemModel) {
+        if (!this.heldItemModel) {
             return;
         }
 
         const handLJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandL];
         const handRJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandR];
 
-        mat4.copy(this.equippedItemModel.modelMatrix, handLJointMtx);
-        this.equippedItemModel?.calcAnim();
+        mat4.copy(this.heldItemModel.modelMatrix, handLJointMtx);
+        this.heldItemModel?.calcAnim();
 
-        if (this.equippedItem === LkEquipItem.Sword) {
+        if (this.heldItem === LkEquipItem.Sword) {
             mat4.copy(this.modelSwordHilt.modelMatrix, handLJointMtx);
             this.modelSwordHilt.calcAnim();
         }
@@ -5869,8 +6022,8 @@ class d_a_title extends fopAc_ac_c {
     private btkSubtitle = new mDoExt_btkAnm();
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
-    private panes: J2DPane[] = []; 
-    
+    private panes: J2DPane[] = [];
+
     private cloudEmitter: JPABaseEmitter | null = null;
     private sparkleEmitter: JPABaseEmitter | null = null;
     private sparklePos = vec3.create();
@@ -5898,16 +6051,16 @@ class d_a_title extends fopAc_ac_c {
         if (this.delayFrameCounter > 0) {
             this.delayFrameCounter -= deltaTimeFrames;
 
-            if (this.delayFrameCounter == 0) {
+            if (this.delayFrameCounter === 0) {
                 // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
             }
         } else {
             this.calc_2d_alpha(globals, deltaTimeFrames);
         }
 
-        if (this.enterMode == 2) {
+        if (this.enterMode === 2) {
             this.enterMode = 3;
-        } else if (this.enterMode == 3) {
+        } else if (this.enterMode === 3) {
             this.shipFrameCounter += deltaTimeFrames;
         }
 
@@ -5999,7 +6152,7 @@ class d_a_title extends fopAc_ac_c {
     }
 
     private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
-        if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
+        if (this.btkSubtitle.frameCtrl.getFrame() !== 0.0) {
             this.btkShimmer.entry(this.modelSubtitleShimmer)
             mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
 
@@ -6007,7 +6160,7 @@ class d_a_title extends fopAc_ac_c {
             mDoExt_modelUpdateDL(globals, this.modelSubtitle, renderInstManager, globals.dlst.ui);
         }
 
-        if (this.bpkShip.frameCtrl.getFrame() != 0.0) {
+        if (this.bpkShip.frameCtrl.getFrame() !== 0.0) {
             this.bckShip.entry(this.modelShip);
             this.bpkShip.entry(this.modelShip);
             mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
@@ -6031,24 +6184,24 @@ class d_a_title extends fopAc_ac_c {
 
     private calc_2d_alpha(globals: dGlobals, deltaTimeFrames: number) {
         this.anmFrameCounter += deltaTimeFrames;
-        if (this.anmFrameCounter >= 200 && this.enterMode == 0) {
+        if (this.anmFrameCounter >= 200 && this.enterMode === 0) {
             this.enterMode = 1;
         }
 
-        const puffPos = vec3.set(scratchVec3a, 
+        const puffPos = vec3.set(scratchVec3a,
             ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
             (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
             0.0
         );
 
-        if (this.enterMode == 0) {
+        if (this.enterMode === 0) {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
-            }            
+            }
 
             if (this.cloudEmitter === null) {
                 this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
-            } else {    
+            } else {
                 this.cloudEmitter.setGlobalTranslation(puffPos);
             }
 
@@ -6064,11 +6217,11 @@ class d_a_title extends fopAc_ac_c {
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
 
             if (this.anmFrameCounter >= 80 && !this.sparkleEmitter) {
-                // if (daTitle_Kirakira_Sound_flag == true) {
+                // if (daTitle_Kirakira_Sound_flag === true) {
                 //     mDoAud_seStart(JA_SE_TITLE_KIRA);
                 //     daTitle_Kirakira_Sound_flag = false;
                 // }
-    
+
                 const sparklePane = this.panes[TitlePane.ShipParticles];
                 vec3.set(this.sparklePos, sparklePane.data.x - 320.0, sparklePane.data.y - 240.0, 0.0);
                 this.sparkleEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDfore, 0x83FB, this.sparklePos);
@@ -6617,6 +6770,813 @@ class d_a_bridge extends fopAc_ac_c {
     }
 }
 
+// Demo-only actors which are controlled by the STB demo system
+class daDemo00_resID_c {
+    public modelId: number = -1;
+    public bckId: number = -1;
+    public btpId: number = -1;
+    public btkId: number = -1;
+    public brkId: number = -1;
+    public plightId: number = -1;
+    public shadowType: number = -1;
+}
+
+class d_a_demo00 extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_demo00;
+
+    private actionFunc: (globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c) => void = this.actStandby;
+
+    // daDemo00_model_c
+    private model: J3DModelInstance | null = null;
+    private morf: mDoExt_McaMorf | null = null;
+    private btp: mDoExt_btpAnm | null = null;
+    private btk: mDoExt_btkAnm | null = null;
+    private brk: mDoExt_brkAnm | null = null;
+    // private plight: dDemo_plight_c;
+
+    // daDemo00_shadow_c
+    private shadowId: number | null = null;
+    private shadowOffset = vec3.create();
+    private shadowSimpleScale: number = 0;
+    private shadowCasterSize: number = 0;
+
+    private currIds: daDemo00_resID_c = new daDemo00_resID_c();
+    private nextIds: daDemo00_resID_c = new daDemo00_resID_c();
+    private dataId: number = -1;
+    private fadeType: number = -1;
+
+    private groundY: number = -Infinity;
+    private gndChk = new dBgS_GndChk();
+
+    private debugName: string;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        dKy_tevstr_init(this.tevStr, globals.mStayNo, 0xFF);
+        return cPhs__Status.Next;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.model !== null) {
+            settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+            setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
+
+            if (this.btp !== null) {
+                this.btp.entry(this.model);
+            }
+
+            if (this.btk !== null) {
+                this.btk.entry(this.model);
+            }
+
+            if (this.brk !== null) {
+                this.brk.entry(this.model);
+            }
+
+            // TODO: Invisible model drawing
+
+            if (this.morf === null) {
+                mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+            } else {
+                this.morf.entryDL(globals, renderInstManager);
+            }
+
+            // Handle shadow drawing
+            if (this.shadowId !== null) {
+                const shadowType = this.currIds.shadowType;
+                if (shadowType === 0 || shadowType === 1) {
+                    const pos = vec3.add(scratchVec3a, this.pos, this.shadowOffset);
+                    this.shadowId = dComIfGd_setShadow(globals, this.shadowId, shadowType === 1, this.model, pos,
+                        this.shadowCasterSize, this.shadowSimpleScale, this.pos[1], this.groundY, this.gndChk.polyInfo, this.tevStr);
+                } else {
+                    const simplePos = vec3.set(scratchVec3a, this.pos[0], this.groundY, this.pos[2]);
+                    dComIfGd_setSimpleShadow2(globals, simplePos, this.groundY, this.shadowSimpleScale, this.gndChk.polyInfo);
+                }
+            }
+        }
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor) {
+            fopAcM_delete(globals.frameworkGlobals, this);
+            return;
+        }
+
+        if (demoActor.checkEnable(EDemoActorFlags.HasShape)) {
+            this.nextIds.modelId = demoActor.shapeId;
+        }
+        if (demoActor.checkEnable(EDemoActorFlags.HasAnim)) {
+            this.nextIds.bckId = demoActor.nextBckId;
+        }
+        if (demoActor.checkEnable(EDemoActorFlags.HasData)) {
+            const oldDataId = this.dataId;
+            this.dataId = demoActor.stbDataId;
+            const stbData = demoActor.stbData;
+
+            switch (this.dataId) {
+                case 4: { // Event bit setting
+                    const l_eventBit = [];
+                    l_eventBit[1] = 0x2A80; // Acquire Hero's Clothes
+                    l_eventBit[5] = 0x2401;
+                    l_eventBit[17] = 0x2110;
+                    l_eventBit[23] = 0x2D01; // Aryll rescued from Forsaken Fortress
+                    l_eventBit[49] = 0x3802; // Triggered during Grandma's Tale
+
+                    const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                    if (data) {
+                        const eventIdx = demoActor.stbData.getUint8(data.entryOffset);
+                        assert(eventIdx < l_eventBit.length);
+                        if (l_eventBit[eventIdx] !== undefined && this.dataId !== oldDataId) {
+                            // dComIfGs_onEventBit(l_eventBit[eventIdx]);
+                            console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
+                        }
+                    }
+                    break;
+                }
+
+                case 5: { // Acquire item
+                    if (this.dataId !== oldDataId) {
+                        const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                        if (data)
+                            console.log(`[d_act${this.subtype}] Acquiring item ID: ${demoActor.stbData.getUint8(data.entryOffset)}`);
+                    }
+                    break;
+                }
+
+                case 6: { // Monotone fading
+                    const data = parseTParagraphData(scratchDemoParagraphData, 33, stbData);
+                    if (data) {
+                        const fadeSpeed = demoActor.stbData.getUint8(data.entryOffset);
+                        console.log(`[d_act${this.subtype}] Set monotone fade speed: ${fadeSpeed}`);
+                        // TODO: mDoGph_gInf_c::setMonotoneRateSpeed(fadeSpeed); 
+                    }
+                    break;
+                }
+
+                case 7: { // Vibration
+                    const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                    if (data) {
+                        const vibArg = demoActor.stbData.getUint8(data.entryOffset);
+                        if (vibArg < 100) {
+                            console.log(`[d_act${this.subtype}] Setting shock vibration: ${vibArg}`);
+                            // dComIfGp_getVibration().StartShock(vibArg, 1, cXyz(0.0f, 1.0f, 0.0f));
+                        } else if (vibArg !== 0xFF) {
+                            console.log(`[d_act${this.subtype}] Setting quake vibration: ${vibArg - 100}`);
+                            // dComIfGp_getVibration().StartQuake(vibArg - 100, 1, cXyz(0.0f, 1.0f, 0.0f));
+                        } else {
+                            console.log(`[d_act${this.subtype}] Stopping vibration: ${vibArg - 100}`);
+                            // dComIfGp_getVibration().StopQuake(1);
+                        }
+                    }
+                    break;
+                }
+
+                case 9:
+                case 10: { // Color fading
+                    const data = parseTParagraphData(scratchDemoParagraphData, 33, stbData);
+                    if (data) {
+                        const fadeType = demoActor.stbData.getUint8(data.entryOffset);
+                        const fadeTime = demoActor.stbData.byteLength > 1 ? demoActor.stbData.getUint8(data.entryOffset + 1) : 0;
+                        if (this.dataId !== oldDataId || fadeType !== this.fadeType) {
+                            this.fadeType = fadeType;
+                            const fadeColor = (this.dataId === 9) ? OpaqueBlack : colorNewFromRGBA8(0xA0A0A0FF);
+                            if (fadeType === 0) {
+                                console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId === 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                // TODO: dComIfGs_startColorFadeOut(fadeTime);
+                            } else {
+                                console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId === 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                // TODO: dComIfGs_startColorFadeIn(fadeTime);
+                            }
+                            // TODO: mDoGph_gInf_c::setFadeColor(fadeColor);
+                        }
+                    }
+                    break;
+                }
+
+                default: {
+                    const data = parseTParagraphData(scratchDemoParagraphData, 51, stbData);
+                    if (data) {
+                        for (let i = 0; i < data.entryCount / 2; i++) {
+                            const idType = stbData.getUint32(data.entryOffset + i * 8 + 0);
+                            const idVal = stbData.getUint32(data.entryOffset + i * 8 + 4);
+                            switch (idType) {
+                                case 0: this.nextIds.btpId = idVal; break;
+                                case 1: this.nextIds.btkId = idVal; break;
+                                case 2: this.nextIds.plightId = idVal; break;
+                                case 3: /* Unused */ break
+                                case 4: this.nextIds.brkId = idVal; break;
+                                case 5: this.nextIds.shadowType = idVal; break;
+                                case 6: this.nextIds.btkId = idVal | 0x10000000; break;
+                                case 7: this.nextIds.brkId = idVal | 0x10000000; break;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+            }
+        }
+
+        this.actionFunc(globals, deltaTimeFrames, demoActor);
+    }
+
+    private setShadowSize(globals: dGlobals): void {
+        const modelData = this.model!.modelData;
+
+        scratchBboxB.reset();
+        const bbox = scratchBboxB;
+        for (let i = 0; i < modelData.bmd.jnt1.joints.length; i++) {
+            // TODO: only if (joint->getKind() === 0)
+            const joint = modelData.bmd.jnt1.joints[i];
+            const anmMtx = this.model!.shapeInstanceState.jointToWorldMatrixArray[i];
+            scratchBboxA.transform(joint.bbox, anmMtx);
+            bbox.union(bbox, scratchBboxA);
+        }
+
+        bbox.centerPoint(this.shadowOffset);
+
+        const extents = vec3.sub(scratchVec3a, bbox.max, bbox.min);
+        this.shadowCasterSize = vec3.length(extents) * 3.0;
+        this.shadowSimpleScale = Math.hypot(extents[0], extents[2]) * 0.25;
+    }
+
+    private createHeap(globals: dGlobals, demoActor: dDemo_actor_c): void {
+        const demoArcName = globals.roomCtrl.demoArcName!;
+
+        if (this.nextIds.modelId !== -1) {
+            const arcInfo = assertExists(globals.resCtrl.findResInfo(demoArcName, globals.resCtrl.resObj));
+            const modelData = arcInfo.getResByID(ResType.Model, this.nextIds.modelId & 0xFFFF);
+
+            // Set the debug name to the model's name from the demo rarc, to make it easier to identify
+            const resEntry = arcInfo.res.find(r => r.file.id === (this.nextIds.modelId & 0xFFFF))!;
+            this.debugName = resEntry.file.name.replace(/\.[^.]*$/, '');
+            demoActor.name = `d_act${this.subtype}: ` + this.debugName;
+            console.log(`[d_act${this.subtype}] Loading model: \"${this.debugName}\" from ${demoArcName}`);
+
+            // TODO: These are used to modify the display list for model (DifferedDisplayList)
+            let modelFlags = 0x11000002;
+
+            // Load BTP (texture pattern, typically facial textures) animation if specified
+            if (this.nextIds.btpId !== -1) {
+                const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, demoArcName, this.nextIds.btpId);
+                this.btp = new mDoExt_btpAnm();
+                this.btp.init(modelData, btpRes, true, -1 as LoopMode, 1.0, 0, -1);
+                modelFlags |= 0x04020000;
+            }
+
+            // Load BTK (texture matrix) animation if specified
+            const btkResID = this.nextIds.btkId;
+            if (btkResID !== -1) {
+                const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, demoArcName, btkResID);
+                this.btk = new mDoExt_btkAnm();
+                this.btk.init(modelData, btkRes, true, -1 as LoopMode, 1.0, 0, -1);
+
+                if ((btkResID & 0x10000000) === 0)
+                    modelFlags |= 0x200;
+                else
+                    modelFlags |= 0x1200;
+            }
+
+            // Load BRK (color register) animation if specified
+            const brkResID = this.nextIds.brkId;
+            if (brkResID !== -1) {
+                const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, demoArcName, brkResID);
+                this.brk = new mDoExt_brkAnm();
+                this.brk.init(modelData, brkRes, true, -1 as LoopMode, 1.0, 0, -1);
+            }
+
+            // Create model with or without BCK animation
+            if (this.nextIds.bckId === -1) {
+                this.morf = null;
+                this.model = new J3DModelInstance(modelData);
+            } else {
+                const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, demoArcName, this.nextIds.bckId);
+                this.morf = new mDoExt_McaMorf(modelData, null, null, bckRes, -1 as LoopMode, 1.0, 0, -1);
+                this.model = this.morf.model;
+
+                // TODO: awaCheck()
+            }
+
+            // TODO: Create invisible model if needed (stbDataID === 3)
+
+            if (this.nextIds.shadowType !== -1) {
+                this.shadowId = 0;
+                this.model.calcAnim();
+                this.setShadowSize(globals);
+            }
+        }
+
+        // TODO: Setup point light if plightResID !== -1
+    }
+
+    private actStandby(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        if (this.nextIds.modelId !== -1 || this.nextIds.plightId !== -1) {
+            this.currIds = { ...this.nextIds };
+            this.createHeap(globals, demoActor);
+
+            if (this.model !== null) {
+                this.cullMtx = this.model.modelMatrix;
+                demoActor.model = this.model;
+                if (this.morf) {
+                    demoActor.animFrameMax = this.morf.frameCtrl.endFrame;
+                }
+            }
+
+            this.actionFunc = this.actPerformance;
+        }
+    }
+
+    private actPerformance(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        // Check if model resources match current state
+        if (this.nextIds.modelId !== this.currIds.modelId || this.nextIds.plightId !== (this.currIds.plightId ?? -1)) {
+            this.actionFunc = this.actLeaving;
+            return;
+        }
+
+        if (this.model === null) {
+            // Handle point light only case
+            if (this.nextIds.plightId !== -1) {
+                // TODO: dDemo_setDemoData for point light only
+                // TODO: dKydm_demo_plight_execute
+            }
+        } else {
+            const arcName = globals.roomCtrl.demoArcName!;
+
+            // Reload BCK animation if changed
+            if (this.morf !== null && this.nextIds.bckId !== this.currIds.bckId) {
+                const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, this.nextIds.bckId);
+                let morf = (demoActor.flags & EDemoActorFlags.HasAnimFrame) ? demoActor.animTransition : 0.0;
+                this.morf.setAnm(bckRes, -1 as LoopMode, morf, 1.0, 0.0, -1.0);
+                this.currIds.bckId = this.nextIds.bckId;
+            }
+
+            // Reload BTP animation if changed
+            if (this.currIds.btpId !== this.nextIds.btpId) {
+                const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, this.nextIds.btpId);
+                this.btp!.init(this.model.modelData, btpRes, true, -1 as LoopMode, 1.0, 0, -1);
+                this.currIds.btpId = this.nextIds.btpId;
+            }
+
+            // Reload BTK animation if changed
+            if (this.currIds.btkId !== this.nextIds.btkId) {
+                const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, this.nextIds.btkId);
+
+                const keepFrame = !!(this.nextIds.btkId & 0x10000000);
+                const startFrame = keepFrame ? this.btk!.frameCtrl.currentTimeInFrames : 0.0;
+                const loopMode = keepFrame ? LoopMode.Repeat : LoopMode.Once;
+
+                this.btk!.init(this.model.modelData, btkRes, true, loopMode, 1.0, startFrame, -1);
+                this.currIds.btkId = this.nextIds.btkId;
+            }
+
+            // Reload BRK animation if changed
+            if (this.currIds.brkId !== this.nextIds.brkId) {
+                const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, arcName, this.nextIds.brkId);
+
+                const keepFrame = !!(this.nextIds.brkId & 0x10000000);
+                const startFrame = keepFrame ? this.brk!.frameCtrl.currentTimeInFrames : 0.0;
+                const loopMode = keepFrame ? LoopMode.Repeat : LoopMode.Once;
+
+                this.brk!.init(this.model.modelData, brkRes, true, loopMode, 1.0, startFrame, -1);
+                this.currIds.brkId = this.nextIds.brkId;
+            }
+
+            // Copy position and rotation from the demo to this actor
+            const channelMask = EDemoActorFlags.HasPos | EDemoActorFlags.HasRot | EDemoActorFlags.HasAnim;
+            assert(channelMask === 0x2a);
+            dDemo_setDemoData(globals, deltaTimeFrames, this, channelMask, null, null);
+
+            // Update ground check position
+            if (this.gndChk) {
+                vec3.set(this.gndChk.pos, this.pos[0], this.pos[1] + 100.0, this.pos[2]);
+                this.groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
+            }
+
+            // setBaseMtx()
+            MtxTrans(this.pos, false, this.model.modelMatrix);
+            mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
+            this.model.baseScale = this.scale;
+            this.cullMtx = this.model.modelMatrix;
+            if (this.currIds.bckId !== -1)
+                this.morf?.calc();
+            else
+                this.model.calcAnim();
+
+            // Play animations
+            if (!(demoActor.flags & EDemoActorFlags.HasAnimFrame)) {
+                // Auto-advance animations
+                if (this.morf !== null) {
+                    this.morf.play(deltaTimeFrames);
+                } else {
+                    if (this.btp !== null)
+                        this.btp.play(deltaTimeFrames);
+                    if (this.btk !== null)
+                        this.btk.play(deltaTimeFrames);
+                    if (this.brk !== null)
+                        this.brk.play(deltaTimeFrames);
+                }
+            } else {
+                // Set explicit frame
+                const frame = demoActor.animFrame;
+
+                if (frame <= 1.0) {
+                    // Simple frame set
+                    if (this.morf !== null) this.morf.frameCtrl.setFrame(frame);
+                    if (this.btp !== null) this.btp.frameCtrl.setFrame(frame);
+                    if (this.btk !== null) {
+                        if (!(this.currIds.btkId & 0x10000000))
+                            this.btk.frameCtrl.setFrame(frame);
+                        else
+                            this.btk.play(deltaTimeFrames);
+                    }
+                    if (this.brk !== null) {
+                        if (!(this.currIds.brkId & 0x10000000))
+                            this.brk.frameCtrl.setFrame(frame);
+                        else
+                            this.brk.play(deltaTimeFrames);
+                    }
+                } else {
+                    // Frame with sound trigger
+                    const soundFrame = frame - 1.0;
+
+                    if (this.morf !== null) {
+                        this.morf.frameCtrl.setFrame(soundFrame);
+
+                        // Would play a sound if within 20 units of the ground
+                        const onGround = Math.abs(this.gndChk.retY - this.pos[1]) < 20.0;
+
+                        this.morf.play(deltaTimeFrames);
+                    }
+
+                    if (this.btp !== null) {
+                        this.btp.frameCtrl.setFrame(soundFrame);
+                        this.btp.play(deltaTimeFrames);
+                    }
+
+                    if (this.btk !== null) {
+                        if (!(this.nextIds.bckId & 0x10000000))
+                            this.btk.frameCtrl.setFrame(soundFrame);
+                        this.btk.play(deltaTimeFrames);
+                    }
+
+                    if (this.brk !== null) {
+                        if (!(this.nextIds.bckId & 0x10000000))
+                            this.brk.frameCtrl.setFrame(soundFrame);
+                        this.brk.play(deltaTimeFrames);
+                    }
+                }
+            }
+
+            // Apply scale from demo
+            if (demoActor.flags & EDemoActorFlags.HasScale) {
+                vec3.copy(this.scale, demoActor.scaling);
+            }
+
+            // Update point light if present
+            if (this.nextIds.plightId !== -1) {
+                const lightPos = vec3.copy(scratchVec3a, this.pos);
+
+                // TODO: Check light data table for position override
+                // If light is attached to a joint, get joint position
+
+                // dKydm_demo_plight_execute(plight, lightPos)
+            }
+        }
+
+    }
+
+    private actLeaving(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        // Clean up resources
+        this.model = null;
+        this.morf = null;
+        this.btp = null;
+        this.btk = null;
+        this.brk = null;
+        this.shadowId = null;
+        this.actionFunc = this.actStandby;
+    }
+}
+
+class d_a_obj_pirateship extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_obj_pirateship;
+
+    public model: J3DModelInstance;
+
+    private modelWheel: mDoExt_McaMorf;
+    private idDoor: number = -1;
+    private actDoor: d_a_noclip_legacy | null = null;
+
+    private static arcName = `Kaizokusen`;
+    private static arcNameWheel = `Kaji`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status = dComIfG_resLoad(globals, d_a_obj_pirateship.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, d_a_obj_pirateship.arcNameWheel);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_obj_pirateship.arcName, 0xE);
+        this.model = new J3DModelInstance(modelData);
+
+        const shipCfgIdx = (this.parameters >> 0x18) & 0xFF;
+        switch (shipCfgIdx) {
+            case 0: this.piratesCreate(globals, [0, 1, 2, 3]); break;
+            case 1: this.piratesCreate(globals, [0, 1, 4, 5, 6]); /* TODO: this.CreateWave() */; break;
+            case 2: this.piratesCreate(globals, [1, 7, 8, 9, 10]); break;
+            case 4: this.piratesCreate(globals, [0, 1, 5]); break;
+        };
+
+        this.set_mtx();
+
+        this.partsCreate(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        // GndChk
+
+        if (!this.demo_move(globals, deltaTimeFrames)) {
+            // PathMove
+        }
+
+        // Event handling
+
+        if (!this.actDoor) this.actDoor = fopAcIt_JudgeByID<d_a_noclip_legacy>(globals.frameworkGlobals, this.idDoor);
+
+        if (this.modelWheel) {
+            this.modelWheel.play(deltaTimeFrames);
+        }
+
+        this.set_mtx();
+        // SetWave
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
+
+        if (this.modelWheel) {
+            const wheelPos = mat4.getTranslation(scratchVec3a, this.modelWheel.model.modelMatrix);
+            settingTevStruct(globals, LightType.Actor, wheelPos, this.tevStr);
+            setLightTevColorType(globals, this.modelWheel.model, this.tevStr, globals.camera);
+            this.modelWheel.entryDL(globals, renderInstManager);
+        }
+    }
+
+    private partsCreate(globals: dGlobals): void {
+        // TODO: Sail
+
+        // Pirate flag
+        let prm: fopAcM_prm_class = {
+            parameters: 0, pos: this.pos, roomNo: this.tevStr.roomNo, rot: this.rot, scale: Vec3One,
+            subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+        };
+        fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_a_pirate_flag, prm);
+
+        const shipCfgIdx = (this.parameters >> 0x18) & 0xFF;
+
+        // Catapult (this must remain a separate actor because demos need to reference it)
+        if (shipCfgIdx !== 3) {
+            const pos = vec3.transformMat4(vec3.create(), vec3.set(scratchVec3a, 0, 700, 850), this.model.modelMatrix);
+            const prm: fopAcM_prm_class = {
+                parameters: 0, pos, roomNo: this.tevStr.roomNo, rot: this.rot, scale: Vec3One,
+                subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+            };
+            fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_a_obj_tousekiki, prm);
+        }
+
+        // Steering Wheel
+        if (shipCfgIdx !== 3) {
+            const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_obj_pirateship.arcNameWheel, 0x11);
+            const anim = globals.resCtrl.getObjectRes(ResType.Bck, d_a_obj_pirateship.arcNameWheel, 0xE);
+            this.modelWheel = new mDoExt_McaMorf(modelData, null, null, anim, LoopMode.Repeat, 1.0, 0, -1);
+        }
+
+        // Door 
+        const doorId = (this.parameters >> 8) & 0xFF;
+        const doorParams = doorId === 0 ? 0x101000FF : 0x101004FF;
+        const pos = vec3.transformMat4(vec3.create(), vec3.set(scratchVec3a, 0, 400, 475), this.model.modelMatrix);
+        const rot = vec3.fromValues(0xFFF, this.rot[1] + 0x8000, 0);
+        prm = {
+            parameters: doorParams, pos, roomNo: this.tevStr.roomNo, rot, scale: Vec3One,
+            subtype: 0xFF, parentPcId: this.processId, enemyNo: -1, gbaName: 0, layer: this.roomLayer
+        };
+        this.idDoor = assertExists(fpcSCtRq_Request(globals.frameworkGlobals, null, 0x0133, prm));
+    }
+
+    private piratesCreate(globals: dGlobals, pirateIdxs: number[]): void {
+        const pirateData: [string, number, vec3, number][] = [
+            ["P2a", 0xFFFFFF00, vec3.fromValues(135.5, 2200.0, 198.0), 0x2900],
+            ["P2c", 0xFFFFFF02, vec3.fromValues(275.0, 400.0, 216.0), 0x4D00],
+            ["P1b", 0xF0100000, vec3.fromValues(-150.0, 700.0, 950.0), 0x4000],
+            ["P1a", 0xF0000000, vec3.fromValues(150.0, 700.0, 950.0), 0xC000],
+            ["Zl1", 0xFFFFFF04, vec3.fromValues(-200.0, 680.0, -875.0), 0],
+            ["P1b", 0xF0100002, vec3.fromValues(163.0, 700.0, 822.0), 0xC000],
+            ["P1a", 0xF0000002, vec3.fromValues(0.0, 750.0, -860.0), 0],
+            ["Zl1", 0xFFFFFF03, vec3.fromValues(125.0, 2200.0, 100.0), 0],
+            ["P2a", 0xFFFFFF00, vec3.fromValues(-200.0, 680.0, -875.0), 0x0000],
+            ["P1b", 0xF0100003, vec3.fromValues(215.0, 700.0, 765.0), 0x3C00],
+            ["P1a", 0xF0000003, vec3.fromValues(275.0, 740.0, -1145.0), 0x1800],
+        ];
+        for (let i = 0; i < pirateIdxs.length; i++) {
+            const p = pirateIdxs[i];
+            this.pirateCreate(globals, ...pirateData[p]);
+        }
+    }
+
+    private pirateCreate(globals: dGlobals, name: string, parameters: number, posOffset: vec3, rotYOffset: number) {
+        const objName = assertExists(globals.dStage_searchName(name));
+        vec3.rotateY(posOffset, posOffset, Vec3Zero, cM_s2rad(this.rot[1]));
+        const pos = vec3.add(posOffset, this.pos, posOffset);
+        const rot = vec3.fromValues(this.rot[0], this.rot[1] + rotYOffset, this.rot[2]);
+
+        // Make sure the actors are created on the same noclip roomLayer, so they only appear on the same layer as the ship
+        const prm: fopAcM_prm_class = {
+            parameters, pos, roomNo: this.tevStr.roomNo, rot, scale: Vec3One, subtype: objName.subtype,
+            parentPcId: this.processId, enemyNo: -1, gbaName: objName.gbaName, layer: this.roomLayer
+        };
+        fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, prm);
+    };
+
+    private set_mtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
+
+        if (this.actDoor) {
+            vec3.transformMat4(this.actDoor.pos, vec3.set(scratchVec3a, 0, 400, 475), this.model.modelMatrix);
+            vec3.set(this.actDoor.rot, 0, this.rot[1] + 0x8000, 0);
+            const dst = this.actDoor.objectRenderers[0].modelMatrix;
+            MtxTrans(this.actDoor.pos, false, dst);
+            mDoMtx_ZXYrotM(dst, this.actDoor.rot);
+        }
+
+        if (this.modelWheel) {
+            const offset = vec3.fromValues(0.0, 740.0, -858.0);
+            const wheelPos = vec3.transformMat4(offset, offset, this.model.modelMatrix);
+            MtxTrans(wheelPos, false, this.modelWheel.model.modelMatrix);
+            mDoMtx_ZXYrotM(this.modelWheel.model.modelMatrix, this.rot);
+            this.modelWheel.calc();
+        }
+    }
+
+    private demo_move(globals: dGlobals, deltaTimeFrames: number): boolean {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor) {
+            return false;
+        }
+        dDemo_setDemoData(globals, deltaTimeFrames, this, EDemoActorFlags.HasPos | EDemoActorFlags.HasRot);
+        return true;
+    }
+}
+
+class d_a_obj_tousekiki extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_obj_tousekiki;
+
+    private morf: mDoExt_McaMorf;
+    private pirateShip: d_a_obj_pirateship;
+
+    private static arcName = `Touseki`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status = dComIfG_resLoad(globals, d_a_obj_tousekiki.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.pirateShip = assertExists(fopAcIt_JudgeByID<d_a_obj_pirateship>(globals.frameworkGlobals, this.parentPcId));
+
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_obj_tousekiki.arcName, 0x8);
+        const anm = globals.resCtrl.getObjectRes(ResType.Bck, d_a_obj_tousekiki.arcName, 0x5);
+        this.morf = new mDoExt_McaMorf(modelData, null, null, anm, LoopMode.Once, 1.0, 0, -1);
+        // this.morf.frameCtrl.setFrame(this.morf.frameCtrl.endFrame - 1);
+
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.demo_move(globals);
+        this.set_mtx();
+        this.morf.calc();
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
+        this.morf.entryDL(globals, renderInstManager, globals.dlst.bg);
+    }
+
+    private set_mtx(): void {
+        MtxTrans(this.pos, false, this.morf.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.morf.model.modelMatrix, this.rot);
+    }
+
+    private demo_move(globals: dGlobals): void {
+
+        // Transform offset by ship's base transform
+        const touseki_offset = vec3.fromValues(0.0, 700.0, 850.0);
+        transformVec3Mat4w1(this.pos, this.pirateShip.model.modelMatrix, touseki_offset);
+
+        const channelMask = EDemoActorFlags.HasAnimFrame | EDemoActorFlags.HasAnim | EDemoActorFlags.HasRot;
+        const isDemo = dDemo_setDemoData(globals, 1.0, this, channelMask, this.morf, d_a_obj_tousekiki.arcName);
+
+        if (!isDemo) {
+            this.rot[1] = this.pirateShip.rot[1];
+        }
+    }
+}
+
+class d_a_pirate_flag extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_pirate_flag;
+
+    private pirateShip: d_a_obj_pirateship;
+    private modelMatrix = mat4.create();
+    private cloth: dCloth_packet_c;
+    private windvec = vec3.create();
+
+    private static arcName = `Kaizokusen`;
+    private static arcNameCloth = `Cloth`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        let status: cPhs__Status;
+
+        status = dComIfG_resLoad(globals, d_a_pirate_flag.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, d_a_pirate_flag.arcNameCloth);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.pirateShip = assertExists(fopAcIt_JudgeByID<d_a_obj_pirateship>(globals.frameworkGlobals, this.parentPcId));
+
+        const resCtrl = globals.resCtrl;
+        dKy_tevstr_init(this.tevStr, this.roomNo);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, d_a_pirate_flag.arcNameCloth, 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, d_a_pirate_flag.arcName, 0x9);
+        this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 800.0, 400.0, this.tevStr);
+
+        vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
+
+        this.cullMtx = mat4.create();
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(globals.camera))
+            return;
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        renderInstManager.setCurrentList(globals.dlst.main[0]);
+        this.cloth.cloth_draw(globals, renderInstManager);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
+
+        this.set_mtx();
+
+        // TODO(jstpierre): addCalcPos2 windvec
+        dKyw_get_AllWind_vecpow(this.windvec, globals.g_env_light, scratchVec3a);
+
+        // noclip modification: This actor implements its own cloth simulation. For simplicity, we use dCloth_packet_c with equivalent parameters.
+        this.cloth.drag = 0.899;
+        this.cloth.ripple = 900;
+        this.cloth.spring = 0.45;
+        this.cloth.gravity = -3.5;
+        this.cloth.waveSpeed = 0x040;
+        this.cloth.windSpeed = 10.0;
+        this.cloth.windSpeedWave = 3.0;
+        this.cloth.setGlobalWind(this.windvec);
+        this.cloth.cloth_move(deltaTimeFrames);
+    }
+
+    private set_mtx(): void {
+        const flagOffset = vec3.set(scratchVec3a, 0.0, 3200.0, 100.0);
+        vec3.transformMat4(this.pos, flagOffset, this.pirateShip.model.modelMatrix);
+
+        MtxTrans(this.pos, false, this.modelMatrix);
+        mDoMtx_ZXYrotM(this.modelMatrix, this.rot);
+        MtxTrans(vec3.set(scratchVec3a, 0, 0, -30), true, this.modelMatrix);
+        this.cloth.setMtx(this.modelMatrix);
+
+        // This actor has a frozen bounding box, but it is very incorrect. Scale it back to a proper bounding volume.
+        mat4.scale(this.cullMtx!, this.modelMatrix, vec3.set(scratchVec3a, 22, -4, 22));
+    }
+
+    public override delete(globals: dGlobals): void {
+        this.cloth.destroy(globals.modelCache.device);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -6653,5 +7613,9 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_py_lk);
     R(d_a_title);
     R(d_a_bridge);
+    R(d_a_demo00);
+    R(d_a_obj_pirateship);
+    R(d_a_obj_tousekiki);
+    R(d_a_pirate_flag);
 }
 

@@ -393,7 +393,7 @@ uniform samplerCube u_Cubemap;
 
     private generateFragmentShader(): void {
         this.frag = `
-precision mediump float;
+precision highp float;
 ${DMPProgram.BindingsDefinition}
 ${GfxShaderLibrary.saturate}
 
@@ -453,7 +453,7 @@ class OoT3DProgram extends DMPProgram {
         super(material, materialHacks);
 
         this.vert = `
-precision mediump float;
+precision highp float;
 ${DMPProgram.BindingsDefinition}
 ${GfxShaderLibrary.MulNormalMatrix}
 ${GfxShaderLibrary.saturate}

@@ -29,7 +29,7 @@ export class FFXProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -171,7 +171,7 @@ class FFXActorProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -271,7 +271,7 @@ class FlipbookProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -340,7 +340,7 @@ class TrailProgram extends FlipbookProgram {
     public static a_Scale = 5;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -419,7 +419,7 @@ class ParticleProgram extends DeviceProgram {
     public static ub_DrawParams = 2;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -520,7 +520,7 @@ class ShatterProgram extends DeviceProgram {
     public static ub_DrawParams = 2;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -594,7 +594,7 @@ class WaterProgram extends DeviceProgram {
     public static ub_DrawParams = 2;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -1819,7 +1819,7 @@ class RainProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -1968,7 +1968,7 @@ class ElectricProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -2190,7 +2190,7 @@ export class FullScreenColor {
 
 class ShadowProgram extends DeviceProgram {
     override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

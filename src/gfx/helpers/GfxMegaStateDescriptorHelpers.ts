@@ -48,9 +48,7 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
 }
 
 export function copyMegaState(src: GfxMegaStateDescriptor): GfxMegaStateDescriptor {
-    const dst = Object.assign({}, src);
-    // Copy fields that need copying.
-    dst.attachmentsState = [];
+    const dst: GfxMegaStateDescriptor = { ...src, attachmentsState: [] };
     copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
     return dst;
 }

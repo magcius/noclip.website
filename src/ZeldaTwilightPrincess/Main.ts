@@ -777,7 +777,7 @@ class d_s_play extends fopScn {
 }
 
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
-    constructor(public name: string, public stageDir: string, public rooms: number[] = [0], public id = this.stageDir) {
+    constructor(public name: string, public stageDir: string, public rooms: number[] = [0], public id = stageDir) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {

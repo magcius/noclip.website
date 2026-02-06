@@ -24,7 +24,7 @@ fn get_addr_block_linear(mut x: usize, y: usize, w: usize, bpp: usize, block_hei
 }
 
 #[wasm_bindgen]
-pub fn tegra_deswizzle(src: &[u8], block_width: usize, block_height: usize, bytes_per_pixel: usize, w: usize, h: usize, block_height_log2: usize) -> Vec<u8> {
+pub fn tegra_deswizzle(src: &[u8], block_width: usize, block_height: usize, bytes_per_block: usize, w: usize, h: usize, block_height_log2: usize) -> Vec<u8> {
     let width_in_blocks = (w + block_width - 1) / block_height;
     let height_in_blocks = (h + block_height - 1) / block_height;
 
@@ -39,9 +39,9 @@ pub fn tegra_deswizzle(src: &[u8], block_width: usize, block_height: usize, byte
 
     for y in 0..height_in_blocks {
         for x in 0..width_in_blocks {
-            let src_offs = get_addr_block_linear(x, y, width_in_blocks, bytes_per_pixel, block_height, 0);
-            let dst_offs = ((y * width_in_blocks) + x) * bytes_per_pixel;
-            dst[dst_offs..dst_offs + bytes_per_pixel].copy_from_slice(&src[src_offs..src_offs + bytes_per_pixel]);
+            let src_offs = get_addr_block_linear(x, y, width_in_blocks, bytes_per_block, block_height, 0);
+            let dst_offs = ((y * width_in_blocks) + x) * bytes_per_block;
+            dst[dst_offs..dst_offs + bytes_per_block].copy_from_slice(&src[src_offs..src_offs + bytes_per_block]);
         }
     }
 

@@ -18,7 +18,7 @@ export interface BRTI {
     arraySize: number;
     textureDataArray: TextureData[];
     blockHeightLog2: number;
-    channelSource: number[];
+    channelSource: ChannelSource[];
 }
 
 export interface TextureData {
@@ -47,7 +47,7 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     const arraySize = view.getUint32(offs + 0x30, littleEndian);
     // layout, the first element of which appears to be blockHeightLog2
     const blockHeightLog2 = view.getUint32(offs + 0x34, littleEndian);
-    let channelFormat = getChannelFormat(imageFormat);
+    const channelFormat = getChannelFormat(imageFormat);
     if (!isChannelFormatSupported(channelFormat)) {
         console.error(`texture ${name} has unsupported channel format ${channelFormat}`);
         return null;

@@ -1209,8 +1209,8 @@ class SceneSelect extends Panel {
     }
 
     private setSceneDescs(sceneDescs: (string | SceneDesc)[]) {
-        this.sceneDescs = sceneDescs;
-        this.sceneDescList.setItems(sceneDescs.map((g): ScrollSelectItem => {
+        this.sceneDescs = sceneDescs.filter((g => typeof g === 'string' || !g.hidden));
+        this.sceneDescList.setItems(this.sceneDescs.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
                 return { type: ScrollSelectItemType.Header, name: g };
             else
@@ -1283,6 +1283,8 @@ export class TextureViewer extends Panel {
     private surfaceView: HTMLElement;
     private fullSurfaceView: HTMLElement;
     private properties: HTMLElement;
+    private searchBar: TextEntry;
+    private filteredTextureNames: string[] = [];
     private newTexturesDebouncer = new FrameDebouncer();
     private textureList: TextureListHolder | null = null;
 
@@ -1291,6 +1293,14 @@ export class TextureViewer extends Panel {
 
         this.setTitle(TEXTURES_ICON, 'Textures');
         this.setVisible(false);
+
+        this.searchBar = new TextEntry();
+        this.searchBar.ontext = (text) => {
+            this.filterTextures(text);
+        };
+        this.searchBar.setIcon(SEARCH_ICON);
+        this.searchBar.setPlaceholder('Search...');
+        this.contents.appendChild(this.searchBar.elem);
 
         this.scrollList = new SingleSelect();
         this.scrollList.elem.style.height = `200px`;
@@ -1328,11 +1338,18 @@ export class TextureViewer extends Panel {
 
         this.newTexturesDebouncer.callback = () => {
             if (this.textureList !== null)
-                this.scrollList.setStrings(this.textureList.textureNames);
+                this.scrollList.setStrings(this.filteredTextureNames);
             else
                 this.scrollList.setStrings([]);
         };
         this.setTextureList(null);
+    }
+
+    private filterTextures(search: string) {
+        this.filteredTextureNames = this.textureList!.textureNames.filter(name => {
+            return name.toLowerCase().includes(search.toLowerCase());
+        });
+        this.newTexturesDebouncer.trigger();
     }
 
     private showInSurfaceView(surface: HTMLCanvasElement) {
@@ -1357,11 +1374,14 @@ export class TextureViewer extends Panel {
         }
     }
 
-    private async selectTexture(i: number) {
-        const texture = await this.textureList!.getViewerTexture(i);
+    private async selectTexture(filteredNameIdx: number) {
+        const name = this.filteredTextureNames[filteredNameIdx];
+        const textureIdx = this.textureList!.textureNames.findIndex(haystack => haystack === name);
+        assert(textureIdx !== undefined);
+        const texture = await this.textureList!.getViewerTexture(textureIdx);
         assert(texture.surfaces.length > 0);
 
-        this.scrollList.setHighlighted(i);
+        this.scrollList.setHighlighted(filteredNameIdx);
 
         const properties = new Map<string, string>();
         properties.set('Name', texture.name);
@@ -1396,6 +1416,7 @@ export class TextureViewer extends Panel {
         this.textureList = textureList;
 
         if (this.textureList !== null) {
+            this.filteredTextureNames = this.textureList.textureNames;
             this.textureList.onnewtextures = () => {
                 this.newTexturesDebouncer.trigger();
             };
@@ -2569,6 +2590,7 @@ class PanelButton extends SingleIconButton {
 class ShareButton extends PanelButton {
     public currentShareURLEntry: TextField;
     public copyButton: HTMLElement;
+    private shareURL: string = '';
     private copyButtonState: 'copy' | 'copied';
 
     constructor() {
@@ -2624,8 +2646,24 @@ class ShareButton extends PanelButton {
     }
 
     public setShareURL(shareURL: string) {
+        if (this.shareURL === shareURL)
+            return;
+
+        this.shareURL = shareURL;
+
+        if (!this.isOpen)
+            return;
+
         this.setCopyButtonState('copy');
-        this.currentShareURLEntry.setValue(shareURL);
+        this.currentShareURLEntry.setValue(this.shareURL);
+    }
+
+    public override setIsOpen(v: boolean): void {
+        super.setIsOpen(v);
+        if (this.isOpen) {
+            this.setCopyButtonState('copy');
+            this.currentShareURLEntry.setValue(this.shareURL);
+        }
     }
 }
 

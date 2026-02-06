@@ -3,14 +3,15 @@ import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TPT1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { JMessage, JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
+import { JMessage, JParticle, JStage, TActor, TCamera, TControl, TParse } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
 import { mDoExt_McaMorf } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
 import { cM_deg2s, cM_sht2d } from "./SComponent.js";
-import { fopAc_ac_c, fopAcM_searchFromName } from "./f_op_actor.js";
+import { fopAc_ac_c, fopAcM_fastCreate, fopAcM_searchFromName } from "./f_op_actor.js";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 
 export enum EDemoMode {
     None,
@@ -155,7 +156,7 @@ export enum EDemoActorFlags {
     HasRot = 1 << 3,
     HasShape = 1 << 4,
     HasAnim = 1 << 5,
-    HasFrame = 1 << 6,
+    HasAnimFrame = 1 << 6,
     HasTexAnim = 1 << 7,
     HasTexFrame = 1 << 8,
 }
@@ -164,7 +165,7 @@ export class dDemo_actor_c extends TActor {
     public name: string;
     public flags: number;
     public translation = vec3.create();
-    public scaling = vec3.create();
+    public scaling = vec3.fromValues(1, 1, 1);
     public rotation = vec3.create();
     public shapeId: number;
     public nextBckId: number;
@@ -224,7 +225,7 @@ export class dDemo_actor_c extends TActor {
                 return null;
             }
 
-            switch(this.stbDataId) {
+            switch (this.stbDataId) {
                 case 1: btpId = this.stbData.getInt16(1); break;
                 case 2: btpId = this.stbData.getInt16(2); break;
                 case 4: btpId = this.stbData.getInt32(1); break;
@@ -235,11 +236,11 @@ export class dDemo_actor_c extends TActor {
             }
         }
 
-        if (btpId == this.btpId) {
+        if (btpId === this.btpId) {
             return null;
         } else {
             this.btpId = btpId;
-            if ((btpId & 0x10000) != 0) {
+            if ((btpId & 0x10000) !== 0) {
                 arcName = globals.roomCtrl.demoArcName!;
             }
 
@@ -259,7 +260,7 @@ export class dDemo_actor_c extends TActor {
         }
 
         let btkId;
-        switch(this.stbDataId) {
+        switch (this.stbDataId) {
             case 2: btkId = this.stbData.getInt16(4); break;
             case 5: btkId = this.stbData.getInt32(6); break;
             case 6: btkId = this.stbData.getInt32(6); break;
@@ -267,12 +268,12 @@ export class dDemo_actor_c extends TActor {
                 return null;
         }
 
-        if (btkId == this.btkId) {
+        if (btkId === this.btkId) {
             return null;
         }
 
         this.btkId = btkId;
-        if ((btkId & 0x10000) != 0) {
+        if ((btkId & 0x10000) !== 0) {
             arcName = globals.roomCtrl.demoArcName!;
         }
 
@@ -282,8 +283,7 @@ export class dDemo_actor_c extends TActor {
     public override JSGGetName() { return this.name; }
 
     public override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
-        debugger; // I think this may be one of the shapeInstanceState matrices instead
-        mat4.copy(mtx, this.model.modelMatrix);
+        mat4.copy(mtx, this.model.shapeInstanceState.jointToWorldMatrixArray[nodeId]);
         return 1;
     }
 
@@ -334,12 +334,12 @@ export class dDemo_actor_c extends TActor {
 
     public override JSGSetAnimationFrame(x: number): void {
         this.animFrame = x;
-        this.flags |= EDemoActorFlags.HasFrame;
+        this.flags |= EDemoActorFlags.HasAnimFrame;
     }
 
     public override JSGSetAnimationTransition(x: number): void {
         this.animTransition = x;
-        this.flags |= EDemoActorFlags.HasFrame;
+        this.flags |= EDemoActorFlags.HasAnimFrame;
     }
 
     public override JSGSetTextureAnimation(id: number): void {
@@ -352,18 +352,28 @@ export class dDemo_actor_c extends TActor {
         this.flags |= EDemoActorFlags.HasTexFrame;
     }
 
+    public override JSGFindNodeID(name: string): number {
+        const joints = this.model.modelData.bmd.jnt1.joints;
+        for (let i = 0; i < joints.length; i++) {
+            if (joints[i].name === name)
+                return i;
+        }
+        return -1;
+    }
+
     override JSGDebugGetAnimationName(x: number): string | null {
-        if( this.debugGetAnimName ) { return this.debugGetAnimName(x); }
+        if (this.debugGetAnimName) { return this.debugGetAnimName(x); }
         else return null;
     }
 }
 
-class dDemo_system_c implements TSystem {
+class dDemo_system_c implements JStage.TSystem {
     private activeCamera: dDemo_camera_c | null;
     private actors: dDemo_actor_c[] = [];
     // private ambient: dDemo_ambient_c;
     // private lights: dDemo_light_c[];
     // private fog: dDemo_fog_c;
+    private demoLayer: number = -1;
 
     constructor(
         private globals: dGlobals
@@ -377,11 +387,10 @@ class dDemo_system_c implements TSystem {
 
             case JStage.EObject.Actor:
             case JStage.EObject.PreExistingActor:
-                let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
+                let actor = fopAcM_searchFromName(this.globals, objName, 0, 0, this.demoLayer);
                 if (!actor) {
-                    if (objType === JStage.EObject.Actor && objName === "d_act") {
-                        debugger; // Untested. Unimplemented
-                        actor = {} as fopAc_ac_c;
+                    if (objType === JStage.EObject.Actor && objName.startsWith("d_act")) {
+                        actor = fopAcM_fastCreate(this.globals, objName, 0, null, this.globals.mStayNo, null, null, -1) as fopAc_ac_c;
                     } else {
                         console.warn('Demo failed to find actor', objName);
                         return null;
@@ -406,11 +415,33 @@ class dDemo_system_c implements TSystem {
     public getCamera() { return this.activeCamera; }
     public getActor(actorID: number) { return this.actors[actorID]; }
 
+    public setLayer(layer: number) {
+        this.demoLayer = layer;
+    }
+
     public remove() {
         this.activeCamera = null;
 
         for (let demoActor of this.actors) { demoActor.actor.demoActorID = -1; }
         this.actors = [];
+    }
+}
+
+// noclip modification: Allow the game to fully control creation/deletion of emitters. See comment above JParticle.TControl
+class dDemo_paControl_c extends JParticle.TControl {
+    constructor(private globals: dGlobals) {
+        super();
+    }
+    
+    public override JPTCCreateEmitter(userId: number, groupId: number, roomId: number): JPABaseEmitter | null {
+        const emitter = this.globals.particleCtrl.set(this.globals, groupId, userId, null);
+        if (emitter === null)
+            console.warn('Failed to create demo emitter', userId.toString(16), roomId, groupId);
+        return emitter;
+    }
+
+    public override JPTCDeleteEmitter(emitter: JPABaseEmitter): void {
+        this.globals.particleCtrl.emitterManager.forceDeleteEmitter(emitter);
     }
 }
 
@@ -423,12 +454,11 @@ export class dDemo_manager_c {
 
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
-    private messageControl = new JMessage.TControl(); // TODO
-    private control: TControl = new TControl(this.system, this.messageControl);
+    private ptcControl = new dDemo_paControl_c(this.globals);
+    private msgControl = new JMessage.TControl(); // TODO
+    private control: TControl = new TControl(this.system, this.msgControl, this.ptcControl);
 
-    constructor(
-        private globals: dGlobals
-    ) { }
+    constructor(private globals: dGlobals) { }
 
     public getName() { return this.name; }
     public getFrame() { return this.frame; }
@@ -436,9 +466,12 @@ export class dDemo_manager_c {
     public getMode() { return this.mode; }
     public getSystem() { return this.system; }
 
-    public create(name: string, data: ArrayBufferSlice, originPos?: vec3, rotYDeg?: number, startFrame?: number): boolean {
+    public create(name: string, data: ArrayBufferSlice, layer: number, originPos?: vec3, rotYDeg?: number, startFrame?: number): boolean {
         this.name = name;
         this.parser = new TParse(this.control);
+
+        // noclip modification: User has control over visible layers. Allow the demo to search for actors from only its layer.
+        this.system.setLayer(layer);
 
         if (!this.parser.parse(data, 0)) {
             console.error('Failed to parse demo data');
@@ -496,17 +529,17 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
         return false;
 
     const enable = demoActor.checkEnable(flagMask);
-    if (enable & 2) {
+    if (enable & EDemoActorFlags.HasPos) {
         // actor.current.pos = demoActor.mTranslation;
         // actor.old.pos = actor.current.pos;
         vec3.copy(actor.pos, demoActor.translation);
     }
-    if (enable & 8) {
+    if (enable & EDemoActorFlags.HasRot) {
         // actor.shape_angle = demoActor.mRotation;
         // actor.current.angle = actor.shape_angle;
         vec3.copy(actor.rot, demoActor.rotation);
     }
-    if (enable & 4) {
+    if (enable & EDemoActorFlags.HasScale) {
         actor.scale = demoActor.scaling;
     }
 
@@ -515,22 +548,30 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
 
     demoActor.model = morf.model;
 
-    if ((enable & 0x20) && (demoActor.nextBckId !== demoActor.bckId)) {
+    if ((enable & EDemoActorFlags.HasAnim) && (demoActor.nextBckId !== demoActor.bckId)) {
         const bckID = demoActor.nextBckId;
         if (bckID & 0x10000)
             arcName = globals.roomCtrl.demoArcName;
-        assert(!!arcName);
         demoActor.bckId = bckID;
 
-        const i_key = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, bckID);
-        assert(!!i_key);
+        // Most actors which requires their own demo arc have demo/anim logic more complex than LegacyActor can handle.
+        // If this branch is hit, it's likely a LegacyActor that needs to be converted to a full d_* Actor.
+        if (!arcName) {
+            const name = globals.dStage__searchNameRev(actor.processName, actor.subtype);
+            console.warn(`dDemo_setDemoData: Actor ${name} needs to pass a valid arcName. Animation disabled`);
+            demoActor.flags &= ~EDemoActorFlags.HasAnim;
+            return true;
+        }
+
+        const bckAnim = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName!, bckID);
+        assert(!!bckAnim);
 
         // void* i_sound = dDemo_getJaiPointer(a_name, bck, soundCount, soundIdxs);
-        morf.setAnm(i_key, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
+        morf.setAnm(bckAnim, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
         demoActor.animFrameMax = morf.frameCtrl.endFrame;
     }
 
-    if (enable & 0x40) {
+    if (enable & EDemoActorFlags.HasAnimFrame) {
         if (demoActor.animFrame > dtFrames) {
             morf.frameCtrl.setFrame(demoActor.animFrame - dtFrames);
             morf.play(dtFrames);

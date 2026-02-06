@@ -431,6 +431,8 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'sint8x2';
     else if (format === GfxFormat.S8_RGBA)
         return 'sint8x4';
+    else if (format === GfxFormat.S8_RG_NORM)
+        return 'snorm8x2';
     else if (format === GfxFormat.S8_RGB_NORM)
         return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)
@@ -1731,6 +1733,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
         assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
         this._frameCommandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [src.width, src.height, 1]);
+    }
+
+    public copyCanvasToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement): void {
+        const dst = dst_ as GfxTextureP_WebGPU;
+        assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
+        assert(dst.width === src.width);
+        assert(dst.height === src.height);
+        this.device.queue.copyExternalImageToTexture({ source: src }, { texture: dst.gpuTexture, origin: [0, 0, dstZ] }, src);
     }
 
     public zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void {

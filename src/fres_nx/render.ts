@@ -152,7 +152,7 @@ class AglProgram extends DeviceProgram {
     }
 
     public static globalDefinitions = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -317,7 +317,7 @@ void main() {
 
     public generateFrag() {
         return `
-precision mediump float;
+precision highp float;
 
 in vec3 v_PositionWorld;
 in vec2 v_TexCoord0;

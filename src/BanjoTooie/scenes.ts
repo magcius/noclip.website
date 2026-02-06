@@ -462,6 +462,8 @@ async function addObjects(view: DataView, offs: number, renderer: BTRenderer): P
             scale = .2;
         else if (id === 0x343)
             scale = .05;
+        else if (id === 0x2af)
+            scale = 1; // torch in flooded caves
 
         const arc = renderer.modelCache.getActorArchive(id);
         const defView = arc.Definition.createDataView();

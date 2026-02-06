@@ -1416,7 +1416,7 @@ export class WmoDefinition {
                     for (let i = 0; i < groupIds.length; i++) {
                         const groupId = groupIds[i];
                         const groupAABB = this.wmo.groupDefAABBs.get(groupId)!;
-                        const groupDist = groupAABB.distanceVec3(p);
+                        const groupDist = groupAABB.distFromCenter(p);
                         if (groupDist < closestDist) {
                             closestDist = groupDist;
                             closestGroupId = groupId;

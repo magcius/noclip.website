@@ -1,5 +1,5 @@
 
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil, GfxColor, GfxPlatform } from './GfxPlatform.js';
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil, GfxColor, GfxPlatform, GfxFrontFaceMode, GfxStencilOp } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
 import { GfxBindings, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 import { GfxBuffer } from "./GfxPlatform.js";
@@ -273,6 +273,64 @@ function translateTextureDimension(dimension: GfxTextureDimension): GLenum {
         return WebGL2RenderingContext.TEXTURE_3D;
     else
         throw "whoops";
+}
+
+function translateCompareMode(compareMode: GfxCompareMode): GLenum {
+    switch (compareMode) {
+    case GfxCompareMode.Never: return WebGL2RenderingContext.NEVER;
+    case GfxCompareMode.Less: return WebGL2RenderingContext.LESS;
+    case GfxCompareMode.Equal: return WebGL2RenderingContext.EQUAL;
+    case GfxCompareMode.LessEqual: return WebGL2RenderingContext.LEQUAL;
+    case GfxCompareMode.Greater: return WebGL2RenderingContext.GREATER;
+    case GfxCompareMode.NotEqual: return WebGL2RenderingContext.NOTEQUAL;
+    case GfxCompareMode.GreaterEqual: return WebGL2RenderingContext.GEQUAL;
+    case GfxCompareMode.Always: return WebGL2RenderingContext.ALWAYS;
+    }
+}
+
+function translateFrontFaceMode(frontFaceMode: GfxFrontFaceMode): GLenum {
+    switch (frontFaceMode) {
+    case GfxFrontFaceMode.CCW: return WebGL2RenderingContext.CCW;
+    case GfxFrontFaceMode.CW: return WebGL2RenderingContext.CW;
+    }
+}
+
+function translateBlendMode(blendMode: GfxBlendMode): GLenum {
+    switch (blendMode) {
+    case GfxBlendMode.Add: return WebGLRenderingContext.FUNC_ADD;
+    case GfxBlendMode.Subtract: return WebGLRenderingContext.FUNC_SUBTRACT;
+    case GfxBlendMode.ReverseSubtract: return WebGLRenderingContext.FUNC_REVERSE_SUBTRACT;
+    }
+}
+
+function translateBlendFactor(blendFactor: GfxBlendFactor): GLenum {
+    switch (blendFactor) {
+    case GfxBlendFactor.Zero: return WebGLRenderingContext.ZERO;
+    case GfxBlendFactor.One: return WebGLRenderingContext.ONE;
+    case GfxBlendFactor.Src: return WebGLRenderingContext.SRC_COLOR;
+    case GfxBlendFactor.OneMinusSrc: return WebGLRenderingContext.ONE_MINUS_SRC_COLOR;
+    case GfxBlendFactor.Dst: return WebGLRenderingContext.DST_COLOR;
+    case GfxBlendFactor.OneMinusDst: return WebGLRenderingContext.ONE_MINUS_DST_COLOR;
+    case GfxBlendFactor.SrcAlpha: return WebGLRenderingContext.SRC_ALPHA;
+    case GfxBlendFactor.OneMinusSrcAlpha: return WebGLRenderingContext.ONE_MINUS_SRC_ALPHA;
+    case GfxBlendFactor.DstAlpha: return WebGLRenderingContext.DST_ALPHA;
+    case GfxBlendFactor.OneMinusDstAlpha: return WebGLRenderingContext.ONE_MINUS_DST_ALPHA;
+    case GfxBlendFactor.ConstantColor: return WebGLRenderingContext.CONSTANT_COLOR;
+    case GfxBlendFactor.OneMinusConstantColor: return WebGLRenderingContext.ONE_MINUS_CONSTANT_COLOR;
+    }
+}
+
+function translateStencilOp(stencilOp: GfxStencilOp): GLenum {
+    switch (stencilOp) {
+    case GfxStencilOp.Keep: return WebGLRenderingContext.KEEP;
+    case GfxStencilOp.Zero: return WebGLRenderingContext.ZERO;
+    case GfxStencilOp.Replace: return WebGLRenderingContext.REPLACE;
+    case GfxStencilOp.Invert: return WebGLRenderingContext.INVERT;
+    case GfxStencilOp.IncrementClamp: return WebGLRenderingContext.INCR;
+    case GfxStencilOp.DecrementClamp: return WebGLRenderingContext.DECR;
+    case GfxStencilOp.IncrementWrap: return WebGLRenderingContext.INCR_WRAP;
+    case GfxStencilOp.DecrementWrap: return WebGLRenderingContext.DECR_WRAP;
+    }
 }
 
 function getPlatformBuffer(buffer_: GfxBuffer, byteOffset: number = 0): WebGLBuffer {
@@ -954,7 +1012,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.samplerParameterf(gl_sampler, gl.TEXTURE_MAX_LOD, descriptor.maxLOD);
         if (descriptor.compareMode !== undefined) {
             gl.samplerParameteri(gl_sampler, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
-            gl.samplerParameteri(gl_sampler, gl.TEXTURE_COMPARE_FUNC, descriptor.compareMode);
+            gl.samplerParameteri(gl_sampler, gl.TEXTURE_COMPARE_FUNC, translateCompareMode(descriptor.compareMode));
         }
 
         const maxAnisotropy = descriptor.maxAnisotropy ?? 1;
@@ -1325,6 +1383,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    }
+
+    public copyCanvasToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement): void {
+        const gl = this.gl;
+
+        const dst = dst_ as GfxTextureP_GL;
+        assert(dst !== this._scTexture);
+        const gl_target = dst.gl_target;
+        assert(dst.width === src.width);
+        assert(dst.height === src.height);
+
+        const gl_format = this.translateTextureFormat(dst.pixelFormat);
+        const gl_type = this.translateTextureType(dst.pixelFormat);
+
+        gl.texSubImage3D(gl_target, 0, 0, 0, dstZ, dst.width, dst.height, 1, gl_format, gl_type, src);
     }
 
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
@@ -2042,8 +2115,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (blendModeChanged) {
             dbi.blendEquationSeparateiOES(i,
-                newAttachmentState.rgbBlendState.blendMode,
-                newAttachmentState.alphaBlendState.blendMode,
+                translateBlendMode(newAttachmentState.rgbBlendState.blendMode),
+                translateBlendMode(newAttachmentState.alphaBlendState.blendMode),
             );
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
@@ -2051,8 +2124,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (blendFuncChanged) {
             dbi.blendFuncSeparateiOES(i,
-                newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
-                newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor,
+                translateBlendFactor(newAttachmentState.rgbBlendState.blendSrcFactor),
+                translateBlendFactor(newAttachmentState.rgbBlendState.blendDstFactor),
+                translateBlendFactor(newAttachmentState.alphaBlendState.blendSrcFactor),
+                translateBlendFactor(newAttachmentState.alphaBlendState.blendDstFactor),
             );
             currentAttachmentState.rgbBlendState.blendSrcFactor = newAttachmentState.rgbBlendState.blendSrcFactor;
             currentAttachmentState.alphaBlendState.blendSrcFactor = newAttachmentState.alphaBlendState.blendSrcFactor;
@@ -2096,8 +2171,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (blendModeChanged) {
             gl.blendEquationSeparate(
-                newAttachmentState.rgbBlendState.blendMode,
-                newAttachmentState.alphaBlendState.blendMode,
+                translateBlendMode(newAttachmentState.rgbBlendState.blendMode),
+                translateBlendMode(newAttachmentState.alphaBlendState.blendMode),
             );
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
@@ -2105,8 +2180,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (blendFuncChanged) {
             gl.blendFuncSeparate(
-                newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
-                newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor,
+                translateBlendFactor(newAttachmentState.rgbBlendState.blendSrcFactor),
+                translateBlendFactor(newAttachmentState.rgbBlendState.blendDstFactor),
+                translateBlendFactor(newAttachmentState.alphaBlendState.blendSrcFactor),
+                translateBlendFactor(newAttachmentState.alphaBlendState.blendDstFactor),
             );
             currentAttachmentState.rgbBlendState.blendSrcFactor = newAttachmentState.rgbBlendState.blendSrcFactor;
             currentAttachmentState.alphaBlendState.blendSrcFactor = newAttachmentState.alphaBlendState.blendSrcFactor;
@@ -2139,7 +2216,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
-            gl.depthFunc(newMegaState.depthCompare);
+            gl.depthFunc(translateCompareMode(newMegaState.depthCompare));
             currentMegaState.depthCompare = newMegaState.depthCompare;
         }
 
@@ -2160,7 +2237,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (currentMegaState.stencilWrite) {
             if (currentMegaState.stencilPassOp !== newMegaState.stencilPassOp) {
-                gl.stencilOp(gl.KEEP, gl.KEEP, newMegaState.stencilPassOp);
+                gl.stencilOp(gl.KEEP, gl.KEEP, translateStencilOp(newMegaState.stencilPassOp));
                 currentMegaState.stencilPassOp = newMegaState.stencilPassOp;
             }
         }
@@ -2179,7 +2256,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         if (currentMegaState.frontFace !== newMegaState.frontFace) {
-            gl.frontFace(newMegaState.frontFace);
+            gl.frontFace(translateFrontFaceMode(newMegaState.frontFace));
             currentMegaState.frontFace = newMegaState.frontFace;
         }
 

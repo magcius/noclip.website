@@ -90,7 +90,7 @@ export function readSegmentSpecial(
     segment: DescentSegment,
     mask?: number,
 ) {
-    if (mask != null) {
+    if (mask !== undefined) {
         // Check if mask indicates special data presence
         if (!(mask & (1 << 6))) return;
     }

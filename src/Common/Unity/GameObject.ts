@@ -108,7 +108,7 @@ export class UnityShaderProgramBase extends DeviceProgram {
     public static ub_ShapeParams = 1;
 
     public static Common = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

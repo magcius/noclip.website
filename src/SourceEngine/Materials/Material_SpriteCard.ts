@@ -16,7 +16,7 @@ export class ShaderTemplate_SpriteCard extends MaterialShaderTemplateBase {
 
     public override generateProgramString(m: Map<string, string>): string {
         return `
-precision mediump float;
+precision highp float;
 
 ${MaterialShaderTemplateBase.Common}
 

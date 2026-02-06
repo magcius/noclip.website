@@ -5,7 +5,7 @@ import { DescentGfxTexture } from "../Common/AssetCache.js";
 export function descentGfxTextureToCanvas(
     texture?: DescentGfxTexture,
 ): Viewer.Texture | null {
-    if (texture == null) return null;
+    if (texture === undefined) return null;
     const canvas = convertToCanvas(
         texture.pixels,
         texture.bitmap.width,

@@ -8,19 +8,19 @@ export enum GfxPlatform {
 }
 
 export enum GfxCompareMode {
-    Never        = WebGLRenderingContext.NEVER,
-    Less         = WebGLRenderingContext.LESS,
-    Equal        = WebGLRenderingContext.EQUAL,
-    LessEqual    = WebGLRenderingContext.LEQUAL,
-    Greater      = WebGLRenderingContext.GREATER,
-    NotEqual     = WebGLRenderingContext.NOTEQUAL,
-    GreaterEqual = WebGLRenderingContext.GEQUAL,
-    Always       = WebGLRenderingContext.ALWAYS,
+    Never,
+    Less,
+    Equal,
+    LessEqual,
+    Greater,
+    NotEqual,
+    GreaterEqual,
+    Always,
 }
 
 export enum GfxFrontFaceMode {
-    CCW = WebGLRenderingContext.CCW,
-    CW  = WebGLRenderingContext.CW,
+    CCW,
+    CW,
 }
 
 export enum GfxCullMode {
@@ -30,24 +30,24 @@ export enum GfxCullMode {
 }
 
 export enum GfxBlendFactor {
-    Zero                  = WebGLRenderingContext.ZERO,
-    One                   = WebGLRenderingContext.ONE,
-    Src                   = WebGLRenderingContext.SRC_COLOR,
-    OneMinusSrc           = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
-    Dst                   = WebGLRenderingContext.DST_COLOR,
-    OneMinusDst           = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
-    SrcAlpha              = WebGLRenderingContext.SRC_ALPHA,
-    OneMinusSrcAlpha      = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
-    DstAlpha              = WebGLRenderingContext.DST_ALPHA,
-    OneMinusDstAlpha      = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
-    ConstantColor         = WebGLRenderingContext.CONSTANT_COLOR,
-    OneMinusConstantColor = WebGLRenderingContext.ONE_MINUS_CONSTANT_COLOR,
+    Zero,
+    One,
+    Src,
+    OneMinusSrc,
+    Dst,
+    OneMinusDst,
+    SrcAlpha,
+    OneMinusSrcAlpha,
+    DstAlpha,
+    OneMinusDstAlpha,
+    ConstantColor,
+    OneMinusConstantColor,
 }
 
 export enum GfxBlendMode {
-    Add              = WebGLRenderingContext.FUNC_ADD,
-    Subtract         = WebGLRenderingContext.FUNC_SUBTRACT,
-    ReverseSubtract  = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
+    Add,
+    Subtract,
+    ReverseSubtract,
 }
 
 export enum GfxWrapMode { Clamp, Repeat, Mirror }
@@ -96,14 +96,14 @@ export enum GfxChannelWriteMask {
 }
 
 export enum GfxStencilOp {
-    Keep            = WebGLRenderingContext.KEEP,
-    Zero            = WebGLRenderingContext.ZERO,
-    Replace         = WebGLRenderingContext.REPLACE,
-    Invert          = WebGLRenderingContext.INVERT,
-    IncrementClamp  = WebGLRenderingContext.INCR,
-    DecrementClamp  = WebGLRenderingContext.DECR,
-    IncrementWrap   = WebGLRenderingContext.INCR_WRAP,
-    DecrementWrap   = WebGLRenderingContext.DECR_WRAP,
+    Keep,
+    Zero,
+    Replace,
+    Invert,
+    IncrementClamp,
+    DecrementClamp,
+    IncrementWrap,
+    DecrementWrap,
 }
 
 export interface GfxVertexBufferDescriptor {
@@ -453,6 +453,7 @@ export interface GfxDevice {
 
     // Copying.
     copySubTexture2D(dst: GfxTexture, dstX: number, dstY: number, src: GfxTexture, srcX: number, srcY: number): void;
+    copyCanvasToTexture(dst: GfxTexture, dstZ: number, src: HTMLCanvasElement): void;
 
     // Data submission
     zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void;

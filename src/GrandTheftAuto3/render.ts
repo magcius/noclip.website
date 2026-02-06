@@ -195,8 +195,8 @@ class GTA3Program extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `
-precision mediump float;
-precision lowp sampler2DArray;
+precision highp float;
+precision highp sampler2DArray;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

@@ -28,7 +28,7 @@ export class KatamariDamacyProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     private static reflectionDeclarations = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

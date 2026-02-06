@@ -19,6 +19,7 @@ import * as GX from '../gx/gx_enum.js';
 import { ColorKind, GXTextureMapping } from "../gx/gx_render.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { TJPACallback } from "../Common/JSYSTEM/JStudio.js";
 
 // Simple common particles
 const j_o_id: number[] = [ 0x0000, 0x0001, 0x0002, 0x0003, 0x03DA, 0x03DB, 0x03DC, 0x4004 ];
@@ -61,7 +62,7 @@ function setTextureMappingIndirect(m: GXTextureMapping, flipY: boolean): void {
 }
 
 export class dPa_control_c {
-    private emitterManager: JPAEmitterManager;
+    public emitterManager: JPAEmitterManager;
     private drawInfo = new JPADrawInfo();
     private jpacData: JPACData[] = [];
     private resourceDatas = new Map<number, JPAResourceData>();
@@ -129,6 +130,10 @@ export class dPa_control_c {
 
             // Don't distance cull 2D/UI emitters
             if (emitter.drawGroupId >= ParticleGroup.TwoDfore)
+                continue;
+
+            // Don't cull demo emitters
+            if (emitter.emitterCallBack instanceof TJPACallback)
                 continue;
 
             let cullDistance = (emitter as any).cullDistance;
@@ -238,7 +243,7 @@ export class dPa_control_c {
     }
 
     public setSimple(userID: number, pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean): boolean {
-        const simple = this.simpleCallbacks.find(s => s.userID == userID);
+        const simple = this.simpleCallbacks.find(s => s.userID === userID);
         if (!simple)
             return false;
         return simple.set(pos, alpha / 0xFF, prmColor, envColor, isAffectedByWind);

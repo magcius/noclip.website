@@ -67,7 +67,7 @@ class DescentPolymodelProgram extends DeviceProgram {
 
     public override both = `
 ${GfxShaderLibrary.MatrixLibrary}
-precision mediump float;
+precision highp float;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_matProjection;
@@ -107,7 +107,7 @@ void main() {
     vec3 t_norm = normalize(mat3(t_matModel) * a_norm);
     float t_normLight = 0.25 + 0.75 * max(dot(t_look, t_norm), 0.0);
     v_uvl = a_uvl;
-    v_light = mix(1.0/33.0, 1.0, clamp(max(max(u_segmentLight * t_normLight, u_minLight), v_uvl.z), 0.0, 1.0));
+    v_light = mix(1.0/33.0, 1.0, clamp(max(max(u_segmentLight * t_normLight + u_glow, u_minLight), v_uvl.z), 0.0, 1.0));
 }
 `;
 
@@ -133,6 +133,9 @@ void main() {
     }
 }
 
+const CLOAKED = Symbol("CLOAKED");
+const FLAT = Symbol("FLAT");
+
 type MeshObjectMatrices = {
     current: mat4;
     angularVelocity: vec3 | null;
@@ -143,14 +146,13 @@ type MeshObjectCall = {
     indexCount: number;
     modelMatrix: MeshObjectMatrices;
     segmentNum: number;
-    isCloaked: boolean;
     glow: number;
     position: vec3;
     radius: number;
 };
 
 type MeshTextureCall = {
-    texture: ResolvedTexture | null;
+    texture: ResolvedTexture | typeof CLOAKED | typeof FLAT | null;
     calls: MeshObjectCall[];
 };
 
@@ -231,12 +233,13 @@ function buildMeshCollection(
         number,
         MeshObjectCall
     >();
+    const meshCloakedObjectCalls: MeshObjectCall[] = [];
     const objectMatrices = new Map<DescentObject, MeshObjectMatrices>();
 
     // Then bake polymodel meshes.
     for (const [modelNum, objects] of objectsGrouped.entries()) {
         const model = assetCache.getPolymodel(modelNum);
-        if (model != null) {
+        if (model !== null) {
             const mesh = makePolymodelMesh(
                 model,
                 level.gameVersion === 1 ? palette : null,
@@ -263,7 +266,7 @@ function buildMeshCollection(
             for (const sourceCall of mesh.calls) {
                 const objectTextureIndex = sourceCall.texture;
                 const objectBitmapId =
-                    objectTextureIndex != null
+                    objectTextureIndex !== null
                         ? assetCache.resolveObjectBitmap(
                               model,
                               objectTextureIndex,
@@ -281,7 +284,7 @@ function buildMeshCollection(
                         object.renderType as DescentObjectRenderTypePolyobj;
 
                     let objectMatrix = objectMatrices.get(object);
-                    if (objectMatrix == null)
+                    if (objectMatrix === undefined)
                         objectMatrices.set(
                             object,
                             (objectMatrix = makeObjectMatrices(object)),
@@ -297,13 +300,15 @@ function buildMeshCollection(
                         object.type === DescentObjectType.ROBOT &&
                         assetCache.getRobotInfo(object.subtypeId)?.cloakType ===
                             1 &&
-                        render.texture_override === -1;
+                        // Texture override overrides cloaking
+                        render.texture_override === -1 &&
+                        // Flat faces are never cloaked
+                        objectTextureIndex !== null;
                     const meshObjectCall = {
                         indexOffset,
                         indexCount,
                         modelMatrix: objectMatrix,
                         segmentNum: object.segmentNum,
-                        isCloaked,
                         glow,
                         position: vec3.fromValues(
                             object.position[0],
@@ -318,6 +323,8 @@ function buildMeshCollection(
                             tmapNum,
                             meshObjectCall,
                         );
+                    } else if (isCloaked) {
+                        meshCloakedObjectCalls.push(meshObjectCall);
                     } else {
                         meshObjectCallsByObjectBitmap.add(
                             objectBitmapKey,
@@ -339,7 +346,7 @@ function buildMeshCollection(
         const texture =
             objectBitmapId !== -1
                 ? textureList.resolveObjectBitmapToTexture(objectBitmapId)
-                : null;
+                : FLAT;
         calls.push({ texture, calls: objectCalls });
     }
     for (const [
@@ -349,6 +356,12 @@ function buildMeshCollection(
         calls.push({
             texture: textureList.resolveTmapToTexture(tmapId),
             calls: objectCalls,
+        });
+    }
+    if (meshCloakedObjectCalls.length > 0) {
+        calls.push({
+            texture: CLOAKED,
+            calls: meshCloakedObjectCalls,
         });
     }
 
@@ -508,12 +521,15 @@ export class DescentPolymodelRenderer {
 
         for (const textureCall of this.meshCalls) {
             const objectTemplate = renderInstManager.pushTemplate();
+            const isFlat = textureCall.texture === FLAT;
+            const isCloaked = textureCall.texture === CLOAKED;
             const pickedTexture =
-                textureCall.texture != null
+                textureCall.texture !== null &&
+                typeof textureCall.texture !== "symbol"
                     ? this.textureList.pickTexture(textureCall.texture, time)
                     : null;
             this.textureMapping[0].gfxTexture =
-                pickedTexture ?? this.textureList.getTransparentTexture();
+                pickedTexture ?? this.textureList.getFallbackTexture();
             objectTemplate.setSamplerBindingsFromTextureMappings(
                 this.textureMapping,
             );
@@ -543,9 +559,8 @@ export class DescentPolymodelRenderer {
                 mappedObject[offsetObject++] =
                     this.level.segments[objectCall.segmentNum].light ?? 1.0;
                 mappedObject[offsetObject++] = objectCall.glow;
-                mappedObject[offsetObject++] =
-                    pickedTexture != null ? 1.0 : 0.0;
-                mappedObject[offsetObject++] = objectCall.isCloaked ? 1.0 : 0.0;
+                mappedObject[offsetObject++] = !isFlat ? 1.0 : 0.0;
+                mappedObject[offsetObject++] = isCloaked ? 1.0 : 0.0;
                 renderInst.setDrawCount(
                     objectCall.indexCount,
                     objectCall.indexOffset,
@@ -560,7 +575,7 @@ export class DescentPolymodelRenderer {
         // Rotate objects
         const rotMul = deltaTime * 2 * Math.PI;
         for (const matrices of this.objectMatrices) {
-            if (matrices.angularVelocity != null) {
+            if (matrices.angularVelocity !== null) {
                 mat4.rotateX(
                     matrices.current,
                     matrices.current,

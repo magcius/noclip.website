@@ -573,7 +573,7 @@ class ParticleProgram extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

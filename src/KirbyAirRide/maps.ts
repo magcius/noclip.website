@@ -171,7 +171,7 @@ function Kirby_Load_grModel(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): Kir
     const grMainModelObjRoot = assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40)));
 
     const grSkyboxOffset = view.getUint32(0x04);
-    if (grSkyboxOffset == 0) {
+    if (grSkyboxOffset === 0) {
         return {
             mainModel: grMainModelObjRoot,
             skyboxModel: null,
