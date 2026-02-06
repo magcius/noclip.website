@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString, assert } from "../util.js";
 import { isMarkerLittleEndian, readBinStr } from "./bfres.js";
-import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat } from "./nngfx_enum.js";
+import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat, ChannelSource } from "./nngfx_enum.js";
 import { getFormatBlockHeight, isChannelFormatSupported } from "./tegra_texture.js";
 
 export interface BNTX {
@@ -17,8 +17,13 @@ export interface BRTI {
     height: number;
     depth: number;
     arraySize: number;
-    mipBuffers: ArrayBufferSlice[];
+    textureDataArray: TextureData[];
     blockHeightLog2: number;
+    channelSource: ChannelSource[];
+}
+
+export interface TextureData {
+    mipBuffers: ArrayBufferSlice[];
 }
 
 function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): BRTI | null {
@@ -44,12 +49,17 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     // layout, the first element of which appears to be blockHeightLog2
     const blockHeightLog2 = view.getUint32(offs + 0x34, littleEndian);
     const channelFormat = getChannelFormat(imageFormat);
-    if (!isChannelFormatSupported(channelFormat))
+    if (!isChannelFormatSupported(channelFormat)) {
+        console.error(`texture ${name} has unsupported channel format ${channelFormat}`);
         return null;
-
+    }
     const textureDataSize = view.getUint32(offs + 0x50, littleEndian);
     const alignment = view.getUint32(offs + 0x54, littleEndian);
-    const channelMapping = view.getUint32(offs + 0x58, littleEndian);
+    let channelSource: ChannelSource[] = [];
+    channelSource.push(view.getUint8(offs + 0x58));
+    channelSource.push(view.getUint8(offs + 0x59));
+    channelSource.push(view.getUint8(offs + 0x5A));
+    channelSource.push(view.getUint8(offs + 0x5B));
     const imageDimension = view.getUint8(offs + 0x5C);
 
     const dataOffsets: number[] = [];
@@ -59,12 +69,22 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         dataOffsTableIdx += 0x08;
     }
 
-    const mipBuffers: ArrayBufferSlice[] = [];
-    for (let i = 0; i < mipCount - 1; i++)
-        mipBuffers.push(buffer.slice(dataOffsets[i], dataOffsets[i + 1]));
-    mipBuffers.push(buffer.slice(dataOffsets[mipCount - 1], dataOffsets[0] + textureDataSize));
+    // to allow indexing at i + 1, add an offset for the end of the last mipmap buffer in a single texture
+    const singleTextureSize = textureDataSize / arraySize;
+    dataOffsets.push(dataOffsets[0] + singleTextureSize);
 
-    return { name, imageDimension, imageFormat, width, height, depth, arraySize, mipBuffers, blockHeightLog2 };
+    const textureDataArray: TextureData[] = [];
+    for (let arrayIndex = 0; arrayIndex < arraySize; arrayIndex++) {
+        const mipBuffers: ArrayBufferSlice[] = [];
+        for (let mipLevel = 0; mipLevel < mipCount; mipLevel++) {
+            const start = dataOffsets[mipLevel] + (arrayIndex * singleTextureSize);
+            const end = dataOffsets[mipLevel + 1] + (arrayIndex * singleTextureSize);
+            mipBuffers.push(buffer.slice(start, end));
+        }
+        textureDataArray.push({ mipBuffers });
+    }
+
+    return { name, imageDimension, imageFormat, width, height, depth, arraySize, textureDataArray, blockHeightLog2, channelSource };
 }
 
 export function parse(buffer: ArrayBufferSlice): BNTX {
