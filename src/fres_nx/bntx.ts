@@ -19,7 +19,7 @@ export interface BRTI {
     arraySize: number;
     textureDataArray: TextureData[];
     blockHeightLog2: number;
-    channelSource: number[];
+    channelSource: ChannelSource[];
 }
 
 export interface TextureData {

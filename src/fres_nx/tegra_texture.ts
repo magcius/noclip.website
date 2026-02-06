@@ -92,7 +92,7 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
     }
 }
 
-export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
+export function getFormatBytesPerBlock(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
     case ChannelFormat.R8_G8_B8_A8:
     case ChannelFormat.B8_G8_R8_A8:
@@ -123,8 +123,8 @@ export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8
     const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
     const blockWidth = getFormatBlockWidth(channelFormat);
     const blockHeight = getFormatBlockHeight(channelFormat);
-    const bytesPerPixel = getFormatBytesPerPixel(channelFormat);
-    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), blockWidth, blockHeight, bytesPerPixel, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
+    const bytesPerBlock = getFormatBytesPerBlock(channelFormat);
+    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), blockWidth, blockHeight, bytesPerBlock, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
