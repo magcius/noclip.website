@@ -111,7 +111,7 @@ export class fshp_renderer
                 this.render_mesh = false;
                 continue;
             }
-            const texture = bntx.textures.find((f) => f.name === texture_name);
+            const texture = bntx.textures.find((f) => f.name === "d018_01_Water01dds");
             if (texture !== undefined)
             {
                 const gfx_texture_index = bntx.textures.indexOf(texture);

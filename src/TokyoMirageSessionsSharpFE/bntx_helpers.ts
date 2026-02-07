@@ -51,9 +51,16 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                     (deswizzled) =>
                     {
                         const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
-                        const rgbaPixels = rgbaTexture.pixels;
-                        // TODO remap for uint16 arrays
-                        const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelSource);
+                        const type_format = getTypeFormat(texture.imageFormat);
+                        let remapped_rgba_pixels;
+                        if (type_format === TypeFormat.Float)
+                        {
+                            remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
+                        }
+                        else
+                        {
+                            remapped_rgba_pixels = remap_r8_g8_b8_a8_channels(rgbaTexture.pixels, texture.channelSource);
+                        }
                         device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
                     }
                 );
@@ -141,19 +148,17 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                     (deswizzled) =>
                     {
                         const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
-                        const rgbaPixels = rgbaTexture.pixels;
                         const type_format = getTypeFormat(texture.imageFormat);
+                        let remapped_rgba_pixels;
                         if (type_format === TypeFormat.Float)
                         {
-                            const test = new Uint16Array(rgbaPixels.buffer);
-                            // TODO: remap channels
-                            device.uploadTextureData(gfx_texture, mipLevel, [test]);
+                            remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
                         }
                         else
                         {
-                            const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelSource);
-                            device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
+                            remapped_rgba_pixels = remap_r8_g8_b8_a8_channels(rgbaTexture.pixels, texture.channelSource);
                         }
+                        device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
                     }
                 );
             }
@@ -171,7 +176,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
  * @param channel_source an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
  * @returns a remapped rgba_pixels array
  */
-function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint8Array | Int8Array
+function remap_r8_g8_b8_a8_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint8Array | Int8Array
 {
     let offset = 0;
     for (let i = 0; i < rgba_pixels.byteLength / 4; i++)
@@ -190,14 +195,23 @@ function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: Cha
     return rgba_pixels;
 }
 
-// export async function deswizzle_uint8_array(buffer: Uint8Array, channel_format: ChannelFormat, width: number, height: number, blockHeightLog2: number): Promise<Uint8Array<ArrayBuffer>>
-// {
-//     const compression_type =
-//     channel_format === ChannelFormat.Bc1 ? rust.CompressionType.Bc1 :
-//     channel_format === ChannelFormat.Bc2 ? rust.CompressionType.Bc2 :
-//     channel_format === ChannelFormat.Bc3 ? rust.CompressionType.Bc3 :
-//     channel_format === ChannelFormat.Bc4 ? rust.CompressionType.Bc4 :
-//     channel_format === ChannelFormat.Bc5 ? rust.CompressionType.Bc5 :
-//     rust.CompressionType.None;
-//     return rust.tegra_deswizzle(buffer, compression_type, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
-// }
+function remap_r16_g16_b16_a16_float_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint16Array
+{
+    let buffer = new Uint16Array(rgba_pixels.buffer);
+    const pixel_count = buffer.length / 4;
+    let offset = 0;
+    for (let i = 0; i < pixel_count; i++)
+    {
+        const r = buffer[i * 4 + 0];
+        const g = buffer[i * 4 + 1];
+        const b = buffer[i * 4 + 2];
+        const a = buffer[i * 4 + 3];
+        const channel_array = [0, 0x003C, r, g, b, a];
+        buffer[offset++] = channel_array[channel_source[0]];
+        buffer[offset++] = channel_array[channel_source[1]];
+        buffer[offset++] = channel_array[channel_source[2]];
+        buffer[offset++] = channel_array[channel_source[3]];
+    }
+
+    return buffer;
+}
