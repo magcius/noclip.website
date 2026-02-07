@@ -5,7 +5,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { DFFMesh, ObjectDefintion, Parser, Texture, TOMInstance, WorldData } from "./bin.js";
+import { Mesh, ObjectDefintion, RWParser, Texture, ObjectInstance, Level } from "./bin.js";
 import { LevelRenderer } from "./render.js";
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 import { DataFetcher } from "../DataFetcher.js";
@@ -22,12 +22,11 @@ Game uses the RenderWare engine. Some files have their extensions changed (such 
 
 TODO
 
-Fix transparency issue (incorrect overlap of multiple alphas)
+Handle different kinds of transparency better
 Dynamic objects
-    Correctly positioned and rotated static models at a minimum
+    Figure out transparency and other effects
     Idle animations would be nice, but not needed
     Even better, figure out AI pathing and have certain enemies/NPCs follow a default path
-Figure out how the skybox and water works
 Implement mipmapping? Textures are present for it, at least for 32-bit ones
 */
 
@@ -37,11 +36,11 @@ class CasperRenderer implements SceneGfx {
     private levelRenderer: LevelRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, levelNumber: number, world: WorldData, textures: Map<string, Texture>, tomInstances: TOMInstance[], dffs: Map<string, DFFMesh>) {
+    constructor(device: GfxDevice, levelNum: number, level: Level, textures: Map<string, Texture>, objInstances: ObjectInstance[], objMeshes: Map<string, Mesh>) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, levelNumber, world, textures, tomInstances, dffs);
-        this.clearColor = CLEAR_COLORS[levelNumber - 1];
+        this.levelRenderer = new LevelRenderer(cache, levelNum, level, textures, objInstances, objMeshes);
+        this.clearColor = CLEAR_COLORS[levelNum - 1];
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -115,38 +114,45 @@ class CasperScene implements SceneDesc {
         const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${this.levelNumber}.DIC`);
         const tomFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/${this.id}/M${this.id}.TOM`);
         const obdFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/CASPER.OBD`);
-        const world = new Parser(bspFile.createDataView()).parseBSP();
-        const objDefs = new Parser(obdFile.createDataView()).parseOBD();
-        const tomInstances = new Parser(tomFile.createDataView()).parseTOM();
-        const dffMeshes = await buildDFFMeshes(context.dataFetcher, pathBase, world, objDefs, tomInstances);
-        const textures = new Parser(dicFile.createDataView()).parseDIC(device, world.materials);
-        return new CasperRenderer(device, this.levelNumber, world, textures, tomInstances, dffMeshes);
+        const level = new RWParser(bspFile.createDataView()).parseLevel();
+        const objDict = new RWParser(obdFile.createDataView()).parseObjectDictionary();
+        const objInstances = new RWParser(tomFile.createDataView()).parseLevelObjects();
+        const objMeshes = await buildDFFMeshes(context.dataFetcher, pathBase, level, objDict, objInstances);
+        const textures = new RWParser(dicFile.createDataView()).parseDIC(device, level.materials);
+        return new CasperRenderer(device, this.levelNumber, level, textures, objInstances, objMeshes);
     }
 }
 
-async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, world: WorldData, objDefs: ObjectDefintion[], tomInstances: TOMInstance[]): Promise<Map<string, DFFMesh>> {
-    const meshes = new Map<string, DFFMesh>();
-    for (const tom of tomInstances) {
-        if (meshes.has(tom.name)) {
+/**
+ * Call this **before** parsing textures
+ */
+async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, level: Level, objDict: ObjectDefintion[], objInstances: ObjectInstance[]): Promise<Map<string, Mesh>> {
+    const meshes = new Map<string, Mesh>();
+    for (const instance of objInstances) {
+        // don't build the same mesh more than once
+        if (meshes.has(instance.name)) {
             continue;
         }
         let dffPath = "";
-        for (const def of objDefs) {
-            if (def.names.includes(tom.name)) {
+        for (const def of objDict) {
+            if (def.names.includes(instance.name)) {
                 dffPath = def.dffPath;
                 break;
             }
         }
         if (dffPath === "") {
+            // console.log("Skipping OBJ by no DFF", instance.name);
             continue;
         }
         const dffFile = await dataFetcher.fetchData(`${pathBase}/${dffPath}`);
-        const mesh = new Parser(dffFile.createDataView()).parseDFF();
+        const mesh = new RWParser(dffFile.createDataView()).parseDFF();
         if (mesh.vertexCount === 0) {
+            // console.log("Skipping OBJ by no vertices", instance.name);
             continue;
         }
-        world.materials.push(...mesh.materials);
-        meshes.set(tom.name, mesh);
+        // append to level materials so the textures don't get skipped
+        level.materials.push(...mesh.materials!);
+        meshes.set(instance.name, mesh);
     }
     return meshes;
 }

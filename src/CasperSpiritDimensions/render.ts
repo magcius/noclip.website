@@ -8,7 +8,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { DFFMesh, Texture, TOMInstance, WorldData, WorldSector } from "./bin";
+import { Mesh, Texture, ObjectInstance, Level, LevelSector } from "./bin";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 
 interface MeshBatch {
@@ -79,40 +79,41 @@ void main() {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 const WORLD_SCALE = 300; // xyz are extremely small in the data
 const BACK_CULL_LEVELS = [5, 8, 9, 11, 12, 14]; // levels that are mostly interior
+const NOSHIFT_MATRIX = mat4.create();
 
 export class LevelRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
-    private dffBuffers: Map<string, GfxBuffer[]> = new Map();
-    private dffBatches: Map<string, MeshBatch[]> = new Map();
+    private objBuffers: Map<string, GfxBuffer[]> = new Map();
+    private objBatches: Map<string, MeshBatch[]> = new Map();
     private inputLayout: GfxInputLayout;
     private batches: MeshBatch[] = [];
     public showTextures: boolean = true;
     public showObjects: boolean = true;
     public cullMode: GfxCullMode = GfxCullMode.None;
 
-    constructor(cache: GfxRenderCache, number: number, world: WorldData, private textures: Map<string, Texture>, private tomInstances: TOMInstance[], private dffs: Map<string, DFFMesh>) {
-        if (BACK_CULL_LEVELS.includes(number)) {
+    constructor(cache: GfxRenderCache, levelNum: number, level: Level, private textures: Map<string, Texture>, private objInstances: ObjectInstance[], private objMeshes: Map<string, Mesh>) {
+        if (BACK_CULL_LEVELS.includes(levelNum)) {
             this.cullMode = GfxCullMode.Back;
         }
         const device = cache.device;
-        const { vertices, indices, uvs, colors } = this.buildBuffers(world);
+        const { vertices, indices, uvs, colors } = this.buildBuffers(level);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indices.buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, colors.buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, uvs.buffer);
-        for (const [name, dff] of this.dffs.entries()) {
-            const { vertices: v, indices: i, uvs: u, colors: c } = this.buildBuffersDFF(name, dff);
+        for (const [name, mesh] of this.objMeshes.entries()) {
+            const { vertices: v, indices: i, uvs: u, colors: c } = this.buildBuffersObj(name, mesh);
             const vb = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, v.buffer);
             const ib = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, i.buffer);
             const cb = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, c.buffer);
             const ub = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, u.buffer);
-            this.dffBuffers.set(name, [vb, ib, cb, ub]);
+            this.objBuffers.set(name, [vb, ib, cb, ub]);
         }
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
@@ -134,7 +135,7 @@ export class LevelRenderer {
         const template = renderInstManager.pushTemplate();
         const program = renderHelper.renderCache.createProgram(new LevelProgram());
         template.setGfxProgram(program);
-        template.setBindingLayouts(bindingLayouts);
+        template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
         template.setVertexInput(this.inputLayout,
             [
@@ -150,7 +151,7 @@ export class LevelRenderer {
         // u_ProjectionView (16)
         offset += fillMatrix4x4(buffer, offset, viewerInput.camera.clipFromWorldMatrix);
         // u_ShiftMatrix (16)
-        offset += fillMatrix4x4(buffer, offset, mat4.create());
+        offset += fillMatrix4x4(buffer, offset, NOSHIFT_MATRIX);
         // u_Options (4)
         buffer[offset++] = this.showTextures ? 1.0 : 0.0;
         buffer[offset++] = 0.0;
@@ -162,13 +163,13 @@ export class LevelRenderer {
 
         // render objects
         if (this.showObjects) {
-            for (const tom of this.tomInstances) {
-                const mesh = this.dffs.get(tom.name);
-                const buffers = this.dffBuffers.get(tom.name);
+            for (const obj of this.objInstances) {
+                const mesh = this.objMeshes.get(obj.name);
+                const buffers = this.objBuffers.get(obj.name);
                 if (!mesh || !buffers) {
                     continue;
                 }
-                const shiftMatrix = this.buildShiftMatrix(tom);
+                const shiftMatrix = this.buildShiftMatrix(obj);
                 const instanceTemplate = renderInstManager.pushTemplate();
                 let instanceOffset = instanceTemplate.allocateUniformBuffer(LevelProgram.ub_SceneParams, 36);
                 const instanceBuffer = instanceTemplate.mapUniformBufferF32(LevelProgram.ub_SceneParams);
@@ -186,7 +187,7 @@ export class LevelRenderer {
                     { buffer: buffers[2], byteOffset: 0 },
                     { buffer: buffers[3], byteOffset: 0 }
                 ], { buffer: buffers[1], byteOffset: 0 });
-                this.submitBatches(renderInstManager, this.dffBatches.get(tom.name)!, renderHelper, false);
+                this.submitBatches(renderInstManager, this.objBatches.get(obj.name)!, renderHelper, false);
                 renderInstManager.popTemplate();
             }
         }
@@ -202,27 +203,27 @@ export class LevelRenderer {
         for (const t of this.textures.values()) {
             device.destroyTexture(t.gfxTexture);
         }
-        for (const buffers of this.dffBuffers.values()) {
+        for (const buffers of this.objBuffers.values()) {
             buffers.forEach(b => device.destroyBuffer(b));
         }
     }
 
-    private buildBuffers(world: WorldData): LevelBuffer {
-        let vOffset = 0;
+    private buildBuffers(level: Level): LevelBuffer {
+        let vertexOffset = 0;
         const vertices: number[] = [];
         const colors: number[] = [];
         const uvs: number[] = [];
         const indexGroups = new Map<string, number[]>();
         this.batches = [];
-        const traverse = (node: WorldSector) => {
+        const traverse = (node: LevelSector) => {
             if (node.mesh && node.mesh.vertexCount > 0 && node.mesh.vertices.length > 0) {
-                const vBase = vOffset;
+                const vBase = vertexOffset;
                 vertices.push(...node.mesh.vertices.map(p => p * WORLD_SCALE));
                 colors.push(...node.mesh.colors.map(c => c / 255));
                 uvs.push(...node.mesh.uvs);
-                vOffset += node.mesh.vertexCount;
-                for (const split of node.mesh.splits) {
-                    const textureName = world.materials[split.materialIndex];
+                vertexOffset += node.mesh.vertexCount;
+                for (const split of node.mesh.indexSplits) {
+                    const textureName = level.materials[split.materialIndex];
                     if (textureName === undefined || textureName.length === 0) {
                         continue;
                     }
@@ -230,8 +231,8 @@ export class LevelRenderer {
                         indexGroups.set(textureName, []);
                     }
                     const groupIndices = indexGroups.get(textureName)!;
-                    for (const i of split.indices) {
-                        groupIndices.push(i + vBase);
+                    for (const index of split.indices) {
+                        groupIndices.push(index + vBase);
                     }
                 }
             }
@@ -239,35 +240,36 @@ export class LevelRenderer {
                 node.children.forEach(traverse);
             }
         };
-        traverse(world.rootSector);
-        const finalIndices: number[] = [];
+
+        traverse(level.root);
+
+        const indices: number[] = [];
         indexGroups.forEach((groupIndices, textureName) => {
-            const indexStart = finalIndices.length;
-            finalIndices.push(...groupIndices);
             this.batches.push({
-                textureName: textureName,
-                indexOffset: indexStart,
+                textureName, indexOffset: indices.length,
                 indexCount: groupIndices.length
             });
+            indices.push(...groupIndices);
         });
+
         return { 
             vertices: new Float32Array(vertices), 
-            indices: new Uint32Array(finalIndices), 
+            indices: new Uint32Array(indices), 
             colors: new Float32Array(colors), 
             uvs: new Float32Array(uvs) 
         };
     }
 
-    private buildBuffersDFF(name: string, mesh: DFFMesh): LevelBuffer {
+    private buildBuffersObj(name: string, mesh: Mesh): LevelBuffer {
         const vertices: number[] = [];
         const colors: number[] = [];
         const uvs: number[] = [];
         const indexGroups = new Map<string, number[]>();
-        if (mesh.vertexCount > 0 && mesh.vertices.length > 0) {
+        if (mesh.vertexCount > 0 && mesh.vertices.length > 0 && mesh.materials) {
             vertices.push(...mesh.vertices.map(p => p * WORLD_SCALE));
             colors.push(...mesh.colors.map(c => c / 255));
             uvs.push(...mesh.uvs);
-            for (const split of mesh.splits) {
+            for (const split of mesh.indexSplits) {
                 const textureName = mesh.materials[split.materialIndex];
                 if (textureName === undefined || textureName.length === 0) {
                     continue;
@@ -283,22 +285,16 @@ export class LevelRenderer {
         }
         const finalIndices: number[] = [];
         indexGroups.forEach((groupIndices, textureName) => {
-            const indexStart = finalIndices.length;
+            const batch = {
+                textureName, indexOffset: finalIndices.length,
+                indexCount: groupIndices.length
+            };
             finalIndices.push(...groupIndices);
-            let mbs = this.dffBatches.get(name);
-            if (mbs === undefined) {
-                this.dffBatches.set(name, [{
-                    textureName: textureName,
-                    indexOffset: indexStart,
-                    indexCount: groupIndices.length
-                }]);
+            const batches = this.objBatches.get(name);
+            if (!batches) {
+                this.objBatches.set(name, [batch]);
             } else {
-                mbs.push({
-                    textureName: textureName,
-                    indexOffset: indexStart,
-                    indexCount: groupIndices.length
-                });
-                this.dffBatches.set(name, mbs);
+                batches.push(batch);
             }
         });
         return { 
@@ -346,17 +342,17 @@ export class LevelRenderer {
         }
     }
 
-    private buildShiftMatrix(tom: TOMInstance): mat4 {
+    private buildShiftMatrix(obj: ObjectInstance): mat4 {
         const out = mat4.create();
         const q = quat.create();
-        const posX = tom.position.x * WORLD_SCALE;
-        const posY = tom.position.y * WORLD_SCALE;
-        const posZ = -tom.position.z * WORLD_SCALE;
-        quat.rotateY(q, q, (tom.rotation.y * Math.PI / 180));
+        const posX = obj.position.x * WORLD_SCALE;
+        const posY = obj.position.y * WORLD_SCALE;
+        const posZ = -obj.position.z * WORLD_SCALE;
+        quat.rotateY(q, q, (obj.rotation.y * Math.PI / 180));
         // quat.rotateZ(q, q, (tom.rotation.y * Math.PI / 180));
         // quat.rotateX(q, q, (tom.rotation.x * Math.PI / 180));
         mat4.fromRotationTranslationScale(out, q, [posX, posY, posZ],
-            [tom.scale.x, tom.scale.z, tom.scale.y]
+            [obj.scale.x, obj.scale.y, obj.scale.z]
         );
         return out;
     }

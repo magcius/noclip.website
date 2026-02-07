@@ -8,24 +8,64 @@ enum ChunkID {
     PLANE_SECTION = 10, WORLD = 11, FRAME_LIST = 14,
     GEOMETRY = 15, CLUMP = 16, ATOMIC = 0x14, TEXTURE_NATIVE = 0x15,
     TEXTURE_DICTIONARY = 0x16, GEOMETRY_LIST = 0x1A,
-    MORPH_PLG = 0x105, SKY_MIPMAP_VAL = 0x110,
-    PARTICLES_PLG = 0x118, COLLISION_PLG = 0x11D,
-    MATERIAL_EFFECTS_PLG = 0x120, BIN_MESH_PLG = 0x50E
+    MORPH_PLG = 0x105, ANIMATION_PLG = 0x108, SKY_MIPMAP_VAL = 0x110,
+    SKIN_PLG = 0x116, PARTICLES_PLG = 0x118, COLLISION_PLG = 0x11D,
+    MATERIAL_EFFECTS_PLG = 0x120, LIBRARY_PLG = 0x189, BIN_MESH_PLG = 0x50E
 }
 
-export interface WorldSector {
+/**
+ * 12-byte header for each node in RW file
+ */
+interface NodeHeader {
+    id: number;
+    size: number;
+}
+
+/**
+ * List of indices for a material
+ */
+interface IndexSplit {
+    materialIndex: number;
+    indices: number[];
+}
+
+export interface LevelSector {
     type: 'node' | 'leaf';
     mesh?: Mesh;
-    children: WorldSector[];
+    children: LevelSector[];
 }
 
-export interface WorldData {
+export interface Level {
     materials: string[];
-    tomMeshes: DFFMesh[];
-    rootSector: WorldSector;
+    objMeshes: Mesh[];
+    root: LevelSector;
 }
 
-export class TOMInstance {
+/**
+ * An object defintion from the CASPER.OBD file
+ */
+export interface ObjectDefintion {
+    names: string[];
+    dffPath: string;
+    thirdValue: string;
+}
+
+/**
+ * Mesh from either DFF or BSP file
+ */
+export interface Mesh {
+    vertexCount: number;
+    vertices: number[];
+    uvs: number[];
+    colors: number[];
+    indexSplits: IndexSplit[];
+    materials?: string[];
+}
+
+/**
+ * Instance of an object from a level's TOM file
+ */
+export class ObjectInstance {
     name: string;
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
@@ -33,31 +73,11 @@ export class TOMInstance {
     properties: string[];
 }
 
-export class ObjectDefintion {
-    names: string[];
-    dffPath: string;
-}
-
-interface MeshSplit {
-    materialIndex: number;
-    indices: number[];
-}
-
-interface Mesh {
-    vertexCount: number;
-    vertices: number[];
-    uvs: number[];
-    colors: number[];
-    splits: MeshSplit[];
-}
-
-export interface DFFMesh extends Mesh {
-    materials: string[];
-}
-
+/**
+ * Texture from DIC file, either 32-bit or unswizzled 8-bit. Uploaded to device upon creation
+ */
 export class Texture {
     public gfxTexture: GfxTexture;
-
     constructor(device: GfxDevice, public rgba: Uint8Array, public width: number, public height: number, public hasAlpha: boolean = false) {
         const gfxTexture = device.createTexture({
             width, height,
@@ -72,42 +92,40 @@ export class Texture {
     }
 }
 
-export class Parser {
-    private view: DataView;
+export class RWParser {
+    private data: DataView;
     private offset: number = 0;
 
     constructor(view: DataView) {
-        this.view = view;
+        this.data = view;
     }
 
-    private readHeader() {
-        const id = this.view.getUint32(this.offset, true);
-        const size = this.view.getUint32(this.offset + 4, true);
+    private readHeader(): NodeHeader {
+        const id = this.data.getUint32(this.offset, true);
+        const size = this.data.getUint32(this.offset + 4, true);
         this.offset += 12;
         return { id, size };
     }
 
-    public parseBSP(): WorldData {
-        const worldData: WorldData = {
+    public parseLevel(): Level {
+        const level: Level = {
             materials: [],
-            tomMeshes: [],
-            rootSector: {type: "node", children: []}
+            objMeshes: [],
+            root: {type: "node", children: []}
         };
 
-        while (this.offset < this.view.byteLength) {
+        while (this.offset < this.data.byteLength) {
             const header = this.readHeader();
             const endOffset = this.offset + header.size;
-
             if (header.id === ChunkID.WORLD) {
                 const struct = this.readHeader();
                 this.offset += struct.size;
-
                 while (this.offset < endOffset) {
                     const childHeader = this.readHeader();
                     if (childHeader.id === ChunkID.MATERIAL_LIST) {
-                        worldData.materials = this.parseMaterialList(childHeader.size);
+                        level.materials = this.parseMaterialList(childHeader.size);
                     } else if (childHeader.id === ChunkID.PLANE_SECTION) {
-                        worldData.rootSector = this.processSector(childHeader);
+                        level.root = this.parsePlaneSection(childHeader);
                     } else {
                         this.offset += childHeader.size;
                     }
@@ -117,12 +135,238 @@ export class Parser {
             }
         }
 
-        return worldData;
+        return level;
     }
 
-    private processSector(header: any): WorldSector {
+    public parseDIC(device: GfxDevice, materials: string[]): Map<string, Texture> {
+        this.offset = 0;
+        const txdHeader = this.readHeader();
+        const txdEnd = this.offset + txdHeader.size;
+        const txdMetaStructHeader = this.readHeader(); 
+        this.offset += 4;
+        // let index = -1;
+        // let debugWidth = 0;
+        // let debugHeight = 0;
+        const textures: Map<string, Texture> = new Map();
+        while (this.offset < txdEnd) {
+            // index += 1;
+            const nativeHeader = this.readHeader();
+            const nativeEnd = this.offset + nativeHeader.size;
+            if (this.offset >= txdEnd) {
+                break;
+            }
+            // this always has "PS2"
+            const structMeta = this.readHeader();
+            this.offset += structMeta.size;
+            const nameHeader = this.readHeader();
+            const textureName = this.readString(nameHeader.size);
+            // only parse materials with known name
+            if (materials.indexOf(textureName) === -1) {
+                this.offset = nativeEnd;
+                // console.log("Skipping texture", textureName);
+                continue;
+            }
+            // not sure what exactly this is, but any texture that has transparency in the game has this set to something
+            const alphaHeader = this.readHeader();
+            const alphaName = this.readString(alphaHeader.size);
+
+            const pixelStructHeader = this.readHeader();
+
+            const pixelStructMeta = this.readHeader(); // always 64 bytes
+            const pixelStructMetaEnd = this.offset + pixelStructMeta.size;
+            const width = this.data.getUint16(this.offset, true);
+            const height = this.data.getUint16(this.offset + 4, true);
+            const bitDepth = this.data.getUint8(this.offset + 8);
+
+            const pixelCount = width * height;
+            let rgba: Uint8Array = new Uint8Array(pixelCount * 4);
+
+            this.offset = pixelStructMetaEnd;
+            const pixelDataHeader = this.readHeader();
+            if (bitDepth === 8) {
+                const colorIndices = new Uint8Array(this.data.buffer, this.offset + 80, pixelCount);
+                const swizzledCLUT = new Uint8Array(this.data.buffer, this.offset + pixelDataHeader.size - 1024, 1024);
+
+                const clut = new Uint8Array(1024);
+                for (let i = 0; i < 256; i++) {
+                    const unswizzled = (i & 231) | ((i & 8) << 1) | ((i & 16) >> 1);
+                    for (let c = 0; c < 4; c++) {
+                        clut[i * 4 + c] = swizzledCLUT[unswizzled * 4 + c];
+                    }
+                }
+
+                // unswizzle 8-bit textures
+                // https://ps2linux.no-ip.info/playstation2-linux.com/docs/howto/display_docef7c.html?docid=75
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const blockLocation = (y & -16) * width + (x & -16) * 2;
+                        const swapSelector = (((y + 2) >> 2) & 1) * 4;
+                        const posY = (((y & -4) >> 1) + (y & 1)) & 7;
+                        const columnLocation = posY * width * 2 + ((x + swapSelector) & 7) * 4;
+                        const byteNum = ((y >> 1) & 1) + ((x >> 2) & 2);
+                        const colorIndex = colorIndices[blockLocation + columnLocation + byteNum];
+                        const index = ((y * width) + x) * 4;
+                        const pointer = colorIndex * 4;
+                        rgba[index] = clut[pointer];
+                        rgba[index + 1] = clut[pointer + 1];
+                        rgba[index + 2] = clut[pointer + 2];
+                        rgba[index + 3] = Math.min(clut[pointer + 3] * 2, 255);
+                    }
+                }
+                // this.debugRenderToCanvas(rgba, width, height, textureName, debugWidth, debugHeight);
+                // debugWidth += width + 32;
+                // if (debugWidth > 2000) {
+                //     debugWidth = 0;
+                //     debugHeight += 150;
+                // }
+            } else if (bitDepth === 32) {
+                const clut = new Uint8Array(this.data.buffer, this.offset + 80, pixelCount * 4);
+                // there's also a copy of the texture at half resolution after another 80-byte offset
+
+                rgba = new Uint8Array(pixelCount * 4);
+                for (let i = 0; i < rgba.length; i += 4) {
+                    rgba[i] = clut[i];
+                    rgba[i + 1] = clut[i + 1];
+                    rgba[i + 2] = clut[i + 2];
+                    rgba[i + 3] = Math.min(clut[i + 3] * 2, 255); // scale from 128 to 255
+                }
+            }
+            textures.set(textureName, new Texture(device, rgba, width, height, alphaName.length > 0));
+            this.offset = nativeEnd;
+        }
+
+        return textures;
+    }
+
+    public parseLevelObjects(): ObjectInstance[] {
+        const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength));
+        const lines = rawText.split("\n");
+        const instances: ObjectInstance[] = [];
+        let instance: ObjectInstance = new ObjectInstance();
+        let inProperties = false;
+
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) {
+                continue;
+            }
+
+            if (line.startsWith("BEGIN_OBJ:")) {
+                instance = new ObjectInstance();
+                const nameMatch = line.match(/"([^"]+)"/);
+                let name = nameMatch ? nameMatch[1] : "";
+                if (name.includes(",")) {
+                    name = name.split(",")[0]
+                }
+                instance.name = name;
+                instance.properties = [];
+                inProperties = false;
+            } else if (!line.startsWith("//")) {
+                if (line.startsWith("END_OBJ:")) {
+                    instances.push(instance);
+                    instance = new ObjectInstance();
+                } else if (line.startsWith("BEGIN_USERPROPS:")) {
+                    inProperties = true;
+                } else if (line.startsWith("END_USERPROPS:")) {
+                    inProperties = false;
+                } else if (!inProperties) {
+                    const parts = line.split(/\s+/);
+                    const key = parts[0].replace(":", "");
+                    const values = parts.slice(1).map(Number);
+                    // y and z might be flipped (???)
+                    if (key === "POS") {
+                        instance.position = { x: values[0], y: values[2], z: values[1] };
+                    } else if (key === "ROTATE") {
+                        instance.rotation = { x: values[0], y: values[2], z: values[1] };
+                    } else if (key === "SCALE") {
+                        instance.scale = { x: values[0], y: values[2], z: values[1] };
+                    }
+                } else {
+                    instance.properties.push(line.replace("\t", ""));
+                }
+            }
+        }
+
+        return instances;
+    }
+
+    public parseObjectDictionary(): ObjectDefintion[] {
+        const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength));
+        const lines = rawText.split("\n");
+        const objDefs: ObjectDefintion[] = [];
+
+        function extractQuotedStrings(line: string): string[] {
+            const matches = line.match(/"([^"]*)"/g);
+            if (!matches) {
+                return [];
+            }
+            return matches.map(s => s.slice(1, -1));
+        }
+
+        for (let line of lines) {
+            line = line.trim().split("//")[0]; // ignore any comments
+            if (!line) {
+                continue;
+            }
+            if (line.startsWith("DEFINE_OBJ:")) {
+                const elems = extractQuotedStrings(line.substring(12, line.lastIndexOf("\"") + 1));
+                const name = elems[0].toLowerCase();
+                const type = elems[1].toLowerCase();
+                const val1 = elems[2];
+                const val2 = elems.length > 3 ? elems[3] : "";
+                if (type === "alias") {
+                    for (const o of objDefs) {
+                        if (o.names.includes(val1)) {
+                            o.names.push(name);
+                            break;
+                        }
+                    }
+                } else if (type === "anim" || type === "basic") {
+                    objDefs.push({ names: [name], dffPath: val1.toUpperCase(), thirdValue: val2 });
+                }
+            }
+        }
+
+        return objDefs;
+    }
+
+    public parseDFF(): Mesh {
+        this.offset = 0;
+        const clumpHeader = this.readHeader();
+        const clumpEnd = this.offset + clumpHeader.size;
+        const clumpStructHeader = this.readHeader(); // struct is just object count, ignore
+        this.offset += clumpStructHeader.size;
+        const frameListHeader = this.readHeader(); // skip for now
+        this.offset += frameListHeader.size;
+        const atomicHeader = this.readHeader();
+        const atomicStructHeader = this.readHeader(); // frame and geometry index numbers
+        this.offset += atomicStructHeader.size;
+        const geometryHeader = this.readHeader();
+        if (geometryHeader.id === ChunkID.GEOMETRY) {
+            const geometryStructHeader = this.readHeader();
+            const geometryStructEnd = this.offset + geometryStructHeader.size;
+            const { vertexCount, vertices, uvs, colors } = this.parseGeometryStruct(this.offset, geometryStructEnd);
+            this.offset = geometryStructEnd;
+            const materialListHeader = this.readHeader();
+            const materials = this.parseMaterialList(materialListHeader.size);
+            if (materials[0].length > 0) { // temp don't build meshes without textures
+                const extensionHeader = this.readHeader();
+                const splits: IndexSplit[] = [];
+                if (extensionHeader.id === ChunkID.EXTENSION) {
+                    const binMeshHeader = this.readHeader();
+                    if (binMeshHeader.id === ChunkID.BIN_MESH_PLG) {
+                        splits.push(...this.parseBinMesh());
+                        return { vertexCount, vertices, uvs, colors, indexSplits: splits, materials };
+                    }
+                }
+            }
+        }
+        return { vertexCount: 0, vertices: [], uvs: [], colors: [], indexSplits: [], materials: [] };
+    }
+
+    private parsePlaneSection(header: NodeHeader): LevelSector {
         const endOffset = this.offset + header.size;
-        const sector: WorldSector = {
+        const sector: LevelSector = {
             type: header.id === ChunkID.ATOMIC_SECTION ? 'leaf' : 'node',
             children: []
         };
@@ -134,7 +378,7 @@ export class Parser {
             while (this.offset < endOffset) {
                 const child = this.readHeader();
                 if (child.id === ChunkID.PLANE_SECTION || child.id === ChunkID.ATOMIC_SECTION) {
-                    sector.children.push(this.processSector(child));
+                    sector.children.push(this.parsePlaneSection(child));
                 } else {
                     this.offset += child.size;
                 }
@@ -144,12 +388,15 @@ export class Parser {
         return sector;
     }
 
+    /**
+     * Empty or color-only materials are set as "" to keep material indices consistent
+     */
     private parseMaterialList(size: number): string[] {
         const names: string[] = [];
         const end = this.offset + size;
         
         const struct = this.readHeader();
-        const numMaterials = this.view.getInt32(this.offset, true);
+        const numMaterials = this.data.getInt32(this.offset, true);
         this.offset += struct.size;
 
         for (let i = 0; i < numMaterials; i++) {
@@ -158,7 +405,7 @@ export class Parser {
 
             while (this.offset < matEnd) {
                 const child = this.readHeader();
-                if (this.view.getUint8(this.offset + 12) === 0) {
+                if (this.data.getUint8(this.offset + 12) === 0) {
                     names.push("");
                     this.offset += child.size;
                 } else if (child.id === ChunkID.TEXTURE) {
@@ -182,37 +429,36 @@ export class Parser {
     }
 
     private parseAtomicSection(): Mesh {
-        // struct has these blocks:
-        // vertices (12), normals? (4), color (4), uvs (8)
-
         const structHeader = this.readHeader();
         const structEnd = this.offset + structHeader.size;
 
-        const vertexCount = this.view.getUint32(this.offset + 8, true);
+        const vertexCount = this.data.getUint32(this.offset + 8, true);
         if (vertexCount === 0) {
             this.offset = structEnd; 
-            return { vertexCount: 0, splits: [], vertices: [], uvs: [], colors: [] };
+            return { vertexCount: 0, indexSplits: [], vertices: [], uvs: [], colors: [] };
         }
+
+        // vertices (12), unknown colors (4), vertex colors (4), uvs (8)
 
         let pointer = this.offset + 44; // skip struct header
         const vertices: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
             vertices.push(
-                this.view.getFloat32(pointer, true),
-                this.view.getFloat32(pointer + 4, true),
-                this.view.getFloat32(pointer + 8, true)
+                this.data.getFloat32(pointer, true),
+                this.data.getFloat32(pointer + 4, true),
+                this.data.getFloat32(pointer + 8, true)
             );
             pointer += 12;
         }
 
-        pointer += vertexCount * 4; // skip block, these could be normals
+        pointer += vertexCount * 4; // skip block, don't know what these colors are. They appear rainbow-like when rendered
 
         const colors: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
             colors.push(
-                this.view.getUint8(pointer),
-                this.view.getUint8(pointer + 1),
-                this.view.getUint8(pointer + 2)
+                this.data.getUint8(pointer),
+                this.data.getUint8(pointer + 1),
+                this.data.getUint8(pointer + 2)
             );
             pointer += 4;
         }
@@ -220,8 +466,8 @@ export class Parser {
         const uvs: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
             uvs.push(
-                this.view.getFloat32(pointer, true),
-                this.view.getFloat32(pointer + 4, true)
+                this.data.getFloat32(pointer, true),
+                this.data.getFloat32(pointer + 4, true)
             );
             pointer += 8;
         }
@@ -230,7 +476,7 @@ export class Parser {
 
         const extHeader = this.readHeader();
         const extEnd = this.offset + extHeader.size;
-        const splits: MeshSplit[] = [];
+        const splits: IndexSplit[] = [];
         while (this.offset < extEnd - 12) {
             const subHeader = this.readHeader();
             if (subHeader.id === ChunkID.BIN_MESH_PLG) {
@@ -241,24 +487,24 @@ export class Parser {
 
         this.offset = extEnd;
 
-        return { vertexCount, vertices, uvs, colors, splits };
+        return { vertexCount, vertices, uvs, colors, indexSplits: splits };
     }
 
-    private parseBinMesh(): MeshSplit[] {
-        const faceType = this.view.getUint32(this.offset, true);
-        const numSplits = this.view.getUint32(this.offset + 4, true);
-        let seeker = this.offset + 12;
-        const splits: MeshSplit[] = [];
+    private parseBinMesh(): IndexSplit[] {
+        const faceType = this.data.getUint32(this.offset, true);
+        const numSplits = this.data.getUint32(this.offset + 4, true);
+        let pointer = this.offset + 12;
+        const splits: IndexSplit[] = [];
         for (let s = 0; s < numSplits; s++) {
-            const count = this.view.getUint32(seeker, true);
-            const materialIndex = this.view.getUint32(seeker + 4, true);
-            seeker += 8;
+            const count = this.data.getUint32(pointer, true);
+            const materialIndex = this.data.getUint32(pointer + 4, true);
+            pointer += 8;
 
             const indices: number[] = [];
             const rawIndices: number[] = [];
             for (let i = 0; i < count; i++) {
-                rawIndices.push(this.view.getUint32(seeker, true));
-                seeker += 4;
+                rawIndices.push(this.data.getUint32(pointer, true));
+                pointer += 4;
             }
 
             if (faceType === 1) {
@@ -283,225 +529,11 @@ export class Parser {
         return splits;
     }
 
-    public parseDIC(device: GfxDevice, materials: string[]): Map<string, Texture> {
-        this.offset = 0;
-        const txdHeader = this.readHeader();
-        const txdEnd = this.offset + txdHeader.size;
-        const txdMetaStructHeader = this.readHeader(); 
-        this.offset += 4;
-
-        const textures: Map<string, Texture> = new Map();
-        while (this.offset < txdEnd) {
-            const nativeHeader = this.readHeader();
-            const nativeEnd = this.offset + nativeHeader.size;
-            if (this.offset >= txdEnd) {
-                break;
-            }
-            const structMeta = this.readHeader(); // this always has "PS2" (50 53 32 ...)
-            this.offset += structMeta.size;
-            const nameHeader = this.readHeader();
-            const textureName = this.readString(nameHeader.size);
-            if (materials.indexOf(textureName) === -1) { // only parse materials with known name
-                this.offset = nativeEnd;
-                continue;
-            }
-            const alphaHeader = this.readHeader();
-            const alphaName = this.readString(alphaHeader.size);
-
-            const pixelStructHeader = this.readHeader();
-
-            const pixelStructMeta = this.readHeader(); // always 64 bytes
-            const pixelStructMetaEnd = this.offset + pixelStructMeta.size;
-            const width = this.view.getUint16(this.offset, true);
-            const height = this.view.getUint16(this.offset + 4, true);
-            const bitDepth = this.view.getUint8(this.offset + 8);
-
-            const pixelCount = width * height;
-            let rgba: Uint8Array = new Uint8Array(pixelCount * 4);
-
-            this.offset = pixelStructMetaEnd;
-            const pixelDataHeader = this.readHeader();
-            if (bitDepth === 8) {
-                const indices = new Uint8Array(this.view.buffer, this.offset + 80, pixelCount);
-                const rawPalette = new Uint8Array(this.view.buffer, this.offset + pixelDataHeader.size - 1024, 1024);
-
-                const cleanPalette = new Uint8Array(1024);
-                for (let i = 0; i < 256; i++) {
-                    const swizzledIdx = (i & 231) | ((i & 8) << 1) | ((i & 16) >> 1);
-                    for (let c = 0; c < 4; c++) {
-                        cleanPalette[i * 4 + c] = rawPalette[swizzledIdx * 4 + c];
-                    }
-                }
-
-                for (let y = 0; y < height; y++) {
-                    for (let x = 0; x < width; x++) {
-                        // https://ps2linux.no-ip.info/playstation2-linux.com/docs/howto/display_docef7c.html?docid=75
-                        const blockLocation = (y & -16) * width + (x & -16) * 2;
-                        const swapSelector = (((y + 2) >> 2) & 1) * 4;
-                        const posY = (((y & -4) >> 1) + (y & 1)) & 7;
-                        const columnLocation = posY * width * 2 + ((x + swapSelector) & 7) * 4;
-                        const byteNum = ((y >> 1) & 1) + ((x >> 2) & 2);
-
-                        const swizzledAddr = blockLocation + columnLocation + byteNum;
-
-                        const colorIdx = indices[swizzledAddr];
-                        const outIdx = ((y * width) + x) * 4;
-                        const p = colorIdx * 4;
-                        rgba[outIdx] = cleanPalette[p];
-                        rgba[outIdx + 1] = cleanPalette[p + 1];
-                        rgba[outIdx + 2] = cleanPalette[p + 2];
-                        rgba[outIdx + 3] = 255;
-                    }
-                }
-            } else if (bitDepth === 32) {
-                const rawData = new Uint8Array(this.view.buffer, this.offset + 80, pixelCount * 4);
-                // there's also a copy of the texture at half resolution after another 80-byte offset
-
-                // scale alpha to 255
-                rgba = new Uint8Array(pixelCount * 4);
-                for (let i = 0; i < rgba.length; i += 4) {
-                    rgba[i] = rawData[i];
-                    rgba[i + 1] = rawData[i + 1];
-                    rgba[i + 2] = rawData[i + 2];
-                    rgba[i + 3] = Math.min((rawData[i + 3] * 255) / 128, 255);
-                }
-            }
-            textures.set(textureName, new Texture(device, rgba, width, height, alphaName.length > 0));
-            this.offset = nativeEnd;
-        }
-
-        return textures;
-    }
-
-    public parseTOM(): TOMInstance[] {
-        const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.view.buffer, this.view.byteOffset, this.view.byteLength));
-        const lines = rawText.split("\n");
-        const instances: TOMInstance[] = [];
-        let currentObj;
-        let inProperties = false;
-
-        for (let line of lines) {
-            line = line.trim();
-            if (!line) {
-                continue;
-            }
-
-            if (line.startsWith("BEGIN_OBJ:")) {
-                currentObj = new TOMInstance();
-                const nameMatch = line.match(/"([^"]+)"/);
-                let name = nameMatch ? nameMatch[1] : "";
-                if (name.includes(",")) {
-                    name = name.split(",")[0]
-                }
-                currentObj.name = name;
-                currentObj.properties = [];
-                inProperties = false;
-            } else if (currentObj) {
-                if (line.startsWith("END_OBJ:")) {
-                    instances.push(currentObj);
-                    currentObj = new TOMInstance();
-                } else if (line.startsWith("BEGIN_USERPROPS:")) {
-                    inProperties = true;
-                } else if (line.startsWith("END_USERPROPS:")) {
-                    inProperties = false;
-                } else if (!inProperties) {
-                    const parts = line.split(/\s+/);
-                    const key = parts[0].replace(":", "");
-                    const values = parts.slice(1).map(Number);
-                    // y and z are flipped for pos and rot, but not scale, for some reason
-                    if (key === "POS") {
-                        currentObj.position = { x: values[0], y: values[2], z: values[1] };
-                    } else if (key === "ROTATE") {
-                        currentObj.rotation = { x: values[0], y: values[2], z: values[1] };
-                    } else if (key === "SCALE") {
-                        currentObj.scale = { x: values[0], y: values[1], z: values[2] };
-                    }
-                } else {
-                    currentObj.properties.push(line.replace("\t", ""));
-                }
-            }
-        }
-
-        return instances;
-    }
-
-    public parseOBD(): ObjectDefintion[] {
-        const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.view.buffer, this.view.byteOffset, this.view.byteLength));
-        const lines = rawText.split("\n");
-        const objDefs: ObjectDefintion[] = [];
-
-        function extractQuotedStrings(line: string): string[] {
-            const matches = line.match(/"([^"]*)"/g);
-            if (!matches) return [];
-            return matches.map(s => s.slice(1, -1));
-        }
-
-        for (let line of lines) {
-            line = line.trim();
-            if (!line) {
-                continue;
-            }
-            if (line.startsWith("DEFINE_OBJ:")) {
-                const elems = extractQuotedStrings(line.substring("DEFINE_OBJ: ".length, line.lastIndexOf("\"") + 1));
-                const name = elems[0].toLowerCase();
-                const type = elems[1].toLowerCase();
-                const val1 = elems[2];
-                // const val2 = elems.length > 3 ? elems[3] : "";
-                if (type === "alias") {
-                    for (const o of objDefs) {
-                        if (o.names.includes(val1)) {
-                            o.names.push(name);
-                            break;
-                        }
-                    }
-                } else if (type === "anim" || type === "basic") {
-                    objDefs.push({ names: [name], dffPath: val1.toUpperCase() });
-                }
-            }
-        }
-
-        return objDefs;
-    }
-
-    public parseDFF(): DFFMesh {
-        this.offset = 0;
-        const clumpHeader = this.readHeader();
-        const clumpEnd = this.offset + clumpHeader.size;
-        const clumpStructHeader = this.readHeader(); // struct is just object count, ignore
-        this.offset += clumpStructHeader.size;
-        const frameListHeader = this.readHeader(); // skip for now
-        this.offset += frameListHeader.size;
-        const atomicHeader = this.readHeader();
-        const atomicStructHeader = this.readHeader(); // frame and geometry index numbers
-        this.offset += atomicStructHeader.size;
-        const geometryHeader = this.readHeader();
-        if (geometryHeader.id === ChunkID.GEOMETRY) {
-            const geometryStructHeader = this.readHeader();
-            const geometryStructEnd = this.offset + geometryStructHeader.size;
-            const { vertexCount, vertices, uvs, colors } = this.parseGeometryStruct(this.offset, geometryStructEnd);
-            this.offset = geometryStructEnd;
-            const materialListHeader = this.readHeader();
-            const materials = this.parseMaterialList(materialListHeader.size);
-            if (materials[0].length > 0) { // temp don't build meshes without textures
-                const extensionHeader = this.readHeader();
-                const splits: MeshSplit[] = [];
-                if (extensionHeader.id === ChunkID.EXTENSION) {
-                    const binMeshHeader = this.readHeader();
-                    if (binMeshHeader.id === ChunkID.BIN_MESH_PLG) {
-                        splits.push(...this.parseBinMesh());
-                        return { vertexCount, vertices, uvs, colors, splits, materials };
-                    }
-                }
-            }
-        }
-        return { vertexCount: 0, vertices: [], uvs: [], colors: [], splits: [], materials: [] };
-    }
-
     private parseGeometryStruct(start: number, end: number): { vertexCount: number, vertices: number[], uvs: number[], colors: number[] } {
         // header (28)
         // bitwise flags (1), ? (3), face num (4), vertex num (4), frame num (4), c1 (4), c2 (4), c3 (4)
         this.offset = start;
-        const flags = this.view.getUint8(this.offset);
+        const flags = this.data.getUint8(this.offset);
         // const geoTriStrip = (flags & 1) === 1;
         // const geoPositions = ((flags >> 1) & 1) === 1;
         const geoTextured = ((flags >> 2) & 1) === 1;
@@ -510,8 +542,8 @@ export class Parser {
         // const geoLight = ((flags >> 5) & 1) === 1;
         // const geoModulate = ((flags >> 6) & 1) === 1;
         // const geoTextured2 = ((flags >> 7) & 1) === 1;
-        const faceCount = this.view.getUint32(this.offset + 4, true);
-        const vertexCount = this.view.getUint32(this.offset + 8, true);
+        const faceCount = this.data.getUint32(this.offset + 4, true);
+        const vertexCount = this.data.getUint32(this.offset + 8, true);
         this.offset += 28; // skip over internal header
         let pointer = this.offset;
 
@@ -520,9 +552,9 @@ export class Parser {
         for (let i = 0; i < vertexCount; i++) {
             if (geoPrelit) {
                 colors.push(
-                    this.view.getUint8(pointer),
-                    this.view.getUint8(pointer + 1),
-                    this.view.getUint8(pointer + 2)
+                    this.data.getUint8(pointer),
+                    this.data.getUint8(pointer + 1),
+                    this.data.getUint8(pointer + 2)
                 );
                 pointer += 4;
             } else {
@@ -535,8 +567,8 @@ export class Parser {
         for (let i = 0; i < vertexCount; i++) {
             if (geoTextured) {
                 uvs.push(
-                    this.view.getFloat32(pointer, true),
-                    this.view.getFloat32(pointer + 4, true)
+                    this.data.getFloat32(pointer, true),
+                    this.data.getFloat32(pointer + 4, true)
                 );
                 pointer += 8;
             } else {
@@ -558,9 +590,9 @@ export class Parser {
         const vertices: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
             vertices.push(
-                this.view.getFloat32(pointer, true),
-                this.view.getFloat32(pointer + 4, true),
-                this.view.getFloat32(pointer + 8, true)
+                this.data.getFloat32(pointer, true),
+                this.data.getFloat32(pointer + 4, true),
+                this.data.getFloat32(pointer + 8, true)
             );
             pointer += 12;
         }
@@ -569,9 +601,26 @@ export class Parser {
     }
 
     private readString(size: number): string {
-        const bytes = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, size);
-        const str = new TextDecoder().decode(bytes);
+        const str = new TextDecoder().decode(new Uint8Array(this.data.buffer, this.data.byteOffset + this.offset, size));
         this.offset += size;
         return str.replace(/\0/g, '').toLowerCase().replace(/[^a-zA-Z0-9_,]/g, "");
+    }
+
+    private debugRenderToCanvas(rgba: Uint8Array, width: number, height: number, name: string, dw: number, dh: number) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        const imgData = ctx.createImageData(width, height);
+        imgData.data.set(rgba);
+        ctx.putImageData(imgData, 0, 0);
+        canvas.style.position = 'fixed';
+        canvas.style.top = `${300 + dh}px`;
+        canvas.style.left = `${10 + dw}px`;
+        canvas.style.zIndex = '9999';
+        canvas.style.border = '1px solid red';
+        canvas.style.background = 'black';
+        canvas.title = name;
+        document.body.appendChild(canvas);
     }
 }
