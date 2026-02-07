@@ -200,11 +200,11 @@ export class LevelRenderer {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
-        for (const t of this.textures.values()) {
-            device.destroyTexture(t.gfxTexture);
-        }
         for (const buffers of this.objBuffers.values()) {
             buffers.forEach(b => device.destroyBuffer(b));
+        }
+        for (const t of this.textures.values()) {
+            device.destroyTexture(t.gfxTexture);
         }
     }
 
@@ -297,11 +297,11 @@ export class LevelRenderer {
                 batches.push(batch);
             }
         });
-        return { 
-            vertices: new Float32Array(vertices), 
-            indices: new Uint32Array(finalIndices), 
-            colors: new Float32Array(colors), 
-            uvs: new Float32Array(uvs) 
+        return {
+            vertices: new Float32Array(vertices),
+            indices: new Uint32Array(finalIndices),
+            colors: new Float32Array(colors),
+            uvs: new Float32Array(uvs)
         };
     }
 
@@ -311,15 +311,33 @@ export class LevelRenderer {
             if (!texture) {
                 continue;
             }
+            const sampler = renderHelper.renderCache.createSampler({
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.Nearest,
+                wrapS: GfxWrapMode.Repeat,
+                wrapT: GfxWrapMode.Repeat
+            });
+            if (texture.hasAlpha) {
+                const depthInst = renderInstManager.newRenderInst();
+                const depthState = depthInst.getMegaStateFlags();
+                depthState.cullMode = (texture.cullModeOverride > 0) ? texture.cullModeOverride : (respectCullMode ? this.cullMode : GfxCullMode.None);
+                setAttachmentStateSimple(depthState, { channelWriteMask: GfxChannelWriteMask.None });
+                depthState.depthWrite = true;
+                depthState.depthCompare = GfxCompareMode.GreaterEqual;
+                depthInst.setMegaStateFlags(depthState);
+                depthInst.setDrawCount(batch.indexCount, batch.indexOffset);
+                depthInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: texture.gfxTexture, gfxSampler: sampler, lateBinding: null }]);
+                renderInstManager.submitRenderInst(depthInst);
+            }
             const renderInst = renderInstManager.newRenderInst();
             const megaState = renderInst.getMegaStateFlags();
-            if (respectCullMode) {
-                megaState.cullMode = this.cullMode;
-            }
+            megaState.cullMode = (texture.cullModeOverride > 0) ? texture.cullModeOverride : (respectCullMode ? this.cullMode : GfxCullMode.None);
             if (texture.hasAlpha) {
+                megaState.depthWrite = false;
                 megaState.depthCompare = GfxCompareMode.GreaterEqual;
                 setAttachmentStateSimple(megaState, {
-                    channelWriteMask: GfxChannelWriteMask.RGB,
+                    channelWriteMask: GfxChannelWriteMask.AllChannels,
                     blendMode: GfxBlendMode.Add,
                     blendSrcFactor: GfxBlendFactor.SrcAlpha,
                     blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
@@ -328,13 +346,7 @@ export class LevelRenderer {
             renderInst.setMegaStateFlags(megaState);
             renderInst.setSamplerBindingsFromTextureMappings([{
                 gfxTexture: texture.gfxTexture,
-                gfxSampler: renderHelper.renderCache.createSampler({
-                    minFilter: GfxTexFilterMode.Bilinear,
-                    magFilter: GfxTexFilterMode.Bilinear,
-                    mipFilter: GfxMipFilterMode.Nearest,
-                    wrapS: GfxWrapMode.Repeat,
-                    wrapT: GfxWrapMode.Repeat
-                }),
+                gfxSampler: sampler,
                 lateBinding: null
             }]);
             renderInst.setDrawCount(batch.indexCount, batch.indexOffset);
@@ -349,11 +361,9 @@ export class LevelRenderer {
         const posY = obj.position.y * WORLD_SCALE;
         const posZ = -obj.position.z * WORLD_SCALE;
         quat.rotateY(q, q, (obj.rotation.y * Math.PI / 180));
-        // quat.rotateZ(q, q, (tom.rotation.y * Math.PI / 180));
-        // quat.rotateX(q, q, (tom.rotation.x * Math.PI / 180));
-        mat4.fromRotationTranslationScale(out, q, [posX, posY, posZ],
-            [obj.scale.x, obj.scale.y, obj.scale.z]
-        );
+        // quat.rotateX(q, q, (obj.rotation.x * Math.PI / 180));
+        // quat.rotateZ(q, q, (obj.rotation.y * Math.PI / 180));
+        mat4.fromRotationTranslationScale(out, q, [posX, posY, posZ], [obj.scale.x, obj.scale.y, obj.scale.z]);
         return out;
     }
 }

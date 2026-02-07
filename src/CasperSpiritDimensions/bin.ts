@@ -1,4 +1,4 @@
-import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { GfxCullMode, GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 
 // Credit to the "RW Analyze" tool by Steve M. for helping to parse the RenderWare files
 
@@ -78,7 +78,7 @@ export class ObjectInstance {
  */
 export class Texture {
     public gfxTexture: GfxTexture;
-    constructor(device: GfxDevice, public rgba: Uint8Array, public width: number, public height: number, public hasAlpha: boolean = false) {
+    constructor(device: GfxDevice, public rgba: Uint8Array, public width: number, public height: number, public hasAlpha: boolean = false, public cullModeOverride: number) {
         const gfxTexture = device.createTexture({
             width, height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -91,6 +91,25 @@ export class Texture {
         this.gfxTexture = gfxTexture;
     }
 }
+
+const TRANSPARENT_TEXTURES_MAP: Map<string, number[]> = new Map<string, number[]>([
+    ["skin1", [140, GfxCullMode.Back]],
+    ["kibosh", [200, GfxCullMode.Back]],
+    ["spinner", [250, GfxCullMode.None]],
+    ["gemg1", [1, GfxCullMode.Back]],
+    ["gemb1", [1, GfxCullMode.Back]],
+    ["gemr1", [1, GfxCullMode.Back]],
+    ["gemy1", [1, GfxCullMode.Back]],
+    ["fwatenv", [180, GfxCullMode.None]],
+    ["wizwtr1", [120, GfxCullMode.None]],
+    ["keyshldr", [70, GfxCullMode.Back]],
+    ["keyshldb", [70, GfxCullMode.Back]],
+    ["keyshldg", [70, GfxCullMode.Back]],
+    ["keyshldo", [70, GfxCullMode.Back]],
+    ["keyshldy", [70, GfxCullMode.Back]]
+]);
+const SCALE_OVERRIDES: Map<string, number[]> = new Map<string, number[]>([["needle2", [1, 1, 1]]]);
+const IGNORED_OBJS: string[] = ["6wall01", "6wall02", "6wall03", "6wall04", "6wall05", "robostand"];
 
 export class RWParser {
     private data: DataView;
@@ -181,6 +200,8 @@ export class RWParser {
             const pixelCount = width * height;
             let rgba: Uint8Array = new Uint8Array(pixelCount * 4);
 
+            const transparencyOverride = TRANSPARENT_TEXTURES_MAP.get(textureName);
+
             this.offset = pixelStructMetaEnd;
             const pixelDataHeader = this.readHeader();
             if (bitDepth === 8) {
@@ -210,7 +231,8 @@ export class RWParser {
                         rgba[index] = clut[pointer];
                         rgba[index + 1] = clut[pointer + 1];
                         rgba[index + 2] = clut[pointer + 2];
-                        rgba[index + 3] = Math.min(clut[pointer + 3] * 2, 255);
+                        const a = Math.min(clut[pointer + 3] * 2, 255);
+                        rgba[index + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
                     }
                 }
                 // this.debugRenderToCanvas(rgba, width, height, textureName, debugWidth, debugHeight);
@@ -228,10 +250,11 @@ export class RWParser {
                     rgba[i] = clut[i];
                     rgba[i + 1] = clut[i + 1];
                     rgba[i + 2] = clut[i + 2];
-                    rgba[i + 3] = Math.min(clut[i + 3] * 2, 255); // scale from 128 to 255
+                    const a = Math.min(clut[i + 3] * 2, 255);
+                    rgba[i + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
                 }
             }
-            textures.set(textureName, new Texture(device, rgba, width, height, alphaName.length > 0));
+            textures.set(textureName, new Texture(device, rgba, width, height, alphaName.length > 0 || TRANSPARENT_TEXTURES_MAP.has(textureName), transparencyOverride ? transparencyOverride[1] : 0));
             this.offset = nativeEnd;
         }
 
@@ -263,7 +286,9 @@ export class RWParser {
                 inProperties = false;
             } else if (!line.startsWith("//")) {
                 if (line.startsWith("END_OBJ:")) {
-                    instances.push(instance);
+                    if (IGNORED_OBJS.indexOf(instance.name) === -1) {
+                        instances.push(instance);
+                    }
                     instance = new ObjectInstance();
                 } else if (line.startsWith("BEGIN_USERPROPS:")) {
                     inProperties = true;
@@ -279,7 +304,12 @@ export class RWParser {
                     } else if (key === "ROTATE") {
                         instance.rotation = { x: values[0], y: values[2], z: values[1] };
                     } else if (key === "SCALE") {
-                        instance.scale = { x: values[0], y: values[2], z: values[1] };
+                        if (SCALE_OVERRIDES.has(instance.name)) {
+                            const s = SCALE_OVERRIDES.get(instance.name)!;
+                            instance.scale = { x: s[0], y: s[2], z: s[1] };
+                        } else {
+                            instance.scale = { x: values[0], y: values[2], z: values[1] };
+                        }
                     }
                 } else {
                     instance.properties.push(line.replace("\t", ""));
@@ -558,7 +588,7 @@ export class RWParser {
                 );
                 pointer += 4;
             } else {
-                colors.push(180, 180, 180);
+                colors.push(255, 255, 255);
             }
         }
 
@@ -579,7 +609,7 @@ export class RWParser {
         // faces (8)
         pointer += 8 * faceCount;
 
-        // skip bounding sphere and unknown nums and work backwards to get to vertices
+        // skip bounding sphere and unknown nums and work backwards
         pointer = end - (12 * vertexCount);
         if (geoNormals) {
             // skip normals if present
