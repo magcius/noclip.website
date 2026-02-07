@@ -7,7 +7,7 @@ import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatfo
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { Skybox, Level, MobyInstance, TILE_SCROLL_MAP } from "./bin";
+import { Skybox, Level, MobyInstance, TILE_SCROLL_MAP, TileAtlas } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
@@ -24,8 +24,8 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_TimeLOD; // x = time, y = LOD flag
-    vec4 u_UV[${MAX_TILES}]; // xy = offset, zw = scale
     vec4 u_TileFlags[${MAX_TILES}]; // x = scroll
+    vec4 u_TileUV[${MAX_TILES}]; // xy = u0,v0, zw = u1,v1
 };
 
 uniform sampler2D u_Texture;
@@ -73,14 +73,11 @@ void main() {
     }
 
     int idx = int(v_TileIndex + 0.5);
-    vec4 tile = u_UV[idx];
-    vec2 offset = tile.xy;
-    vec2 scale = tile.zw;
-
-    vec2 uv = v_UV;
+    vec4 rect = u_TileUV[idx];
+    vec2 uv = mix(rect.xy, rect.zw, v_UV);
     if (u_TileFlags[idx].x > 0.5) {
-        float y = fract((v_UV.y - offset.y) / scale.y - u_TimeLOD.x * 0.45);
-        uv.y = y * scale.y + offset.y;
+        float y = fract(v_UV.y - u_TimeLOD.x * 0.45);
+        uv = mix(rect.xy, rect.zw, vec2(v_UV.x, y));
     }
 
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
@@ -152,23 +149,23 @@ export class LevelRenderer {
     private indexCountTransparent: number;
     private indexCountLOD: number;
     private gameNumber: number;
-    private tileParams: Float32Array;
     private scrollFlags: Float32Array;
+    private atlas: TileAtlas;
 
     constructor(cache: GfxRenderCache, level: Level, private mobys?: MobyInstance[]) {
         const device = cache.device;
-        const atlas = level.atlas;
+        this.atlas = level.atlas;
         
         this.texture = device.createTexture({
-            width: atlas.width,
-            height: atlas.height,
+            width: this.atlas.width,
+            height: this.atlas.height,
             numLevels: 1,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
             usage: GfxTextureUsage.Sampled,
             dimension: GfxTextureDimension.n2D,
             depthOrArrayLayers: 1
         });
-        device.uploadTextureData(this.texture, 0, [atlas.data]);
+        device.uploadTextureData(this.texture, 0, [this.atlas.data]);
 
         this.gameNumber = level.game;
         const expandedVertex: number[] = [];
@@ -179,17 +176,8 @@ export class LevelRenderer {
         const expandedIndexTransparent: number[] = [];
         const expandedIndexLOD: number[] = [];
 
-        const tileCount = atlas.uvs.length;
-        this.tileParams = new Float32Array(tileCount * 4);
+        const tileCount = this.atlas.uvs.length;
         this.scrollFlags = new Float32Array(tileCount);
-        for (let i = 0; i < tileCount; i++) {
-            const t = atlas.uvs[i];
-            const base = i * 4;
-            this.tileParams[base + 0] = t.u0;
-            this.tileParams[base + 1] = t.v0;
-            this.tileParams[base + 2] = t.uScale;
-            this.tileParams[base + 3] = t.vScale;
-        }
         if (level.id in TILE_SCROLL_MAP[level.game]) {
             for (const ti of TILE_SCROLL_MAP[level.game][level.id]) {
                 if (ti != null && ti >= 0 && ti < tileCount) {
@@ -286,9 +274,8 @@ export class LevelRenderer {
 
         // ub_SceneParams
         const sceneFloats = 16 + 4;
-        const tileFloats = MAX_TILES * 4;
         const scrollFloats = MAX_TILES * 4;
-        const totalFloats = sceneFloats + tileFloats + scrollFloats;
+        const totalFloats = sceneFloats + scrollFloats + scrollFloats;
         let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, totalFloats);
         const sceneBuffer = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
         mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, spaceCorrection);
@@ -299,21 +286,31 @@ export class LevelRenderer {
         sceneBuffer[offset++] = lod || !this.showTextures ? 1.0 : 0.0;
         sceneBuffer[offset++] = 0.0;
         sceneBuffer[offset++] = 0.0;
-        // u_Tile
-        const tileCount = this.tileParams.length / 4;
-        for (let i = 0; i < MAX_TILES; i++) {
-            const base = i * 4;
-            sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 0] : 0.0; // x = u0
-            sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 1] : 0.0; // y = v0
-            sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 2] : 0.0; // z = uScale
-            sceneBuffer[offset++] = i < tileCount ? this.tileParams[base + 3] : 0.0; // w = vScale
-        }
         // u_TileFlags
         for (let i = 0; i < MAX_TILES; i++) {
-            sceneBuffer[offset++] = i < tileCount ? this.scrollFlags[i] : 0.0; // x = scroll
+            sceneBuffer[offset++] = i < this.atlas.uvs.length ? this.scrollFlags[i] : 0.0; // x = scroll
             sceneBuffer[offset++] = 0.0;
             sceneBuffer[offset++] = 0.0;
             sceneBuffer[offset++] = 0.0;
+        }
+        // u_TileUV
+        for (let i = 0; i < MAX_TILES; i++) {
+            if (i < this.atlas.uvs.length) {
+                const { atlasX, atlasY } = this.atlas.uvs[i];
+                const u0 = atlasX / this.atlas.width;
+                const v0 = atlasY / this.atlas.height;
+                const u1 = (atlasX + 32) / this.atlas.width;
+                const v1 = (atlasY + 32) / this.atlas.height;
+                sceneBuffer[offset++] = u0;
+                sceneBuffer[offset++] = v0;
+                sceneBuffer[offset++] = u1;
+                sceneBuffer[offset++] = v1;
+            } else {
+                sceneBuffer[offset++] = 0;
+                sceneBuffer[offset++] = 0;
+                sceneBuffer[offset++] = 0;
+                sceneBuffer[offset++] = 0;
+            }
         }
 
         {

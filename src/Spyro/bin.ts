@@ -18,11 +18,11 @@ interface SkyFace {
     colors: number[];
 }
 
-interface TileAtlas {
+export interface TileAtlas {
     data: Uint8Array;
     width: number;
     height: number;
-    uvs: {u0: number, v0: number, u1: number, v1: number, uScale: number, vScale: number}[];
+    uvs: { atlasX: number, atlasY: number }[];
     tiles?: Tile[];
 }
 
@@ -375,18 +375,17 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
     const c = mdlVertStart + poly.v3;
     const d = mdlVertStart + poly.v4;
     const tileIndex = poly.t & 127;
-    if (atlas && tileIndex >= 0 && tileIndex < atlas.uvs.length) {
-        const rect = atlas.uvs[tileIndex];
-        const uv1 = [rect.u0, rect.v1];
-        const uv2 = [rect.u1, rect.v1];
-        const uv3 = [rect.u1, rect.v0];
-        const uv4 = [rect.u0, rect.v0];
+    if (tileIndex >= 0 && tileIndex < atlas.uvs.length) {
+        const uv1 = [0, 1];
+        const uv2 = [1, 1];
+        const uv3 = [1, 0];
+        const uv4 = [0, 0];
         const ca = mdlColorStart + poly.c1;
         const cb = mdlColorStart + poly.c2;
         const cc = mdlColorStart + poly.c3;
         const cd = mdlColorStart + poly.c4;
         if (poly.v1 === poly.v2) {
-            const base = [[rect.u0, rect.v1], [rect.u1, rect.v1], [rect.u1, rect.v0], [rect.u0, rect.v0]];
+            const base = [[0,1], [1,1], [1,0], [0,0]];
             const permutations = [[0, 1, 2, 3], [3, 0, 1, 2], [2, 3, 0, 1], [1, 2, 3, 0]];
             const permutation = permutations[poly.r & 3];
             const tex1 = base[permutation[0]];
@@ -436,11 +435,10 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
     const colorC = mdlColorStart + poly.c3;
     const colorD = mdlColorStart + poly.c4;
     const tileIndex = poly.tt & 127;
-    const rect = atlas.uvs[tileIndex];
-    let A = [rect.u0, rect.v1];
-    let B = [rect.u1, rect.v1];
-    let C = [rect.u1, rect.v0];
-    let D = [rect.u0, rect.v0];
+    let A = [0, 1];
+    let B = [1, 1];
+    let C = [1, 0];
+    let D = [0, 0];
 
     function rotateUVCorners(rot: number, A: number[], B: number[], C: number[], D: number[]) {
         switch (rot & 3) {
@@ -721,7 +719,7 @@ export function buildTileAtlas(vram: VRAM, textureList: DataView, gameNumber: nu
     const width = tilesPerRow * slotSize;
     const height = Math.ceil(tileCount / tilesPerRow) * slotSize;
     const data = new Uint8Array(width * height * 4);
-    const uvs: { u0: number; v0: number; u1: number; v1: number, uScale: number, vScale: number }[] = [];
+    const uvs: { atlasX: number, atlasY: number }[] = [];
     for (let i = 0; i < tileCount; i++) {
         const tile = tiles[i];
         let rgba = decodeTileToRGBA(vram, tile, tile.size, tile.size);
@@ -740,14 +738,7 @@ export function buildTileAtlas(vram: VRAM, textureList: DataView, gameNumber: nu
                 data[dst + 3] = rgba[src + 3];
             }
         }
-        uvs.push({
-            u0: atlasX / width,
-            v0: atlasY / height,
-            u1: (atlasX + slotSize) / width,
-            v1: (atlasY + slotSize) / height,
-            uScale: slotSize / width,
-            vScale: slotSize / height
-        });
+        uvs.push({ atlasX, atlasY });
     }
     if (gameNumber == 1) {
         return { data, width, height, uvs };
