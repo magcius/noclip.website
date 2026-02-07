@@ -89,6 +89,7 @@ import * as Scenes_WorldOfWarcraft from './WorldOfWarcraft/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_CounterStrike from './GoldSrc/Scenes_CounterStrike.js';
+import * as Scenes_TeamFortressClassic from './GoldSrc/Scenes_TeamFortressClassic.js';
 import * as Scenes_Quake from './Quake/Scenes_Quake.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
 import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
@@ -236,6 +237,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_JetSetRadio.sceneGroup,
     Scenes_HalfLife.sceneGroup,
     Scenes_CounterStrike.sceneGroup,
+    Scenes_TeamFortressClassic.sceneGroup,
     Scenes_Quake.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
