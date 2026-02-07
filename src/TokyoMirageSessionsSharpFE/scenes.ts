@@ -148,10 +148,10 @@ class TMSFESceneDesc implements SceneDesc
         {
             const layout = parseLayout(maplayout_data);
             scene.layout = layout;
-            // scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
+            scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
             if (this.map_gimmick_function != undefined)
             {
-                // scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
+                scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
         }
 
@@ -175,7 +175,6 @@ const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
     "Daitama Observatory",
-    new TMSFESceneDesc("d018_01", "test cubemap", ["obj01"], [""]),
     new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], create_d002_01_gimmicks),
     new TMSFESceneDesc("d002_02", "Illusory Daitama Blue Observatory", ["d002_02"], [""]),
     new TMSFESceneDesc("d002_03", "Illusory Daitama Red Observatory", ["d002_03"], [""]),
