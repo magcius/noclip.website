@@ -36,6 +36,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const blockwall_entries: MapLayoutEntry[] = [];
     const warp_entries: MapLayoutEntry[] = [];
     const gate_entries: MapLayoutEntry[] = [];
+    const lightspot_entries: MapLayoutEntry[] = [];
     const elevator_entries: MapLayoutEntry[] = [];
     const transparent_floor_entries: MapLayoutEntry[] = [];
 
@@ -113,6 +114,10 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
                 gate_entries.push(entry);
                 break;
 
+            case GROUP_INDEX_LIGHTSPOT:
+                lightspot_entries.push(entry);
+                break;
+
             case GROUP_INDEX_ELEVATOR:
                 elevator_entries.push(entry);
                 break;
@@ -151,6 +156,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         heal_point_entries,
         warp_entries,
         gate_entries,
+        lightspot_entries,
         elevator_entries,
         transparent_floor_entries,
         entries,
@@ -166,13 +172,19 @@ const GROUP_INDEX_2 = 2;
 const GROUP_INDEX_OBJECT = 3;
 const GROUP_INDEX_ENEMY = 4;
 const GROUP_INDEX_NPC = 5;
+const GROUP_INDEX_6 = 6;
+const GROUP_INDEX_PORTAL = 7;
 const GROUP_INDEX_TREASURE_BOX_01 = 8;
 const GROUP_INDEX_BLOCKSIDE = 9;
 const GROUP_INDEX_BLOCKWALL = 10;
+const GROUP_INDEX_DROP_DOWN_LEDGE = 13;
+const GROUP_INDEX_LADDER = 14;
 const GROUP_INDEX_HEAL_POINT = 16;
 const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
+const GROUP_INDEX_LIGHTSPOT = 20;
 const GROUP_INDEX_ELEVATOR = 21;
+const GROUP_INDEX_TRAP = 25;
 const GROUP_INDEX_TRANSPARENT_FLOOR = 31;
 const GROUP_INDEX_36 = 36;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
@@ -261,6 +273,7 @@ export interface MapLayout
     heal_point_entries: MapLayoutEntry[];
     warp_entries: MapLayoutEntry[];
     gate_entries: MapLayoutEntry[];
+    lightspot_entries: MapLayoutEntry[];
     elevator_entries: MapLayoutEntry[];
     transparent_floor_entries: MapLayoutEntry[];
 }

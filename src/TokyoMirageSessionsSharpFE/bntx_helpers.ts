@@ -75,14 +75,15 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
  */
 function remap_r8_g8_b8_a8_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint8Array | Int8Array
 {
+    const pixel_count = rgba_pixels.length / 4;
     let offset = 0;
-    for (let i = 0; i < rgba_pixels.byteLength / 4; i++)
+    for (let i = 0; i < pixel_count; i++)
     {
-        const red = rgba_pixels[i * 4];
-        const green = rgba_pixels[i * 4 + 1];
-        const blue = rgba_pixels[i * 4 + 2];
-        const alpha = rgba_pixels[i * 4 + 3];
-        const channel_array = [0, 0xFF, red, green, blue, alpha];
+        const r = rgba_pixels[i * 4 + 0];
+        const g = rgba_pixels[i * 4 + 1];
+        const b = rgba_pixels[i * 4 + 2];
+        const a = rgba_pixels[i * 4 + 3];
+        const channel_array = [0, 0xFF, r, g, b, a];
         rgba_pixels[offset++] = channel_array[channel_source[0]];
         rgba_pixels[offset++] = channel_array[channel_source[1]];
         rgba_pixels[offset++] = channel_array[channel_source[2]];
@@ -125,18 +126,24 @@ async function deswizzle_and_upload_normal(texture: BNTX.BRTI, mip_count: number
         const height = Math.max(texture.height >>> mipLevel, 1);
         const depth = 1;
         const blockHeightLog2 = texture.blockHeightLog2;
-        const deswizzled = await deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
-        const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
-        let remapped_rgba_pixels;
-        if (type_format === TypeFormat.Float)
-        {
-            remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
-        }
-        else
-        {
-            remapped_rgba_pixels = remap_r8_g8_b8_a8_channels(rgbaTexture.pixels, texture.channelSource);
-        }
-        device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
+        deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 })
+        .then
+        (
+            (deswizzled) =>
+            {
+                const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
+                let remapped_rgba_pixels;
+                if (type_format === TypeFormat.Float)
+                {
+                    remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
+                }
+                else
+                {
+                    remapped_rgba_pixels = remap_r8_g8_b8_a8_channels(rgbaTexture.pixels, texture.channelSource);
+                }
+                device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
+            }
+        );
     }
 }
 

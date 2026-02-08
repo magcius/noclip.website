@@ -11,6 +11,7 @@ import { MapLayout, parseLayout } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
+import { parseLights } from "./lights.js";
 
 import { create_d002_01_gimmicks } from "./maps/d002_01.js";
 import { create_d003_01_gimmicks } from "./maps/d003_01.js";
@@ -142,7 +143,7 @@ class TMSFESceneDesc implements SceneDesc
         
         let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_texture_groups);
 
-        // add gimmicks (only if this level has a maplayout.layout file)
+        // add gimmicks
         const maplayout_data = get_file_by_name(apak, "maplayout.layout");
         if (maplayout_data != undefined)
         {
@@ -153,6 +154,15 @@ class TMSFESceneDesc implements SceneDesc
             {
                 scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
+        }
+        
+        const light_data = get_file_by_name(apak, `${this.id}.lig`);
+        if (light_data !== undefined)
+        {
+            const lights = parseLights(light_data);
+            console.log(this.id);
+            console.log(lights);
+            scene.lights = lights;
         }
 
         return scene;

@@ -1,7 +1,8 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { colorNewFromRGBA } from '../Color.js';
+import { drawWorldSpaceAABB, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { FMAA } from './bfres/fmaa.js';
 import { FSKA } from "./bfres/fska.js";
 import { AABB } from '../Geometry.js';
@@ -18,12 +19,14 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { computeModelMatrixSRT } from '../MathHelpers.js';
+import { Light } from './lights.js';
 
 export class TMSFEScene implements SceneGfx
 {
     public layout: MapLayout | undefined; // this level's MapLayout, containing coordinates and areas to spawn objects or trigger flags
     public common_gimmicks: gimmick[] = [];
     public map_gimmicks: gimmick[] = [];
+    public lights: Light[] = [];
 
     private renderHelper: GfxRenderHelper;
     private renderInstListOpaque = new GfxRenderInstList();
@@ -119,6 +122,7 @@ export class TMSFEScene implements SceneGfx
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
         // this.debug_draw_layout_entries(viewerInput);
+        this.debug_draw_lights(viewerInput);
 
         // create draw calls for all the models
         for (let i = 0; i < this.fmdl_renderers.length; i++)
@@ -247,6 +251,18 @@ export class TMSFEScene implements SceneGfx
                 );
 
                 drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, box, transform_matrix);
+            }
+        }
+    }
+
+    debug_draw_lights(viewerInput: ViewerRenderInput)
+    {
+        if (this.lights != undefined)
+        {
+            for (let i = 0; i < this.lights.length; i++)
+            {
+                const light = this.lights[i];
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix , light.position, light.color, 10);
             }
         }
     }
