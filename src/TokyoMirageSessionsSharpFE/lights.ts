@@ -23,14 +23,14 @@ export function parseLights(buffer: ArrayBufferSlice): Light[]
     const lnam_offset = view.getUint32(0x28, little_endian);
     const lnna_offset = view.getUint32(0x2C, little_endian);
 
-    let ldat_count = view.getUint32(ldat_offset + 0x8, false);
-    if (ldat_count === 0)
+    // b016_01.lig has the counts of each section written in little endian, despite every other file using big endian
+    let is_b006_01 = false;
+    if (view.getUint32(ldat_offset + 0x8, false) == 0x12000000)
     {
-        // b016_01.lig has this as a little endian uint32
-        ldat_count = view.getUint32(ldat_offset + 0x8, true);
+        is_b006_01 = true;
     }
 
-    const ltyp_count = view.getUint32(ltyp_offset + 0x8, false);
+    const ltyp_count = view.getUint32(ltyp_offset + 0x8, is_b006_01);
     let ltyp_array: LightType[] = [];
     let ltyp_entry_offset = ltyp_offset + 0x10;
     for (let i = 0; i < ltyp_count; i++)
@@ -41,7 +41,7 @@ export function parseLights(buffer: ArrayBufferSlice): Light[]
         ltyp_entry_offset += LTYP_ENTRY_SIZE;
     }
 
-    const lnam_count = view.getUint32(lnam_offset + 0x8, false);
+    const lnam_count = view.getUint32(lnam_offset + 0x8, is_b006_01);
     let lnam_entry_offset = lnam_offset + 0x10;
     let lnam_string_offsets: number[] = [];
     for (let i = 0; i < lnam_count; i++)
@@ -64,7 +64,7 @@ export function parseLights(buffer: ArrayBufferSlice): Light[]
         lnam_array.push(string);
     }
 
-    const lnna_count = view.getUint32(lnna_offset + 0x8, false);
+    const lnna_count = view.getUint32(lnna_offset + 0x8, is_b006_01);
     let lnna_entry_offset = lnna_offset + 0x10;
     let lnna_string_offsets: number[] = [];
     for (let i = 0; i < lnna_count; i++)
@@ -87,6 +87,7 @@ export function parseLights(buffer: ArrayBufferSlice): Light[]
     }
 
     let lights: Light[] = [];
+    const ldat_count = view.getUint32(ldat_offset + 0x8, is_b006_01);
     let ldat_entry_offset = ldat_offset + 0x10;
     for (let i = 0; i < ldat_count; i++)
     {
