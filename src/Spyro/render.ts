@@ -79,9 +79,7 @@ void main() {
 
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
     bool isTransparent = v_Color.a < 0.99;
-    bool isBlackPixel = texColor.r < 0.001 && texColor.g < 0.001 && texColor.b < 0.001;
-    bool kill = isTransparent && isBlackPixel && u_TimeLOD.y < 1.0;
-    if (kill) {
+    if (isTransparent && (texColor.r < 0.001 && texColor.g < 0.001 && texColor.b < 0.001)) {
         discard;
     }
 
@@ -177,75 +175,18 @@ export class LevelRenderer {
             }
         }
 
-        const expandedVertex: number[] = [];
-        const expandedColor: number[] = [];
-        const expandedUV: number[] = [];
-        const expandedTileIndex: number[] = [];
-        const groupsRegularOpaque = new Map<number, number[]>();
-        const groupsRegularTransparent = new Map<number, number[]>();
-        const groupsLOD = new Map<number, number[]>();
-        let i = 0;
-        for (const face of level.faces) {
-            for (let k = 0; k < face.indices.length; k++) {
-                const v = level.vertices[face.indices[k]];
-                expandedVertex.push(v[0], v[1], v[2]);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.vertices!.buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.colors!.buffer);
+        this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.uvs!.buffer);
+        this.tileBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.tileIndices!.buffer);
 
-                const c = face.colors ? level.colors[face.colors[k]] : [255, 255, 255];
-                let alpha = 1.0;
-                if (face.isWater) {
-                    alpha = 0.4;
-                } else if (face.isTransparent) {
-                    alpha = 0.5;
-                }
-                expandedColor.push(c[0] / 255, c[1] / 255, c[2] / 255, alpha);
+        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesGround!.buffer);
+        this.indexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesTransparent!.buffer);
+        this.indexBufferLOD = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesLOD!.buffer);
 
-                const uv = level.uvs[face.uvs[k]];
-                expandedUV.push(uv[0], uv[1]);
-
-                expandedTileIndex.push(face.tileIndex);
-
-                let targetMap: Map<number, number[]>;
-                if (face.isLOD) {
-                    targetMap = groupsLOD;
-                } else if (face.isTransparent || face.isWater) {
-                    targetMap = groupsRegularTransparent;
-                } else {
-                    targetMap = groupsRegularOpaque;
-                }
-                if (!targetMap.has(face.tileIndex)) {
-                    targetMap.set(face.tileIndex, []);
-                }
-                targetMap.get(face.tileIndex)!.push(i);
-
-                i++;
-            }
-        }
-
-        const buildBatches = (map: Map<number, number[]>) => {
-            const batches = [];
-            const indices: number[] = [];
-            for (const [tileIndex, group] of map.entries()) {
-                batches.push({ tileIndex, indexOffset: indices.length, indexCount: group.length });
-                indices.push(...group);
-            }
-            return { batches, indices: new Uint32Array(indices) };
-        };
-
-        const opaque = buildBatches(groupsRegularOpaque);
-        const transparent = buildBatches(groupsRegularTransparent);
-        const lod = buildBatches(groupsLOD);
-
-        this.batchesGround = opaque.batches;
-        this.batchesTransparent = transparent.batches;
-        this.batchesLOD = lod.batches;
-
-        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, opaque.indices.buffer);
-        this.indexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, transparent.indices.buffer);
-        this.indexBufferLOD = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, lod.indices.buffer);
-        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedVertex).buffer);
-        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedColor).buffer);
-        this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
-        this.tileBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedTileIndex).buffer);
+        this.batchesGround = level.batchesGround;
+        this.batchesTransparent = level.batchesTransparent;
+        this.batchesLOD = level.batchesLOD;
 
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
@@ -303,14 +244,7 @@ export class LevelRenderer {
                 const inst = renderInstManager.newRenderInst();
                 const megaState = inst.getMegaStateFlags();
                 megaState.cullMode = this.cullMode;
-                if (!transparency) {
-                    setAttachmentStateSimple(megaState, {
-                        channelWriteMask: GfxChannelWriteMask.RGB,
-                        blendMode: GfxBlendMode.Add,
-                        blendSrcFactor: GfxBlendFactor.One,
-                        blendDstFactor: GfxBlendFactor.Zero
-                    });
-                } else {
+                if (transparency) {
                     setAttachmentStateSimple(megaState, {
                         channelWriteMask: GfxChannelWriteMask.RGB,
                         blendMode: GfxBlendMode.Add,

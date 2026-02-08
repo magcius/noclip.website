@@ -1,22 +1,23 @@
-// Credit to "Spyro World Viewer" by Kly_Men_COmpany for a majority of the data structures, reverse-engineering and parsing logic
-
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxTexture } from "../gfx/platform/GfxPlatformImpl";
+import { assert } from "../util";
 
-interface GroundFace {
-    indices: number[];
-    uvs: number[];
-    colors: number[];
-    tileIndex: number;
-    isLOD: boolean;
-    isWater?: boolean;
-    isTransparent?: boolean;
-    isScrolling?: boolean;
-}
+// Credit to "Spyro World Viewer" by Kly_Men_COmpany for a majority of the data structures, reverse-engineering and parsing logic
 
 interface SkyFace {
     indices: number[];
     colors: number[];
+}
+
+interface GroundStream {
+    vertices: number[];
+    colors: number[];
+    uvs: number[];
+    tileIndices: number[];
+    groupsGround: number[][];
+    groupsTransparent: number[][];
+    groupsLOD: number[][];
+    runningIndex: number;
 }
 
 export interface TextureStore {
@@ -26,13 +27,19 @@ export interface TextureStore {
 }
 
 export interface Level {
-    vertices: number[][];
-    colors: number[][];
-    faces: GroundFace[];
-    uvs: number[][];
     textures: TextureStore;
     game: number;
     id: number;
+    vertices?: Float32Array;
+    colors?: Float32Array;
+    uvs?: Float32Array;
+    tileIndices?: Float32Array;
+    indicesGround?: Uint32Array;
+    indicesTransparent?: Uint32Array;
+    indicesLOD?: Uint32Array;
+    batchesGround: { tileIndex: number, indexOffset: number, indexCount: number }[];
+    batchesTransparent: { tileIndex: number, indexOffset: number, indexCount: number }[];
+    batchesLOD: { tileIndex: number, indexOffset: number, indexCount: number }[];
 };
 
 export interface LevelData {
@@ -47,7 +54,7 @@ export interface LevelData {
 export interface Skybox {
     backgroundColor: number[];
     vertices: number[][];
-    colors: number[][]; 
+    colors: number[][];
     faces: SkyFace[];
 }
 
@@ -368,154 +375,20 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
     }
 }
 
-function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], tileCount: number) {
-    const a = mdlVertStart + poly.v1;
-    const b = mdlVertStart + poly.v2;
-    const c = mdlVertStart + poly.v3;
-    const d = mdlVertStart + poly.v4;
-    const tileIndex = poly.t & 127;
-    if (tileIndex >= 0 && tileIndex < tileCount) {
-        const uv1 = [0, 1];
-        const uv2 = [1, 1];
-        const uv3 = [1, 0];
-        const uv4 = [0, 0];
-        const ca = mdlColorStart + poly.c1;
-        const cb = mdlColorStart + poly.c2;
-        const cc = mdlColorStart + poly.c3;
-        const cd = mdlColorStart + poly.c4;
-        if (poly.v1 === poly.v2) {
-            const base = [[0,1], [1,1], [1,0], [0,0]];
-            const permutations = [[0, 1, 2, 3], [3, 0, 1, 2], [2, 3, 0, 1], [1, 2, 3, 0]];
-            const permutation = permutations[poly.r & 3];
-            const tex1 = base[permutation[0]];
-            const tex2 = base[permutation[1]];
-            const tex3 = base[permutation[2]];
-            const tex4 = base[permutation[3]];
-            const uv0 = uvs.push(tex4) - 1;
-            const uv1 = uvs.push(tex3) - 1;
-            const uv2 = uvs.push(tex1) - 1;
-            faces.push({
-                indices: [d, c, b],
-                uvs: [uv0, uv1, uv2],
-                colors: [cd, cc, ca],
-                isLOD: false,
-                tileIndex
-            });
-        } else {
-            const uvA = uvs.push(uv1) - 1;
-            const uvB = uvs.push(uv2) - 1;
-            const uvC = uvs.push(uv3) - 1;
-            const uvD = uvs.push(uv4) - 1;
-            faces.push({
-                indices: [a, b, c],
-                uvs: [uvA, uvB, uvC],
-                colors:[ca, cb, cc],
-                isLOD: false,
-                tileIndex
-            });
-            faces.push({
-                indices: [a, c, d],
-                uvs: [uvA, uvC, uvD],
-                colors:[ca, cc, cd],
-                isLOD: false,
-                tileIndex
-            });
-        }
-    }
-}
-
-function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], textures: TextureStore, headerWaterFlag: number) {
-    const a = mdlVertStart + poly.v1;
-    const b = mdlVertStart + poly.v2;
-    const c = mdlVertStart + poly.v3;
-    const d = mdlVertStart + poly.v4;
-    const colorA = mdlColorStart + poly.c1;
-    const colorB = mdlColorStart + poly.c2;
-    const colorC = mdlColorStart + poly.c3;
-    const colorD = mdlColorStart + poly.c4;
-    const tileIndex = poly.tt & 127;
-    let A = [0, 1];
-    let B = [1, 1];
-    let C = [1, 0];
-    let D = [0, 0];
-
-    function rotateUVCorners(rot: number, A: number[], B: number[], C: number[], D: number[]) {
-        switch (rot & 3) {
-            case 1:
-                return [B, C, D, A];
-            case 2:
-                return [C, D, A, B];
-            case 3:
-                return [D, A, B, C];
-            case 0:
-            default:
-                return [A, B, C, D];
-        }
-    }
-
-    const tile = textures.tiles[tileIndex];
-    const isTransparent = tile.transparent > 0;
-    const isTri = poly.v1 === poly.v2;
-    let polyRotation = 0;
-    if (isTri) {
-        const rr = (poly.ii >> 4) & 3;
-        polyRotation = (tile.rotation - rr) & 3;
-        [A, B, C, D] = rotateUVCorners(polyRotation, A, B, C, D);
-    }
-
-    const uvIndexA = uvs.length;
-    uvs.push(A);
-    const uvIndexB = uvs.length;
-    uvs.push(B);
-    const uvIndexC = uvs.length;
-    uvs.push(C);
-    const uvIndexD = uvs.length;
-    uvs.push(D);
-    const isWater = headerWaterFlag == 0 && poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0;
-    const inverse = !!(poly.ii & 4);
-
-    if (isTri) {
-        if (!inverse) {
-            faces.push({
-                indices: [b, c, d],
-                uvs: [uvIndexA, uvIndexC, uvIndexD],
-                colors: [colorB, colorC, colorD],
-                isWater,
-                isTransparent,
-                isLOD: false,
-                tileIndex
-            });
-        } else {
-            faces.push({
-                indices: [d, c, b],
-                uvs: [uvIndexD, uvIndexC, uvIndexA],
-                colors: [colorD, colorC, colorB],
-                isWater,
-                isTransparent,
-                isLOD: false,
-                tileIndex
-            });
-        }
-    } else {
-        faces.push({
-            indices: [a, b, c],
-            uvs: [uvIndexA, uvIndexB, uvIndexC],
-            colors: [colorA, colorB, colorC],
-            isWater,
-            isTransparent,
-            isLOD: false,
-            tileIndex
+function buildBatches(groups: number[][]) {
+    const batches: { tileIndex: number; indexOffset: number; indexCount: number }[] = [];
+    const indices: number[] = [];
+    for (let tileIndex = 0; tileIndex < groups.length; tileIndex++) {
+        const group = groups[tileIndex];
+        if (group.length === 0) continue;
+        batches.push({
+            tileIndex,
+            indexOffset: indices.length,
+            indexCount: group.length,
         });
-        faces.push({
-            indices: [a, c, d],
-            uvs: [uvIndexA, uvIndexC, uvIndexD],
-            colors: [colorA, colorC, colorD],
-            isWater,
-            isTransparent,
-            isLOD: false,
-            tileIndex
-        });
+        indices.push(...group);
     }
+    return { batches, indices: new Uint32Array(indices) };
 }
 
 export function buildSkybox(data: DataView, gameNumber: number): Skybox {
@@ -546,168 +419,273 @@ export function buildSkybox(data: DataView, gameNumber: number): Skybox {
 }
 
 export function buildLevel(data: DataView, textures: TextureStore, gameNumber: number, levelNumber: number): Level {
-    const vertices: number[][] = [];
-    const colors: number[][] = [];
-    const faces: GroundFace[] = [];
-    const uvs: number[][] = [];
+    const vertexTable: number[] = [];
+    const colorTable: number[] = [];
+    const ctx: GroundStream = {
+        vertices: [], colors: [], uvs: [], tileIndices: [],
+        groupsGround: [], groupsTransparent: [], groupsLOD: [], runningIndex: 0,
+    };
+    const tileCount = textures.tiles.length;
+    for (let i = 0; i < tileCount; i++) {
+        ctx.groupsGround[i] = [];
+        ctx.groupsTransparent[i] = [];
+        ctx.groupsLOD[i] = [];
+    }
+    const tileIsBlack: boolean[] = [];
+    for (let i = 0; i < textures.tiles.length; i++) {
+        let b = true;
+        const rgba = textures.colors[i];
+        for (let i = 0; i < rgba.length; i += 4) {
+            if (rgba[i] !== 0 || rgba[i + 1] !== 0 || rgba[i + 2] !== 0) {
+                b = false;
+                break;
+            }
+        }
+        tileIsBlack[i] = b;
+    }
+
     let partCount = data.getUint32(0, true);
     let offset = 4;
     const partOffsets: number[] = [];
 
     if (gameNumber > 1) {
         offset = 0;
-        let partTablePos = data.getUint32(offset, true);
+        let table = data.getUint32(offset, true);
         offset += 4;
-        partCount = data.getUint32(partTablePos, true);
-        partTablePos += 4;
+        partCount = data.getUint32(table, true);
+        table += 4;
         for (let i = 0; i < partCount; i++) {
-            partOffsets.push(data.getUint32(partTablePos, true));
-            partTablePos += 4;
+            partOffsets.push(data.getUint32(table, true));
+            table += 4;
+        }
+    }
+    
+    const UV = { TL: [0, 1], TR: [1, 1], BR: [1, 0], BL: [0, 0], ZERO: [0, 0] };
+
+    function decodeLOD(poly: LODPoly | LODPoly2) {
+        if (gameNumber === 1) {
+            return {
+                v1: (poly.v1 & 63),
+                v2: (poly.v1 >> 6) | ((poly.v2 & 15) << 2),
+                v3: (poly.v2 >> 4) | ((poly.v3 & 3) << 4),
+                v4: (poly.v3 >> 2),
+                c1: (poly.c1 & 63),
+                c2: (poly.c1 >> 6) | ((poly.c2 & 15) << 2),
+                c3: (poly.c2 >> 4) | ((poly.c3 & 3) << 4),
+                c4: (poly.c3 >> 2),
+            };
+        } else {
+            assert(poly instanceof LODPoly2);
+            return {
+                v1: (poly.v1 >> 3) | ((poly.v2 & 3) << 5),
+                v2: (poly.v2 >> 2) | ((poly.v3 & 1) << 6),
+                v3: (poly.v3 >> 1),
+                v4: (poly.v4 & 127),
+                c1: (poly.c1 >> 4) | ((poly.c2 & 7) << 4),
+                c2: (poly.c2 >> 3) | ((poly.c3 & 3) << 5),
+                c3: (poly.c3 >> 2) | ((poly.c4 & 1) << 6),
+                c4: (poly.c4 >> 1),
+            };
+        }
+    }
+
+    function emitTri(a: number, b: number, c: number, ca: number, cb: number, cc: number, uvA: number[], uvB: number[], uvC: number[], tileIndex: number, opts: { isLOD: boolean; isTransparent?: boolean; isWater?: boolean }) {
+        if (tileIsBlack[tileIndex]) return;
+        const { vertices, colors, uvs: uvStream, tileIndices } = ctx;
+        const group = opts.isLOD ? ctx.groupsLOD : (opts.isTransparent || opts.isWater ? ctx.groupsTransparent : ctx.groupsGround);
+        const alpha = opts.isWater ? 0.4 : (opts.isTransparent ? 0.5 : 1.0);
+        const verts = [a, b, c];
+        const cols = [ca, cb, cc];
+        const uvs = [uvA, uvB, uvC];
+        for (let i = 0; i < 3; i++) {
+            const vi = verts[i] * 3;
+            vertices.push(vertexTable[vi], vertexTable[vi + 1], vertexTable[vi + 2]);
+            const ci = cols[i] * 3;
+            const r = colorTable[ci];
+            const g = colorTable[ci + 1];
+            const b = colorTable[ci + 2];
+            colors.push(r / 255, g / 255, b / 255, alpha);
+            const uv = uvs[i];
+            uvStream.push(uv[0], uv[1]);
+            tileIndices.push(tileIndex);
+            group[tileIndex].push(ctx.runningIndex++);
+        }
+    }
+
+    function emitPoly(poly: Polygon, mdlVertStart: number, mdlColorStart: number, headerWaterFlag: number) {
+        const tileIndex = (gameNumber === 1) ? (poly.t & 127) : (poly.tt & 127);
+        if (tileIndex < 0 || tileIndex >= tileCount) return;
+        const tile = textures.tiles[tileIndex];
+        const isTransparent = tile.transparent > 0;
+        const isWater = (gameNumber > 1) ? (headerWaterFlag === 0 && poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0) : false;
+        const isLOD = false;
+        const opts = { isLOD, isTransparent, isWater };
+        const a = mdlVertStart + poly.v1;
+        const b = mdlVertStart + poly.v2;
+        const c = mdlVertStart + poly.v3;
+        const d = mdlVertStart + poly.v4;
+        const ca = mdlColorStart + poly.c1;
+        const cb = mdlColorStart + poly.c2;
+        const cc = mdlColorStart + poly.c3;
+        const cd = mdlColorStart + poly.c4;
+        let A = UV.TL, B = UV.TR, C = UV.BR, D = UV.BL;
+
+        if (gameNumber > 1) {
+            const isTri = poly.v1 === poly.v2;
+            if (isTri) {
+                const rr = (poly.ii >> 4) & 3;
+                const rot = (tile.rotation - rr) & 3;
+                const seq = [A, B, C, D];
+                const rotated = [seq[(0 + rot) & 3], seq[(1 + rot) & 3], seq[(2 + rot) & 3], seq[(3 + rot) & 3]];
+                [A, B, C, D] = rotated;
+            }
+        } else {
+            if (poly.v1 === poly.v2) {
+                const base = [UV.TL, UV.TR, UV.BR, UV.BL];
+                const perms = [[0, 1, 2, 3], [3, 0, 1, 2], [2, 3, 0, 1], [1, 2, 3, 0]];
+                const p = perms[poly.r & 3];
+                A = base[p[0]];
+                B = base[p[1]];
+                C = base[p[2]];
+                D = base[p[3]];
+            }
+        }
+
+        const isTri = poly.v1 === poly.v2;
+        if (isTri) {
+            const inverse = (gameNumber > 1) ? !!(poly.ii & 4) : false;
+            if (!inverse) {
+                emitTri(b, c, d, cb, cc, cd, A, C, D, tileIndex, opts);
+            } else {
+                emitTri(d, c, b, cd, cc, cb, D, C, A, tileIndex, opts);
+            }
+        } else {
+            emitTri(a, b, c, ca, cb, cc, A, B, C, tileIndex, opts);
+            emitTri(a, c, d, ca, cc, cd, A, C, D, tileIndex, opts);
         }
     }
 
     for (let part = 0; part < partCount; part++) {
         let pointer = 0;
-        if (gameNumber == 1) {
+        if (gameNumber === 1) {
             const o = data.getUint32(offset, true);
             offset += 4;
             pointer = o + 8;
         } else {
             pointer = partOffsets[part] + 8;
         }
+
         const header = new PartHeader(data, pointer);
         pointer += 20;
 
-        // LOD vertices
-        const lodVertStart = vertices.length;
+        const lodVertStart = vertexTable.length / 3;
         for (let i = 0; i < header.lodVertexCount; i++) {
             const v = new Vertex(data, pointer);
             pointer += 4;
             const zraw = (v.byte1 | ((v.byte2 & 3) << 8));
             let z = zraw + header.z;
-            if (gameNumber > 1) {
-                z = (zraw << 1) + header.z; // lazy z-scaling to correct for S2/S3, see proper z-scaling further below
-            }
+            if (gameNumber > 1) z = (zraw << 1) + header.z;
             const y = ((v.byte2 >> 2) | ((v.byte3 & 31) << 6)) + header.y;
             const x = ((v.byte3 >> 5) | (v.byte4 << 3)) + header.x;
-            vertices.push([x, y, z]);
+            vertexTable.push(x, y, z);
         }
 
-        // LOD colors
-        const lodColorStart = colors.length;
+        const lodColorStart = colorTable.length / 3;
         for (let i = 0; i < header.lodColorCount; i++) {
             const c = new VertexColor(data, pointer);
             pointer += 4;
-            colors.push([c.r, c.g, c.b]);
+            colorTable.push(c.r, c.g, c.b);
         }
 
-        // LOD polys
         for (let i = 0; i < header.lodPolyCount; i++) {
-            const poly = gameNumber > 1 ? new LODPoly2(data, pointer) : new LODPoly(data, pointer);
+            const poly = (gameNumber > 1) ? new LODPoly2(data, pointer) : new LODPoly(data, pointer);
             pointer += 8;
+            const d = decodeLOD(poly);
+            const a = lodVertStart + d.v1;
+            const b = lodVertStart + d.v2;
+            const c = lodVertStart + d.v3;
+            const e = lodVertStart + d.v4;
+            const ca = lodColorStart + d.c1;
+            const cb = lodColorStart + d.c2;
+            const cc = lodColorStart + d.c3;
+            const cd = lodColorStart + d.c4;
 
-            let v1 = (poly.v1 & 63);
-            let v2 = (poly.v1 >> 6) | ((poly.v2 & 15) << 2);
-            let v3 = (poly.v2 >> 4) | ((poly.v3 & 3) << 4);
-            let v4 = (poly.v3 >> 2);
-            let c1 = (poly.c1 & 63);
-            let c2 = (poly.c1 >> 6) | ((poly.c2 & 15) << 2);
-            let c3 = (poly.c2 >> 4) | ((poly.c3 & 3) << 4);
-            let c4 = (poly.c3 >> 2);
-            if (gameNumber > 1 && poly instanceof LODPoly2) {
-                v1 = (poly.v1 >> 3) | ((poly.v2 & 3) << 5);
-                v2 = (poly.v2 >> 2) | ((poly.v3 & 1) << 6);
-                v3 = (poly.v3 >> 1);
-                v4 = (poly.v4 & 127);
-                c1 = (poly.c1 >> 4) | ((poly.c2 & 7) << 4);
-                c2 = (poly.c2 >> 3) | ((poly.c3 & 3) << 5);
-                c3 = (poly.c3 >> 2) | ((poly.c4 & 1) << 6);
-                c4 = (poly.c4 >> 1);
-            }
-            const a = lodVertStart + v1;
-            const b = lodVertStart + v2;
-            const c = lodVertStart + v3;
-            const d = lodVertStart + v4;
-            const cA = lodColorStart + c1;
-            const cB = lodColorStart + c2;
-            const cC = lodColorStart + c3;
-            const cD = lodColorStart + c4;
-
-            if (v1 === v2)
-                faces.push({ indices: [b, c, d], uvs: [0, 0, 0], colors: [cB, cC, cD], tileIndex: 0, isLOD: true });
-            else if (v2 === v3)
-                faces.push({ indices: [a, c, d], uvs: [0, 0, 0], colors: [cA, cC, cD], tileIndex: 0, isLOD: true });
-            else if (v3 === v4)
-                faces.push({ indices: [a, b, d], uvs: [0, 0, 0], colors: [cA, cB, cD], tileIndex: 0, isLOD: true });
-            else if (v4 === v1)
-                faces.push({ indices: [a, b, c], uvs: [0, 0, 0], colors: [cA, cB, cC], tileIndex: 0, isLOD: true });
-            else {
-                faces.push({ indices: [b, a, c], uvs: [0, 0, 0], colors: [cB, cA, cC], tileIndex: 0, isLOD: true });
-                faces.push({ indices: [b, c, d], uvs: [0, 0, 0], colors: [cB, cC, cD], tileIndex: 0, isLOD: true });
+            const Z = UV.ZERO;
+            if (d.v1 === d.v2) {
+                emitTri(b, c, e, cb, cc, cd, Z, Z, Z, 0, { isLOD: true });
+            } else if (d.v2 === d.v3) {
+                emitTri(a, c, e, ca, cc, cd, Z, Z, Z, 0, { isLOD: true });
+            } else if (d.v3 === d.v4) {
+                emitTri(a, b, e, ca, cb, cd, Z, Z, Z, 0, { isLOD: true });
+            } else if (d.v4 === d.v1) {
+                emitTri(a, b, c, ca, cb, cc, Z, Z, Z, 0, { isLOD: true });
+            } else {
+                emitTri(b, a, c, cb, ca, cc, Z, Z, Z, 0, { isLOD: true });
+                emitTri(b, c, e, cb, cc, cd, Z, Z, Z, 0, { isLOD: true });
             }
         }
 
-        // MDL vertices
         let isWaterNonGround = false;
         if (gameNumber > 1) {
-            let polyPos = pointer + header.mdlVertexCount * 4 + header.mdlColorCount * 4 + header.mdlColorCount * 4;
+            let pos = pointer + header.mdlVertexCount * 4 + header.mdlColorCount * 4 + header.mdlColorCount * 4;
             for (let i = 0; i < header.mdlPolyCount; i++) {
-                const s1 = data.getUint8(polyPos + 8);
-                const s2 = data.getUint8(polyPos + 9);
-                const s3 = data.getUint8(polyPos + 10);
-                const s4 = data.getUint8(polyPos + 11);
+                const s1 = data.getUint8(pos + 8);
+                const s2 = data.getUint8(pos + 9);
+                const s3 = data.getUint8(pos + 10);
+                const s4 = data.getUint8(pos + 11);
                 if (s1 === 0 && s2 === 0 && s3 === 0 && s4 === 0) {
                     isWaterNonGround = true;
                     break;
                 }
-                polyPos += 16;
+                pos += 16;
             }
         }
-        const mdlVertStart = vertices.length;
+
+        const mdlVertStart = vertexTable.length / 3;
         for (let i = 0; i < header.mdlVertexCount; i++) {
-            const vertex = new Vertex(data, pointer);
+            const v = new Vertex(data, pointer);
             pointer += 4;
-            const zraw = (vertex.byte1 | ((vertex.byte2 & 3) << 8));
+            const zraw = (v.byte1 | ((v.byte2 & 3) << 8));
             let z = zraw + header.z;
             if (gameNumber > 1) {
-                // z-scaling
-                // non-ground water is usually flat water, while "ground" water is usually sloped (different signatures)
                 const far = header.lodVertexCount === 0 && header.flag === 0xFFFFFFFF;
                 if ((far && !isWaterNonGround) || (far && isWaterNonGround && header.water > 0) || (!far && header.water > 0)) {
                     z = (zraw << 1) + header.z;
-                } else if ((far && isWaterNonGround && header.water <= 0) || (!far && header.water <= 0)) {
+                } else {
                     z = (zraw >> 2) + header.z;
                 }
             }
-            const y = ((vertex.byte2 >> 2) | ((vertex.byte3 & 31) << 6)) + header.y;
-            const x = ((vertex.byte3 >> 5) | (vertex.byte4 << 3)) + header.x;
-            vertices.push([x, y, z]);
+            const y = ((v.byte2 >> 2) | ((v.byte3 & 31) << 6)) + header.y;
+            const x = ((v.byte3 >> 5) | (v.byte4 << 3)) + header.x;
+            vertexTable.push(x, y, z);
         }
 
-        // MDL colors
-        const mdlColorStart = colors.length;
+        const mdlColorStart = colorTable.length / 3;
         for (let i = 0; i < header.mdlColorCount; i++) {
-            const color = new VertexColor(data, pointer);
+            const c = new VertexColor(data, pointer);
             pointer += 4;
-            colors.push([color.r, color.g, color.b]);
+            colorTable.push(c.r, c.g, c.b);
         }
 
-        // FAR colors (ignored)
         pointer += header.mdlColorCount * 4;
 
-        // MDL polys
         for (let i = 0; i < header.mdlPolyCount; i++) {
             const poly = new Polygon(data, pointer, gameNumber);
             pointer += 16;
-            if (gameNumber == 1) {
-                buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, textures.tiles.length)
-            } else {
-                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, textures, header.water)
-            }
+            emitPoly(poly, mdlVertStart, mdlColorStart, header.water);
         }
     }
 
-    return { vertices, colors, faces, uvs, textures, game: gameNumber, id: levelNumber };
+    const ground = buildBatches(ctx.groupsGround);
+    const transparent = buildBatches(ctx.groupsTransparent);
+    const lod = buildBatches(ctx.groupsLOD);
+
+    return {
+        textures, game: gameNumber, id: levelNumber,
+        vertices: new Float32Array(ctx.vertices), colors: new Float32Array(ctx.colors), uvs: new Float32Array(ctx.uvs), tileIndices: new Float32Array(ctx.tileIndices),
+        indicesGround: ground.indices, indicesTransparent: transparent.indices, indicesLOD: lod.indices,
+        batchesGround: ground.batches, batchesTransparent: transparent.batches, batchesLOD: lod.batches
+    };
 }
 
 export function parseTextures(vram: VRAM, textureList: DataView, gameNumber: number): TextureStore {

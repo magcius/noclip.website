@@ -17,39 +17,33 @@ TODO
         Right now it's just a toggle b/t high and low, but it'd be ideal to render both since low LOD usually is larger than high LOD
         This is will fix some scenes that seem way too small (particularly cutscenes w/ fixed camera) since a lot of their look is from low LOD
     Clean up functions in bin.ts
+        Any computer made in the last century should be fine, but there's plenty of room for better efficiency
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
     Clean up the transparency handling. Transparent tiles/water can sometimes disappear behind other ones
+        This is an issue with draw order. Not really a big deal until/if mobys get added to levels that have transparency
 
     Spyro 1
-        Per-tile transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
-            This may need to be hardcoded since there seems to be no transparent flags in tile lists
+        Transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
+            Can't tell how these work, the tile index of the polygons doesn't match what's being rendered
         
     Spyro 2
-        There are a very small number of incorrect faces (unsure if all the same problem or different. Some are invisible walls/collision related)
-            Most (but not all) portals in homeworlds have black portal-shaped faces under them
-            Idol Springs has two black triangles at the top of the outdoor waterfall
-            Hurricos has black polygons on the gates that need spark plugs to open (Sunny Beach has similar ones on the turtle gates)
-            Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should (wrong texture?)
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
             This may not be an issue, just something worth investigating to see if the polygon parsing needs to be more robust
             These levels also don't have LOD versions for some reason (may be related)
 
     Spyro 3
-        There are a very small number of incorrect faces
-            Molten Crater has random ground textures in the trees (might be like that in the game)
-            Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent (at least in the same way as water)
-            Icy Peak has some misaligned vertex colors under the ice sections (likely an issue in the game)
+        Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent (at least in the same way as water)
         Sublevels should extract their own skybox, not default to the parent level
 
 Nice to have
 
-    
     Mobys (gems, NPCs, enemies, etc.)
-        The format will need to be figured out. They're in other level subfiles (S2 grabs from global store instead?)
-        Only their per-level instances in S3 are available for now
-    Make scrolling textures and their speed determined by data, not hardcoded
+        Only their per-level instances (position and type) in S3 are implemented
+        Will require a lot of work to figure out how their models are encoded, different for each game
+    Remove hardcoded tile scrolling and read dynamically from level data (tile indices and speed)
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
+    Back-face culling toggle. Winding order is (seemingly) not consistent in the game, so this would require a lot of work
 */
 
 class SpyroRenderer implements SceneGfx {
@@ -116,7 +110,7 @@ class SpyroRenderer implements SceneGfx {
         panel.contents.appendChild(toggleTextures.elem);
         if (this.mobys === undefined)
             return [panel];
-        const showMobysCheckbox = new Checkbox("Show moby positions", false);
+        const showMobysCheckbox = new Checkbox("Show moby positions (debug)", false);
         showMobysCheckbox.onchanged = () => {
             this.levelRenderer.showMobys = showMobysCheckbox.checked
         };
