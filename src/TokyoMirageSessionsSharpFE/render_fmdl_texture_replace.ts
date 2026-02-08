@@ -64,9 +64,16 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         // render all fshp renderers
         for (let i = 0; i < this.fshp_renderers.length; i++)
         {
-            let bone_matrix_array = this.get_fshp_bone_matrix(i);
-            let texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
-            let bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
+            const fmat_index = this.fshp_renderers[i].fmat_index;
+            const sampler_bindings = this.material_samplers_array[fmat_index];
+            if (sampler_bindings === undefined)
+            {
+                // don't render a mesh with an invalid material
+                continue;
+            }
+            const bone_matrix_array = this.get_fshp_bone_matrix(i);
+            const texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
+            const bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
 
             let replacement_sampler_binding: GfxSamplerBinding | undefined = undefined;
             for (let replacement_texture_index = 0; replacement_texture_index < this.replacement_textures.length; replacement_texture_index++)
@@ -92,6 +99,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                     texture_srt_matrix,
                     this.special_skybox,
                     bounding_box,
+                    sampler_bindings,
                     replacement_sampler_binding,
                 );
             }

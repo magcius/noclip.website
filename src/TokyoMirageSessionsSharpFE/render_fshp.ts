@@ -37,7 +37,6 @@ export class fshp_renderer
     private index_count: number;
     private input_layout: GfxInputLayout;
     private program: TMSFEProgram;
-    private sampler_bindings: GfxSamplerBinding[] = [];
     private blend_mode: BlendMode;
     private mega_state_flags: Partial<GfxMegaStateDescriptor>;
 
@@ -47,7 +46,6 @@ export class fshp_renderer
         fshp: FSHP,
         fmat: FMAT,
         bntx: BNTX.BNTX,
-        gfx_texture_array: GfxTexture[],
         bone_matrix_array_length: number,
         device: GfxDevice,
         renderHelper: GfxRenderHelper,
@@ -99,37 +97,6 @@ export class fshp_renderer
         this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.index_buffer_data);
         this.index_count = mesh.index_count;
         this.index_buffer_descriptor = { buffer: this.index_buffer };
-
-        // setup sampler
-        for (let i = 0; i < fmat.sampler_names.length; i++)
-        {
-            const texture_name = fmat.texture_names[i];
-            if (texture_name == undefined)
-            {
-                // TODO: not sure what to do if there's no texture
-                console.log(`fmat ${fmat.name} has an undefined texture`);
-                this.render_mesh = false;
-                continue;
-            }
-            const texture = bntx.textures.find((f) => f.name === texture_name);
-            if (texture !== undefined)
-            {
-                const gfx_texture_index = bntx.textures.indexOf(texture);
-                const gfx_texture = gfx_texture_array[gfx_texture_index];
-                const sampler_descriptor = fmat.sampler_descriptors[i];
-                const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
-                this.sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null });
-            }
-            else
-            {
-                console.error(`texture ${texture_name} not found (fshp ${fshp.name})`);
-                throw("whoops");
-            }
-        }
-        if (this.sampler_bindings.length == 0)
-        {
-            this.render_mesh = false;
-        }
 
         // mega state flags
         this.mega_state_flags = { cullMode: fmat.cull_mode, depthWrite: false };
@@ -232,6 +199,7 @@ export class fshp_renderer
         albedo0_srt_matrix: mat4,
         special_skybox: boolean,
         bounding_box: AABB,
+        sampler_bindings: GfxSamplerBinding[],
         replacement_sampler_binding?: GfxSamplerBinding,
     ): void
     {
@@ -250,8 +218,8 @@ export class fshp_renderer
         // set shader
         const program = renderHelper.renderCache.createProgram(this.program);
         renderInst.setGfxProgram(program);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: this.sampler_bindings.length }];
+        const numSamplers = sampler_bindings.length;
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers }];
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
@@ -284,10 +252,11 @@ export class fshp_renderer
         if (replacement_sampler_binding != undefined)
         {
             renderInst.setSamplerBindingsFromTextureMappings([replacement_sampler_binding]);
+            // TODO: this should include the other samplers, only the diffuse gets replaced
         }
         else
         {
-            renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
+            renderInst.setSamplerBindingsFromTextureMappings(sampler_bindings);
         }
 
         renderInst.setMegaStateFlags(this.mega_state_flags);

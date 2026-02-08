@@ -1,5 +1,5 @@
 // render_fmdl.ts
-// handles all the common tasks shared between the separate meshes of a model, such as animating the skeleton
+// handles all the common tasks shared between the separate meshes of a model, such as materials and animations
 
 import { Curve } from './bfres/animation_common.js';
 import * as BNTX from '../fres_nx/bntx.js';
@@ -10,7 +10,7 @@ import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { AABB } from '../Geometry.js';
-import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxSamplerBinding } from "../gfx/platform/GfxPlatform";
 import { vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -38,6 +38,7 @@ export class fmdl_renderer
     protected current_animation_frame: number = 0.0;
     protected current_material_animation_frame: number = 0.0; // TODO: do I need separate ones? not sure if theres a model with both material and skeletal animations
     protected override_bounding_box: AABB | undefined;
+    protected material_samplers_array: (GfxSamplerBinding[] | undefined)[] = [];
 
     constructor
     (
@@ -57,6 +58,40 @@ export class fmdl_renderer
     {
         this.special_skybox = special_skybox;
         this.override_bounding_box = override_bounding_box;
+
+        // create samplers
+        for (let i = 0; i < fmdl.fmat.length; i++)
+        {
+            const fmat = fmdl.fmat[i];
+            let sampler_bindings: GfxSamplerBinding[] = [];
+
+            for (let i = 0; i < fmat.sampler_names.length; i++)
+            {
+                const texture_name = fmat.texture_names[i];
+                if (texture_name === undefined)
+                {
+                    // invalid material, these are usually just for casting shadows and are set to not render
+                    this.material_samplers_array.push(undefined);
+                    break;
+                }
+                const texture = bntx.textures.find((f) => f.name === texture_name);
+                if (texture !== undefined)
+                {
+                    const gfx_texture_index = bntx.textures.indexOf(texture);
+                    const gfx_texture = gfx_texture_array[gfx_texture_index];
+                    const sampler_descriptor = fmat.sampler_descriptors[i];
+                    const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
+                    sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null });
+                }
+                else
+                {
+                    console.error(`texture ${texture_name} not found (fmdl ${fmdl.name})`);
+                    throw("whoops");
+                }
+            }
+
+            this.material_samplers_array.push(sampler_bindings);
+        }
 
         // setup skeleton
         this.fskl = fmdl.fskl;
@@ -121,7 +156,6 @@ export class fmdl_renderer
                 fshp,
                 fmat,
                 bntx,
-                gfx_texture_array,
                 bone_matrix_array_length,
                 device,
                 renderHelper
@@ -137,7 +171,6 @@ export class fmdl_renderer
 
             this.fshp_renderers.push(renderer);
         }
-
     }
 
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListOpaque: GfxRenderInstList, renderInstListTranslucent: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
@@ -147,9 +180,16 @@ export class fmdl_renderer
         // render all fshp renderers
         for (let i = 0; i < this.fshp_renderers.length; i++)
         {
-            let bone_matrix_array = this.get_fshp_bone_matrix(i);
-            let texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
-            let bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
+            const fmat_index = this.fshp_renderers[i].fmat_index;
+            const sampler_bindings = this.material_samplers_array[fmat_index];
+            if (sampler_bindings === undefined)
+            {
+                // don't render a mesh with an invalid material
+                continue;
+            }
+            const bone_matrix_array = this.get_fshp_bone_matrix(i);
+            const texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
+            const bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
 
             // frustrum culling
             if (viewerInput.camera.frustum.contains(bounding_box) || this.special_skybox)
@@ -167,6 +207,7 @@ export class fmdl_renderer
                     texture_srt_matrix,
                     this.special_skybox,
                     bounding_box,
+                    sampler_bindings,
                     undefined,
                 );
             }

@@ -160,8 +160,6 @@ class TMSFESceneDesc implements SceneDesc
         if (light_data !== undefined)
         {
             const lights = parseLights(light_data);
-            console.log(this.id);
-            console.log(lights);
             scene.lights = lights;
         }
 
@@ -258,7 +256,7 @@ const sceneDescs =
     new TMSFESceneDesc("d010_02", "Area of Memories Warrior's Hall", ["d010_02"], [""]),
     new TMSFESceneDesc("d010_03", "Area of Memories Leader's Hall", ["d010_03"], [""]),
     new TMSFESceneDesc("d010_04", "Area of Memories Hero's Hall", ["d010_04"], [""]),
-    // new TMSFESceneDesc("d018_01", "Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
+    new TMSFESceneDesc("d018_01", "Area of Aspirations 1F to 2F", ["d018_01", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
     new TMSFESceneDesc("d018_02", "Area of Aspirations 3F", ["d018_02", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
     new TMSFESceneDesc("d018_03", "Area of Aspirations 4F to 5F", ["d018_03", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, true, true),
     new TMSFESceneDesc("d018_04", "Area of Aspirations The Nexus", ["d018_04", "obj01", "obj02", "sky"], ["", "obj01", "obj02", "sky"], undefined, false, true),
