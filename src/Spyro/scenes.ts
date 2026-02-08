@@ -1,8 +1,8 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { GfxCullMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildTileAtlas, buildLevel, buildSkybox, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
+import { parseTextures, buildLevel, buildSkybox, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -19,8 +19,7 @@ TODO
     Clean up functions in bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
-    Clean up scrolling textures (they're a mess but working as intended)
-    Overhaul texture and UV parsing. It's a port of SWV for now, but it can be massively simplified
+    Clean up the transparency handling. Transparent tiles/water can sometimes disappear behind other ones
 
     Spyro 1
         Per-tile transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
@@ -34,7 +33,7 @@ TODO
             Dragon Shores has a water triangle along the edge "ocean" that appears much brighter than it should (wrong texture?)
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
             This may not be an issue, just something worth investigating to see if the polygon parsing needs to be more robust
-            These levels also don't have LOD versions for some reason
+            These levels also don't have LOD versions for some reason (may be related)
 
     Spyro 3
         There are a very small number of incorrect faces
@@ -45,10 +44,11 @@ TODO
 
 Nice to have
 
-    Make scrolling textures and their speed determined by data, not hardcoded
-    Render mobys (gems, NPCs, enemies, etc.) in each level
+    
+    Mobys (gems, NPCs, enemies, etc.)
         The format will need to be figured out. They're in other level subfiles (S2 grabs from global store instead?)
-        Only their per-level instances in S3 have been RE-ed
+        Only their per-level instances in S3 are available for now
+    Make scrolling textures and their speed determined by data, not hardcoded
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
 */
 
@@ -144,8 +144,8 @@ class SpyroScene implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}.bin`);
         const { vram, textureList, ground, sky } = parseLevelData(levelFile);
-        const tileAtlas = buildTileAtlas(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
+        const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
+        const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         return new SpyroRenderer(device, level, skybox);
     }
@@ -165,8 +165,8 @@ class SpyroScene2 implements SceneDesc {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}.bin`);
         const { vram, textureList, ground, sky } = parseLevelData2(levelFile);
         vram.applyFontStripFix();
-        const tileAtlas = buildTileAtlas(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
+        const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
+        const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         return new SpyroRenderer(device, level, skybox);
     }
@@ -193,8 +193,8 @@ class SpyroScene3 implements SceneDesc {
         if (this.subLevelID && grounds && grounds.length > 0) {
             ground = grounds[this.subLevelID - 1];
         }
-        const tileAtlas = buildTileAtlas(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber, this.subFileID);
+        const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
+        const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         return new SpyroRenderer(device, level, skybox, mobys);
     }

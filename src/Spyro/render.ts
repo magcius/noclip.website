@@ -7,7 +7,7 @@ import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatfo
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { Skybox, Level, MobyInstance, TILE_SCROLL_MAP, TileAtlas } from "./bin";
+import { Skybox, Level, MobyInstance, TILE_SCROLL_MAP } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
@@ -25,7 +25,6 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_TimeLOD; // x = time, y = LOD flag
     vec4 u_TileFlags[${MAX_TILES}]; // x = scroll
-    vec4 u_TileUV[${MAX_TILES}]; // xy = u0,v0, zw = u1,v1
 };
 
 uniform sampler2D u_Texture;
@@ -72,12 +71,10 @@ void main() {
         return;
     }
 
+    vec2 uv = v_UV;
     int idx = int(v_TileIndex + 0.5);
-    vec4 rect = u_TileUV[idx];
-    vec2 uv = mix(rect.xy, rect.zw, v_UV);
     if (u_TileFlags[idx].x > 0.5) {
-        float y = fract(v_UV.y - u_TimeLOD.x * 0.45);
-        uv = mix(rect.xy, rect.zw, vec2(v_UV.x, y));
+        uv.y = fract(uv.y - u_TimeLOD.x * 0.45);
     }
 
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
@@ -143,113 +140,127 @@ export class LevelRenderer {
     private indexBufferGround: GfxBuffer;
     private indexBufferTransparent: GfxBuffer;
     private indexBufferLOD: GfxBuffer;
-    private texture: GfxTexture;
+    private batchesGround: { tileIndex: number, indexOffset: number, indexCount: number }[] = [];
+    private batchesTransparent: { tileIndex: number, indexOffset: number, indexCount: number }[] = [];
+    private batchesLOD: { tileIndex: number, indexOffset: number, indexCount: number }[] = [];
     private inputLayout: GfxInputLayout;
-    private indexCountGround: number;
-    private indexCountTransparent: number;
-    private indexCountLOD: number;
+    private textures: GfxTexture[] = [];
+    private tileCount: number;
     private gameNumber: number;
     private scrollFlags: Float32Array;
-    private atlas: TileAtlas;
 
     constructor(cache: GfxRenderCache, level: Level, private mobys?: MobyInstance[]) {
         const device = cache.device;
-        this.atlas = level.atlas;
-        
-        this.texture = device.createTexture({
-            width: this.atlas.width,
-            height: this.atlas.height,
-            numLevels: 1,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            usage: GfxTextureUsage.Sampled,
-            dimension: GfxTextureDimension.n2D,
-            depthOrArrayLayers: 1
-        });
-        device.uploadTextureData(this.texture, 0, [this.atlas.data]);
-
         this.gameNumber = level.game;
-        const expandedVertex: number[] = [];
-        const expandedColor: number[] = [];
-        const expandedUV: number[] = [];
-        const expandedTile: number[] = [];
-        const expandedIndexGround: number[] = [];
-        const expandedIndexTransparent: number[] = [];
-        const expandedIndexLOD: number[] = [];
+        this.tileCount = level.textures.tiles.length;
+        this.textures = new Array(this.tileCount);
+        for (let i = 0; i < this.tileCount; i++) {
+            const rgba = level.textures.colors[i];
+            const tile = level.textures.tiles[i];
+            const texture = device.createTexture({
+                width: tile.size, height: tile.size,
+                numLevels: 1, pixelFormat: GfxFormat.U8_RGBA_NORM,
+                usage: GfxTextureUsage.Sampled,
+                dimension: GfxTextureDimension.n2D,
+                depthOrArrayLayers: 1
+            });
+            device.uploadTextureData(texture, 0, [rgba]);
+            this.textures[i] = texture;
+        }
 
-        const tileCount = this.atlas.uvs.length;
-        this.scrollFlags = new Float32Array(tileCount);
+        this.scrollFlags = new Float32Array(this.tileCount);
         if (level.id in TILE_SCROLL_MAP[level.game]) {
             for (const ti of TILE_SCROLL_MAP[level.game][level.id]) {
-                if (ti != null && ti >= 0 && ti < tileCount) {
+                if (ti != null && ti >= 0 && ti < this.tileCount) {
                     this.scrollFlags[ti] = 1.0;
                 }
             }
         }
 
+        const expandedVertex: number[] = [];
+        const expandedColor: number[] = [];
+        const expandedUV: number[] = [];
+        const expandedTileIndex: number[] = [];
+        const groupsRegularOpaque = new Map<number, number[]>();
+        const groupsRegularTransparent = new Map<number, number[]>();
+        const groupsLOD = new Map<number, number[]>();
         let i = 0;
         for (const face of level.faces) {
             for (let k = 0; k < face.indices.length; k++) {
                 const v = level.vertices[face.indices[k]];
                 expandedVertex.push(v[0], v[1], v[2]);
 
+                const c = face.colors ? level.colors[face.colors[k]] : [255, 255, 255];
                 let alpha = 1.0;
                 if (face.isWater) {
                     alpha = 0.4;
                 } else if (face.isTransparent) {
                     alpha = 0.5;
                 }
-                const c = face.colors ? level.colors[face.colors[k]] : [255, 255, 255];
                 expandedColor.push(c[0] / 255, c[1] / 255, c[2] / 255, alpha);
 
-                if (face.uvs) {
-                    const uvVal = level.uvs[face.uvs[k]];
-                    expandedUV.push(uvVal[0], uvVal[1]);
-                } else {
-                    expandedUV.push(0, 0);
-                }
+                const uv = level.uvs[face.uvs[k]];
+                expandedUV.push(uv[0], uv[1]);
 
-                expandedTile.push(face.tileIndex ?? 0);
+                expandedTileIndex.push(face.tileIndex);
 
+                let targetMap: Map<number, number[]>;
                 if (face.isLOD) {
-                    expandedIndexLOD.push(i);
-                } else if (face.isWater || face.isTransparent) {
-                    expandedIndexTransparent.push(i);
+                    targetMap = groupsLOD;
+                } else if (face.isTransparent || face.isWater) {
+                    targetMap = groupsRegularTransparent;
                 } else {
-                    expandedIndexGround.push(i);
+                    targetMap = groupsRegularOpaque;
                 }
+                if (!targetMap.has(face.tileIndex)) {
+                    targetMap.set(face.tileIndex, []);
+                }
+                targetMap.get(face.tileIndex)!.push(i);
+
                 i++;
             }
         }
 
+        const buildBatches = (map: Map<number, number[]>) => {
+            const batches = [];
+            const indices: number[] = [];
+            for (const [tileIndex, group] of map.entries()) {
+                batches.push({ tileIndex, indexOffset: indices.length, indexCount: group.length });
+                indices.push(...group);
+            }
+            return { batches, indices: new Uint32Array(indices) };
+        };
+
+        const opaque = buildBatches(groupsRegularOpaque);
+        const transparent = buildBatches(groupsRegularTransparent);
+        const lod = buildBatches(groupsLOD);
+
+        this.batchesGround = opaque.batches;
+        this.batchesTransparent = transparent.batches;
+        this.batchesLOD = lod.batches;
+
+        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, opaque.indices.buffer);
+        this.indexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, transparent.indices.buffer);
+        this.indexBufferLOD = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, lod.indices.buffer);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedVertex).buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedColor).buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
-        this.tileBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedTile).buffer);
-
-        const indexGround = new Uint32Array(expandedIndexGround);
-        const indexTransparent = new Uint32Array(expandedIndexTransparent);
-        const indexLOD = new Uint32Array(expandedIndexLOD);
-        this.indexCountGround = indexGround.length;
-        this.indexCountTransparent = indexTransparent.length;
-        this.indexCountLOD = indexLOD.length;
-        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexGround.buffer);
-        this.indexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexTransparent.buffer);
-        this.indexBufferLOD = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexLOD.buffer);
+        this.tileBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedTileIndex).buffer);
 
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
-                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 }, // a_Color
-                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 }, // a_AtlasUV
-                { location: 3, bufferIndex: 3, format: GfxFormat.F32_R, bufferByteOffset: 0 } // a_TileIndex
+                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
+                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
+                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
+                { location: 3, bufferIndex: 3, format: GfxFormat.F32_R, bufferByteOffset: 0 }
             ],
             vertexBufferDescriptors: [
-                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // pos (x,y,z)
-                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex }, // color (r,g,b,a)
-                { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex }, // uv
-                { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex } // tile index
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 8,  frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 4,  frequency: GfxVertexBufferFrequency.PerVertex }
             ],
-            indexBufferFormat: GfxFormat.U32_R,
+            indexBufferFormat: GfxFormat.U32_R
         });
     }
 
@@ -260,105 +271,73 @@ export class LevelRenderer {
         template.setGfxProgram(program);
         template.setBindingLayouts(bindingLayouts);
         template.setUniformBuffer(renderHelper.uniformBuffer);
-        template.setSamplerBindingsFromTextureMappings([{
-            gfxTexture: this.texture,
-            gfxSampler: renderHelper.renderCache.createSampler({
-                minFilter: GfxTexFilterMode.Point,
-                magFilter: GfxTexFilterMode.Point,
-                mipFilter: GfxMipFilterMode.Nearest,
-                wrapS: GfxWrapMode.Repeat,
-                wrapT: GfxWrapMode.Repeat
-            }),
-            lateBinding: null
-        }]);
 
-        // ub_SceneParams
-        const sceneFloats = 16 + 4;
-        const scrollFloats = MAX_TILES * 4;
-        const totalFloats = sceneFloats + scrollFloats + scrollFloats;
-        let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, totalFloats);
-        const sceneBuffer = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
+        let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 20 + (4 * MAX_TILES));
+        const uniformBuffer = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
         mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, spaceCorrection);
-        offset += fillMatrix4x4(sceneBuffer, offset, scratchMat4a); // u_ProjectionView
+        offset += fillMatrix4x4(uniformBuffer, offset, scratchMat4a);
         // u_TimeLOD
-        const lod = this.showLOD && this.indexCountLOD > 0;
-        sceneBuffer[offset++] = viewerInput.time * 0.001 * (this.gameNumber === 1 ? 2.6 : 2);
-        sceneBuffer[offset++] = lod || !this.showTextures ? 1.0 : 0.0;
-        sceneBuffer[offset++] = 0.0;
-        sceneBuffer[offset++] = 0.0;
+        uniformBuffer[offset++] = viewerInput.time * 0.001 * (this.gameNumber === 1 ? 2.6 : 2);
+        uniformBuffer[offset++] = (this.showLOD) || !this.showTextures ? 1.0 : 0.0;;
+        uniformBuffer[offset++] = 0.0;
+        uniformBuffer[offset++] = 0.0;
         // u_TileFlags
         for (let i = 0; i < MAX_TILES; i++) {
-            sceneBuffer[offset++] = i < this.atlas.uvs.length ? this.scrollFlags[i] : 0.0; // x = scroll
-            sceneBuffer[offset++] = 0.0;
-            sceneBuffer[offset++] = 0.0;
-            sceneBuffer[offset++] = 0.0;
+            uniformBuffer[offset++] = i < this.tileCount ? this.scrollFlags[i] : 0.0;
+            uniformBuffer[offset++] = 0.0;
+            uniformBuffer[offset++] = 0.0;
+            uniformBuffer[offset++] = 0.0;
         }
-        // u_TileUV
-        for (let i = 0; i < MAX_TILES; i++) {
-            if (i < this.atlas.uvs.length) {
-                const { atlasX, atlasY } = this.atlas.uvs[i];
-                const u0 = atlasX / this.atlas.width;
-                const v0 = atlasY / this.atlas.height;
-                const u1 = (atlasX + 32) / this.atlas.width;
-                const v1 = (atlasY + 32) / this.atlas.height;
-                sceneBuffer[offset++] = u0;
-                sceneBuffer[offset++] = v0;
-                sceneBuffer[offset++] = u1;
-                sceneBuffer[offset++] = v1;
-            } else {
-                sceneBuffer[offset++] = 0;
-                sceneBuffer[offset++] = 0;
-                sceneBuffer[offset++] = 0;
-                sceneBuffer[offset++] = 0;
+
+        const gfxSampler = renderHelper.renderCache.createSampler({
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp
+        });
+
+        const drawBatches = (batches: { tileIndex: number, indexOffset: number, indexCount: number }[], buffer: GfxBuffer, transparency: boolean) => {
+            for (const batch of batches) {
+                const gfxTexture = this.textures[batch.tileIndex];
+                const inst = renderInstManager.newRenderInst();
+                const megaState = inst.getMegaStateFlags();
+                megaState.cullMode = this.cullMode;
+                if (!transparency) {
+                    setAttachmentStateSimple(megaState, {
+                        channelWriteMask: GfxChannelWriteMask.RGB,
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.One,
+                        blendDstFactor: GfxBlendFactor.Zero
+                    });
+                } else {
+                    setAttachmentStateSimple(megaState, {
+                        channelWriteMask: GfxChannelWriteMask.RGB,
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha
+                    });
+                }
+                inst.setMegaStateFlags(megaState);
+                inst.setSamplerBindingsFromTextureMappings([{ gfxTexture, gfxSampler, lateBinding: null }]);
+                inst.setVertexInput(this.inputLayout,
+                    [
+                        { buffer: this.vertexBuffer, byteOffset: 0 },
+                        { buffer: this.colorBuffer, byteOffset: 0 },
+                        { buffer: this.uvBuffer, byteOffset: 0 },
+                        { buffer: this.tileBuffer, byteOffset: 0 }
+                    ], { buffer, byteOffset: 0 }
+                );
+                inst.setDrawCount(batch.indexCount, batch.indexOffset);
+                renderInstManager.submitRenderInst(inst);
             }
         }
 
-        {
-            const renderInst = renderInstManager.newRenderInst();
-            const megaState = renderInst.getMegaStateFlags();
-            megaState.cullMode = this.cullMode;
-            setAttachmentStateSimple(megaState, {
-                channelWriteMask: GfxChannelWriteMask.RGB,
-                blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.One,
-                blendDstFactor: GfxBlendFactor.Zero
-            });
-            renderInst.setMegaStateFlags(megaState);
-            renderInst.setVertexInput(this.inputLayout,
-                [
-                    { buffer: this.vertexBuffer, byteOffset: 0 },
-                    { buffer: this.colorBuffer, byteOffset: 0 },
-                    { buffer: this.uvBuffer, byteOffset: 0 },
-                    { buffer: this.tileBuffer, byteOffset: 0 }
-                ],
-                { buffer: lod ? this.indexBufferLOD : this.indexBufferGround, byteOffset: 0 }
-            );
-            renderInst.setDrawCount(lod ? this.indexCountLOD : this.indexCountGround);
-            renderInstManager.submitRenderInst(renderInst);
-        }
-
-        if (this.indexCountTransparent > 0 && !this.showLOD) {
-            const renderInst = renderInstManager.newRenderInst();
-            const megaState = renderInst.getMegaStateFlags();
-            megaState.cullMode = this.cullMode;
-            setAttachmentStateSimple(megaState, {
-                channelWriteMask: GfxChannelWriteMask.RGB,
-                blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha
-            });
-            renderInst.setMegaStateFlags(megaState);
-            renderInst.setVertexInput(this.inputLayout,
-                [
-                    { buffer: this.vertexBuffer, byteOffset: 0 },
-                    { buffer: this.colorBuffer, byteOffset: 0 },
-                    { buffer: this.uvBuffer, byteOffset: 0 },
-                    { buffer: this.tileBuffer, byteOffset: 0 }
-                ],
-                { buffer: this.indexBufferTransparent, byteOffset: 0 }
-            );
-            renderInst.setDrawCount(this.indexCountTransparent);
-            renderInstManager.submitRenderInst(renderInst);
+        if (this.showLOD) {
+            drawBatches(this.batchesLOD, this.indexBufferLOD, false);
+        } else {
+            drawBatches(this.batchesGround, this.indexBufferGround, false);
+            drawBatches(this.batchesTransparent, this.indexBufferTransparent, true);
         }
 
         if (this.showMobys && this.mobys !== undefined) {
@@ -400,7 +379,9 @@ export class LevelRenderer {
         device.destroyBuffer(this.indexBufferGround);
         device.destroyBuffer(this.indexBufferTransparent);
         device.destroyBuffer(this.indexBufferLOD);
-        device.destroyTexture(this.texture);
+        for (const tex of this.textures) {
+            device.destroyTexture(tex);
+        }
     }
 }
 

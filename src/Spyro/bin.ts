@@ -1,11 +1,12 @@
 // Credit to "Spyro World Viewer" by Kly_Men_COmpany for a majority of the data structures, reverse-engineering and parsing logic
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 
 interface GroundFace {
     indices: number[];
-    uvs: number[] | null;
-    colors: number[] | null;
+    uvs: number[];
+    colors: number[];
     tileIndex: number;
     isLOD: boolean;
     isWater?: boolean;
@@ -18,12 +19,10 @@ interface SkyFace {
     colors: number[];
 }
 
-export interface TileAtlas {
-    data: Uint8Array;
-    width: number;
-    height: number;
-    uvs: { atlasX: number, atlasY: number }[];
-    tiles?: Tile[];
+export interface TextureStore {
+    textures: GfxTexture[];
+    colors: Uint8Array[];
+    tiles: Tile[];
 }
 
 export interface Level {
@@ -31,7 +30,7 @@ export interface Level {
     colors: number[][];
     faces: GroundFace[];
     uvs: number[][];
-    atlas: TileAtlas;
+    textures: TextureStore;
     game: number;
     id: number;
 };
@@ -369,13 +368,13 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
     }
 }
 
-function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], tileCount: number) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
     const d = mdlVertStart + poly.v4;
     const tileIndex = poly.t & 127;
-    if (tileIndex >= 0 && tileIndex < atlas.uvs.length) {
+    if (tileIndex >= 0 && tileIndex < tileCount) {
         const uv1 = [0, 1];
         const uv2 = [1, 1];
         const uv3 = [1, 0];
@@ -425,7 +424,7 @@ function buildFaces1(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
     }
 }
 
-function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas, headerWaterFlag: number) {
+function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], textures: TextureStore, headerWaterFlag: number) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -454,7 +453,7 @@ function buildFaces2(poly: Polygon, mdlVertStart: number, mdlColorStart: number,
         }
     }
 
-    const tile = atlas.tiles![tileIndex];
+    const tile = textures.tiles[tileIndex];
     const isTransparent = tile.transparent > 0;
     const isTri = poly.v1 === poly.v2;
     let polyRotation = 0;
@@ -546,7 +545,7 @@ export function buildSkybox(data: DataView, gameNumber: number): Skybox {
     return { backgroundColor, vertices, colors, faces };
 }
 
-export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number, levelNumber: number): Level {
+export function buildLevel(data: DataView, textures: TextureStore, gameNumber: number, levelNumber: number): Level {
     const vertices: number[][] = [];
     const colors: number[][] = [];
     const faces: GroundFace[] = [];
@@ -635,16 +634,16 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
             const cD = lodColorStart + c4;
 
             if (v1 === v2)
-                faces.push({ indices: [b, c, d], uvs: null, colors: [cB, cC, cD], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [b, c, d], uvs: [0, 0, 0], colors: [cB, cC, cD], tileIndex: 0, isLOD: true });
             else if (v2 === v3)
-                faces.push({ indices: [a, c, d], uvs: null, colors: [cA, cC, cD], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [a, c, d], uvs: [0, 0, 0], colors: [cA, cC, cD], tileIndex: 0, isLOD: true });
             else if (v3 === v4)
-                faces.push({ indices: [a, b, d], uvs: null, colors: [cA, cB, cD], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [a, b, d], uvs: [0, 0, 0], colors: [cA, cB, cD], tileIndex: 0, isLOD: true });
             else if (v4 === v1)
-                faces.push({ indices: [a, b, c], uvs: null, colors: [cA, cB, cC], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [a, b, c], uvs: [0, 0, 0], colors: [cA, cB, cC], tileIndex: 0, isLOD: true });
             else {
-                faces.push({ indices: [b, a, c], uvs: null, colors: [cB, cA, cC], tileIndex: 0, isLOD: true });
-                faces.push({ indices: [b, c, d], uvs: null, colors: [cB, cC, cD], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [b, a, c], uvs: [0, 0, 0], colors: [cB, cA, cC], tileIndex: 0, isLOD: true });
+                faces.push({ indices: [b, c, d], uvs: [0, 0, 0], colors: [cB, cC, cD], tileIndex: 0, isLOD: true });
             }
         }
 
@@ -701,49 +700,29 @@ export function buildLevel(data: DataView, atlas: TileAtlas, gameNumber: number,
             const poly = new Polygon(data, pointer, gameNumber);
             pointer += 16;
             if (gameNumber == 1) {
-                buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
+                buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, textures.tiles.length)
             } else {
-                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas, header.water)
+                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, textures, header.water)
             }
         }
     }
 
-    return { vertices, colors, faces, uvs, atlas, game: gameNumber, id: levelNumber };
+    return { vertices, colors, faces, uvs, textures, game: gameNumber, id: levelNumber };
 }
 
-export function buildTileAtlas(vram: VRAM, textureList: DataView, gameNumber: number): TileAtlas {
+export function parseTextures(vram: VRAM, textureList: DataView, gameNumber: number): TextureStore {
     const tiles = parseTiles(textureList, gameNumber);
-    const tilesPerRow = 8;
-    const slotSize = 32;
     const tileCount = tiles.length;
-    const width = tilesPerRow * slotSize;
-    const height = Math.ceil(tileCount / tilesPerRow) * slotSize;
-    const data = new Uint8Array(width * height * 4);
-    const uvs: { atlasX: number, atlasY: number }[] = [];
+    const colors: Uint8Array[] = [];
     for (let i = 0; i < tileCount; i++) {
         const tile = tiles[i];
         let rgba = decodeTileToRGBA(vram, tile, tile.size, tile.size);
         if (gameNumber == 1) {
             rgba = applyTileRotationRGBA(rgba, tile, tile.size);
         }
-        const atlasX = (i % tilesPerRow) * slotSize;
-        const atlasY = Math.floor(i / tilesPerRow) * slotSize;
-        for (let y = 0; y < tile.size; y++) {
-            for (let x = 0; x < tile.size; x++) {
-                const src = (y * tile.size + x) * 4;
-                const dst = ((atlasY + y) * width + (atlasX + x)) * 4;
-                data[dst + 0] = rgba[src + 0];
-                data[dst + 1] = rgba[src + 1];
-                data[dst + 2] = rgba[src + 2];
-                data[dst + 3] = rgba[src + 3];
-            }
-        }
-        uvs.push({ atlasX, atlasY });
+        colors.push(rgba);
     }
-    if (gameNumber == 1) {
-        return { data, width, height, uvs };
-    }
-    return { data, width, height, uvs, tiles };
+    return { textures: [], colors, tiles };
 }
 
 export function parseMobyInstances(subfile4: DataView): MobyInstance[] {
