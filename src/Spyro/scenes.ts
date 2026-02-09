@@ -1,21 +1,19 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
-import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { parseTextures, buildLevel, buildSkybox, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
-import { LevelRenderer, SkyboxRenderer } from "./render.js"
+import { LevelRenderer, SkyboxRenderer, convertToViewerTexture } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
+import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 
 /*
 TODO
 
     Better water rendering, although it's mostly accurate
-    Better handling of LOD levels
-        Right now it's just a toggle b/t high and low, but it'd be ideal to render both since low LOD usually is larger than high LOD
-        This is will fix some scenes that seem way too small (particularly cutscenes w/ fixed camera) since a lot of their look is from low LOD
     Clean up functions in bin.ts
         Any computer made in the last century should be fine, but there's plenty of room for better efficiency
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
@@ -44,6 +42,8 @@ Nice to have
     Remove hardcoded tile scrolling and read dynamically from level data (tile indices and speed)
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
     Back-face culling toggle. Winding order is (seemingly) not consistent in the game, so this would require a lot of work
+    Figure out a way to correctly render LOD and MDL polys at the same time without overlap
+        This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
 */
 
 class SpyroRenderer implements SceneGfx {
@@ -53,7 +53,7 @@ class SpyroRenderer implements SceneGfx {
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox, private mobys?: MobyInstance[]) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox, public textureHolder: TextureHolder, private mobys?: MobyInstance[]) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
         this.levelRenderer = new LevelRenderer(cache, level, this.mobys);
@@ -120,6 +120,7 @@ class SpyroRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        this.textureHolder.destroy(device);
         this.skyboxRenderer.destroy(device);
         this.levelRenderer.destroy(device);
     }
@@ -141,7 +142,13 @@ class SpyroScene implements SceneDesc {
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        return new SpyroRenderer(device, level, skybox);
+        const viewerTextures: Texture[] = [];
+        for (let i = 0; i < textures.tiles.length; i++) {
+            const rgba = textures.colors[i];
+            viewerTextures.push(convertToViewerTexture(i, rgba));
+        }
+        const textureHolder = new FakeTextureHolder(viewerTextures);
+        return new SpyroRenderer(device, level, skybox, textureHolder);
     }
 }
 
@@ -162,7 +169,13 @@ class SpyroScene2 implements SceneDesc {
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        return new SpyroRenderer(device, level, skybox);
+        const viewerTextures: Texture[] = [];
+        for (let i = 0; i < textures.tiles.length; i++) {
+            const rgba = textures.colors[i];
+            viewerTextures.push(convertToViewerTexture(i, rgba));
+        }
+        const textureHolder = new FakeTextureHolder(viewerTextures);
+        return new SpyroRenderer(device, level, skybox, textureHolder);
     }
 }
 
@@ -190,7 +203,13 @@ class SpyroScene3 implements SceneDesc {
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        return new SpyroRenderer(device, level, skybox, mobys);
+        const viewerTextures: Texture[] = [];
+        for (let i = 0; i < textures.tiles.length; i++) {
+            const rgba = textures.colors[i];
+            viewerTextures.push(convertToViewerTexture(i, rgba));
+        }
+        const textureHolder = new FakeTextureHolder(viewerTextures);
+        return new SpyroRenderer(device, level, skybox, textureHolder, mobys);
     }
 }
 

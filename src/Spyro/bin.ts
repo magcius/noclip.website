@@ -9,15 +9,14 @@ interface SkyFace {
     colors: number[];
 }
 
-interface GroundStream {
+interface LevelStream {
     vertices: number[];
     colors: number[];
     uvs: number[];
     tileIndices: number[];
-    groupsGround: number[][];
-    groupsTransparent: number[][];
-    groupsLOD: number[][];
-    runningIndex: number;
+    indicesGround: number[][];
+    indicesTransparent: number[][];
+    indicesLOD: number[][];
 }
 
 export interface TextureStore {
@@ -375,17 +374,15 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
     }
 }
 
-function buildBatches(groups: number[][]) {
+function buildBatches(tileGroups: number[][]) {
     const batches: { tileIndex: number; indexOffset: number; indexCount: number }[] = [];
     const indices: number[] = [];
-    for (let tileIndex = 0; tileIndex < groups.length; tileIndex++) {
-        const group = groups[tileIndex];
-        if (group.length === 0) continue;
-        batches.push({
-            tileIndex,
-            indexOffset: indices.length,
-            indexCount: group.length,
-        });
+    for (let i = 0; i < tileGroups.length; i++) {
+        const group = tileGroups[i];
+        if (group.length === 0) {
+            continue;
+        }
+        batches.push({ tileIndex: i, indexOffset: indices.length, indexCount: group.length });
         indices.push(...group);
     }
     return { batches, indices: new Uint32Array(indices) };
@@ -419,19 +416,22 @@ export function buildSkybox(data: DataView, gameNumber: number): Skybox {
 }
 
 export function buildLevel(data: DataView, textures: TextureStore, gameNumber: number, levelNumber: number): Level {
-    const vertexTable: number[] = [];
-    const colorTable: number[] = [];
-    const ctx: GroundStream = {
+    const vertices: number[] = [];
+    const colors: number[] = [];
+    const stream: LevelStream = {
         vertices: [], colors: [], uvs: [], tileIndices: [],
-        groupsGround: [], groupsTransparent: [], groupsLOD: [], runningIndex: 0,
+        indicesGround: [], indicesTransparent: [], indicesLOD: []
     };
     const tileCount = textures.tiles.length;
+    const invalidTile: boolean[] = [];
+    const UV = { TL: [0, 1], TR: [1, 1], BR: [1, 0], BL: [0, 0], ZERO: [0, 0] };
+    let runningIndex = 0;
+
     for (let i = 0; i < tileCount; i++) {
-        ctx.groupsGround[i] = [];
-        ctx.groupsTransparent[i] = [];
-        ctx.groupsLOD[i] = [];
+        stream.indicesGround[i] = [];
+        stream.indicesTransparent[i] = [];
+        stream.indicesLOD[i] = [];
     }
-    const tileIsBlack: boolean[] = [];
     for (let i = 0; i < textures.tiles.length; i++) {
         let b = true;
         const rgba = textures.colors[i];
@@ -441,7 +441,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
                 break;
             }
         }
-        tileIsBlack[i] = b;
+        invalidTile[i] = b;
     }
 
     let partCount = data.getUint32(0, true);
@@ -459,10 +459,8 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
             table += 4;
         }
     }
-    
-    const UV = { TL: [0, 1], TR: [1, 1], BR: [1, 0], BL: [0, 0], ZERO: [0, 0] };
 
-    function decodeLOD(poly: LODPoly | LODPoly2) {
+    function decodeLODPoly(poly: LODPoly | LODPoly2) {
         if (gameNumber === 1) {
             return {
                 v1: (poly.v1 & 63),
@@ -489,45 +487,48 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
         }
     }
 
-    function emitTri(a: number, b: number, c: number, ca: number, cb: number, cc: number, uvA: number[], uvB: number[], uvC: number[], tileIndex: number, opts: { isLOD: boolean; isTransparent?: boolean; isWater?: boolean }) {
-        if (tileIsBlack[tileIndex]) return;
-        const { vertices, colors, uvs: uvStream, tileIndices } = ctx;
-        const group = opts.isLOD ? ctx.groupsLOD : (opts.isTransparent || opts.isWater ? ctx.groupsTransparent : ctx.groupsGround);
+    function pushTri(v1: number, v2: number, v3: number, c1: number, c2: number, c3: number, uv1: number[], uv2: number[], uv3: number[], tileIndex: number, opts: { isLOD: boolean; isTransparent?: boolean; isWater?: boolean }) {
+        if (!opts.isLOD && invalidTile[tileIndex]) {
+            return;
+        }
+        const group = opts.isLOD ? stream.indicesLOD : (opts.isTransparent || opts.isWater ? stream.indicesTransparent : stream.indicesGround);
         const alpha = opts.isWater ? 0.4 : (opts.isTransparent ? 0.5 : 1.0);
-        const verts = [a, b, c];
-        const cols = [ca, cb, cc];
-        const uvs = [uvA, uvB, uvC];
+        const v = [v1, v2, v3];
+        const color = [c1, c2, c3];
+        const uvs = [uv1, uv2, uv3];
         for (let i = 0; i < 3; i++) {
-            const vi = verts[i] * 3;
-            vertices.push(vertexTable[vi], vertexTable[vi + 1], vertexTable[vi + 2]);
-            const ci = cols[i] * 3;
-            const r = colorTable[ci];
-            const g = colorTable[ci + 1];
-            const b = colorTable[ci + 2];
-            colors.push(r / 255, g / 255, b / 255, alpha);
+            const vi = v[i] * 3;
+            const ci = color[i] * 3;
             const uv = uvs[i];
-            uvStream.push(uv[0], uv[1]);
-            tileIndices.push(tileIndex);
-            group[tileIndex].push(ctx.runningIndex++);
+            const r = colors[ci];
+            const g = colors[ci + 1];
+            const b = colors[ci + 2];
+            stream.vertices.push(vertices[vi], vertices[vi + 1], vertices[vi + 2]);
+            stream.colors.push(r / 255, g / 255, b / 255, alpha);
+            stream.uvs.push(uv[0], uv[1]);
+            stream.tileIndices.push(tileIndex);
+            group[tileIndex].push(runningIndex++);
         }
     }
 
-    function emitPoly(poly: Polygon, mdlVertStart: number, mdlColorStart: number, headerWaterFlag: number) {
+    function pushPoly(poly: Polygon, vertexOffset: number, colorOffset: number, waterFlag: number) {
         const tileIndex = (gameNumber === 1) ? (poly.t & 127) : (poly.tt & 127);
-        if (tileIndex < 0 || tileIndex >= tileCount) return;
+        if (tileIndex < 0 || tileIndex >= tileCount) {
+            return;
+        }
         const tile = textures.tiles[tileIndex];
         const isTransparent = tile.transparent > 0;
-        const isWater = (gameNumber > 1) ? (headerWaterFlag === 0 && poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0) : false;
+        const isWater = (gameNumber > 1) ? (waterFlag === 0 && poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0) : false;
         const isLOD = false;
         const opts = { isLOD, isTransparent, isWater };
-        const a = mdlVertStart + poly.v1;
-        const b = mdlVertStart + poly.v2;
-        const c = mdlVertStart + poly.v3;
-        const d = mdlVertStart + poly.v4;
-        const ca = mdlColorStart + poly.c1;
-        const cb = mdlColorStart + poly.c2;
-        const cc = mdlColorStart + poly.c3;
-        const cd = mdlColorStart + poly.c4;
+        const v1 = vertexOffset + poly.v1;
+        const v2 = vertexOffset + poly.v2;
+        const v3 = vertexOffset + poly.v3;
+        const v4 = vertexOffset + poly.v4;
+        const c1 = colorOffset + poly.c1;
+        const c2 = colorOffset + poly.c2;
+        const c3 = colorOffset + poly.c3;
+        const c4 = colorOffset + poly.c4;
         let A = UV.TL, B = UV.TR, C = UV.BR, D = UV.BL;
 
         if (gameNumber > 1) {
@@ -555,73 +556,73 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
         if (isTri) {
             const inverse = (gameNumber > 1) ? !!(poly.ii & 4) : false;
             if (!inverse) {
-                emitTri(b, c, d, cb, cc, cd, A, C, D, tileIndex, opts);
+                pushTri(v2, v3, v4, c2, c3, c4, A, C, D, tileIndex, opts);
             } else {
-                emitTri(d, c, b, cd, cc, cb, D, C, A, tileIndex, opts);
+                pushTri(v4, v3, v2, c4, c3, c2, D, C, A, tileIndex, opts);
             }
         } else {
-            emitTri(a, b, c, ca, cb, cc, A, B, C, tileIndex, opts);
-            emitTri(a, c, d, ca, cc, cd, A, C, D, tileIndex, opts);
+            pushTri(v1, v2, v3, c1, c2, c3, A, B, C, tileIndex, opts);
+            pushTri(v1, v3, v4, c1, c3, c4, A, C, D, tileIndex, opts);
         }
     }
 
-    for (let part = 0; part < partCount; part++) {
+    for (let partIndex = 0; partIndex < partCount; partIndex++) {
         let pointer = 0;
         if (gameNumber === 1) {
             const o = data.getUint32(offset, true);
             offset += 4;
             pointer = o + 8;
         } else {
-            pointer = partOffsets[part] + 8;
+            pointer = partOffsets[partIndex] + 8;
         }
 
         const header = new PartHeader(data, pointer);
         pointer += 20;
 
-        const lodVertStart = vertexTable.length / 3;
+        const lodVertexOffset = vertices.length / 3;
         for (let i = 0; i < header.lodVertexCount; i++) {
             const v = new Vertex(data, pointer);
             pointer += 4;
             const zraw = (v.byte1 | ((v.byte2 & 3) << 8));
             let z = zraw + header.z;
-            if (gameNumber > 1) z = (zraw << 1) + header.z;
+            if (gameNumber > 1) {
+                z = (zraw << 1) + header.z;
+            }
             const y = ((v.byte2 >> 2) | ((v.byte3 & 31) << 6)) + header.y;
             const x = ((v.byte3 >> 5) | (v.byte4 << 3)) + header.x;
-            vertexTable.push(x, y, z);
+            vertices.push(x, y, z);
         }
 
-        const lodColorStart = colorTable.length / 3;
+        const lodColorOffset = colors.length / 3;
         for (let i = 0; i < header.lodColorCount; i++) {
             const c = new VertexColor(data, pointer);
             pointer += 4;
-            colorTable.push(c.r, c.g, c.b);
+            colors.push(c.r, c.g, c.b);
         }
 
         for (let i = 0; i < header.lodPolyCount; i++) {
-            const poly = (gameNumber > 1) ? new LODPoly2(data, pointer) : new LODPoly(data, pointer);
+            const p = (gameNumber > 1) ? new LODPoly2(data, pointer) : new LODPoly(data, pointer);
             pointer += 8;
-            const d = decodeLOD(poly);
-            const a = lodVertStart + d.v1;
-            const b = lodVertStart + d.v2;
-            const c = lodVertStart + d.v3;
-            const e = lodVertStart + d.v4;
-            const ca = lodColorStart + d.c1;
-            const cb = lodColorStart + d.c2;
-            const cc = lodColorStart + d.c3;
-            const cd = lodColorStart + d.c4;
-
-            const Z = UV.ZERO;
-            if (d.v1 === d.v2) {
-                emitTri(b, c, e, cb, cc, cd, Z, Z, Z, 0, { isLOD: true });
-            } else if (d.v2 === d.v3) {
-                emitTri(a, c, e, ca, cc, cd, Z, Z, Z, 0, { isLOD: true });
-            } else if (d.v3 === d.v4) {
-                emitTri(a, b, e, ca, cb, cd, Z, Z, Z, 0, { isLOD: true });
-            } else if (d.v4 === d.v1) {
-                emitTri(a, b, c, ca, cb, cc, Z, Z, Z, 0, { isLOD: true });
+            const poly = decodeLODPoly(p);
+            const v1 = lodVertexOffset + poly.v1;
+            const v2 = lodVertexOffset + poly.v2;
+            const v3 = lodVertexOffset + poly.v3;
+            const v4 = lodVertexOffset + poly.v4;
+            const c1 = lodColorOffset + poly.c1;
+            const c2 = lodColorOffset + poly.c2;
+            const c3 = lodColorOffset + poly.c3;
+            const c4 = lodColorOffset + poly.c4;
+            if (poly.v1 === poly.v2) {
+                pushTri(v2, v3, v4, c2, c3, c4, UV.ZERO, UV.ZERO, UV.ZERO, 0, { isLOD: true });
+            } else if (poly.v2 === poly.v3) {
+                pushTri(v1, v3, v4, c1, c3, c4, UV.ZERO, UV.ZERO, UV.ZERO, 0, { isLOD: true });
+            } else if (poly.v3 === poly.v4) {
+                pushTri(v1, v2, v4, c1, c2, c4, UV.ZERO, UV.ZERO, UV.ZERO, 0, { isLOD: true });
+            } else if (poly.v4 === poly.v1) {
+                pushTri(v1, v2, v3, c1, c2, c3, UV.ZERO, UV.ZERO, UV.ZERO, 0, { isLOD: true });
             } else {
-                emitTri(b, a, c, cb, ca, cc, Z, Z, Z, 0, { isLOD: true });
-                emitTri(b, c, e, cb, cc, cd, Z, Z, Z, 0, { isLOD: true });
+                pushTri(v2, v1, v3, c2, c1, c3, UV.ZERO, UV.ZERO, UV.ZERO, 0, { isLOD: true });
+                pushTri(v2, v3, v4, c2, c3, c4, UV.ZERO, UV.ZERO, UV.ZERO, 0, { isLOD: true });
             }
         }
 
@@ -641,7 +642,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
             }
         }
 
-        const mdlVertStart = vertexTable.length / 3;
+        const mdlVertexOffset = vertices.length / 3;
         for (let i = 0; i < header.mdlVertexCount; i++) {
             const v = new Vertex(data, pointer);
             pointer += 4;
@@ -657,14 +658,14 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
             }
             const y = ((v.byte2 >> 2) | ((v.byte3 & 31) << 6)) + header.y;
             const x = ((v.byte3 >> 5) | (v.byte4 << 3)) + header.x;
-            vertexTable.push(x, y, z);
+            vertices.push(x, y, z);
         }
 
-        const mdlColorStart = colorTable.length / 3;
+        const mdlColorOffset = colors.length / 3;
         for (let i = 0; i < header.mdlColorCount; i++) {
             const c = new VertexColor(data, pointer);
             pointer += 4;
-            colorTable.push(c.r, c.g, c.b);
+            colors.push(c.r, c.g, c.b);
         }
 
         pointer += header.mdlColorCount * 4;
@@ -672,17 +673,18 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
         for (let i = 0; i < header.mdlPolyCount; i++) {
             const poly = new Polygon(data, pointer, gameNumber);
             pointer += 16;
-            emitPoly(poly, mdlVertStart, mdlColorStart, header.water);
+            pushPoly(poly, mdlVertexOffset, mdlColorOffset, header.water);
         }
     }
 
-    const ground = buildBatches(ctx.groupsGround);
-    const transparent = buildBatches(ctx.groupsTransparent);
-    const lod = buildBatches(ctx.groupsLOD);
+    const ground = buildBatches(stream.indicesGround);
+    const transparent = buildBatches(stream.indicesTransparent);
+    const lod = buildBatches(stream.indicesLOD);
 
     return {
         textures, game: gameNumber, id: levelNumber,
-        vertices: new Float32Array(ctx.vertices), colors: new Float32Array(ctx.colors), uvs: new Float32Array(ctx.uvs), tileIndices: new Float32Array(ctx.tileIndices),
+        vertices: new Float32Array(stream.vertices), colors: new Float32Array(stream.colors),
+        uvs: new Float32Array(stream.uvs), tileIndices: new Float32Array(stream.tileIndices),
         indicesGround: ground.indices, indicesTransparent: transparent.indices, indicesLOD: lod.indices,
         batchesGround: ground.batches, batchesTransparent: transparent.batches, batchesLOD: lod.batches
     };
@@ -722,18 +724,25 @@ export function parseMobyInstances(subfile4: DataView): MobyInstance[] {
         if (pos + 88 > size) {
             break;
         }
-        // ??? (12), x (4), y (4), z (4), ??? (30), classId (1)
+        // offset: name (size)
+        //   0-11: ???
+        //     12: x (4)
+        //     16: y (4)
+        //     20: z (4)
+        //  24-53: ???
+        //     54: class ID (1)
+        //  55-88: ???
         const x = subfile4.getInt32(pos + 12, true);
         const y = subfile4.getInt32(pos + 16, true);
         const z = subfile4.getInt32(pos + 20, true);
         const classId = subfile4.getUint8(pos + 54);
-        // unlikely to have a moby at origin and there's lots of "empty" moby instances (these are filled at runtime if at all?)
+        // unlikely to have a moby at origin and there's lots of "empty" ones
         if (x === 0 && y === 0 && z === 0) {
             continue;
         }
-        // unsure which byte is the rotation/yaw so hardcode to 0 for now
         mobys.push({ x, y, z, yaw: 0, classId });
     }
+
     return mobys;
 }
 

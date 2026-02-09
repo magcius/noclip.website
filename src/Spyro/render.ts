@@ -6,12 +6,14 @@ import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxVertex
 import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
-import { ViewerRenderInput } from "../viewer";
+import { Texture, ViewerRenderInput } from "../viewer";
 import { Skybox, Level, MobyInstance, TILE_SCROLL_MAP } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -76,16 +78,11 @@ void main() {
     if (u_TileFlags[idx].x > 0.5) {
         uv.y = fract(uv.y - u_TimeLOD.x * 0.45);
     }
-
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
-    bool isTransparent = v_Color.a < 0.99;
-    if (isTransparent && (texColor.r < 0.001 && texColor.g < 0.001 && texColor.b < 0.001)) {
-        discard;
-    }
 
     vec3 lit;
     float outAlpha;
-
+    bool isTransparent = v_Color.a < 0.99;
     if (isTransparent) {
         float mask = max(texColor.r, max(texColor.g, texColor.b));
         lit = v_Color.rgb;
@@ -125,6 +122,13 @@ const scratchMat4a = mat4.create();
 const scratchViewNoTransform = mat4.create();
 const scratchClipFromWorldNoTransform = mat4.create();
 const MAX_TILES = 144;
+
+export function convertToViewerTexture(index: number, colors: Uint8Array): Texture {
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(colors), 32, 32);
+    const name = "tile_" + index.toString();
+    canvas.title = name;
+    return { name, surfaces: [canvas] };
+}
 
 export class LevelRenderer {
     public showMobys: boolean = false;
