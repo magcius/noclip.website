@@ -37,13 +37,13 @@ import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
+import { parse_atlm } from "./lightmap.js";
 import { parseLights } from "./lights.js";
 import { MapLayout, parseLayout } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 import { replacement_texture_group } from "./render_fmdl_texture_replace.js";
-import { assert } from "../util.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -145,6 +145,10 @@ class TMSFESceneDesc implements SceneDesc
         // get lightmaps
         const lightmap_file_name = `${this.id}.atlm`
         const lightmap_data = get_file_by_name(apak, lightmap_file_name);
+        if (lightmap_data !== undefined)
+        {
+            const lightmaps = parse_atlm(lightmap_data, device);
+        }
         
         let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_texture_groups);
 
