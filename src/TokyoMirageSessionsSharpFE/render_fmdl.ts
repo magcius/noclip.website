@@ -150,6 +150,21 @@ export class fmdl_renderer
             {
                 bone_matrix_array_length = this.fskl.smooth_rigid_indices.length;
             }
+
+            // disable meshes that are set to not render
+            let render_mesh = true;
+            const bone_user_data = fmdl.fskl.bones[fshp.bone_index].user_data;
+            const render_mesh_enable = bone_user_data.get("render_mesh_enable");
+            if (render_mesh_enable !== undefined && render_mesh_enable[0] === 0)
+            {
+                render_mesh = false;
+            }
+            // disable meshes with invalid materials
+            if (this.material_samplers_array[fshp.fmat_index]?.length === 0)
+            {
+                render_mesh = false;
+            }
+
             const renderer = new fshp_renderer
             (
                 fvtx,
@@ -157,17 +172,10 @@ export class fmdl_renderer
                 fmat,
                 bntx,
                 bone_matrix_array_length,
+                render_mesh,
                 device,
                 renderHelper
             );
-
-            // disable meshes that are set to not render
-            const bone_user_data = fmdl.fskl.bones[fshp.bone_index].user_data;
-            const render_mesh_enable = bone_user_data.get("render_mesh_enable");
-            if (render_mesh_enable != undefined && render_mesh_enable[0] === 0)
-            {
-                renderer.render_mesh = false;
-            }
 
             this.fshp_renderers.push(renderer);
         }

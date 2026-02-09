@@ -1,18 +1,6 @@
 // scene.ts
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 
-import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
-import { DataFetcher } from "../DataFetcher.js";
-import { create_common_gimmicks } from "./gimmick.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { gimmick } from "./gimmick.js";
-import { MapLayout, parseLayout } from "./maplayout.js";
-import { TMSFEScene } from "./render.js"
-import { SceneContext, SceneDesc } from "../SceneBase.js";
-import { SceneGfx, SceneGroup } from "../viewer.js";
-import { parseLights } from "./lights.js";
-
 import { create_d002_01_gimmicks } from "./maps/d002_01.js";
 import { create_d003_01_gimmicks } from "./maps/d003_01.js";
 import { create_d003_02_gimmicks } from "./maps/d003_02.js";
@@ -42,7 +30,20 @@ import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./ma
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
 import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
 import { create_f010_01_music_fes_gimmicks } from "./maps/f010_01.js";
+
+import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
+import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { create_common_gimmicks } from "./gimmick.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { gimmick } from "./gimmick.js";
+import { parseLights } from "./lights.js";
+import { MapLayout, parseLayout } from "./maplayout.js";
+import { TMSFEScene } from "./render.js"
+import { SceneContext, SceneDesc } from "../SceneBase.js";
+import { SceneGfx, SceneGroup } from "../viewer.js";
 import { replacement_texture_group } from "./render_fmdl_texture_replace.js";
+import { assert } from "../util.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -140,6 +141,10 @@ class TMSFESceneDesc implements SceneDesc
         {
             replacement_texture_groups = await this.replacement_texture_function(dataFetcher, device);
         }
+
+        // get lightmaps
+        const lightmap_file_name = `${this.id}.atlm`
+        const lightmap_data = get_file_by_name(apak, lightmap_file_name);
         
         let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_texture_groups);
 

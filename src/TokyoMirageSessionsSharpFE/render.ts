@@ -122,7 +122,7 @@ export class TMSFEScene implements SceneGfx
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
         // this.debug_draw_layout_entries(viewerInput);
-        this.debug_draw_lights(viewerInput);
+        // this.debug_draw_lights(viewerInput);
 
         // create draw calls for all the models
         for (let i = 0; i < this.fmdl_renderers.length; i++)

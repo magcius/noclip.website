@@ -47,6 +47,7 @@ export class fshp_renderer
         fmat: FMAT,
         bntx: BNTX.BNTX,
         bone_matrix_array_length: number,
+        render_mesh: boolean,
         device: GfxDevice,
         renderHelper: GfxRenderHelper,
     )
@@ -55,6 +56,7 @@ export class fshp_renderer
         this.fshp = fshp;
         this.fmat_index = fshp.fmat_index;
         this.blend_mode = fmat.blend_mode;
+        this.render_mesh = render_mesh;
 
         // create vertex buffers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
