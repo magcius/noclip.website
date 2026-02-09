@@ -188,11 +188,13 @@ export class fmdl_renderer
         // render all fshp renderers
         for (let i = 0; i < this.fshp_renderers.length; i++)
         {
-            const fmat_index = this.fshp_renderers[i].fmat_index;
-            const sampler_bindings = this.material_samplers_array[fmat_index];
+            if (this.fshp_renderers[i].render_mesh === false)
+            {
+                continue;
+            }
+            const sampler_bindings = this.material_samplers_array[this.fshp_renderers[i].fmat_index];
             if (sampler_bindings === undefined)
             {
-                // don't render a mesh with an invalid material
                 continue;
             }
             const bone_matrix_array = this.get_fshp_bone_matrix(i);
@@ -216,7 +218,6 @@ export class fmdl_renderer
                     this.special_skybox,
                     bounding_box,
                     sampler_bindings,
-                    undefined,
                 );
             }
         }

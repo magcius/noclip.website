@@ -8,13 +8,14 @@ import { DataFetcher } from '../DataFetcher.js';
 import { FMAA } from './bfres/fmaa.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
+import { AABB } from '../Geometry.js';
 import { GfxDevice, GfxSamplerBinding, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec3 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { fmdl_renderer } from "./render_fmdl";
 import { ViewerRenderInput } from '../viewer.js';
-import { AABB } from '../Geometry.js';
+import { assert } from '../util.js';
 
 export class fmdl_renderer_texture_replace extends fmdl_renderer
 {
@@ -64,11 +65,13 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         // render all fshp renderers
         for (let i = 0; i < this.fshp_renderers.length; i++)
         {
-            const fmat_index = this.fshp_renderers[i].fmat_index;
-            const sampler_bindings = this.material_samplers_array[fmat_index];
+            if (this.fshp_renderers[i].render_mesh === false)
+            {
+                continue;
+            }
+            const sampler_bindings = this.material_samplers_array[this.fshp_renderers[i].fmat_index];
             if (sampler_bindings === undefined)
             {
-                // don't render a mesh with an invalid material
                 continue;
             }
             const bone_matrix_array = this.get_fshp_bone_matrix(i);
@@ -81,6 +84,9 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                 if (this.replacement_texture_fmat_indices[replacement_texture_index] == this.fshp_renderers[i].fmat_index)
                 {
                     replacement_sampler_binding = this.replacement_textures[replacement_texture_index].sampler_binding;
+                    assert(replacement_sampler_binding !== undefined);
+                    // replace s_diffuse
+                    sampler_bindings[0] = replacement_sampler_binding;
                 }
             }
 
@@ -100,7 +106,6 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                     this.special_skybox,
                     bounding_box,
                     sampler_bindings,
-                    replacement_sampler_binding,
                 );
             }
         }

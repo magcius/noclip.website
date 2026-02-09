@@ -202,14 +202,8 @@ export class fshp_renderer
         special_skybox: boolean,
         bounding_box: AABB,
         sampler_bindings: GfxSamplerBinding[],
-        replacement_sampler_binding?: GfxSamplerBinding,
     ): void
     {
-        if (!this.render_mesh)
-        {
-            return;
-        }
-
         // the template is necessary to use uniform buffers
         renderHelper.pushTemplateRenderInst();
 
@@ -250,17 +244,7 @@ export class fshp_renderer
             uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, bone_matrix_array[i]);
         }
 
-        // set sampler
-        if (replacement_sampler_binding != undefined)
-        {
-            renderInst.setSamplerBindingsFromTextureMappings([replacement_sampler_binding]);
-            // TODO: this should include the other samplers, only the diffuse gets replaced
-        }
-        else
-        {
-            renderInst.setSamplerBindingsFromTextureMappings(sampler_bindings);
-        }
-
+        renderInst.setSamplerBindingsFromTextureMappings(sampler_bindings);
         renderInst.setMegaStateFlags(this.mega_state_flags);
         
         // submit the draw call
