@@ -15,6 +15,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
 
+    - name: Set up rust
+      run: rustup target add wasm32-unknown-unknown
+
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
 
