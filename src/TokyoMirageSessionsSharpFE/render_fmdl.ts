@@ -10,10 +10,11 @@ import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
 import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { AABB } from '../Geometry.js';
-import { GfxDevice, GfxTexture, GfxSamplerBinding } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { LightmapTexture } from './lightmap.js';
 import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { fshp_renderer } from "./render_fshp";
 import { getPointCubic } from '../Spline.js';
@@ -27,10 +28,12 @@ export class fmdl_renderer
     protected fskl: FSKL;
     protected fska: FSKA | undefined;
     protected fmaa: FMAA | undefined;
+    protected lightmap_sampler_bindings: GfxSamplerBinding[] = [];
     protected bone_to_bone_animation_indices: number[] = [];
     protected current_bones: FSKL_Bone[];
     protected smooth_rigid_matrix_array: mat4[] = [];
     protected material_to_material_animation_indices: number[] = [];
+    protected fshp_to_lightmap_indices: number[] = [];
     protected texture_srt_matrices: mat4[] = [];
     protected transform_matrix: mat4 = mat4.create();
     protected fshp_renderers: fshp_renderer[] = [];
@@ -47,6 +50,7 @@ export class fmdl_renderer
         gfx_texture_array: GfxTexture[],
         fska: FSKA | undefined,
         fmaa: FMAA | undefined,
+        lightmaps: LightmapTexture[] | undefined,
         position: vec3,
         rotation: vec3,
         scale: vec3,
@@ -93,13 +97,33 @@ export class fmdl_renderer
             this.material_samplers_array.push(sampler_bindings);
         }
 
+        // lightmap samplers
+        if (lightmaps !== undefined)
+        {
+            const sampler_descriptor = 
+            {
+                wrapS: GfxWrapMode.Repeat,
+                wrapT: GfxWrapMode.Repeat,
+                wrapQ: GfxWrapMode.Repeat,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.Linear,
+            };
+            for (let i = 0; i < lightmaps.length; i++)
+            {
+                const lightmap = lightmaps[i];
+                const gfxSampler = renderHelper.renderCache.createSampler(sampler_descriptor);
+                this.lightmap_sampler_bindings.push({ gfxTexture: lightmap.gfx_texture, gfxSampler, lateBinding: null })
+            }
+        }
+
         // setup skeleton
         this.fskl = fmdl.fskl;
         this.fska = fska;
         assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
         // for each bone, which element of the fska bone_animations array applies to it
-        if (this.fska != undefined)
+        if (this.fska !== undefined)
         {
             for (let i = 0; i < this.fskl.bones.length; i++)
             {
@@ -116,7 +140,7 @@ export class fmdl_renderer
         this.fmaa = fmaa;
 
         // for each material, which element of the material_animations array applies to it
-        if (this.fmaa != undefined)
+        if (this.fmaa !== undefined)
         {
             for (let i = 0; i < fmdl.fmat.length; i++)
             {
@@ -151,6 +175,23 @@ export class fmdl_renderer
                 bone_matrix_array_length = this.fskl.smooth_rigid_indices.length;
             }
 
+            // for each fshp, which element of the lightmaps array applies to it
+            let use_lightmaps = false;
+            let lightmap_srt_matrix = mat4.create();
+            if (lightmaps !== undefined)
+            {
+                const fshp_bone_name = fmdl.fskl.bones[fshp.bone_index].name;
+                let lightmap_index = -1;
+                const lightmap = lightmaps.find((f) => f.bone_name === fshp_bone_name);
+                if (lightmap != undefined)
+                {
+                    lightmap_index = lightmaps.indexOf(lightmap);
+                    lightmap_srt_matrix = lightmap.srt_matrix;
+                    use_lightmaps = true;
+                }
+                this.fshp_to_lightmap_indices.push(lightmap_index);
+            }
+
             // disable meshes that are set to not render
             let render_mesh = true;
             const bone_user_data = fmdl.fskl.bones[fshp.bone_index].user_data;
@@ -170,9 +211,10 @@ export class fmdl_renderer
                 fvtx,
                 fshp,
                 fmat,
-                bntx,
                 bone_matrix_array_length,
                 render_mesh,
+                use_lightmaps,
+                lightmap_srt_matrix,
                 device,
                 renderHelper
             );
@@ -192,7 +234,7 @@ export class fmdl_renderer
             {
                 continue;
             }
-            const sampler_bindings = this.material_samplers_array[this.fshp_renderers[i].fmat_index];
+            let sampler_bindings = this.get_fshp_sampler_bindings(i);
             if (sampler_bindings === undefined)
             {
                 continue;
@@ -483,6 +525,33 @@ export class fmdl_renderer
         }
 
         return new_bounding_box;
+    }
+
+    get_fshp_sampler_bindings(fshp_index: number): GfxSamplerBinding[] | undefined
+    {
+        const new_sampler_bindings: GfxSamplerBinding[] = [];
+        let sampler_bindings = this.material_samplers_array[this.fshp_renderers[fshp_index].fmat_index];
+        if (sampler_bindings === undefined)
+        {
+            return undefined;
+        }
+        // TODO: is there a better way to join two arrays than iterating over it?
+        for (let i = 0; i < sampler_bindings.length; i++)
+        {
+            new_sampler_bindings.push(sampler_bindings[i]);
+        }
+        // add the lightmap at the end if there is one
+        if (this.lightmap_sampler_bindings.length > 0)
+        {
+            const lightmap_index = this.fshp_to_lightmap_indices[fshp_index];
+            if (lightmap_index !== -1)
+            {
+                const lightmap_sampler_binding = this.lightmap_sampler_bindings[lightmap_index];
+                new_sampler_bindings.push(lightmap_sampler_binding)
+            }
+        }
+
+        return new_sampler_bindings;
     }
 }
 

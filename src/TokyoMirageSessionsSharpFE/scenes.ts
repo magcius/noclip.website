@@ -37,8 +37,8 @@ import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
-import { parse_atlm } from "./lightmap.js";
-import { parseLights } from "./lights.js";
+import { LightmapTexture, parse_atlm } from "./lightmap.js";
+import { Light, parseLights } from "./lights.js";
 import { MapLayout, parseLayout } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
@@ -55,7 +55,7 @@ class TMSFESceneDesc implements SceneDesc
      * @param name The map's display name in the UI
      * @param model_file_names which model files in model.apak to load
      * @param animation_file_names which animation files in model.apak to load
-     * @param map_gimmick_function per map function that spawns interactable objects
+     * @param map_gimmick_function per map function that spawns objects in a level
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
      * @param has_battle_audience whether to add the audience models
@@ -120,7 +120,7 @@ class TMSFESceneDesc implements SceneDesc
                 }
             }
 
-            level_models.push({ model_fres, animation_fres });
+            level_models.push({ model_fres, animation_fres, lightmaps: undefined });
         }
 
         if (this.has_battle_audience)
@@ -130,48 +130,47 @@ class TMSFESceneDesc implements SceneDesc
             const audience_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience01/skin/00/model.apak", "audience01_00.bfres", dataFetcher);
             const audience_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience02/skin/00/model.apak", "audience02_00.bfres", dataFetcher);
             const audience_00_animation_fres = await get_animations_from_apak("TokyoMirageSessionsSharpFE/Battle/Obj/audience00/skin/00/model_common.apak", dataFetcher);
-            level_models.push({ model_fres: audience_00_fres, animation_fres: audience_00_animation_fres[0] });
-            level_models.push({ model_fres: audience_01_fres, animation_fres: audience_00_animation_fres[0] });
-            level_models.push({ model_fres: audience_02_fres, animation_fres: audience_00_animation_fres[0] });
+            level_models.push({ model_fres: audience_00_fres, animation_fres: audience_00_animation_fres[0], lightmaps: undefined });
+            level_models.push({ model_fres: audience_01_fres, animation_fres: audience_00_animation_fres[0], lightmaps: undefined });
+            level_models.push({ model_fres: audience_02_fres, animation_fres: audience_00_animation_fres[0], lightmaps: undefined });
         }
 
-        // get replacement textures
         let replacement_texture_groups: replacement_texture_group[] = [];
         if (this.replacement_texture_function != undefined)
         {
             replacement_texture_groups = await this.replacement_texture_function(dataFetcher, device);
         }
+        
+        let layout = undefined;
+        let common_gimmicks: gimmick[] = [];
+        let map_gimmicks: gimmick[] = [];
+        const maplayout_data = get_file_by_name(apak, "maplayout.layout");
+        if (maplayout_data != undefined)
+        {
+            layout = parseLayout(maplayout_data);
+            common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
+            if (this.map_gimmick_function != undefined)
+            {
+                map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
+            }
+        }
+        
+        let lights: Light[] = [];
+        const light_data = get_file_by_name(apak, `${this.id}.lig`);
+        if (light_data !== undefined)
+        {
+            lights = parseLights(light_data);
+        }
 
-        // get lightmaps
         const lightmap_file_name = `${this.id}.atlm`
         const lightmap_data = get_file_by_name(apak, lightmap_file_name);
         if (lightmap_data !== undefined)
         {
-            const lightmaps = parse_atlm(lightmap_data, device);
-        }
-        
-        let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_texture_groups);
-
-        // add gimmicks
-        const maplayout_data = get_file_by_name(apak, "maplayout.layout");
-        if (maplayout_data != undefined)
-        {
-            const layout = parseLayout(maplayout_data);
-            scene.layout = layout;
-            scene.common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
-            if (this.map_gimmick_function != undefined)
-            {
-                scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
-            }
-        }
-        
-        const light_data = get_file_by_name(apak, `${this.id}.lig`);
-        if (light_data !== undefined)
-        {
-            const lights = parseLights(light_data);
-            scene.lights = lights;
+            // only the main model for each level has lightmap textures
+            level_models[0].lightmaps = parse_atlm(lightmap_data, device);
         }
 
+        let scene = new TMSFEScene(device, level_models, this.special_skybox, replacement_texture_groups, layout, common_gimmicks, map_gimmicks, lights);
         return scene;
     }
 }
@@ -180,6 +179,7 @@ export interface level_model
 {
     model_fres: FRES;
     animation_fres: FRES | undefined;
+    lightmaps: LightmapTexture[] | undefined;
 }
 
 // sceneGroup

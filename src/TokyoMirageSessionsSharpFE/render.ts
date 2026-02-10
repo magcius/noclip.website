@@ -12,6 +12,8 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
 import { vec3, mat4 } from "gl-matrix";
+import { LightmapTexture } from './lightmap.js';
+import { Light } from './lights.js';
 import { MapLayout } from './maplayout.js';
 import { fmdl_renderer } from "./render_fmdl.js";
 import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
@@ -19,29 +21,41 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { computeModelMatrixSRT } from '../MathHelpers.js';
-import { Light } from './lights.js';
 
 export class TMSFEScene implements SceneGfx
 {
-    public layout: MapLayout | undefined; // this level's MapLayout, containing coordinates and areas to spawn objects or trigger flags
-    public common_gimmicks: gimmick[] = [];
-    public map_gimmicks: gimmick[] = [];
-    public lights: Light[] = [];
-
     private renderHelper: GfxRenderHelper;
     private renderInstListOpaque = new GfxRenderInstList();
     private renderInstListTranslucent = new GfxRenderInstList();
     private renderInstListSkybox = new GfxRenderInstList();
     private fmdl_renderers: fmdl_renderer[] = [];
+    private layout: MapLayout | undefined; // this level's MapLayout, containing coordinates and areas to spawn objects or trigger flags
+    private common_gimmicks: gimmick[] = [];
+    private map_gimmicks: gimmick[] = [];
+    private lights: Light[] = [];
 
     /**
      * @param level_models array of level_model objects containing groups of FRES objects for a single model
      * @param special_skybox this level has a smaller skybox that follows the camera
      * @param replacement_textures for displaying dynamic posters, tvs, and advertisements in certain maps
      */
-    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean, replacement_texture_groups: replacement_texture_group[])
+    constructor
+    (
+        device: GfxDevice,
+        level_models: level_model[],
+        special_skybox: boolean,
+        replacement_texture_groups: replacement_texture_group[],
+        layout: MapLayout | undefined,
+        common_gimmicks: gimmick[],
+        map_gimmicks: gimmick[],
+        lights: Light[],
+    )
     {
         this.renderHelper = new GfxRenderHelper(device);
+        this.layout = layout;
+        this.common_gimmicks = common_gimmicks;
+        this.map_gimmicks = map_gimmicks;
+        this.lights = lights;
 
         // create all fmdl renderers
         for(let level_models_index = 0; level_models_index < level_models.length; level_models_index++)
@@ -71,6 +85,8 @@ export class TMSFEScene implements SceneGfx
                 }
             }
 
+            let lightmaps: LightmapTexture[] | undefined = level_models[level_models_index].lightmaps;
+
             let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
             let renderer: fmdl_renderer;
@@ -83,6 +99,7 @@ export class TMSFEScene implements SceneGfx
                     gfx_texture_array,
                     fska,
                     fmaa,
+                    lightmaps,
                     vec3.fromValues(0.0, 0.0, 0.0),
                     vec3.fromValues(0.0, 0.0, 0.0),
                     vec3.fromValues(1.0, 1.0, 1.0),
@@ -101,6 +118,7 @@ export class TMSFEScene implements SceneGfx
                     gfx_texture_array,
                     fska,
                     fmaa,
+                    lightmaps,
                     vec3.fromValues(0.0, 0.0, 0.0),
                     vec3.fromValues(0.0, 0.0, 0.0),
                     vec3.fromValues(1.0, 1.0, 1.0),

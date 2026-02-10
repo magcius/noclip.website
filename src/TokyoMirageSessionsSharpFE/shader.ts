@@ -33,10 +33,12 @@ layout(std140) uniform ub_SceneParams
     Mat3x4 u_ViewFromWorldMatrix;
     Mat3x4 u_TransformationMatrix;
     Mat2x4 u_Albedo0SRTMatrix;
+    Mat2x4 u_LightmapSRTMatrix;
     Mat3x4 u_BoneMatrices[${this.bone_matrix_array_length}];
 };
 
 varying vec2 v_TexCoord0;
+varying vec2 v_TexCoord1;
 
 #ifdef VERT
 ${this.define_inputs()}
@@ -77,17 +79,32 @@ void mainVS()
     gl_Position = UnpackMatrix(u_ClipFromViewMatrix) * vec4(ViewPosition, 1.0);
     
     v_TexCoord0 = a_TexCoord0.xy;
+
+    #ifdef USE_LIGHTMAPS
+    v_TexCoord1 = a_TexCoord1.xy;
+    #endif
 }
 #endif
 
 #ifdef FRAG
 ${this.define_samplers()}
 
+#ifdef USE_LIGHTMAPS
+uniform sampler2D s_lightmap;
+#endif
+
 void mainPS()
 {
+    #ifdef USE_LIGHTMAPS
+    vec2 LightmapTexCoord = UnpackMatrix(u_LightmapSRTMatrix) * vec4(v_TexCoord1.xy, 1.0, 1.0);
+    vec4 Color = texture(SAMPLER_2D(s_lightmap), LightmapTexCoord);
+    gl_FragColor = Color;
+
+    #else
     vec2 Albedo0TexCoord =  UnpackMatrix(u_Albedo0SRTMatrix) * vec4(v_TexCoord0.xy, 1.0, 1.0);
     vec4 Albedo0Color = texture(SAMPLER_2D(s_diffuse), Albedo0TexCoord);
     gl_FragColor = Albedo0Color;
+    #endif
 
     #ifdef USE_ALPHA_TEST
     if (gl_FragColor.a < 0.5)

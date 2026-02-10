@@ -1,7 +1,6 @@
 // render_fshp.ts
 // renders a single mesh from a model in a bfres file
 
-import * as BNTX from '../fres_nx/bntx.js';
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { computeViewMatrixSkybox, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
 import { FVTX } from "./bfres/fvtx.js";
@@ -13,8 +12,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
-         GfxBuffer, GfxSamplerBinding, GfxTexture, GfxMegaStateDescriptor, GfxBlendMode,
-         GfxBlendFactor, GfxChannelWriteMask} from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, GfxSamplerBinding, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -39,15 +37,17 @@ export class fshp_renderer
     private program: TMSFEProgram;
     private blend_mode: BlendMode;
     private mega_state_flags: Partial<GfxMegaStateDescriptor>;
+    private lightmap_srt_matrix: mat4;
 
     constructor
     (
         fvtx: FVTX,
         fshp: FSHP,
         fmat: FMAT,
-        bntx: BNTX.BNTX,
         bone_matrix_array_length: number,
         render_mesh: boolean,
+        use_lightmaps: boolean,
+        lightmap_srt_matrix: mat4,
         device: GfxDevice,
         renderHelper: GfxRenderHelper,
     )
@@ -57,6 +57,7 @@ export class fshp_renderer
         this.fmat_index = fshp.fmat_index;
         this.blend_mode = fmat.blend_mode;
         this.render_mesh = render_mesh;
+        this.lightmap_srt_matrix = lightmap_srt_matrix;
 
         // create vertex buffers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
@@ -184,6 +185,7 @@ export class fshp_renderer
             use_alpha_test = true;
         }
         this.program.setDefineBool('USE_ALPHA_TEST', use_alpha_test);
+        this.program.setDefineBool('USE_LIGHTMAPS', use_lightmaps);
     }
 
     /**
@@ -214,13 +216,13 @@ export class fshp_renderer
         // set shader
         const program = renderHelper.renderCache.createProgram(this.program);
         renderInst.setGfxProgram(program);
-        const numSamplers = sampler_bindings.length;
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers }];
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: sampler_bindings.length }];
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
-        // size 16 + 12 + 12 + 8 + (12 * bone count)
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 48 + (12 * bone_matrix_array.length));
+        // size 16 + 12 + 12 + 8 + 8 + (12 * bone count)
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 56 + (12 * bone_matrix_array.length));
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
 
@@ -238,6 +240,7 @@ export class fshp_renderer
         
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, transform_matrix);
         uniform_buffer_offset += fillMatrix4x2(mapped, uniform_buffer_offset, albedo0_srt_matrix);
+        uniform_buffer_offset += fillMatrix4x2(mapped, uniform_buffer_offset, this.lightmap_srt_matrix);
 
         for (let i = 0; i < bone_matrix_array.length; i++)
         {

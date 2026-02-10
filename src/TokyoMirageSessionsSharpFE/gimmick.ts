@@ -52,6 +52,7 @@ export class gimmick
             gfx_texture_array,
             fska,
             fmaa,
+            undefined,
             position,
             rotation,
             scale,

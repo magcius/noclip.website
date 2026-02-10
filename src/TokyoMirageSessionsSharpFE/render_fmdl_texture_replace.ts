@@ -13,6 +13,7 @@ import { GfxDevice, GfxSamplerBinding, GfxTexture } from "../gfx/platform/GfxPla
 import { vec3 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { LightmapTexture } from './lightmap.js';
 import { fmdl_renderer } from "./render_fmdl";
 import { ViewerRenderInput } from '../viewer.js';
 import { assert } from '../util.js';
@@ -29,6 +30,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         gfx_texture_array: GfxTexture[],
         fska: FSKA | undefined,
         fmaa: FMAA | undefined,
+        lightmaps: LightmapTexture[] | undefined,
         position: vec3,
         rotation: vec3,
         scale: vec3,
@@ -40,7 +42,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         
     )
     {
-        super(fmdl, bntx, gfx_texture_array, fska, fmaa, position, rotation, scale, special_skybox, device, renderHelper, override_bounding_box);
+        super(fmdl, bntx, gfx_texture_array, fska, fmaa, lightmaps, position, rotation, scale, special_skybox, device, renderHelper, override_bounding_box);
         this.replacement_textures = replacement_textures;
 
         for (let i = 0; i < replacement_textures.length; i++)
@@ -69,7 +71,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
             {
                 continue;
             }
-            const sampler_bindings = this.material_samplers_array[this.fshp_renderers[i].fmat_index];
+            let sampler_bindings = this.get_fshp_sampler_bindings(i);
             if (sampler_bindings === undefined)
             {
                 continue;
