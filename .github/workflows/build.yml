@@ -15,9 +15,6 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
 
-    - name: Set up rust
-      run: rustup target add wasm32-unknown-unknown && cd rust && cargo install cargo-run-bin && cargo bin --install
-
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
 
@@ -29,10 +26,14 @@ jobs:
     - name: Cache Rust workspace
       uses: Swatinem/rust-cache@v2
       with:
+        cache-directories: "rust/.bin"
         workspaces: rust
 
     - name: Install Node dependencies
       run: pnpm install
+
+    - name: Set up rust
+      run: rustup target add wasm32-unknown-unknown && cd rust && cargo install cargo-run-bin && cargo bin --install
 
     - name: Debug
       run: echo "RUST_LOG=info" >> $GITHUB_ENV
