@@ -184,7 +184,7 @@ class Polygon {
     }
 }
 
-const VRAM_SIZE = 524288
+const VRAM_SIZE = 512000;
 export class VRAM {
     private data: Uint16Array;
 
@@ -718,6 +718,11 @@ export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): 
     }
     pointer += 4; // skip the instances section's size/next pointer
 
+    if (pointer + 88 > size) {
+        // temp fix for S2 title screen, other cutscenes in S2 don't have this problem (???)
+        return [];
+    }
+
     // Moby instances (88)
     const mobys: MobyInstance[] = [];
     for (let i = 0; i < subfile4.getUint32(pointer, true); i++) {
@@ -797,7 +802,7 @@ export function parseLevelData(data: ArrayBufferSlice): LevelData {
     pointer += 4;
     let subfile4Size = getUint32();
     pointer = subfile4Offset;
-    if (pointer + subfile4Size <= data.byteLength) {
+    if (pointer + subfile4Size < data.byteLength) {
         subfile4 = data.subarray(pointer, subfile4Size);
     }
 
