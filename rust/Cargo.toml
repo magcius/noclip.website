@@ -10,15 +10,6 @@ edition = "2018"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-O', '--enable-bulk-memory']
-
-[package.metadata.wasm-pack.profile.dev]
-wasm-opt = ['-Os', '--enable-bulk-memory']
-
-[package.metadata.wasm-pack.profile.dev.wasm-bindgen]
-demangle-name-section = true
-
 [profile.release]
 lto = true
 opt-level = "s"
