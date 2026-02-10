@@ -707,10 +707,8 @@ export function parseTextures(vram: VRAM, textureList: DataView, gameNumber: num
 
 export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): MobyInstance[] {
     const size = subfile4.byteLength;
-    // instance section is constant across levels per game
-    const mobyInstancesIndex = gameNumber === 3 ? 12 : 8;
-    // skip header, different size per game
-    let pointer = gameNumber === 3 ? 48 : 44;
+    const mobyInstancesIndex = [7, 8, 12][gameNumber - 1];
+    let pointer = [136, 44, 48][gameNumber - 1];
     let index = 0;
     // jump sections until reaching the right one
     while (pointer < size - 8 && index < mobyInstancesIndex) {
@@ -718,7 +716,7 @@ export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): 
         pointer += sectionSize;
         index += 1;
     }
-    pointer += 4;
+    pointer += 4; // skip the instances section's size/next pointer
 
     // Moby instances (88)
     const mobys: MobyInstance[] = [];
@@ -793,7 +791,17 @@ export function parseLevelData(data: ArrayBufferSlice): LevelData {
     }
     const sky = data.subarray(pointer, skyVar);
 
-    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky };
+    let subfile4;
+    pointer = 24;
+    const subfile4Offset = getUint32();
+    pointer += 4;
+    let subfile4Size = getUint32();
+    pointer = subfile4Offset;
+    if (pointer + subfile4Size <= data.byteLength) {
+        subfile4 = data.subarray(pointer, subfile4Size);
+    }
+
+    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
 }
 
 export function parseLevelData2(data: ArrayBufferSlice, gameNumber: number = 2): LevelData {

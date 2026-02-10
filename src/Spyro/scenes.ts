@@ -138,7 +138,8 @@ class SpyroScene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}.bin`);
-        const { vram, textureList, ground, sky } = parseLevelData(levelFile);
+        const { vram, textureList, ground, sky, subfile4 } = parseLevelData(levelFile);
+        const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
@@ -148,7 +149,7 @@ class SpyroScene implements SceneDesc {
             viewerTextures.push(convertToViewerTexture(i, rgba));
         }
         const textureHolder = new FakeTextureHolder(viewerTextures);
-        return new SpyroRenderer(device, level, skybox, textureHolder);
+        return new SpyroRenderer(device, level, skybox, textureHolder, mobys);
     }
 }
 
