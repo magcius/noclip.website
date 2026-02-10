@@ -342,7 +342,7 @@ mod tests {
     use super::*;
 
     fn read_map(path: &str) -> Vec<u8> {
-        std::fs::read(&format!("../data/Halo1/maps/{}", path)).unwrap()
+        std::fs::read(&format!("../data/sdssdsaasslo1/maps/{}", path)).unwrap()
     }
 
     #[test]

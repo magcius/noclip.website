@@ -1,5 +1,5 @@
 [workspace]
-members = ["noclip-macros"]
+members = ["noclip-macros", "tools/cargo-bin"]
 
 [package]
 name = "noclip-support"
@@ -37,3 +37,7 @@ anyhow = "1.0.99"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
+
+[package.metadata.bin]
+wasm-bindgen-cli = { version = "0.2.100", locked = true, bins = ["wasm-bindgen"] }
+wasm-opt = { version = "0.116.1" }
