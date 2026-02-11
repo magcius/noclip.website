@@ -1,5 +1,5 @@
 [workspace]
-members = ["noclip-macros"]
+members = ["noclip-macros", "tools/cargo-bin"]
 
 [package]
 name = "noclip-support"
@@ -9,15 +9,6 @@ edition = "2018"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-O', '--enable-bulk-memory']
-
-[package.metadata.wasm-pack.profile.dev]
-wasm-opt = ['-Os', '--enable-bulk-memory']
-
-[package.metadata.wasm-pack.profile.dev.wasm-bindgen]
-demangle-name-section = true
 
 [profile.release]
 lto = true
@@ -46,3 +37,7 @@ anyhow = "1.0.99"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
+
+[package.metadata.bin]
+wasm-bindgen-cli = { version = "0.2.100", locked = true, bins = ["wasm-bindgen"] }
+wasm-opt = { version = "0.116.1" }
