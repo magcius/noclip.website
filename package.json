@@ -2,6 +2,7 @@
   "name": "@jstpierre/noclip.website",
   "private": true,
   "license": "MIT",
+  "type": "module",
   "devDependencies": {
     "@rsbuild/core": "^1.4.4",
     "@rsbuild/plugin-type-check": "^1.2.3",
@@ -90,7 +91,7 @@
       ]
     },
     "build:wasm-debug": {
-      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/debug/noclip_support.wasm --out-dir ./pkg --out-name noclip_support --target web",
+      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/debug/noclip_support.wasm --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/target/wasm32-unknown-unknown/debug/noclip_support.wasm"
       ],
@@ -115,7 +116,7 @@
       ]
     },
     "build:wasm-release": {
-      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/release/noclip_support.opt.wasm --out-dir ./pkg --out-name noclip_support --target web",
+      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/release/noclip_support.opt.wasm --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/target/wasm32-unknown-unknown/release/noclip_support.opt.wasm"
       ],

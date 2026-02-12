@@ -1,4 +1,4 @@
-import { WowBlp } from "../../rust/pkg/noclip_support";
+import { WowBlp } from "noclip-support";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
 import {

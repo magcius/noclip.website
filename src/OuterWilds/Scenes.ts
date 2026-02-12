@@ -11,7 +11,7 @@ import { UnityMaterialData } from '../Common/Unity/AssetManager.js';
 import { GfxRenderInst, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { fallback, nArray } from '../util.js';
 import { TextureMapping } from '../TextureHolder.js';
-import { UnityVersion } from '../../rust/pkg/noclip_support.js';
+import { UnityVersion } from 'noclip-support';
 
 class TempMaterialProgram extends UnityShaderProgramBase {
     public static ub_MaterialParams = 2;
