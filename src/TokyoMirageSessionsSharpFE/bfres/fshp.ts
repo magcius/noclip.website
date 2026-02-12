@@ -87,7 +87,7 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
         const fvtx_index = view.getUint16(fshp_entry_offset + 0x56, true);
 
         const skin_bone_index_array_offset = view.getUint32(fshp_entry_offset + 0x20, true);
-        const skin_bone_count = view.getUint8(fshp_entry_offset + 0x5A);
+        const skin_bone_count = view.getUint8(fshp_entry_offset + 0x58);
         let skin_bone_indices: number[] = [];
         let skin_bone_index_entry_offset = skin_bone_index_array_offset;
         for (let i = 0; i < skin_bone_count; i++)
@@ -97,7 +97,9 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
             skin_bone_index_entry_offset += 0x2;
         }
 
-        fshp_array.push({ name, mesh: mesh_array, bounding_boxes, bounding_sphere_center, bounding_sphere_radius, fmat_index, bone_index, fvtx_index, skin_bone_count, skin_bone_indices });
+        const vertex_skin_weight_count = view.getUint8(fshp_entry_offset + 0x5A);
+
+        fshp_array.push({ name, mesh: mesh_array, bounding_boxes, bounding_sphere_center, bounding_sphere_radius, fmat_index, bone_index, fvtx_index, skin_bone_indices, vertex_skin_weight_count });
         fshp_entry_offset += FSHP_ENTRY_SIZE;
     }
 
@@ -148,8 +150,8 @@ export interface FSHP
     fmat_index: number; // the index into this fmdl's fmat array for the material to use for this mesh
     bone_index: number; // the index into this fmdl's bone array for the bone to use for this mesh
     fvtx_index: number; // the index into this fmdl's fvtx array for the set of vertices to use for this mesh
-    skin_bone_count: number;
-    skin_bone_indices: number[]; // indices of which bones in a fskl that influence this mesh
+    skin_bone_indices: number[]; // indices of every bone in a fskl that influence this mesh
+    vertex_skin_weight_count: number; // for each vertex, how many bones influence it
 }
 
 enum IndexFormat

@@ -3,15 +3,28 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString, align } from "../util.js";
 import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum.js";
 import { AABB } from "../Geometry.js";
-import { vec2, vec4 } from "gl-matrix";
+import { vec2, vec3, vec4 } from "gl-matrix";
 import { Color } from "../Color.js";
+
+export interface Version
+{
+    major: number;
+    minor: number;
+    micro: number;
+}
 
 export interface FSKL_Bone {
     name: string;
+    parentIndex: number;
+    scale: vec3;
+    rotation: vec4;
+    translation: vec3;
+    userData: Map<string, number[] | string[]>;
 }
 
 export interface FSKL {
     bones: FSKL_Bone[];
+    smoothRigidIndices: number[];
 }
 
 export interface FVTX_VertexAttribute {
@@ -117,6 +130,7 @@ export interface FMAT {
     textureName: string[];
     samplerInfo: FMAT_SamplerInfo[];
     shaderParam: FMAT_ShaderParam[];
+    userData: Map<string, number[] | string[]>;
 }
 
 export interface FMDL {
@@ -125,6 +139,7 @@ export interface FMDL {
     fvtx: FVTX[];
     fshp: FSHP[];
     fmat: FMAT[];
+    userData: Map<string, number[] | string[]>;
 }
 
 export interface FRES {
@@ -142,65 +157,117 @@ export function readBinStr(buffer: ArrayBufferSlice, offs: number, littleEndian:
     return readString(buffer, offs + 0x02, 0xFF, true);
 }
 
-function parseFSKL(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FSKL {
+function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FSKL {
     const view = buffer.createDataView();
 
     assert(readString(buffer, offs + 0x00, 0x04) === 'FSKL');
-    const boneArrayOffs = view.getUint32(offs + 0x18, littleEndian);
 
+    let boneArrayOffs;
+    let smoothRigidIndexArrayOffset;
+    let flag;
+    let boneCount;
+    let smoothMtxCount;
+    let rigidMtxCount;
+
+    if (fresVersion.major < 9)
+    {
+        boneArrayOffs = view.getUint32(offs + 0x18, littleEndian);
+        smoothRigidIndexArrayOffset = view.getUint32(offs + 0x20, littleEndian);
+        flag = view.getUint32(offs + 0x48, littleEndian);
+        boneCount = view.getUint16(offs + 0x4C, littleEndian);
+        smoothMtxCount = view.getUint16(offs + 0x4E, littleEndian);
+        rigidMtxCount = view.getUint16(offs + 0x50, littleEndian);
+    }
+    else
+    {
+        flag = view.getUint32(offs + 0x4, littleEndian);
+        boneArrayOffs = view.getUint32(offs + 0x10, littleEndian);
+        smoothRigidIndexArrayOffset = view.getUint32(offs + 0x18, littleEndian);
+        boneCount = view.getUint16(offs + 0x38, littleEndian);
+        smoothMtxCount = view.getUint16(offs + 0x3A, littleEndian);
+        rigidMtxCount = view.getUint16(offs + 0x3C, littleEndian);
+    }
+
+    // TODO: do something with this
     enum BoneFlag {
         RotationMode_Quat     = 0x00 << 12,
         RotationMode_EulerXyz = 0x01 << 12,
     }
 
-    const flag = view.getUint32(offs + 0x48, littleEndian);
-    const boneCount = view.getUint16(offs + 0x4C, littleEndian);
-    const smoothMtxCount = view.getUint16(offs + 0x4E, littleEndian);
-    const rigidMtxCount = view.getUint16(offs + 0x50, littleEndian);
-
     let boneArrayIdx = boneArrayOffs;
     const bones: FSKL_Bone[] = [];
     for (let i = 0; i < boneCount; i++) {
         const name = readBinStr(buffer, view.getUint32(boneArrayIdx + 0x00, littleEndian), littleEndian);
+        const userDataArrayOffs = view.getUint16(boneArrayIdx + 0x08, littleEndian);
         const index = view.getUint16(boneArrayIdx + 0x28, littleEndian);
-        const parentIndex = view.getUint16(boneArrayIdx + 0x2A, littleEndian);
+        const parentIndex = view.getInt16(boneArrayIdx + 0x2A, littleEndian);
         const smoothMtxIndex = view.getInt16(boneArrayIdx + 0x2C, littleEndian);
         const rigidMtxIndex = view.getInt16(boneArrayIdx + 0x2E, littleEndian);
-        const billboardIndex = view.getUint16(boneArrayIdx + 0x30, littleEndian);
+        const billboardIndex = view.getInt16(boneArrayIdx + 0x30, littleEndian);
+        const userDataCount = view.getInt16(boneArrayIdx + 0x32, littleEndian);
         const boneFlag: BoneFlag = view.getUint32(boneArrayIdx + 0x34, littleEndian);
 
         const scaleX = view.getFloat32(boneArrayIdx + 0x38, littleEndian);
         const scaleY = view.getFloat32(boneArrayIdx + 0x3C, littleEndian);
         const scaleZ = view.getFloat32(boneArrayIdx + 0x40, littleEndian);
-        if ((boneFlag & BoneFlag.RotationMode_EulerXyz)) {
-            const rotationEulerX = view.getFloat32(boneArrayIdx + 0x44, littleEndian);
-            const rotationEulerY = view.getFloat32(boneArrayIdx + 0x48, littleEndian);
-            const rotationEulerZ = view.getFloat32(boneArrayIdx + 0x4C, littleEndian);
-        } else {
-            const rotationQuatX = view.getFloat32(boneArrayIdx + 0x44, littleEndian);
-            const rotationQuatY = view.getFloat32(boneArrayIdx + 0x48, littleEndian);
-            const rotationQuatZ = view.getFloat32(boneArrayIdx + 0x4C, littleEndian);
-            const rotationQuatW = view.getFloat32(boneArrayIdx + 0x50, littleEndian);
-        }
+        const scale = vec3.fromValues(scaleX, scaleY, scaleZ);
+
+        const rotationX = view.getFloat32(boneArrayIdx + 0x44, littleEndian);
+        const rotationY = view.getFloat32(boneArrayIdx + 0x48, littleEndian);
+        const rotationZ = view.getFloat32(boneArrayIdx + 0x4C, littleEndian);
+        const rotationW = view.getFloat32(boneArrayIdx + 0x50, littleEndian);
+        const rotation = vec4.fromValues(rotationX, rotationY, rotationZ, rotationW);
+
         const translationX = view.getFloat32(boneArrayIdx + 0x54, littleEndian);
         const translationY = view.getFloat32(boneArrayIdx + 0x58, littleEndian);
         const translationZ = view.getFloat32(boneArrayIdx + 0x5C, littleEndian);
+        const translation = vec3.fromValues(translationX, translationY, translationZ);
 
-        bones.push({ name });
+        const userData = parseUserData(buffer, fresVersion, userDataArrayOffs, userDataCount, littleEndian);
+
+        bones.push({ name, parentIndex, scale, rotation, translation, userData });
         boneArrayIdx += 0x60;
     }
-    return { bones };
+
+    let smoothRigidIndices: number[] = [];
+    let smoothRigidIndexArrayIdx = smoothRigidIndexArrayOffset;
+    for (let i = 0; i < smoothMtxCount + rigidMtxCount; i++)
+    {
+        const boneIndex = view.getUint16(smoothRigidIndexArrayIdx, true);
+
+        smoothRigidIndices.push(boneIndex);
+        smoothRigidIndexArrayIdx += 0x2;
+    }
+
+    return { bones, smoothRigidIndices };
 }
 
-function parseFVTX(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FVTX {
+function parseFVTX(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FVTX {
     const view = buffer.createDataView();
 
-    const vertexAttrArrayOffs = view.getUint32(offs + 0x10, littleEndian);
-    const vertexBufferInfoArrayOffs = view.getUint32(offs + 0x38, littleEndian);
-    const vertexBufferStateInfoArrayOffs = view.getUint32(offs + 0x40, littleEndian);
-    const memoryPoolOffset = view.getUint32(offs + 0x50, littleEndian);
-    const vertexAttrCount = view.getUint8(offs + 0x54);
-    const vertexBufferCount = view.getUint8(offs + 0x55);
+    let vertexAttrArrayOffs;
+    let vertexBufferInfoArrayOffs;
+    let vertexBufferStateInfoArrayOffs;
+    let memoryPoolOffset;
+    let vertexAttrCount;
+    let vertexBufferCount;
+
+    if (fresVersion.major < 9) {
+        vertexAttrArrayOffs = view.getUint32(offs + 0x10, littleEndian);
+        vertexBufferInfoArrayOffs = view.getUint32(offs + 0x38, littleEndian);
+        vertexBufferStateInfoArrayOffs = view.getUint32(offs + 0x40, littleEndian);
+        memoryPoolOffset = view.getUint32(offs + 0x50, littleEndian);
+        vertexAttrCount = view.getUint8(offs + 0x54);
+        vertexBufferCount = view.getUint8(offs + 0x55);
+    }
+    else {
+        vertexAttrArrayOffs = view.getUint32(offs + 0x8, littleEndian);
+        vertexBufferInfoArrayOffs = view.getUint32(offs + 0x30, littleEndian);
+        vertexBufferStateInfoArrayOffs = view.getUint32(offs + 0x38, littleEndian);
+        memoryPoolOffset = view.getUint32(offs + 0x48, littleEndian);
+        vertexAttrCount = view.getUint8(offs + 0x4C);
+        vertexBufferCount = view.getUint8(offs + 0x4D);
+    }
 
     const vertexAttributes: FVTX_VertexAttribute[] = [];
     let vertexAttrArrayIdx = vertexAttrArrayOffs;
@@ -231,28 +298,60 @@ function parseFVTX(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     return { vertexAttributes, vertexBuffers };
 }
 
-function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FSHP {
+function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FSHP {
     const view = buffer.createDataView();
 
-    const name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
-    // 0x18 vertex
-    const meshArrayOffs = view.getUint32(offs + 0x20, littleEndian);
-    // 0x28 skin bone index array
-    // 0x30 key shape array
-    // 0x38 key shape dict
-    const boundingBoxArrayOffs = view.getUint32(offs + 0x40, littleEndian);
-    // 0x48 bounding sphere array
-    // 0x50 user ptr
-    // 0x58 flag
-    // 0x5C index
-    const materialIndex = view.getUint16(offs + 0x5E, littleEndian);
-    const boneIndex = view.getUint16(offs + 0x60, littleEndian);
-    const vertexIndex = view.getUint16(offs + 0x62, littleEndian);
-    // 0x64 skin bone index count
-    // 0x66 vtx skin count
-    const meshCount = view.getUint8(offs + 0x67);
-    // 0x68 key shape count
-    // 0x69 target attr count
+    let name;
+    let meshArrayOffs;
+    let skinBoneIndexArrayOffs;
+    let boundingBoxArrayOffs;
+    let boundingSphereArrayOffs;
+    let materialIndex;
+    let boneIndex;
+    let vertexIndex;
+    let skinBoneIndexCount;
+    let vertexSkinWeightCount;
+    let meshCount;
+
+    if (fresVersion.major < 9)
+    {
+        name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
+        // 0x18 vertex
+        meshArrayOffs = view.getUint32(offs + 0x20, littleEndian);
+        skinBoneIndexArrayOffs = view.getUint32(offs + 0x28, littleEndian);
+        // 0x30 key shape array
+        // 0x38 key shape dict
+        boundingBoxArrayOffs = view.getUint32(offs + 0x40, littleEndian);
+        boundingSphereArrayOffs = view.getUint32(offs + 0x48, littleEndian);
+        // 0x50 user ptr
+        // 0x58 flag
+        // 0x5C index
+        materialIndex = view.getUint16(offs + 0x5E, littleEndian);
+        boneIndex = view.getUint16(offs + 0x60, littleEndian);
+        vertexIndex = view.getUint16(offs + 0x62, littleEndian);
+        skinBoneIndexCount = view.getUint16(offs + 0x64, littleEndian);
+        vertexSkinWeightCount = view.getUint8(offs + 0x66);
+        meshCount = view.getUint8(offs + 0x67);
+        // 0x68 key shape count
+        // 0x69 target attr count
+    }
+    else
+    {
+        name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
+
+        meshArrayOffs = view.getUint32(offs + 0x18, littleEndian);
+        skinBoneIndexArrayOffs = view.getUint32(offs + 0x20, littleEndian);
+
+        boundingBoxArrayOffs = view.getUint32(offs + 0x38, littleEndian);
+        boundingSphereArrayOffs = view.getUint32(offs + 0x40, littleEndian);
+
+        materialIndex = view.getUint16(offs + 0x52, littleEndian);
+        boneIndex = view.getUint16(offs + 0x54, littleEndian);
+        vertexIndex = view.getUint16(offs + 0x56, littleEndian);
+        skinBoneIndexCount = view.getUint16(offs + 0x58, littleEndian);
+        vertexSkinWeightCount = view.getUint8(offs + 0x5A);
+        meshCount = view.getUint8(offs + 0x5B);
+    }
 
     let meshArrayIdx = meshArrayOffs;
     let boundingBoxArrayIdx = boundingBoxArrayOffs;
@@ -360,29 +459,75 @@ export function parseFMAT_ShaderParam_Texsrt(dst: Texsrt, p: FMAT_ShaderParam): 
     dst.translationT = view.getFloat32(0x14, p.littleEndian);
 }
 
-function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FMAT {
+function parseFMAT(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FMAT {
     const view = buffer.createDataView();
 
-    const name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
-    const renderInfoArrayOffs = view.getUint32(offs + 0x18, littleEndian);
-    const shaderAssignOffs = view.getUint32(offs + 0x28, littleEndian);
-    const textureArrayOffs = view.getUint32(offs + 0x30, littleEndian);
-    const textureNameArrayOffs = view.getUint32(offs + 0x38, littleEndian);
-    const samplerInfoArrayOffs = view.getUint32(offs + 0x48, littleEndian);
-    const samplerInfoDicOffs = view.getUint32(offs + 0x50, littleEndian);
-    const shaderParamArrayOffs = view.getUint32(offs + 0x58, littleEndian);
-    const srcParamOffs = view.getUint32(offs + 0x68, littleEndian);
-    const userDataArrayOffs = view.getUint32(offs + 0x70, littleEndian);
-    const flag = view.getUint32(offs + 0xA0, littleEndian);
-    const index = view.getUint16(offs + 0xA4, littleEndian);
-    const renderInfoCount = view.getUint16(offs + 0xA6, littleEndian);
-    const samplerCount = view.getUint8(offs + 0xA8);
-    const textureCount = view.getUint8(offs + 0xA9);
-    const shaderParamCount = view.getUint16(offs + 0xAA, littleEndian);
-    const shaderParamVolatileCount = view.getUint16(offs + 0xAC, littleEndian);
-    const srcParamSize = view.getUint16(offs + 0xAE, littleEndian);
-    const rawParamSize = view.getUint16(offs + 0xB0, littleEndian);
-    const userDataCount = view.getUint16(offs + 0xB2, littleEndian);
+    let name;
+    let renderInfoArrayOffs;
+    let shaderAssignOffs;
+    let textureArrayOffs;
+    let textureNameArrayOffs;
+    let samplerInfoArrayOffs;
+    let samplerInfoDicOffs;
+    let shaderParamArrayOffs;
+    let srcParamOffs;
+    let userDataArrayOffs;
+    let flag;
+    let index;
+    let renderInfoCount;
+    let samplerCount;
+    let textureCount;
+    let shaderParamCount;
+    let shaderParamVolatileCount;
+    let srcParamSize;
+    let rawParamSize;
+    let userDataCount;
+
+    if (fresVersion.major < 9)
+    {
+        name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
+        renderInfoArrayOffs = view.getUint32(offs + 0x18, littleEndian);
+        shaderAssignOffs = view.getUint32(offs + 0x28, littleEndian);
+        textureArrayOffs = view.getUint32(offs + 0x30, littleEndian);
+        textureNameArrayOffs = view.getUint32(offs + 0x38, littleEndian);
+        samplerInfoArrayOffs = view.getUint32(offs + 0x48, littleEndian);
+        samplerInfoDicOffs = view.getUint32(offs + 0x50, littleEndian);
+        shaderParamArrayOffs = view.getUint32(offs + 0x58, littleEndian);
+        srcParamOffs = view.getUint32(offs + 0x68, littleEndian);
+        userDataArrayOffs = view.getUint32(offs + 0x70, littleEndian);
+        flag = view.getUint32(offs + 0xA0, littleEndian);
+        index = view.getUint16(offs + 0xA4, littleEndian);
+        renderInfoCount = view.getUint16(offs + 0xA6, littleEndian);
+        samplerCount = view.getUint8(offs + 0xA8);
+        textureCount = view.getUint8(offs + 0xA9);
+        shaderParamCount = view.getUint16(offs + 0xAA, littleEndian);
+        shaderParamVolatileCount = view.getUint16(offs + 0xAC, littleEndian);
+        srcParamSize = view.getUint16(offs + 0xAE, littleEndian);
+        rawParamSize = view.getUint16(offs + 0xB0, littleEndian);
+        userDataCount = view.getUint16(offs + 0xB2, littleEndian);
+    }
+    else
+    {
+        name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
+        renderInfoArrayOffs = view.getUint32(offs + 0x10, littleEndian);
+        shaderAssignOffs = view.getUint32(offs + 0x20, littleEndian);
+        textureArrayOffs = view.getUint32(offs + 0x28, littleEndian);
+        textureNameArrayOffs = view.getUint32(offs + 0x30, littleEndian);
+        samplerInfoArrayOffs = view.getUint32(offs + 0x40, littleEndian);
+        samplerInfoDicOffs = view.getUint32(offs + 0x48, littleEndian);
+        shaderParamArrayOffs = view.getUint32(offs + 0x58, littleEndian);
+        srcParamOffs = view.getUint32(offs + 0x60, littleEndian);
+        userDataArrayOffs = view.getUint32(offs + 0x68, littleEndian);
+        index = view.getUint16(offs + 0x98, littleEndian);
+        renderInfoCount = view.getUint16(offs + 0x9A, littleEndian);
+        samplerCount = view.getUint8(offs + 0x9C);
+        textureCount = view.getUint8(offs + 0x9D);
+        shaderParamCount = view.getUint16(offs + 0x9E, littleEndian);
+        shaderParamVolatileCount = view.getUint16(offs + 0xA0, littleEndian);
+        srcParamSize = view.getUint16(offs + 0xA2, littleEndian);
+        rawParamSize = view.getUint16(offs + 0xA4, littleEndian);
+        userDataCount = view.getUint16(offs + 0xA6, littleEndian);
+    }
 
     // RenderInfo
     let renderInfoArrayIdx = renderInfoArrayOffs;
@@ -507,60 +652,175 @@ function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         shaderParamArrayIdx += 0x20;
     }
 
-    return { name, renderInfo, shaderAssign, textureName, samplerInfo, shaderParam };
+    const userData = parseUserData(buffer, fresVersion, userDataArrayOffs, userDataCount, littleEndian);
+
+    return { name, renderInfo, shaderAssign, textureName, samplerInfo, shaderParam, userData };
 }
 
-function parseFMDL(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FMDL {
+function parseUserData(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, count: number, littleEndian: boolean): Map<string, number[] | string[]> {
+    const view = buffer.createDataView();
+    let userData = new Map<string, number[] | string[]>();
+
+    let userDataArrayIdx = offs;
+    for (let i = 0; i < count; i++) {
+        const keyOffset = view.getUint32(userDataArrayIdx + 0x0, littleEndian);
+        const key = readBinStr(buffer, keyOffset, littleEndian);
+        const dataOffset = view.getUint32(userDataArrayIdx + 0x8, littleEndian);
+        const dataCount = view.getUint32(userDataArrayIdx + 0x10, littleEndian);
+        const dataType: Type = view.getUint8(userDataArrayIdx + 0x14);
+
+        enum Type {
+            S32,
+            F32,
+            String,
+            U8,
+        }
+
+        let values: number[] | string[] = [];
+        switch (dataType) {
+            case Type.S32:
+                let s32Values: number[] = [];
+                for (let dataIndex = 0; dataIndex < dataCount; dataIndex++) {
+                    s32Values.push(view.getInt32(dataOffset + (dataIndex * 0x4), littleEndian));
+                }
+                values = s32Values;
+                break;
+            
+            case Type.F32:
+                let f32Values: number[] = [];
+                for (let dataIndex = 0; dataIndex < dataCount; dataIndex++) {
+                    f32Values.push(view.getFloat32(dataOffset + (dataIndex * 0x4), littleEndian));
+                }
+                values = f32Values;
+                break;
+            
+            case Type.String:
+                let stringValues: string[] = [];
+                for (let dataIndex = 0; dataIndex < dataCount; dataIndex++) {
+                    const stringOffset = view.getUint32(dataOffset + (dataIndex * 0x8), littleEndian);
+                    const string = readBinStr(buffer, stringOffset, littleEndian);
+                    stringValues.push(string);
+                }
+                values = stringValues;
+                break;
+            
+            case Type.U8:
+                let u8Values: number[] = [];
+                for (let dataIndex = 0; dataIndex < dataCount; dataIndex++) {
+                    u8Values.push(view.getUint8(dataOffset + (dataIndex * 0x1)));
+                }
+                values = u8Values;
+                break;
+        }
+
+        userData.set(key, values);
+        userDataArrayIdx += 0x40;
+    }
+
+    return userData
+}
+
+function parseFMDL(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FMDL {
     const view = buffer.createDataView();
 
-    const name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
-    const skeletonOffs = view.getUint32(offs + 0x20, littleEndian);
-    const vertexArrayOffs = view.getUint32(offs + 0x28, littleEndian);
-    const shapeArrayOffs = view.getUint32(offs + 0x30, littleEndian);
-    const shapeDicOffs = view.getUint32(offs + 0x38, littleEndian);
-    const materialArrayOffs = view.getUint32(offs + 0x40, littleEndian);
-    const materialDicOffs = view.getUint32(offs + 0x48, littleEndian);
-    const userDataArrayOffs = view.getUint32(offs + 0x50, littleEndian);
-    const userDataDicOffs = view.getUint32(offs + 0x58, littleEndian);
+    let name;
+    let skeletonOffs;
+    let vertexArrayOffs;
+    let shapeArrayOffs;
+    let shapeDicOffs;
+    let materialArrayOffs;
+    let materialDicOffs;
+    let userDataArrayOffs;
+    let userDataDicOffs;
+    let userDataPtr;
+    let vertexCount;
+    let shapeCount;
+    let materialCount;
+    let userDataCount;
+    let totalProcessVertex;
 
-    const userDataPtr = view.getUint32(offs + 0x60, littleEndian);
-    const vertexCount = view.getUint16(offs + 0x68, littleEndian);
-    const shapeCount = view.getUint16(offs + 0x6A, littleEndian);
-    const materialCount = view.getUint16(offs + 0x6C, littleEndian);
-    const userDataCount = view.getUint16(offs + 0x6E, littleEndian);
-    const totalProcessVertex = view.getUint32(offs + 0x70, littleEndian);
-    // Reserved.
+    if (fresVersion.major < 9) {
+        name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
+        skeletonOffs = view.getUint32(offs + 0x20, littleEndian);
+        vertexArrayOffs = view.getUint32(offs + 0x28, littleEndian);
+        shapeArrayOffs = view.getUint32(offs + 0x30, littleEndian);
+        shapeDicOffs = view.getUint32(offs + 0x38, littleEndian);
+        materialArrayOffs = view.getUint32(offs + 0x40, littleEndian);
+        materialDicOffs = view.getUint32(offs + 0x48, littleEndian);
+        userDataArrayOffs = view.getUint32(offs + 0x50, littleEndian);
+        userDataDicOffs = view.getUint32(offs + 0x58, littleEndian);
+        userDataPtr = view.getUint32(offs + 0x60, littleEndian);
+        vertexCount = view.getUint16(offs + 0x68, littleEndian);
+        shapeCount = view.getUint16(offs + 0x6A, littleEndian);
+        materialCount = view.getUint16(offs + 0x6C, littleEndian);
+        userDataCount = view.getUint16(offs + 0x6E, littleEndian);
+        totalProcessVertex = view.getUint32(offs + 0x70, littleEndian);
+        // Reserved.
+    }
+    else {
+        name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
+        skeletonOffs = view.getUint32(offs + 0x18, littleEndian);
+        vertexArrayOffs = view.getUint32(offs + 0x20, littleEndian);
+        shapeArrayOffs = view.getUint32(offs + 0x28, littleEndian);
+        shapeDicOffs = view.getUint32(offs + 0x30, littleEndian);
+        materialArrayOffs = view.getUint32(offs + 0x38, littleEndian);
+        materialDicOffs = view.getUint32(offs + 0x48, littleEndian);
+        userDataArrayOffs = view.getUint32(offs + 0x50, littleEndian);
+        userDataDicOffs = view.getUint32(offs + 0x58, littleEndian);
+        userDataPtr = view.getUint32(offs + 0x60, littleEndian);
+        vertexCount = view.getUint16(offs + 0x68, littleEndian);
+        shapeCount = view.getUint16(offs + 0x6A, littleEndian);
+        materialCount = view.getUint16(offs + 0x6C, littleEndian);
+        userDataCount = view.getUint16(offs + 0x70, littleEndian);
+    }
 
-    const fskl: FSKL = parseFSKL(buffer, skeletonOffs, littleEndian);
+    const fskl: FSKL = parseFSKL(buffer, fresVersion, skeletonOffs, littleEndian);
 
     let vertexArrayIdx = vertexArrayOffs;
     const fvtx: FVTX[] = [];
     for (let i = 0; i < vertexCount; i++) {
         assert(readString(buffer, vertexArrayIdx + 0x00, 0x04) === 'FVTX');
-        const fvtx_ = parseFVTX(buffer, memoryPoolBuffer, vertexArrayIdx, littleEndian);
+        const fvtx_ = parseFVTX(buffer, memoryPoolBuffer, fresVersion, vertexArrayIdx, littleEndian);
         fvtx.push(fvtx_);
-        vertexArrayIdx += 0x60;
+        if (fresVersion.major < 9) {
+            vertexArrayIdx += 0x60;
+        }
+        else {
+            vertexArrayIdx += 0x58;
+        }
     }
 
     let shapeArrayIdx = shapeArrayOffs;
     const fshp: FSHP[] = [];
     for (let i = 0; i < shapeCount; i++) {
         assert(readString(buffer, shapeArrayIdx + 0x00, 0x04) === 'FSHP');
-        const fshp_ = parseFSHP(buffer, memoryPoolBuffer, shapeArrayIdx, littleEndian);
+        const fshp_ = parseFSHP(buffer, memoryPoolBuffer, fresVersion, shapeArrayIdx, littleEndian);
         fshp.push(fshp_);
-        shapeArrayIdx += 0x70;
+        if (fresVersion.major < 9) {
+            shapeArrayIdx += 0x70;
+        }
+        else {
+            shapeArrayIdx += 0x60;
+        }
     }
 
     let materialArrayIdx = materialArrayOffs;
     const fmat: FMAT[] = [];
     for (let i = 0; i < materialCount; i++) {
         assert(readString(buffer, materialArrayIdx + 0x00, 0x04) === 'FMAT');
-        const fmat_ = parseFMAT(buffer, materialArrayIdx, littleEndian);
+        const fmat_ = parseFMAT(buffer, fresVersion, materialArrayIdx, littleEndian);
         fmat.push(fmat_);
-        materialArrayIdx += 0xB8;
+        if (fresVersion.major < 9) {
+            materialArrayIdx += 0xB8;
+        }
+        else {
+            materialArrayIdx += 0xA8;
+        }
     }
 
-    return { name, fskl, fvtx, fshp, fmat };
+    const userData = parseUserData(buffer, fresVersion, userDataArrayOffs, userDataCount, littleEndian);
+
+    return { name, fskl, fvtx, fshp, fmat, userData };
 }
 
 export function isMarkerLittleEndian(marker: number): boolean {
@@ -580,21 +840,25 @@ export function parse(buffer: ArrayBufferSlice): FRES {
 
     const version = view.getUint32(0x08, littleEndian);
     const supportedVersions: number[] = [
-        0x00080000, // Super Mario Odyssey
         0x00050003,
+        0x00080000, // Super Mario Odyssey
+        0x00090000,
     ];
+
+    const major = version >> 16;
+    const minor = version >> 8 & 0xFF;
+    const micro = version & 0xFF;
+    const fresVersion: Version = { major, minor, micro };
+
     assert(supportedVersions.includes(version));
 
     const fileNameOffs = view.getUint16(0x20, littleEndian);
     const fileName = readBinStr(buffer, fileNameOffs, littleEndian);
 
-    function parseResDicIdx(idx: number): { names: string[], arrayOffs: number } {
-        const arrayOffs = view.getUint32(0x28 + idx * 0x10, littleEndian);
-        const resDicOffs = view.getUint32(0x30 + idx * 0x10, littleEndian);
-
+    function parseResDic(resDicOffs: number): string[] {
         const names: string[] = [];
         if (resDicOffs === 0)
-            return { names, arrayOffs };
+            return names;
 
         // Signature
         assert(view.getUint32(resDicOffs + 0x00, littleEndian) === 0x00000000);
@@ -606,32 +870,58 @@ export function parse(buffer: ArrayBufferSlice): FRES {
             names.push(readBinStr(buffer, view.getUint32(resDicTableIdx + 0x08, littleEndian), littleEndian));
             resDicTableIdx += 0x10;
         }
-        return { names, arrayOffs };
+        return names;
+    }
+
+    const fmdlArrayOffset = view.getUint32(0x28, littleEndian);
+    const fmdlResDicOffset = view.getUint32(0x30, littleEndian);
+
+    let memoryPoolInfoOffs;
+    let externalFilesArrayOffset;
+    let externalFilesResDicOffset;
+    let fskaArrayOffset;
+    let fskaResDicOffset;
+    let fmaaArrayOffset;
+    let fmaaResDicOffset;
+
+    if (fresVersion.major < 9) {
+        memoryPoolInfoOffs = view.getUint32(0x90, littleEndian);
+        externalFilesArrayOffset = view.getUint32(0x98, littleEndian);
+        externalFilesResDicOffset = view.getUint32(0xA0, littleEndian);
+    }
+    else {
+        fskaArrayOffset = view.getUint32(0x58, littleEndian);
+        fskaResDicOffset = view.getUint32(0x60, littleEndian);
+        fmaaArrayOffset = view.getUint32(0x68, littleEndian);
+        fmaaResDicOffset = view.getUint32(0x70, littleEndian);
+        memoryPoolInfoOffs = view.getUint32(0xB0, littleEndian);
+        externalFilesArrayOffset = view.getUint32(0xB8, littleEndian);
+        externalFilesResDicOffset = view.getUint32(0xC0, littleEndian);
     }
 
     // First, read our memory pool info. This stores our buffers.
-    const memoryPoolInfoOffs = view.getUint32(0x90, littleEndian);
     const memoryPoolSize = memoryPoolInfoOffs !== 0 ? view.getUint32(memoryPoolInfoOffs + 0x04, littleEndian) : 0;
     const memoryPoolDataOffs = memoryPoolInfoOffs !== 0 ? view.getUint32(memoryPoolInfoOffs + 0x08, littleEndian) : 0;
     const memoryPoolBuffer = memoryPoolInfoOffs !== 0 ? buffer.subarray(memoryPoolDataOffs, memoryPoolSize) : null;
 
-    const fmdlTable = parseResDicIdx(0x00);
-    let fmdlTableIdx = fmdlTable.arrayOffs;
+    const fmdlNames = parseResDic(fmdlResDicOffset);
+    let fmdlTableIdx = fmdlArrayOffset;
     const fmdl: FMDL[] = [];
-    for (let i = 0; i < fmdlTable.names.length; i++) {
-        const name = fmdlTable.names[i];
+    for (let i = 0; i < fmdlNames.length; i++) {
+        const name = fmdlNames[i];
         assert(readString(buffer, fmdlTableIdx + 0x00, 0x04) === 'FMDL');
-        const fmdl_ = parseFMDL(buffer, memoryPoolBuffer!, fmdlTableIdx, littleEndian);
+        const fmdl_ = parseFMDL(buffer, memoryPoolBuffer!, fresVersion, fmdlTableIdx, littleEndian);
+        console.log(fmdl_);
         assert(fmdl_.name === name);
         fmdl.push(fmdl_);
         fmdlTableIdx += 0x78;
     }
 
-    const externalFilesTable = parseResDicIdx(0x07);
+    const externalFileNames = parseResDic(externalFilesResDicOffset);
     const externalFiles: ExternalFile[] = [];
-    let externalFilesTableIdx = externalFilesTable.arrayOffs;
-    for (let i = 0; i < externalFilesTable.names.length; i++) {
-        const name = externalFilesTable.names[i];
+    let externalFilesTableIdx = externalFilesArrayOffset;
+    for (let i = 0; i < externalFileNames.length; i++) {
+        const name = externalFileNames[i];
         const offs = view.getUint32(externalFilesTableIdx + 0x00, littleEndian);
         const size = view.getUint32(externalFilesTableIdx + 0x08, littleEndian);
         const fileBuffer = buffer.subarray(offs, size);

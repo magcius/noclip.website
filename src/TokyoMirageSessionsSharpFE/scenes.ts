@@ -44,6 +44,7 @@ import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 import { replacement_texture_group } from "./render_fmdl_texture_replace.js";
+import * as BFRES from "../fres_nx/bfres.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -79,13 +80,22 @@ class TMSFESceneDesc implements SceneDesc
      */
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx>
     {
+        const dataFetcher = context.dataFetcher;
+
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
         if (this.special_skybox == undefined) { this.special_skybox = false };
 
+        const testapak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/b016_01/model.apak`));
+        const testbfres = get_file_by_name(testapak, `b016_01.bfres`);
+        if (testbfres != undefined)
+        {
+            const testfres = BFRES.parse(testbfres);
+            console.log(testfres);
+        }
+
         // Load the map file
-        const dataFetcher = context.dataFetcher;
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
-    
+
         // get model files
         let level_models: level_model[] = [];
         let model_fres: FRES;

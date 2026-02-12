@@ -49,7 +49,9 @@ export function parse_atlm(buffer: ArrayBufferSlice, device: GfxDevice): Lightma
         const texure_index = view.getUint32(lightmap_entry_offset + 0x14, little_endian);
         const gfx_texture = gfx_texture_array[texure_index];
 
-        lightmap_array.push({ bone_name, gfx_texture, srt_matrix });
+        const unk18 = view.getFloat32(lightmap_entry_offset + 0x18, little_endian);
+
+        lightmap_array.push({ bone_name, gfx_texture, srt_matrix, unk18 });
         lightmap_entry_offset += LIGHTMAP_ENTRY_SIZE;
     }
 
@@ -63,4 +65,5 @@ export interface LightmapTexture
     bone_name: string;
     gfx_texture: GfxTexture;
     srt_matrix: mat4;
+    unk18: number;
 }

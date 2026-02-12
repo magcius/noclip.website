@@ -45,26 +45,26 @@ ${this.define_inputs()}
 
 void mainVS()
 {
-    #if ${this.fshp.skin_bone_count} == 0
+    #if ${this.fshp.vertex_skin_weight_count} == 0
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[0]) * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.skin_bone_count} == 1
+    #elif ${this.fshp.vertex_skin_weight_count} == 1
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.skin_bone_count} == 2
+    #elif ${this.fshp.vertex_skin_weight_count} == 2
     mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
     vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.skin_bone_count} == 3
+    #elif ${this.fshp.vertex_skin_weight_count} == 3
     mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
     vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.skin_bone_count} == 4
+    #elif ${this.fshp.vertex_skin_weight_count} == 4
     mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
@@ -95,15 +95,14 @@ uniform sampler2D s_lightmap;
 
 void mainPS()
 {
-    #ifdef USE_LIGHTMAPS
-    vec2 LightmapTexCoord = UnpackMatrix(u_LightmapSRTMatrix) * vec4(v_TexCoord1.xy, 1.0, 1.0);
-    vec4 Color = texture(SAMPLER_2D(s_lightmap), LightmapTexCoord);
-    gl_FragColor = Color;
-
-    #else
     vec2 Albedo0TexCoord =  UnpackMatrix(u_Albedo0SRTMatrix) * vec4(v_TexCoord0.xy, 1.0, 1.0);
     vec4 Albedo0Color = texture(SAMPLER_2D(s_diffuse), Albedo0TexCoord);
     gl_FragColor = Albedo0Color;
+
+    #ifdef USE_LIGHTMAPS
+    vec2 LightmapTexCoord = UnpackMatrix(u_LightmapSRTMatrix) * vec4(v_TexCoord1.xy, 1.0, 1.0);
+    vec4 LightmapColor = texture(SAMPLER_2D(s_lightmap), LightmapTexCoord);
+
     #endif
 
     #ifdef USE_ALPHA_TEST
@@ -135,7 +134,7 @@ void mainPS()
             let type = TMSFEProgram.vertex_attribute_types[attribute_index];
             if (attribute_code == '_i0')
             {
-                switch(this.fshp.skin_bone_count)
+                switch(this.fshp.vertex_skin_weight_count)
                 {
                     case 1:
                         type = 'uint';
@@ -154,13 +153,13 @@ void mainPS()
                         break;
                     
                     default:
-                        console.error(`fshp ${this.fshp.name} _i0 defintion has ${this.fshp.skin_bone_count} skin bones`);
+                        console.error(`fshp ${this.fshp.name} _i0 defintion has ${this.fshp.vertex_skin_weight_count} skin bones`);
                         throw("whoops");
                 }
             }
             if (attribute_code == '_w0')
             {
-                switch(this.fshp.skin_bone_count)
+                switch(this.fshp.vertex_skin_weight_count)
                 {
                     case 2:
                         type = 'vec2';
@@ -175,7 +174,7 @@ void mainPS()
                         break;
 
                     default:
-                        console.error(`fshp ${this.fshp.name} _w0 defintion has ${this.fshp.skin_bone_count} skin weights`);
+                        console.error(`fshp ${this.fshp.name} _w0 defintion has ${this.fshp.vertex_skin_weight_count} vertex skin weights`);
                         throw("whoops");
                 }
             }

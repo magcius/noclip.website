@@ -170,7 +170,7 @@ export class fmdl_renderer
             const fvtx = fmdl.fvtx[fshp.fvtx_index];
             const fmat = fmdl.fmat[fshp.fmat_index];
             let bone_matrix_array_length = 1;
-            if (fshp.skin_bone_count > 0)
+            if (fshp.vertex_skin_weight_count > 0)
             {
                 bone_matrix_array_length = this.fskl.smooth_rigid_indices.length;
             }
@@ -450,7 +450,7 @@ export class fmdl_renderer
     get_fshp_bone_matrix(fshp_index: number): mat4[]
     {
         let bone_matrix_array: mat4[] = [];
-        if (this.fshp_renderers[fshp_index].fshp.skin_bone_count == 0)
+        if (this.fshp_renderers[fshp_index].fshp.vertex_skin_weight_count == 0)
         {
             let transformation_matrix = recursive_bone_transform(this.fshp_renderers[fshp_index].fshp.bone_index, this.current_bones);
             bone_matrix_array.push(transformation_matrix);
@@ -490,7 +490,7 @@ export class fmdl_renderer
         const original_bounding_box = this.fshp_renderers[fshp_index].fshp.bounding_boxes[last_bounding_box_index];
         let new_bounding_box = new AABB();
 
-        if (this.fshp_renderers[fshp_index].fshp.skin_bone_count == 0)
+        if (this.fshp_renderers[fshp_index].fshp.vertex_skin_weight_count == 0)
         {
             // non skinned mesh
             // if this model has a skeletal animation, update it every frame
