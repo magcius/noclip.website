@@ -260,7 +260,7 @@ class MobyAnimationFrame {
     }
 }
 
-const VRAM_SIZE = 512000;
+const VRAM_SIZE = 524288;
 export class VRAM {
     private data: Uint16Array;
 
@@ -842,7 +842,7 @@ export function parseLevelData(data: ArrayBufferSlice): LevelData {
 
     // VRAM
     const subFile1Offset = getUint32();
-    const vram = data.subarray(subFile1Offset, VRAM_SIZE);
+    const vram = data.subarray(subFile1Offset, VRAM_SIZE < data.byteLength ? VRAM_SIZE : 512000); // temp fix for tiny flyover levels
 
     // Texture list
     pointer = 8;

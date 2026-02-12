@@ -24,7 +24,6 @@ TODO
     Spyro 1
         Transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
             Can't tell how these work, the tile index of the polygons doesn't match what's being rendered
-        Some parts of Toasty are not textured (???)
         
     Spyro 2
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
