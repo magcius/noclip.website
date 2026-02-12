@@ -184,6 +184,82 @@ class Polygon {
     }
 }
 
+class MobyModel {
+    numAnimations: number;
+    dataOffset: number;
+    animations: MobyAnimation[] = [];
+    constructor(view: DataView) {
+        this.numAnimations = view.getInt32(0, true);
+        this.dataOffset = view.getUint32(0x34, true);
+        if (this.numAnimations < 16 && this.numAnimations > 0 && this.dataOffset < 100000) {
+            for (let i = 0; i < this.numAnimations; i++) {
+                const offset = view.getUint32(0x38 + (4 * i), true);
+                this.animations.push(new MobyAnimation(view, offset, this.dataOffset));
+            }
+        }
+    }
+}
+
+class MobyAnimation {
+    numFrames: number;
+    numColors: number;
+    isSpyroAnimation: number;
+    scale: number;
+    shortEncodeShift: number;
+    radius: number;
+    vertexCountHigh: number;
+    vertexCountLow: number;
+    depthScale: number;
+    progressPerTick: number;
+    animationVerticesOffset: number;
+    facesOffset: number;
+    colorsOffset: number;
+    lowPolyFacesOffset: number;
+    lowPolyColorsOffset: number;
+    frames: MobyAnimationFrame[] = [];
+    constructor(view: DataView, offset: number, public modelDataOffset: number) {
+        this.numFrames = view.getInt16(offset, true);
+        this.numColors = view.getUint16(offset + 2, true);
+        this.isSpyroAnimation = view.getUint8(offset + 4);
+        this.scale = view.getUint8(offset + 5);
+        this.shortEncodeShift = view.getUint8(offset + 6);
+        this.radius = view.getUint8(offset + 7);
+        this.vertexCountHigh = view.getUint8(offset + 8);
+        this.vertexCountLow = view.getUint8(offset + 9);
+        this.depthScale = view.getUint8(offset + 11);
+        this.progressPerTick = view.getUint8(offset + 12);
+        this.animationVerticesOffset = view.getUint32(offset + 16, true);
+        this.facesOffset = view.getUint32(offset + 20, true);
+        this.colorsOffset = view.getUint32(offset + 24, true);
+        this.lowPolyFacesOffset = view.getUint32(offset + 28, true);
+        this.lowPolyColorsOffset = view.getUint32(offset + 32, true);
+        for (let i = 0; i < this.numFrames; i++) {
+            const frame = new MobyAnimationFrame(view, offset + 36 + (i * 8));
+            // frame.vertices = this.getVerticesForFrame(view, frame);
+            this.frames.push(frame);
+        }
+    }
+}
+
+class MobyAnimationFrame {
+    vertexOffset: number;
+    collisionModelIndex: number;
+    frameSound: number;
+    vertexColorOffset: number;
+    shadow: number;
+    shortOffset: number;
+    vertices: number[] = [];
+    constructor(view: DataView, offset: number) {
+        const bitfield = view.getUint32(offset, true);
+        this.vertexOffset = bitfield & 0x1FFFFF;
+        this.collisionModelIndex = (bitfield >> 21) & 0x07;
+        this.frameSound = (bitfield >> 24) & 0xFF;
+        this.vertexColorOffset = view.getUint16(offset + 4, true);
+        this.shadow = view.getUint8(offset + 6);
+        this.shortOffset = view.getUint8(offset + 7);
+    }
+}
+
 const VRAM_SIZE = 512000;
 export class VRAM {
     private data: Uint16Array;
@@ -731,22 +807,28 @@ export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): 
             break;
         }
         // offset: name (size)
-        //   0-11: ???
+        //      0: mystery incrementing value (4)
+        //   4-11: ???
         //     12: x (4)
         //     16: y (4)
         //     20: z (4)
-        //  24-53: ???
+        //  24-30: ???
+        //     31: mystery 0 or 128 value (1)
+        //  32-53: ???
         //     54: class ID (1)
-        //  55-88: ???
+        //  55-69: ???
+        //     70: yaw (1)
+        //  71-88: ???
         const x = subfile4.getInt32(pos + 12, true);
         const y = subfile4.getInt32(pos + 16, true);
         const z = subfile4.getInt32(pos + 20, true);
+        const yaw = subfile4.getInt8(pos + 70);
         const classId = subfile4.getUint8(pos + 54);
         // unlikely to have a moby at origin and there's lots of "empty" ones
         if (x === 0 && y === 0 && z === 0) {
             continue;
         }
-        mobys.push({ x, y, z, yaw: 0, classId });
+        mobys.push({ x, y, z, yaw, classId });
     }
 
     return mobys;
@@ -805,6 +887,33 @@ export function parseLevelData(data: ArrayBufferSlice): LevelData {
     if (pointer + subfile4Size < data.byteLength) {
         subfile4 = data.subarray(pointer, subfile4Size);
     }
+
+    // pointer = 0x50;
+    // const modelOffsets: number[] = [];
+    // for (let i = 0; i < 64; i++) {
+    //     const offset = getUint32();
+    //     pointer += 4;
+    //     if (offset === 0 || offset === 0xFFFFFFFF) break;
+    //     modelOffsets.push(offset);
+    // }
+
+    // const mobyModels = [];
+    // for (let i = 0; i < modelOffsets.length; i++) {
+    //     const start = modelOffsets[i];
+    //     const end = (i < modelOffsets.length - 1) ? modelOffsets[i + 1] : subfile4Offset;
+    //     mobyModels.push({
+    //         view: data.slice(start, end).createDataView()
+    //     });
+    // }
+
+    // const mobyModelObjects = [];
+    // for (let i = 0; i < mobyModels.length - 1; i++) {
+    //     const model = mobyModels[i];
+    //     const mm = new MobyModel(model.view);
+    //     if (mm.numAnimations > 0 && mm.dataOffset > 0 && mm.dataOffset < 100000) {
+    //         mobyModelObjects.push(mm);
+    //     }
+    // }
 
     return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
 }

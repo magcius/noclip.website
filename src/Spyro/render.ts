@@ -290,6 +290,7 @@ export class LevelRenderer {
             return;
         }
         const scale = 1.0 / 16;
+        const y = colorNewFromRGBA(1, 1, 0, 1);
         for (let i = 0; i < this.mobys.length; i++) {
             const m = this.mobys[i];
             const spyroPos = vec3.fromValues(m.x * scale, m.y * scale, m.z * scale);
@@ -300,12 +301,24 @@ export class LevelRenderer {
             const g = ((m.classId * 57) & 255) / 255;
             const b = ((m.classId * 17) & 255) / 255;
             const color = colorNewFromRGBA(r, g, b, 1);
-            renderHelper.debugDraw.drawLocator(worldPos, 50, color);
+            renderHelper.debugDraw.drawLocator(worldPos, 20, color);
+
+            const yawRad = ((m.yaw + 64) & 0xFF) / 256 * (Math.PI * 2);
+            const forward = vec3.fromValues(
+                Math.sin(yawRad),
+                0,
+                Math.cos(yawRad)
+            );
+            vec3.scale(forward, forward, 40);
+            const arrowEnd = vec3.create();
+            vec3.add(arrowEnd, worldPos, forward);
+            renderHelper.debugDraw.drawLine(worldPos, arrowEnd, y);
 
             const labelPos = vec3.clone(worldPos);
-            labelPos[0] -= 75;
+            const s = `${m.classId} (${i})`;
+            labelPos[0] -= s.length * 7;
             labelPos[1] += 50;
-            renderHelper.debugDraw.drawWorldTextRU(`i=${i}, t=${m.classId}`, labelPos, White, undefined, undefined, { flags: DebugDrawFlags.WorldSpace });
+            renderHelper.debugDraw.drawWorldTextRU(s, labelPos, White, undefined, undefined, { flags: DebugDrawFlags.WorldSpace });
         }
     }
 
