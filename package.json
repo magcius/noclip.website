@@ -29,8 +29,8 @@
     "tiff": "^6.2.0"
   },
   "scripts": {
-    "start": "pnpm run build:wasm-debug && rsbuild dev",
-    "build": "pnpm run build:wasm-release && rsbuild build",
+    "start": "wireit",
+    "build": "wireit",
     "build:wasm-debug": "wireit",
     "build:wasm-release": "wireit",
     "build:ZeldaWindWaker": "cd src/ZeldaWindWaker/tools && tsx --experimental-wasm-modules zww_extractor.ts",
@@ -47,6 +47,24 @@
     "typecheck": "tsc -w --noEmit"
   },
   "wireit": {
+    "build": {
+      "command": "rsbuild build",
+      "files": [
+        "src/**/*",
+        "rsbuild.config.ts",
+        "tsconfig.json"
+      ],
+      "dependencies": ["build:wasm-release"]
+    },
+    "start": {
+      "command": "rsbuild dev",
+      "dependencies": [
+        "build:wasm-debug"
+      ],
+      "service": true,
+      "cascade": false,
+      "files": []
+    },
     "build:cargo-build-debug": {
       "command": "cd rust && cargo build --target wasm32-unknown-unknown",
       "files": [
@@ -81,7 +99,8 @@
       ],
       "dependencies": [
         "build:cargo-build-debug"
-      ]
+      ],
+      "clean": false
     },
     "build:rust-wasm-opt": {
       "command": "cd rust && cargo bin wasm-opt target/wasm32-unknown-unknown/release/noclip_support.wasm -Os --enable-bulk-memory -g --output target/wasm32-unknown-unknown/release/noclip_support.opt.wasm",
