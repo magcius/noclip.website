@@ -662,7 +662,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "noclip-support"
+name = "noclip-rust-support"
 version = "0.0.0"
 dependencies = [
  "anyhow",
