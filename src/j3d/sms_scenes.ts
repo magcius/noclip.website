@@ -933,7 +933,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 { k: 'SandLeafBase03', m: 'SandLeafBase03.bmd' },
 { k: 'SandLeaf', m: 'SandLeaf.bmd', n: 'sandleaf_wait', u: 0 },
 { k: 'ShellCup', m: 'ShellCup.bmd', n: 'shellcup', u: 0 },
-{ k: 'shine' },
+{ k: 'shine', m: 'shine.bmd', n: 'shine_float', u: 0 },
 { k: 'SignCircle', m: 'maru_sign.bmd' },
 { k: 'SignCross', m: 'batu_sign.bmd' },
 { k: 'SignTriangle', m: '3kaku_sign.bmd' },
