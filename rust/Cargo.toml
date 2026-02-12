@@ -2,7 +2,7 @@
 members = ["noclip-macros", "tools/cargo-bin"]
 
 [package]
-name = "noclip-support"
+name = "noclip-rust-support"
 version = "0.0.0"
 categories = ["wasm"]
 edition = "2018"

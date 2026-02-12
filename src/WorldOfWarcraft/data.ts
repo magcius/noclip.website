@@ -41,7 +41,7 @@ import {
     WowWmoMaterialFlags,
     WowWmoMaterialPixelShader,
     WowWmoMaterialVertexShader
-} from "../../rust/pkg/noclip_support";
+} from "noclip-rust-support";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum } from "../Geometry.js";
 import {
