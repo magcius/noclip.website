@@ -1,7 +1,7 @@
 import {
     WowSheepfileEntry,
     WowSheepfileManager,
-} from "noclip-support";
+} from "noclip-rust-support";
 import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher.js";
 import { rust } from "../rustlib.js";
 

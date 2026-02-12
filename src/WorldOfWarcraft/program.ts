@@ -1,7 +1,7 @@
 import {
     WowLightResult,
     WowVec3,
-} from "noclip-support";
+} from "noclip-rust-support";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import {

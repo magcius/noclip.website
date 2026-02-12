@@ -30,7 +30,7 @@
             "webxr"
         ],
         "paths": {
-          "noclip-support": ["./rust/pkg"]
+          "noclip-rust-support": ["./rust/pkg"]
         }
     },
     "include": [

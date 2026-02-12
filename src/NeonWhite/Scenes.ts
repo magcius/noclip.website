@@ -12,7 +12,7 @@ import { GfxRenderInst, GfxRenderInstList } from '../gfx/render/GfxRenderInstMan
 import { nArray } from '../util.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { CameraController } from '../Camera.js';
-import { UnityVersion } from 'noclip-support';
+import { UnityVersion } from 'noclip-rust-support';
 
 class TempMaterialProgram extends UnityShaderProgramBase {
     public static ub_MaterialParams = 2;
