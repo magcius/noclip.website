@@ -97,8 +97,8 @@ export class LevelRenderer {
     public showObjects: boolean = true;
     public cullMode: GfxCullMode = GfxCullMode.None;
 
-    constructor(cache: GfxRenderCache, levelNum: number, level: Level, private textures: Map<string, Texture>, private objInstances: ObjectInstance[], private objMeshes: Map<string, Mesh>) {
-        if (BACK_CULL_LEVELS.includes(levelNum)) {
+    constructor(cache: GfxRenderCache, level: Level, private textures: Map<string, Texture>, private objInstances: ObjectInstance[], private objMeshes: Map<string, Mesh>) {
+        if (BACK_CULL_LEVELS.includes(level.number)) {
             this.cullMode = GfxCullMode.Back;
         }
         const device = cache.device;

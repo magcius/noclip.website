@@ -9,6 +9,10 @@ import { Mesh, ObjectDefintion, RWParser, Texture, ObjectInstance, Level } from 
 import { LevelRenderer } from "./render.js";
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 import { DataFetcher } from "../DataFetcher.js";
+import { Texture as ViewerTexture } from "../viewer.js";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 
 const CLEAR_COLORS: number[][] = [ // hardcode to approx fog colors for now
     [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
@@ -24,23 +28,29 @@ TODO
 
 Handle different kinds of transparency better
 Dynamic objects
-    Figure out transparency and other effects
     Idle animations would be nice, but not needed
     Even better, figure out AI pathing and have certain enemies/NPCs follow a default path
 Implement mipmapping? Textures are present for it, at least for 32-bit ones
 */
 
 class CasperRenderer implements SceneGfx {
+    public textureHolder: TextureHolder;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, levelNum: number, level: Level, textures: Map<string, Texture>, objInstances: ObjectInstance[], objMeshes: Map<string, Mesh>) {
+    constructor(device: GfxDevice, level: Level, textures: Map<string, Texture>, objInstances: ObjectInstance[], objMeshes: Map<string, Mesh>) {
+        const viewerTextures: ViewerTexture[] = [];
+        for (const [name, texture] of textures.entries()) {
+            viewerTextures.push(convertToViewerTexture(name, texture));
+        }
+        viewerTextures.sort(function(a, b) { return a.name < b.name ? -1 : 1 });
+        this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, levelNum, level, textures, objInstances, objMeshes);
-        this.clearColor = CLEAR_COLORS[levelNum - 1];
+        this.levelRenderer = new LevelRenderer(cache, level, textures, objInstances, objMeshes);
+        this.clearColor = CLEAR_COLORS[level.number - 1];
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -95,6 +105,7 @@ class CasperRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        this.textureHolder.destroy(device);
         this.levelRenderer.destroy(device);
     }
 }
@@ -114,12 +125,12 @@ class CasperScene implements SceneDesc {
         const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${this.levelNumber}.DIC`);
         const tomFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/${this.id}/M${this.id}.TOM`);
         const obdFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/CASPER.OBD`);
-        const level = new RWParser(bspFile.createDataView()).parseLevel();
+        const level = new RWParser(bspFile.createDataView()).parseLevel(this.levelNumber);
         const objDict = new RWParser(obdFile.createDataView()).parseObjectDictionary();
         const objInstances = new RWParser(tomFile.createDataView()).parseLevelObjects();
         const objMeshes = await buildDFFMeshes(context.dataFetcher, pathBase, level, objDict, objInstances);
         const textures = new RWParser(dicFile.createDataView()).parseDIC(device, level.materials);
-        return new CasperRenderer(device, this.levelNumber, level, textures, objInstances, objMeshes);
+        return new CasperRenderer(device, level, textures, objInstances, objMeshes);
     }
 }
 
@@ -155,6 +166,15 @@ async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, level:
         meshes.set(instance.name, mesh);
     }
     return meshes;
+}
+
+function convertToViewerTexture(name: string, texture: Texture): ViewerTexture {
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.rgba), texture.width, texture.height);
+    canvas.title = name;
+    const extraInfo = new Map<string, string>();
+    extraInfo.set("Has Alpha", `${texture.hasAlpha}`);
+    extraInfo.set("Bit Depth", texture.bitDepth.toString());
+    return { name, surfaces: [canvas], extraInfo };
 }
 
 const id = "CasperSD";

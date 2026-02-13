@@ -39,6 +39,7 @@ export interface Level {
     materials: string[];
     objMeshes: Mesh[];
     root: LevelSector;
+    number: number;
 }
 
 /**
@@ -78,7 +79,7 @@ export class ObjectInstance {
  */
 export class Texture {
     public gfxTexture: GfxTexture;
-    constructor(device: GfxDevice, public rgba: Uint8Array, public width: number, public height: number, public hasAlpha: boolean = false, public cullModeOverride: number) {
+    constructor(device: GfxDevice, public rgba: Uint8Array, public width: number, public height: number, public bitDepth: number, public hasAlpha: boolean = false, public cullModeOverride: number) {
         const gfxTexture = device.createTexture({
             width, height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -126,11 +127,12 @@ export class RWParser {
         return { id, size };
     }
 
-    public parseLevel(): Level {
+    public parseLevel(number: number): Level {
         const level: Level = {
             materials: [],
             objMeshes: [],
-            root: {type: "node", children: []}
+            root: {type: "node", children: []},
+            number
         };
 
         while (this.offset < this.data.byteLength) {
@@ -254,7 +256,7 @@ export class RWParser {
                     rgba[i + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
                 }
             }
-            textures.set(textureName, new Texture(device, rgba, width, height, alphaName.length > 0 || TRANSPARENT_TEXTURES_MAP.has(textureName), transparencyOverride ? transparencyOverride[1] : 0));
+            textures.set(textureName, new Texture(device, rgba, width, height, bitDepth, alphaName.length > 0 || TRANSPARENT_TEXTURES_MAP.has(textureName), transparencyOverride ? transparencyOverride[1] : 0));
             this.offset = nativeEnd;
         }
 
