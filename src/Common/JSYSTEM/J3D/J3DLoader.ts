@@ -1896,7 +1896,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
     const view = buffer.createDataView();
     const loopMode: LoopMode = view.getUint8(0x08);
     const rotationDecimal = view.getUint8(0x09);
-    const duration = view.getUint16(0x0A);
+    let duration = view.getUint16(0x0A);
     const jointAnimationTableCount = view.getUint16(0x0C);
     const sCount = view.getUint16(0x0E);
     const rCount = view.getUint16(0x10);
@@ -1937,6 +1937,11 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
             scaleY, rotationY, translationY,
             scaleZ, rotationZ, translationZ,
         });
+    }
+
+    // Avoid divide by 0 when calculating current frame
+    if(duration === 0) {
+        duration = 1;
     }
 
     return { loopMode, duration, jointAnimationEntries };
