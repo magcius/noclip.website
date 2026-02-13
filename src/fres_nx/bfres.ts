@@ -146,8 +146,41 @@ export interface FMDL {
     userData: Map<string, number[] | string[]>;
 }
 
+export enum CurveType {
+    CubicSingle,
+    LinearSingle,
+    BakedSingle,
+    StepInteger,
+    BakedInteger,
+    StepBoolean,
+    BakedBoolean,
+}
+
+export interface Curve {
+    curveType: CurveType;
+    startFrame: number;
+    endFrame: number;
+    frames: number[];
+    keys: vec4[];
+}
+
+export interface BoneAnimation {
+    name: string;
+    flags: number;
+    initialValues: number[];
+    curves: Curve[];
+}
+
+export interface FSKA {
+    name: string;
+    frameCount: number;
+    boneAnimations: BoneAnimation[];
+    userData: Map<string, number[] | string[]>;
+}
+
 export interface FRES {
     fmdl: FMDL[];
+    fska: FSKA[];
     externalFiles: ExternalFile[];
 }
 
@@ -233,25 +266,25 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     let smoothRigidIndices: number[] = [];
     let smoothRigidIndexArrayIdx = smoothRigidIndexArrayOffset;
     for (let i = 0; i < smoothMtxCount + rigidMtxCount; i++) {
-        smoothRigidIndices.push(view.getUint16(smoothRigidIndexArrayIdx, true));
+        smoothRigidIndices.push(view.getUint16(smoothRigidIndexArrayIdx, littleEndian));
         smoothRigidIndexArrayIdx += 0x2;
     }
 
     let boneLocalFromBindPoseMatrices: mat4[] = [];
     let boneLocalFromBindPoseMatrixArrayIdx = boneLocalFromBindPoseMatrixArrayOffset;
     for (let i = 0; i < smoothMtxCount; i++) {
-        const m00 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x00, true);
-        const m10 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x04, true);
-        const m20 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x08, true);
-        const m30 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x0C, true);
-        const m01 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x10, true);
-        const m11 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x14, true);
-        const m21 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x18, true);
-        const m31 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x1C, true);
-        const m02 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x20, true);
-        const m12 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x24, true);
-        const m22 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x28, true);
-        const m32 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x2C, true);
+        const m00 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x00, littleEndian);
+        const m10 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x04, littleEndian);
+        const m20 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x08, littleEndian);
+        const m30 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x0C, littleEndian);
+        const m01 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x10, littleEndian);
+        const m11 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x14, littleEndian);
+        const m21 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x18, littleEndian);
+        const m31 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x1C, littleEndian);
+        const m02 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x20, littleEndian);
+        const m12 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x24, littleEndian);
+        const m22 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x28, littleEndian);
+        const m32 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x2C, littleEndian);
         const matrix = mat4.fromValues(m00, m01, m02, 0.0, m10, m11, m12, 0.0, m20, m21, m22, 0.0, m30, m31, m32, 1.0);
 
         boneLocalFromBindPoseMatrices.push(matrix);
@@ -417,7 +450,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         }
         const bbox = readBBox();
 
-        const boundingSphereRadius = view.getFloat32(boundingSphereArrayIdx + 0x0, true);
+        const boundingSphereRadius = view.getFloat32(boundingSphereArrayIdx + 0x0, littleEndian);
         boundingSphereArrayIdx += 0x4;
 
         meshArrayIdx += 0x38;
@@ -427,7 +460,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     let skinBoneIndices: number[] = [];
     let skinBoneIndexArrayIdx = skinBoneIndexArrayOffs;
     for (let i = 0; i < skinBoneIndexCount; i++) {
-        skinBoneIndices.push(view.getUint16(skinBoneIndexArrayIdx, true));
+        skinBoneIndices.push(view.getUint16(skinBoneIndexArrayIdx, littleEndian));
         skinBoneIndexArrayIdx += 0x2;
     }
 
@@ -700,10 +733,7 @@ function parseUserData(buffer: ArrayBufferSlice, fresVersion: Version, offs: num
         const dataType: Type = view.getUint8(userDataArrayIdx + 0x14);
 
         enum Type {
-            S32,
-            F32,
-            String,
-            U8,
+            S32, F32, String, U8,
         }
 
         let values: number[] | string[] = [];
@@ -853,6 +883,174 @@ function parseFMDL(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     return { name, fskl, fvtx, fshp, fmat, userData };
 }
 
+function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, count: number, littleEndian: boolean): Curve[] {
+    const view = buffer.createDataView();
+
+    let curves: Curve[] = [];
+    let curveEntryOffset = offs;
+    for (let curveIndex = 0; curveIndex < count; curveIndex++) {
+        const frameArrayOffset = view.getUint32(curveEntryOffset + 0x0, littleEndian);
+        const keyArrayOffset = view.getUint32(curveEntryOffset + 0x8, littleEndian);
+        const flags = view.getUint16(curveEntryOffset + 0x10, littleEndian);
+        const keyCount = view.getUint16(curveEntryOffset + 0x12, littleEndian);
+        const startFrame = view.getFloat32(curveEntryOffset + 0x18, littleEndian);
+        const endFrame = view.getFloat32(curveEntryOffset + 0x1C, littleEndian);
+        const dataScale = view.getFloat32(curveEntryOffset + 0x20, littleEndian);
+        const dataOffset = view.getFloat32(curveEntryOffset + 0x24, littleEndian);
+
+        enum FrameType {
+            F32, FixedPoint16, U8,
+        }
+
+        enum KeyType {
+            F32, S16, S8,
+        }
+
+        const frameType: FrameType = flags & 0x3;
+        const keyType: KeyType = (flags >> 0x2) & 0x3;
+        const curveType: CurveType = (flags >> 0x4) & 0x7;
+        // currently only support cubic
+        assert(curveType == CurveType.CubicSingle);
+
+        let frames: number[] = [];
+        let frameEntryOffset = frameArrayOffset;
+        for (let i = 0; i < keyCount; i++) {
+            switch(frameType) {
+                case FrameType.F32:
+                    frames.push(view.getFloat32(frameEntryOffset, littleEndian));
+                    frameEntryOffset += 0x4;
+                    break;
+
+                case FrameType.FixedPoint16:
+                    let frame = view.getInt16(frameEntryOffset, littleEndian);
+                    frame = frame / 32;
+                    frames.push(frame);
+                    frameEntryOffset += 0x2;
+                    break;
+
+                case FrameType.U8:
+                    frames.push(view.getUint8(frameEntryOffset));
+                    frameEntryOffset += 0x1;
+                    break;
+
+                default:
+                    console.error(`Unknown frame type ${frameType}`);
+                    throw("whoops");
+            }
+        }
+
+        let keys: vec4[] = [];
+        let keyEntryOffset = keyArrayOffset;
+        for (let i = 0; i < keyCount; i++)
+        {
+            // keyframes store four coefficients that can be used to interpolate a value
+            // see getPointCubic() in Spline.ts
+            let constant: number;
+            let linear: number;
+            let square: number;
+            let cubic: number;
+            switch(keyType)
+            {
+                case KeyType.F32:
+                    // only constant has dataOffset added to it
+                    constant = view.getFloat32(keyEntryOffset + 0x0, littleEndian) * dataScale + dataOffset;
+                    linear = view.getFloat32(keyEntryOffset + 0x4, littleEndian) * dataScale;
+                    square = view.getFloat32(keyEntryOffset + 0x8, littleEndian) * dataScale;
+                    cubic = view.getFloat32(keyEntryOffset + 0xC, littleEndian) * dataScale;
+                    keyEntryOffset += 0x10;
+                    break;
+
+                case KeyType.S16:
+                    constant = view.getInt16(keyEntryOffset + 0x0, littleEndian) * dataScale + dataOffset;
+                    linear = view.getInt16(keyEntryOffset + 0x2, littleEndian) * dataScale;
+                    square = view.getInt16(keyEntryOffset + 0x4, littleEndian) * dataScale;
+                    cubic = view.getInt16(keyEntryOffset + 0x6, littleEndian) * dataScale;
+                    keyEntryOffset += 0x8;
+                    break;
+
+                case KeyType.S8:
+                    constant = view.getInt8(keyEntryOffset + 0x0) * dataScale + dataOffset;
+                    linear = view.getInt8(keyEntryOffset + 0x1) * dataScale;
+                    square = view.getInt8(keyEntryOffset + 0x2) * dataScale;
+                    cubic = view.getInt8(keyEntryOffset + 0x3) * dataScale;
+                    keyEntryOffset += 0x4;
+                    break;
+
+                default:
+                    console.error(`Unknown key type ${keyType}`);
+                    throw("whoops");
+            }
+
+            keys.push(vec4.fromValues(cubic, square, linear, constant));
+        }
+
+        curves.push({ curveType, startFrame, endFrame, frames, keys });
+        curveEntryOffset += 0x30;
+    }
+
+    return curves;
+}
+
+function parseFSKA(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FSKA {
+    const view = buffer.createDataView();
+
+    let name;
+    let boneAnimationArrayOffset;
+    let userDataArrayOffset;
+    let userDataResDicOffset;
+    let frameCount;
+    let boneAnimationCount;
+    let userDataCount;
+
+    // if (fresVersion.major < 9) {
+    //     name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
+    // }
+    // else {
+        name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
+        boneAnimationArrayOffset = view.getUint32(offs + 0x28, littleEndian);
+        userDataArrayOffset = view.getUint32(offs + 0x30, littleEndian);
+        userDataResDicOffset = view.getUint32(offs + 0x30, littleEndian);
+        frameCount = view.getUint32(offs + 0x40, littleEndian);
+        boneAnimationCount = view.getUint16(offs + 0x4C, littleEndian);
+        userDataCount = view.getUint16(offs + 0x4E, littleEndian);
+    // }
+
+    let boneAnimations: BoneAnimation[] = [];
+    let boneAnimationArrayIdx = boneAnimationArrayOffset;
+    for (let i = 0; i < boneAnimationCount; i++) {
+        const name = readBinStr(buffer, view.getUint32(boneAnimationArrayIdx + 0x0, littleEndian), littleEndian);
+        const curveArrayOffset = view.getUint32(boneAnimationArrayIdx + 0x8, littleEndian);
+        const initialValueArrayOffset = view.getUint32(boneAnimationArrayIdx + 0x10, littleEndian);
+        const flags = view.getUint32(boneAnimationArrayIdx + 0x28, littleEndian);
+        const curveCount = view.getUint8(boneAnimationArrayIdx + 0x2E);
+
+        const initialScale = (flags >> 3) & 0x1;
+        const initialRotation = (flags >> 4) & 0x1;
+        const initialTranslation = (flags >> 5) & 0x1;
+
+        let initialValues: number[] = [];
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x00, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x04, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x08, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x0C, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x10, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x14, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x18, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x1C, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x20, littleEndian));
+        initialValues.push(view.getFloat32(initialValueArrayOffset + 0x24, littleEndian));
+
+        const curves = parseCurves(buffer, fresVersion, curveArrayOffset, curveCount, littleEndian);
+
+        boneAnimations.push ({ name, flags, initialValues, curves });
+        boneAnimationArrayIdx += 0x38;
+    }
+
+    const userData = parseUserData(buffer, fresVersion, userDataArrayOffset, userDataCount, littleEndian);
+
+    return { name, frameCount, boneAnimations, userData };
+}
+
 export function isMarkerLittleEndian(marker: number): boolean {
     if (marker === 0xFFFE)
         return true;
@@ -915,6 +1113,10 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     let fmaaResDicOffset;
 
     if (fresVersion.major < 9) {
+        fskaArrayOffset = view.getUint32(0x38, littleEndian);
+        fskaResDicOffset = view.getUint32(0x40, littleEndian);
+        fmaaArrayOffset = view.getUint32(0x48, littleEndian);
+        fmaaResDicOffset = view.getUint32(0x50, littleEndian);
         memoryPoolInfoOffs = view.getUint32(0x90, littleEndian);
         externalFilesArrayOffset = view.getUint32(0x98, littleEndian);
         externalFilesResDicOffset = view.getUint32(0xA0, littleEndian);
@@ -946,6 +1148,16 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         fmdlTableIdx += 0x78;
     }
 
+    const fskaNames = parseResDic(fskaResDicOffset);
+    let fskaTableIdx = fskaArrayOffset;
+    const fska: FSKA[] = [];
+    for (let i = 0; i < fskaNames.length; i++) {
+        assert(readString(buffer, fskaTableIdx + 0x00, 0x04) === 'FSKA');
+        const fska_ = parseFSKA(buffer, fresVersion, fskaTableIdx, littleEndian);
+        fska.push(fska_);
+        fskaTableIdx += 0x50;
+    }
+
     const externalFileNames = parseResDic(externalFilesResDicOffset);
     const externalFiles: ExternalFile[] = [];
     let externalFilesTableIdx = externalFilesArrayOffset;
@@ -958,5 +1170,5 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         externalFilesTableIdx += 0x10;
     }
 
-    return { fmdl, externalFiles };
+    return { fmdl, fska, externalFiles };
 }

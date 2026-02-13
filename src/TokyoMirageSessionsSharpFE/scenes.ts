@@ -84,9 +84,8 @@ class TMSFESceneDesc implements SceneDesc
 
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
         if (this.special_skybox == undefined) { this.special_skybox = false };
-
-        const testapak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/b016_01/model.apak`));
-        const testbfres = get_file_by_name(testapak, `b016_01.bfres`);
+        const testapak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/01/model_common.apak`));
+        const testbfres = get_file_by_name(testapak, `fd_mot_00.anm`);
         if (testbfres != undefined)
         {
             const testfres = BFRES.parse(testbfres);
