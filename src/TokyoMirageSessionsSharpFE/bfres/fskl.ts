@@ -98,7 +98,7 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
 
 const BONE_ENTRY_SIZE = 0x60;
 const SMOOTH_RIGID_INDEX_ENTRY_SIZE = 0x2;
-const MATRIX_ENTRY_SIZE = 0X30;
+const MATRIX_ENTRY_SIZE = 0x30;
 
 /**
  * multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix

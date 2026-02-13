@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString, align } from "../util.js";
 import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum.js";
 import { AABB } from "../Geometry.js";
-import { vec2, vec3, vec4 } from "gl-matrix";
+import { vec2, vec3, vec4, mat4 } from "gl-matrix";
 import { Color } from "../Color.js";
 
 export interface Version
@@ -25,6 +25,7 @@ export interface FSKL_Bone {
 export interface FSKL {
     bones: FSKL_Bone[];
     smoothRigidIndices: number[];
+    boneLocalFromBindPoseMatrices: mat4[];
 }
 
 export interface FVTX_VertexAttribute {
@@ -59,6 +60,7 @@ export interface FSHP_Mesh {
     indexFormat: IndexFormat;
     indexBufferData: ArrayBufferSlice;
     bbox: AABB;
+    boundingSphereRadius: number;
 }
 
 export interface FSHP {
@@ -67,6 +69,8 @@ export interface FSHP {
     vertexIndex: number;
     boneIndex: number;
     materialIndex: number;
+    skinBoneIndices: number[];
+    vertexSkinWeightCount: number;
 }
 
 export enum FMAT_RenderInfoType {
@@ -164,6 +168,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
 
     let boneArrayOffs;
     let smoothRigidIndexArrayOffset;
+    let boneLocalFromBindPoseMatrixArrayOffset;
     let flag;
     let boneCount;
     let smoothMtxCount;
@@ -173,6 +178,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     {
         boneArrayOffs = view.getUint32(offs + 0x18, littleEndian);
         smoothRigidIndexArrayOffset = view.getUint32(offs + 0x20, littleEndian);
+        boneLocalFromBindPoseMatrixArrayOffset = view.getUint32(offs + 0x28, littleEndian);
         flag = view.getUint32(offs + 0x48, littleEndian);
         boneCount = view.getUint16(offs + 0x4C, littleEndian);
         smoothMtxCount = view.getUint16(offs + 0x4E, littleEndian);
@@ -183,15 +189,10 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         flag = view.getUint32(offs + 0x4, littleEndian);
         boneArrayOffs = view.getUint32(offs + 0x10, littleEndian);
         smoothRigidIndexArrayOffset = view.getUint32(offs + 0x18, littleEndian);
+        boneLocalFromBindPoseMatrixArrayOffset = view.getUint32(offs + 0x20, littleEndian);
         boneCount = view.getUint16(offs + 0x38, littleEndian);
         smoothMtxCount = view.getUint16(offs + 0x3A, littleEndian);
         rigidMtxCount = view.getUint16(offs + 0x3C, littleEndian);
-    }
-
-    // TODO: do something with this
-    enum BoneFlag {
-        RotationMode_Quat     = 0x00 << 12,
-        RotationMode_EulerXyz = 0x01 << 12,
     }
 
     let boneArrayIdx = boneArrayOffs;
@@ -205,7 +206,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         const rigidMtxIndex = view.getInt16(boneArrayIdx + 0x2E, littleEndian);
         const billboardIndex = view.getInt16(boneArrayIdx + 0x30, littleEndian);
         const userDataCount = view.getInt16(boneArrayIdx + 0x32, littleEndian);
-        const boneFlag: BoneFlag = view.getUint32(boneArrayIdx + 0x34, littleEndian);
+        const boneFlag = view.getUint32(boneArrayIdx + 0x34, littleEndian);
 
         const scaleX = view.getFloat32(boneArrayIdx + 0x38, littleEndian);
         const scaleY = view.getFloat32(boneArrayIdx + 0x3C, littleEndian);
@@ -231,15 +232,33 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
 
     let smoothRigidIndices: number[] = [];
     let smoothRigidIndexArrayIdx = smoothRigidIndexArrayOffset;
-    for (let i = 0; i < smoothMtxCount + rigidMtxCount; i++)
-    {
-        const boneIndex = view.getUint16(smoothRigidIndexArrayIdx, true);
-
-        smoothRigidIndices.push(boneIndex);
+    for (let i = 0; i < smoothMtxCount + rigidMtxCount; i++) {
+        smoothRigidIndices.push(view.getUint16(smoothRigidIndexArrayIdx, true));
         smoothRigidIndexArrayIdx += 0x2;
     }
 
-    return { bones, smoothRigidIndices };
+    let boneLocalFromBindPoseMatrices: mat4[] = [];
+    let boneLocalFromBindPoseMatrixArrayIdx = boneLocalFromBindPoseMatrixArrayOffset;
+    for (let i = 0; i < smoothMtxCount; i++) {
+        const m00 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x00, true);
+        const m10 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x04, true);
+        const m20 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x08, true);
+        const m30 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x0C, true);
+        const m01 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x10, true);
+        const m11 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x14, true);
+        const m21 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x18, true);
+        const m31 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x1C, true);
+        const m02 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x20, true);
+        const m12 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x24, true);
+        const m22 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x28, true);
+        const m32 = view.getFloat32(boneLocalFromBindPoseMatrixArrayIdx + 0x2C, true);
+        const matrix = mat4.fromValues(m00, m01, m02, 0.0, m10, m11, m12, 0.0, m20, m21, m22, 0.0, m30, m31, m32, 1.0);
+
+        boneLocalFromBindPoseMatrices.push(matrix);
+        boneLocalFromBindPoseMatrixArrayIdx += 0x30;
+    }
+
+    return { bones, smoothRigidIndices, boneLocalFromBindPoseMatrices };
 }
 
 function parseFVTX(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FVTX {
@@ -355,6 +374,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
 
     let meshArrayIdx = meshArrayOffs;
     let boundingBoxArrayIdx = boundingBoxArrayOffs;
+    let boundingSphereArrayIdx = boundingSphereArrayOffs;
     const mesh: FSHP_Mesh[] = [];
 
     const readBBox = () => {
@@ -397,11 +417,21 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         }
         const bbox = readBBox();
 
+        const boundingSphereRadius = view.getFloat32(boundingSphereArrayIdx + 0x0, true);
+        boundingSphereArrayIdx += 0x4;
+
         meshArrayIdx += 0x38;
-        mesh.push({ primType, indexFormat, count, offset, subMeshes, indexBufferData, bbox });
+        mesh.push({ primType, indexFormat, count, offset, subMeshes, indexBufferData, bbox, boundingSphereRadius });
     }
 
-    return { name, mesh, vertexIndex, boneIndex, materialIndex };
+    let skinBoneIndices: number[] = [];
+    let skinBoneIndexArrayIdx = skinBoneIndexArrayOffs;
+    for (let i = 0; i < skinBoneIndexCount; i++) {
+        skinBoneIndices.push(view.getUint16(skinBoneIndexArrayIdx, true));
+        skinBoneIndexArrayIdx += 0x2;
+    }
+
+    return { name, mesh, vertexIndex, boneIndex, materialIndex, skinBoneIndices, vertexSkinWeightCount };
 }
 
 export function parseFMAT_ShaderParam_Float(p: FMAT_ShaderParam): number {
@@ -911,7 +941,6 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         const name = fmdlNames[i];
         assert(readString(buffer, fmdlTableIdx + 0x00, 0x04) === 'FMDL');
         const fmdl_ = parseFMDL(buffer, memoryPoolBuffer!, fresVersion, fmdlTableIdx, littleEndian);
-        console.log(fmdl_);
         assert(fmdl_.name === name);
         fmdl.push(fmdl_);
         fmdlTableIdx += 0x78;
