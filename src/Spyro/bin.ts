@@ -107,7 +107,7 @@ class PartHeader {
     }
 }
 
-class Vertex {
+class RawVertex {
     byte1: number; byte2: number; byte3: number; byte4: number;
     constructor(data: DataView, offset: number) {
         this.byte1 = data.getUint8(offset);
@@ -184,6 +184,9 @@ class Polygon {
     }
 }
 
+// Moby structs from the decompile
+// These are 99% correct so far. Still need to figure out vertices, indices, UVs, etc.
+
 class MobyModel {
     numAnimations: number;
     dataOffset: number;
@@ -248,7 +251,7 @@ class MobyAnimationFrame {
     vertexColorOffset: number;
     shadow: number;
     shortOffset: number;
-    vertices: number[] = [];
+    // vertices: number[] = [];
     constructor(view: DataView, offset: number) {
         const bitfield = view.getUint32(offset, true);
         this.vertexOffset = bitfield & 0x1FFFFF;
@@ -260,7 +263,7 @@ class MobyAnimationFrame {
     }
 }
 
-const VRAM_SIZE = 524288;
+const VRAM_SIZE = 524288; // 512 KB and some change
 export class VRAM {
     private data: Uint16Array;
 
@@ -465,15 +468,13 @@ function buildBatches(tileGroups: number[][]) {
 }
 
 export function buildSkybox(data: DataView, gameNumber: number): Skybox {
-    const size = data.byteLength;
-    // Background color (4)
     const backgroundColor = [data.getUint8(0), data.getUint8(1), data.getUint8(2)];
     let pointer = 4;
     const partOffsets: number[] = [];
-    while (pointer + 4 <= size) {
+    while (pointer + 4 <= data.byteLength) {
         const offset = data.getUint32(pointer, true);
         pointer += 4;
-        if (offset === 0 || offset >= size) {
+        if (offset === 0 || offset >= data.byteLength) {
             break;
         }
         partOffsets.push(offset);
@@ -483,9 +484,9 @@ export function buildSkybox(data: DataView, gameNumber: number): Skybox {
     const faces: SkyFace[] = [];
     for (const offset of Array.from(new Set(partOffsets)).sort((a, b) => a - b)) {
         if (gameNumber == 1) {
-            parseSkyboxPart(data, size, offset, vertices, colors, faces);
+            parseSkyboxPart(data, data.byteLength, offset, vertices, colors, faces);
         } else {
-            parseSkyboxPart2(data, size, offset, vertices, colors, faces);
+            parseSkyboxPart2(data, data.byteLength, offset, vertices, colors, faces);
         }
     }
     return { backgroundColor, vertices, colors, faces };
@@ -657,7 +658,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
 
         const lodVertexOffset = vertices.length / 3;
         for (let i = 0; i < header.lodVertexCount; i++) {
-            const v = new Vertex(data, pointer);
+            const v = new RawVertex(data, pointer);
             pointer += 4;
             const zraw = (v.byte1 | ((v.byte2 & 3) << 8));
             let z = zraw + header.z;
@@ -720,7 +721,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
 
         const mdlVertexOffset = vertices.length / 3;
         for (let i = 0; i < header.mdlVertexCount; i++) {
-            const v = new Vertex(data, pointer);
+            const v = new RawVertex(data, pointer);
             pointer += 4;
             const zraw = (v.byte1 | ((v.byte2 & 3) << 8));
             let z = zraw + header.z;

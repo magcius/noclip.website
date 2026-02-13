@@ -13,13 +13,12 @@ import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 /*
 TODO
 
-    Better water rendering, although it's mostly accurate
     Clean up functions in bin.ts
-        Any computer made in the last century should be fine, but there's plenty of room for better efficiency
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
     Clean up the transparency handling. Transparent tiles/water can sometimes disappear behind other ones
         This is an issue with draw order. Not really a big deal until/if mobys get added to levels that have transparency
+    Some moby instances aren't detected for regular levels when they should be 
 
     Spyro 1
         Transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
@@ -27,21 +26,19 @@ TODO
         
     Spyro 2
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
-            This may not be an issue, just something worth investigating to see if the polygon parsing needs to be more robust
             These levels also don't have LOD versions for some reason (may be related)
 
     Spyro 3
-        Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent (at least in the same way as water)
+        Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent
         Sublevels should extract their own skybox, not default to the parent level
 
 Nice to have
 
     Mobys (gems, NPCs, enemies, etc.)
-        Only their per-level instances (position and type) in S3 are implemented
-        Will require a lot of work to figure out how their models are encoded, different for each game
+        Only their per-level instances are implemented (position and type)
     Remove hardcoded tile scrolling and read dynamically from level data (tile indices and speed)
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
-    Back-face culling toggle. Winding order is (seemingly) not consistent in the game, so this would require a lot of work
+    Back-face culling toggle. Winding order is not consistent in the game, so this would require a lot of work
     Figure out a way to correctly render LOD and MDL polys at the same time without overlap
         This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
 */
@@ -53,10 +50,10 @@ class SpyroRenderer implements SceneGfx {
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox, public textureHolder: TextureHolder, private mobys?: MobyInstance[]) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox, public textureHolder: TextureHolder, private mobyInstances: MobyInstance[]) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, level, this.mobys);
+        this.levelRenderer = new LevelRenderer(cache, level, this.mobyInstances);
         this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
     }
@@ -108,8 +105,9 @@ class SpyroRenderer implements SceneGfx {
             this.levelRenderer.showTextures = toggleTextures.checked
         };
         panel.contents.appendChild(toggleTextures.elem);
-        if (this.mobys === undefined || this.mobys.length === 0)
+        if (this.mobyInstances.length === 0) {
             return [panel];
+        }
         const showMobysCheckbox = new Checkbox("Show moby positions (debug)", false);
         showMobysCheckbox.onchanged = () => {
             this.levelRenderer.showMobys = showMobysCheckbox.checked

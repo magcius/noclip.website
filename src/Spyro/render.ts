@@ -151,7 +151,7 @@ export class LevelRenderer {
     private gameNumber: number;
     private scrollFlags: Float32Array;
 
-    constructor(cache: GfxRenderCache, level: Level, private mobys?: MobyInstance[]) {
+    constructor(cache: GfxRenderCache, level: Level, private mobyInstances: MobyInstance[]) {
         const device = cache.device;
         this.gameNumber = level.game;
         this.tileCount = level.textures.tiles.length;
@@ -278,7 +278,7 @@ export class LevelRenderer {
             drawBatches(this.batchesTransparent, this.indexBufferTransparent, true);
         }
 
-        if (this.showMobys && this.mobys !== undefined) {
+        if (this.showMobys) {
             this.drawMobys(renderHelper);
         }
 
@@ -286,13 +286,10 @@ export class LevelRenderer {
     }
 
     private drawMobys(renderHelper: GfxRenderHelper): void {
-        if (!this.mobys) {
-            return;
-        }
         const scale = 1.0 / 16;
         const y = colorNewFromRGBA(1, 1, 0, 1);
-        for (let i = 0; i < this.mobys.length; i++) {
-            const m = this.mobys[i];
+        for (let i = 0; i < this.mobyInstances.length; i++) {
+            const m = this.mobyInstances[i];
             const spyroPos = vec3.fromValues(m.x * scale, m.y * scale, m.z * scale);
             const worldPos = vec3.create();
             vec3.transformMat4(worldPos, spyroPos, spaceCorrection);
@@ -301,22 +298,18 @@ export class LevelRenderer {
             const g = ((m.classId * 57) & 255) / 255;
             const b = ((m.classId * 17) & 255) / 255;
             const color = colorNewFromRGBA(r, g, b, 1);
-            renderHelper.debugDraw.drawLocator(worldPos, 20, color);
+            renderHelper.debugDraw.drawLocator(worldPos, 20, color, { flags: DebugDrawFlags.WorldSpace });
 
             const yawRad = ((m.yaw + 64) & 0xFF) / 256 * (Math.PI * 2);
-            const forward = vec3.fromValues(
-                Math.sin(yawRad),
-                0,
-                Math.cos(yawRad)
-            );
+            const forward = vec3.fromValues(Math.sin(yawRad), 0, Math.cos(yawRad));
             vec3.scale(forward, forward, 40);
             const arrowEnd = vec3.create();
             vec3.add(arrowEnd, worldPos, forward);
-            renderHelper.debugDraw.drawLine(worldPos, arrowEnd, y);
+            renderHelper.debugDraw.drawLine(worldPos, arrowEnd, y, undefined, { flags: DebugDrawFlags.WorldSpace });
 
             const labelPos = vec3.clone(worldPos);
             const s = `${m.classId} (${i})`;
-            labelPos[0] -= s.length * 7;
+            labelPos[0] -= s.length * 7; // roughly center it
             labelPos[1] += 50;
             renderHelper.debugDraw.drawWorldTextRU(s, labelPos, White, undefined, undefined, { flags: DebugDrawFlags.WorldSpace });
         }
