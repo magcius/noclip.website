@@ -147,13 +147,13 @@ export interface FMDL {
 }
 
 export enum CurveType {
-    CubicSingle,
-    LinearSingle,
-    BakedSingle,
-    StepInteger,
-    BakedInteger,
-    StepBoolean,
-    BakedBoolean,
+    Cubic        = 0,
+    Linear       = 1,
+    BakedFloat   = 2,
+    StepInteger  = 4,
+    BakedInteger = 5,
+    StepBoolean  = 6,
+    BakedBoolean = 1,
 }
 
 export interface Curve {
@@ -161,7 +161,7 @@ export interface Curve {
     startFrame: number;
     endFrame: number;
     frames: number[];
-    keys: vec4[];
+    keys: number[][];
 }
 
 export interface BoneAnimation {
@@ -177,9 +177,22 @@ export interface FSKA {
     boneAnimations: BoneAnimation[];
 }
 
+export interface MaterialAnimation {
+    name: string;
+    curves: Curve[];
+}
+
+export interface FMAA {
+    name: string;
+    frameCount: number;
+    materialAnimations: MaterialAnimation[];
+    userData: Map<string, number[] | string[]>;
+}
+
 export interface FRES {
     fmdl: FMDL[];
     fska: FSKA[];
+    fmaa: FMAA[];
     externalFiles: ExternalFile[];
 }
 
@@ -901,16 +914,7 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
             F32, FixedPoint10x5, U8,
         }
 
-        enum KeyType {
-            F32, S16, S8,
-        }
-
         const frameType: FrameType = flags & 0x3;
-        const keyType: KeyType = (flags >> 0x2) & 0x3;
-        console.log(frameType);
-        const curveType: CurveType = (flags >> 0x4) & 0x7;
-        // currently only support cubic
-        assert(curveType == CurveType.CubicSingle);
 
         let frames: number[] = [];
         let frameEntryOffset = frameArrayOffset;
@@ -939,49 +943,74 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
             }
         }
 
-        let keys: vec4[] = [];
+        enum KeyType {
+            F32, S16, S8,
+        }
+
+        const keyType: KeyType = (flags >> 0x2) & 0x3;
+        const curveType: CurveType = (flags >> 0x4) & 0x7;
+
+        let valuesPerKey: number;
+        switch(curveType) {
+            case CurveType.Cubic:
+                valuesPerKey = 4;
+                break;
+            
+            case CurveType.Linear:
+                valuesPerKey = 2;
+                break;
+
+            case CurveType.BakedFloat:
+            case CurveType.StepInteger:
+            case CurveType.BakedInteger:
+                valuesPerKey = 1;
+                break;
+
+            default:
+                console.error(`Unsupported curve type ${curveType}`);
+                throw("whoops");
+        }
+
+        let keys: number[][] = [];
         let keyEntryOffset = keyArrayOffset;
-        for (let i = 0; i < keyCount; i++)
-        {
-            // keyframes store four coefficients that can be used to interpolate a value
-            // see getPointCubic() in Spline.ts
-            let constant: number;
-            let linear: number;
-            let square: number;
-            let cubic: number;
-            switch(keyType)
-            {
-                case KeyType.F32:
-                    // only constant has dataOffset added to it
-                    constant = view.getFloat32(keyEntryOffset + 0x0, littleEndian) * dataScale + dataOffset;
-                    linear = view.getFloat32(keyEntryOffset + 0x4, littleEndian) * dataScale;
-                    square = view.getFloat32(keyEntryOffset + 0x8, littleEndian) * dataScale;
-                    cubic = view.getFloat32(keyEntryOffset + 0xC, littleEndian) * dataScale;
-                    keyEntryOffset += 0x10;
-                    break;
+        for (let i = 0; i < keyCount; i++) {
+            let values: number[] = [];
 
-                case KeyType.S16:
-                    constant = view.getInt16(keyEntryOffset + 0x0, littleEndian) * dataScale + dataOffset;
-                    linear = view.getInt16(keyEntryOffset + 0x2, littleEndian) * dataScale;
-                    square = view.getInt16(keyEntryOffset + 0x4, littleEndian) * dataScale;
-                    cubic = view.getInt16(keyEntryOffset + 0x6, littleEndian) * dataScale;
-                    keyEntryOffset += 0x8;
-                    break;
+            for (let j = 0; j < valuesPerKey; j++) {
+                let value;
 
-                case KeyType.S8:
-                    constant = view.getInt8(keyEntryOffset + 0x0) * dataScale + dataOffset;
-                    linear = view.getInt8(keyEntryOffset + 0x1) * dataScale;
-                    square = view.getInt8(keyEntryOffset + 0x2) * dataScale;
-                    cubic = view.getInt8(keyEntryOffset + 0x3) * dataScale;
-                    keyEntryOffset += 0x4;
-                    break;
+                switch(keyType) {
+                    case KeyType.F32:
+                        value = view.getFloat32(keyEntryOffset, littleEndian) * dataScale;
+                        keyEntryOffset += 0x4;
+                        break;
 
-                default:
-                    console.error(`Unknown key type ${keyType}`);
-                    throw("whoops");
+                    case KeyType.S16:
+                        value = view.getInt16(keyEntryOffset, littleEndian) * dataScale;
+                        keyEntryOffset += 0x2;
+                        break;
+
+                    case KeyType.S8:
+                        value = view.getInt8(keyEntryOffset) * dataScale;
+                        keyEntryOffset += 0x1;
+                        break;
+
+                    default:
+                        console.error(`Unknown key type ${keyType}`);
+                        throw("whoops");
+                }
+
+                if (curveType === CurveType.Cubic || curveType === CurveType.Linear) {
+                    value *= dataScale;
+                    if (j === 0) {
+                        value += dataOffset;
+                    }
+                }
+
+                values.push(value);
             }
 
-            keys.push(vec4.fromValues(cubic, square, linear, constant));
+            keys.push(values);
         }
 
         curves.push({ curveType, startFrame, endFrame, frames, keys });
@@ -991,7 +1020,7 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
     return curves;
 }
 
-function parseFSKA(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, littleEndian: boolean): FSKA {
+function parseFSKA(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, littleEndian: boolean): FSKA {
     const view = buffer.createDataView();
 
     let name;
@@ -1000,16 +1029,16 @@ function parseFSKA(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     let boneAnimationCount;
 
     if (fresVersion.major < 9) {
-        name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
-        boneAnimationArrayOffset = view.getUint32(offs + 0x30, littleEndian);
-        frameCount = view.getUint32(offs + 0x4C, littleEndian);
-        boneAnimationCount = view.getUint16(offs + 0x58, littleEndian);
+        name = readBinStr(buffer, view.getUint32(offset + 0x10, littleEndian), littleEndian);
+        boneAnimationArrayOffset = view.getUint32(offset + 0x30, littleEndian);
+        frameCount = view.getUint32(offset + 0x4C, littleEndian);
+        boneAnimationCount = view.getUint16(offset + 0x58, littleEndian);
     }
     else {
-        name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
-        boneAnimationArrayOffset = view.getUint32(offs + 0x28, littleEndian);
-        frameCount = view.getUint32(offs + 0x40, littleEndian);
-        boneAnimationCount = view.getUint16(offs + 0x4C, littleEndian);
+        name = readBinStr(buffer, view.getUint32(offset + 0x8, littleEndian), littleEndian);
+        boneAnimationArrayOffset = view.getUint32(offset + 0x28, littleEndian);
+        frameCount = view.getUint32(offset + 0x40, littleEndian);
+        boneAnimationCount = view.getUint16(offset + 0x4C, littleEndian);
     }
 
     let boneAnimations: BoneAnimation[] = [];
@@ -1050,6 +1079,53 @@ function parseFSKA(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     }
 
     return { name, frameCount, boneAnimations };
+}
+
+function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, littleEndian: boolean): FMAA {
+    const view = buffer.createDataView();
+
+    let name;
+    let materialAnimationArrayOffset;
+    let userDataArrayOffset;
+    let userDataResDicOffset;
+    let frameCount;
+    let userDataCount;
+    let materialAnimationCount;
+
+    if (fresVersion.major < 9) {
+        name = readBinStr(buffer, view.getUint32(offset + 0x10, littleEndian), littleEndian);
+        materialAnimationArrayOffset = view.getUint32(offset + 0x30, littleEndian);
+        userDataArrayOffset = view.getUint32(offset + 0x48, littleEndian);
+        userDataResDicOffset = view.getUint32(offset + 0x50, littleEndian);
+        userDataCount = view.getUint16(offset + 0x62, littleEndian);
+        materialAnimationCount = view.getUint16(offset + 0x64, littleEndian);
+        frameCount = view.getUint32(offset + 0x68, littleEndian);
+    }
+    else {
+        name = readBinStr(buffer, view.getUint32(offset + 0x8, littleEndian), littleEndian);
+        materialAnimationArrayOffset = view.getUint32(offset + 0x28, littleEndian);
+        userDataArrayOffset = view.getUint32(offset + 0x40, littleEndian);
+        userDataResDicOffset = view.getUint32(offset + 0x48, littleEndian);
+        frameCount = view.getUint32(offset + 0x50, littleEndian);
+        userDataCount = view.getUint16(offset + 0x60, littleEndian);
+        materialAnimationCount = view.getUint16(offset + 0x62, littleEndian);
+    }
+
+    let materialAnimations: MaterialAnimation[] = [];
+    let materialAnimationEntryOffset = materialAnimationArrayOffset;
+    for (let materialAnimationIndex = 0; materialAnimationIndex < materialAnimationCount; materialAnimationIndex++) {
+        const name = readBinStr(buffer, view.getUint32(materialAnimationEntryOffset + 0x0, littleEndian), littleEndian);
+        const curveArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x18, littleEndian);
+        const curveCount = view.getUint16(materialAnimationEntryOffset + 0x38, littleEndian);
+        const curves = parseCurves(buffer, fresVersion, curveArrayOffset, curveCount, littleEndian);
+
+        materialAnimations.push({ name, curves });
+        materialAnimationEntryOffset += 0x40;
+    }
+
+    const userData = parseUserData(buffer, fresVersion, userDataArrayOffset, userDataCount, littleEndian);
+
+    return { name, frameCount, materialAnimations, userData };
 }
 
 export function isMarkerLittleEndian(marker: number): boolean {
@@ -1164,6 +1240,21 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         }
     }
 
+    const fmaaNames = parseResDic(fmaaResDicOffset);
+    let fmaaTableIdx = fmaaArrayOffset;
+    const fmaa: FMAA[] = [];
+    for (let i = 0; i < fmaaNames.length; i++) {
+        assert(readString(buffer, fmaaTableIdx + 0x00, 0x04) === 'FMAA');
+        const fmaa_ = parseFMAA(buffer, fresVersion, fmaaTableIdx, littleEndian);
+        fmaa.push(fmaa_);
+        if (fresVersion.major < 9) {
+            fmaaTableIdx += 0x78;
+        }
+        else {
+            fmaaTableIdx += 0x70;
+        }
+    }
+
     const externalFileNames = parseResDic(externalFilesResDicOffset);
     const externalFiles: ExternalFile[] = [];
     let externalFilesTableIdx = externalFilesArrayOffset;
@@ -1176,5 +1267,6 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         externalFilesTableIdx += 0x10;
     }
 
-    return { fmdl, fska, externalFiles };
+    console.log({ fmdl, fska, fmaa,  externalFiles });
+    return { fmdl, fska, fmaa, externalFiles };
 }
