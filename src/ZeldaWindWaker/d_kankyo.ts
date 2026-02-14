@@ -911,11 +911,11 @@ function dKankyo_DayProc(globals: dGlobals): void {
     // Called once a day.
 }
 
-function dKy_getdaytime_hour(globals: dGlobals): number {
+export function dKy_getdaytime_hour(globals: dGlobals): number {
     return globals.g_env_light.curTime / 15.0;
 }
 
-function dKy_daynight_check(globals: dGlobals): boolean {
+export function dKy_daynight_check(globals: dGlobals): boolean {
     const hour = dKy_getdaytime_hour(globals);
     return hour < 5 || hour > 17;
 }
