@@ -33,7 +33,7 @@ import { dBgS } from './d_bg.js';
 import { CameraTrimHeight, dCamera_c } from './d_camera.js';
 import { EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
-import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
+import { dKankyo_create, dKy__RegisterConstructors, dKy_daynight_check, dKy_getdaytime_hour, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { ParticleGroup, dPa_control_c } from './d_particle.js';
 import { Placename, PlacenameState, dPn__update, d_pn__RegisterConstructors } from './d_place_name.js';
@@ -266,12 +266,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: WindWakerRoom[] = [];
-    public layers: WindWakerLayer[] = [];
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
-    public time: number; // In milliseconds, affected by pause and time scaling
+    public layers: WindWakerLayer[] = [];
+    public layerPanel: UI.LayerPanel;
     public roomLayerMask: number = 1;
+    public useLayerSelect: boolean = false;
+
+    public time: number; // In milliseconds, affected by pause and time scaling
 
     // Time of day control
     private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
@@ -296,19 +299,25 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     private setVisibleLayerMask(m: number): void {
         this.roomLayerMask = m;
+        for (let i = 0; i < this.layers.length; i++) {
+            this.layers[i].setVisible(objectLayerVisible(m, this.layers[i].layerNo));
+        }
+        this.layerPanel.syncLayerVisibility();
     }
 
     public createPanels(): UI.Panel[] {
         const scenarioPanel = new UI.LayerPanel();
         scenarioPanel.setLayers(this.layers);
         scenarioPanel.onlayertoggled = () => {
+            this.useLayerSelect = true;
             let layerMask = 0;
             for (let i = 0; i < this.layers.length; i++) {
                 if (this.layers[i].visible)
                     layerMask |= (1 << this.layers[i].layerNo);
             }
-            this.setVisibleLayerMask(layerMask);
+            this.roomLayerMask = layerMask;
         };
+        this.layerPanel = scenarioPanel;
 
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -399,6 +408,13 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // Update time-of-day panel display
         if (this.timeOfDayPanel !== null && this.useSystemTime) {
             this.timeOfDayPanel.setTime(globals.g_env_light.curTime / 360);
+        }
+
+        // noclip modification: If we're on an island, and the user has not manually selected a layer, toggle between night and day layers based on time of day.
+        if (this.globals.stageName == 'sea' && this.useLayerSelect === false) {
+            const hour = dKy_getdaytime_hour(globals);
+            const defaultLayer = (hour >= 6 && hour < 18) ? 0 : 1;
+            this.setVisibleLayerMask(1 << defaultLayer);
         }
 
         // noclip hack: if only one room is visible, make it the mStayNo
