@@ -140,15 +140,15 @@ export class Material {
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV); // 0 0 0 0 1 0
 
         if (this.drawType === CTShapeDrawType.Opaque) {
-            mb.setBlendMode(GX.BlendMode.NONE, 4, 5, GX.LogicOp.SET);
+            mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0x00, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0x00);
             mb.setZMode(true, GX.CompareType.LEQUAL, true);
         } else if (this.drawType === CTShapeDrawType.Transparent) {
-            mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
             mb.setAlphaCompare(GX.CompareType.GREATER, 0x40, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x40);
             mb.setZMode(true, GX.CompareType.LEQUAL, true);
         } else {
-            mb.setBlendMode(GX.BlendMode.BLEND, 4, 5, GX.LogicOp.SET);
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
             mb.setAlphaCompare(GX.CompareType.GREATER, 0x00, GX.AlphaOp.AND, GX.CompareType.GREATER, 0x00);
             // mb.setZMode(true, GX.CompareType.LEQUAL, true);
             // mb.setColorUpdate(true);
@@ -171,7 +171,7 @@ export class Material {
             mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
             mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         } else if (this.materialId === 5) {
-            mb.setBlendMode(GX.BlendMode.BLEND, 0, 4, GX.LogicOp.CLEAR);
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ZERO, GX.BlendFactor.SRCALPHA, GX.LogicOp.CLEAR);
             mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
             mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
             mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);

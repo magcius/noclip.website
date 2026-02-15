@@ -165,7 +165,7 @@ export class Shape {
             [GX.Attr.TEX7, shape.tex_loc(7)],
         ];
 
-        const drawsData = fileManager.getData(shape.mystery_loc()!);
+        const drawsData = fileManager.getData(shape.draw_list_loc()!);
         const draws = shape.parse_draw_data(drawsData.createTypedArray(Uint8Array));
         const dlSection = fileManager.getData(shape.display_list_loc()!);
         const dlOffset = shape.display_list_offs();

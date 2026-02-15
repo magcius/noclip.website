@@ -234,7 +234,7 @@ impl Shape {
         }
     }
 
-    pub fn mystery_loc(&self) -> Option<FileLoc> {
+    pub fn draw_list_loc(&self) -> Option<FileLoc> {
         let relative_offset = self.header.draw_list_offset as usize;
         if relative_offset == 0 {
             None
