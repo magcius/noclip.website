@@ -1,4 +1,4 @@
-import { CTFileStore, CTFileLoc } from "../../rust/pkg/noclip_support";
+import { CTFileStore, CTFileLoc } from "noclip-rust-support";
 import * as GXTexture from '../gx/gx_texture.js';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice, DataFetcher } from "../DataFetcher";

@@ -14,7 +14,7 @@ import { setMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import { Shape, ShapeDrawCall, ShapeDrawType } from "./shape";
 import { FileManager, FriendlyLoc } from "./util.js";
-import { CTShapeDrawType } from "../../rust/pkg/noclip_support.js";
+import { CTShapeDrawType } from "noclip-rust-support";
 
 export class TextureCache {
     public textureMap: Map<string, Texture> = new Map();

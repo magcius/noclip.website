@@ -1,11 +1,10 @@
 import { vec3 } from "gl-matrix";
-import { CTFileLoc, CTShapeDrawInfo } from "../../rust/pkg/noclip_support";
+import { CTFileLoc, CTShapeDrawInfo } from "noclip-rust-support";
 import { AABB } from "../Geometry";
 import { LoadedVertexData, LoadedVertexLayout, GX_VtxDesc, GX_Array, getAttributeByteSize, compileVtxLoaderMultiVat, GX_VtxAttrFmt, VtxLoader } from "../gx/gx_displaylist"
 import * as GX from '../gx/gx_enum.js';
 import { assert } from "../util";
 import { FileManager, FriendlyLoc } from "./util.js";
-import { hexdump } from "../DebugJunk";
 
 interface GX {
     vat: GX_VtxAttrFmt[][];
