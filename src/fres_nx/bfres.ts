@@ -895,16 +895,16 @@ function parseFMDL(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     return { name, fskl, fvtx, fshp, fmat, userData };
 }
 
-function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: number, count: number, littleEndian: boolean): Curve[] {
+function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, count: number, littleEndian: boolean): Curve[] {
     const view = buffer.createDataView();
 
     let curves: Curve[] = [];
-    let curveEntryOffset = offs;
+    let curveEntryOffset = offset;
     for (let curveIndex = 0; curveIndex < count; curveIndex++) {
         const frameArrayOffset = view.getUint32(curveEntryOffset + 0x0, littleEndian);
         const keyArrayOffset = view.getUint32(curveEntryOffset + 0x8, littleEndian);
         const flags = view.getUint16(curveEntryOffset + 0x10, littleEndian);
-        const keyCount = view.getUint16(curveEntryOffset + 0x12, littleEndian);
+        const keyframeCount = view.getUint16(curveEntryOffset + 0x12, littleEndian);
         const startFrame = view.getFloat32(curveEntryOffset + 0x18, littleEndian);
         const endFrame = view.getFloat32(curveEntryOffset + 0x1C, littleEndian);
         const dataScale = view.getFloat32(curveEntryOffset + 0x20, littleEndian);
@@ -918,7 +918,7 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
 
         let frames: number[] = [];
         let frameEntryOffset = frameArrayOffset;
-        for (let i = 0; i < keyCount; i++) {
+        for (let i = 0; i < keyframeCount; i++) {
             switch(frameType) {
                 case FrameType.F32:
                     frames.push(view.getFloat32(frameEntryOffset, littleEndian));
@@ -943,11 +943,6 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
             }
         }
 
-        enum KeyType {
-            F32, S16, S8,
-        }
-
-        const keyType: KeyType = (flags >> 0x2) & 0x3;
         const curveType: CurveType = (flags >> 0x4) & 0x7;
 
         let valuesPerKey: number;
@@ -971,9 +966,15 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
                 throw("whoops");
         }
 
+        enum KeyType {
+            F32, S16, S8,
+        }
+
+        const keyType: KeyType = (flags >> 0x2) & 0x3;
+
         let keys: number[][] = [];
         let keyEntryOffset = keyArrayOffset;
-        for (let i = 0; i < keyCount; i++) {
+        for (let i = 0; i < keyframeCount; i++) {
             let values: number[] = [];
 
             for (let j = 0; j < valuesPerKey; j++) {
@@ -981,17 +982,17 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offs: numbe
 
                 switch(keyType) {
                     case KeyType.F32:
-                        value = view.getFloat32(keyEntryOffset, littleEndian) * dataScale;
+                        value = view.getFloat32(keyEntryOffset, littleEndian);
                         keyEntryOffset += 0x4;
                         break;
 
                     case KeyType.S16:
-                        value = view.getInt16(keyEntryOffset, littleEndian) * dataScale;
+                        value = view.getInt16(keyEntryOffset, littleEndian);
                         keyEntryOffset += 0x2;
                         break;
 
                     case KeyType.S8:
-                        value = view.getInt8(keyEntryOffset) * dataScale;
+                        value = view.getInt8(keyEntryOffset);
                         keyEntryOffset += 0x1;
                         break;
 
