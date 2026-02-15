@@ -1753,6 +1753,10 @@ export class JPABaseEmitter {
         JPASetRMtxTVecfromMtx(m, this.globalRotation, this.globalTranslation);
     }
 
+    public setGlobalSRTMatrix(m: mat4): void {
+        JPASetRMtxSTVecFromMtx(this.globalDynamicsScale, this.globalRotation, this.globalTranslation, m);
+    }
+
     public setGlobalRotation(v: ReadonlyVec3): void {
         computeModelMatrixR(this.globalRotation, v[0], v[1], v[2]);
     }

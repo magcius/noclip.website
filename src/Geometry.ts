@@ -1,8 +1,8 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
 import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
-import { nArray } from "./util.js";
-import type { ConvexHull } from "../rust/pkg/noclip_support";
+import { assert, nArray } from "./util.js";
+import type { ConvexHull } from "noclip-rust-support";
 import { rust } from "./rustlib.js";
 import { getMatrixTranslation, vec3SetAll } from "./MathHelpers.js";
 
@@ -108,6 +108,14 @@ export class AABB {
         vec3.set(this.max, maxX, maxY, maxZ);
     }
 
+    /**
+     * Sets this AABB to the result after transforming {@param src} by the matrix {@param m}.
+     * Note that information loss is expected if rotated by non-90 degree increments, as an AABB
+     * can grow larger when rotated and will never shrink; this loss can build up if repeatedly
+     * transformed. As such, if wanting to transform an AABB by a chain of transformations, it is
+     * always better to combine the transformations together and transform the AABB once, instead
+     * of repeatedly transforming the AABB one at a time.
+     */
     public transform(src: AABB, m: ReadonlyMat4): void {
         // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
 
@@ -157,6 +165,17 @@ export class AABB {
         return aabb;
     }
 
+    /**
+     * Sets this AABB to the union of {@param a} and {@param b}.
+     */
+    public union(a: AABB, b: AABB): void {
+        vec3.min(this.min, a.min, b.min);
+        vec3.max(this.max, a.max, b.max);
+    }
+
+    /**
+     * Sets this AABB to be the AABB formed by the set of all points given in {@param points}.
+     */
     public setFromPoints(points: ReadonlyVec3[]): void {
         this.reset();
 
@@ -167,11 +186,11 @@ export class AABB {
         }
     }
 
-    public union(a: AABB, b: AABB): void {
-        vec3.min(this.min, a.min, b.min);
-        vec3.max(this.max, a.max, b.max);
-    }
-
+    /**
+     * Adds the point {@param v} to the AABB.
+     * If the point was outside the AABB, the AABB is updated to contain the point and {@constant true} is returned.
+     * Otherwise, the AABB is unchanged, and this function returns {@constant false}.
+     */
     public unionPoint(v: ReadonlyVec3): boolean {
         let changed = false;
 
@@ -208,13 +227,19 @@ export class AABB {
         return changed;
     }
 
-    public static intersect(a: AABB, b: AABB): boolean {
+    /**
+     * Returns whether the two AABBs given by {@param a} and {@param b} overlap at all.
+     */
+    public static intersect(a: Readonly<AABB>, b: Readonly<AABB>): boolean {
         return !(
             a.min[0] > b.max[0] || b.min[0] > a.max[0] ||
             a.min[1] > b.max[1] || b.min[1] > a.max[1] ||
             a.min[2] > b.max[2] || b.min[2] > a.max[2]);
     }
 
+    /**
+     * Returns whether a point {@param v} is inside the bounds of this box.
+     */
     public containsPoint(v: ReadonlyVec3): boolean {
         const pX = v[0], pY = v[1], pZ = v[2];
         return !(
@@ -231,12 +256,18 @@ export class AABB {
             pZ < this.min[2] - rad || pZ > this.max[2] + rad);
     }
 
-    public getHalfExtents(v: vec3): void {
-        v[0] = Math.max((this.max[0] - this.min[0]) * 0.5, 0);
-        v[1] = Math.max((this.max[1] - this.min[1]) * 0.5, 0);
-        v[2] = Math.max((this.max[2] - this.min[2]) * 0.5, 0);
+    /**
+     * Retrieves the half-extents of this AABB into {@param dst}.
+     */
+    public getHalfExtents(dst: vec3): void {
+        dst[0] = Math.max((this.max[0] - this.min[0]) * 0.5, 0);
+        dst[1] = Math.max((this.max[1] - this.min[1]) * 0.5, 0);
+        dst[2] = Math.max((this.max[2] - this.min[2]) * 0.5, 0);
     }
 
+    /**
+     * Returns the diagonal length.
+     */
     public diagonalLengthSquared(): number {
         const dx = this.max[0] - this.min[0];
         const dy = this.max[1] - this.min[1];
@@ -244,38 +275,38 @@ export class AABB {
         return dx*dx + dy*dy + dz*dz;
     }
 
-    public centerPoint(v: vec3): void {
-        v[0] = (this.min[0] + this.max[0]) / 2;
-        v[1] = (this.min[1] + this.max[1]) / 2;
-        v[2] = (this.min[2] + this.max[2]) / 2;
+    /**
+     * Returns the center point of this AABB into {@param dst}.
+     */
+    public centerPoint(dst: vec3): void {
+        dst[0] = (this.min[0] + this.max[0]) / 2;
+        dst[1] = (this.min[1] + this.max[1]) / 2;
+        dst[2] = (this.min[2] + this.max[2]) / 2;
     }
 
+    /**
+     * Constructs an AABB given a center point {@param center} and a half-extents vector {@param halfExtents}.
+     */
     public setFromCenterAndHalfExtents(center: ReadonlyVec3, halfExtents: ReadonlyVec3): void {
         vec3.sub(this.min, center, halfExtents);
         vec3.add(this.max, center, halfExtents);
     }
 
+    /**
+     * Returns a corner of the AABB, the specific one being given by {@param i}.
+     * The corners will be returned in an arbitrary order.
+     */
     public cornerPoint(dst: vec3, i: number): void {
-        if (i === 0)
-            vec3.set(dst, this.min[0], this.min[1], this.min[2]);
-        else if (i === 1)
-            vec3.set(dst, this.max[0], this.min[1], this.min[2]);
-        else if (i === 2)
-            vec3.set(dst, this.min[0], this.max[1], this.min[2]);
-        else if (i === 3)
-            vec3.set(dst, this.max[0], this.max[1], this.min[2]);
-        else if (i === 4)
-            vec3.set(dst, this.min[0], this.min[1], this.max[2]);
-        else if (i === 5)
-            vec3.set(dst, this.max[0], this.min[1], this.max[2]);
-        else if (i === 6)
-            vec3.set(dst, this.min[0], this.max[1], this.max[2]);
-        else if (i === 7)
-            vec3.set(dst, this.max[0], this.max[1], this.max[2]);
-        else
-            throw "whoops";
+        assert(i < 8, "An AABB only has eight corner points");
+        dst[0] = (i & 0x01) ? this.min[0] : this.max[0];
+        dst[1] = (i & 0x02) ? this.min[1] : this.max[1];
+        dst[2] = (i & 0x04) ? this.min[2] : this.max[2];
     }
 
+    /**
+     * Returns the length of the half-diagonal vector of the AABB, which is also
+     * the smallest radius of a sphere that surrounds this box.
+     */
     public boundingSphereRadius(): number {
         const extX = (this.max[0] - this.min[0]);
         const extY = (this.max[1] - this.min[1]);
@@ -291,14 +322,53 @@ export class AABB {
         return Math.hypot(x, y, z);
     }
 
+    /**
+     * Returns whether an AABB has zero length on *all* axes. Does not necessarily imply it has 3D volume.
+     */
     public isEmpty(): boolean {
-        this.getHalfExtents(scratchVec3a);
-        return scratchVec3a[0] === 0 && scratchVec3a[1] === 0 && scratchVec3a[2] === 0;
+        return this.min[0] >= this.max[0] && this.min[1] >= this.max[1] && this.min[2] >= this.max[2];
     }
 
-    public distanceVec3(point: vec3): number {
+    /**
+     * Returns the distance from the center of this AABB to an arbitrary point {@param v}.
+     */
+    public distFromCenter(v: ReadonlyVec3): number {
         this.centerPoint(scratchVec3a);
-        return vec3.distance(point, scratchVec3a);
+        return vec3.distance(v, scratchVec3a);
+    }
+
+    /**
+     * Returns the squared distance from {@param v} to the point closest to {@param v} on this AABB.
+     * Will be 0 if the point is inside the AABB.
+     */
+    public sqDistFromClosestPoint(v: ReadonlyVec3): number {
+        const pX = v[0], pY = v[1], pZ = v[2];
+        let sqDist = 0;
+
+        if (pX < this.min[0])
+            sqDist += (this.min[0] - pX) ** 2.0;
+        else if (pX > this.max[1])
+            sqDist += (pX - this.max[1]) ** 2.0;
+
+        if (pY < this.min[1])
+            sqDist += (this.min[1] - pY) ** 2.0;
+        else if (pY > this.max[1])
+            sqDist += (pY - this.max[1]) ** 2.0;
+
+        if (pZ < this.min[2])
+            sqDist += (this.min[2] - pZ) ** 2.0;
+        else if (pZ > this.max[2])
+            sqDist += (pZ - this.max[2]) ** 2.0;
+
+        return sqDist;
+    }
+
+    /**
+     * Returns the distance from {@param v} to the point closest to {@param v} on this AABB.
+     * Will return 0 if the point is inside the AABB.
+     */
+    public distFromClosestPoint(v: ReadonlyVec3): number {
+        return Math.sqrt(this.sqDistFromClosestPoint(v));
     }
 }
 
@@ -367,31 +437,4 @@ export class Frustum {
     public getRust(): ConvexHull {
         return this.convexHull;
     }
-}
-
-/**
- * Computes the squared distance from a point {@param v} to the AABB {@param aabb}.
- * Will be 0 if the point is inside the AABB. Note that this is *not* the distance
- * to the the AABB's center point.
- */
-export function squaredDistanceFromPointToAABB(v: vec3, aabb: AABB): number {
-    const pX = v[0], pY = v[1], pZ = v[2];
-    let sqDist = 0;
-
-    if (pX < aabb.min[0])
-        sqDist += (aabb.min[0] - pX) ** 2.0;
-    else if (pX > aabb.max[1])
-        sqDist += (pX - aabb.max[1]) ** 2.0;
-
-    if (pY < aabb.min[1])
-        sqDist += (aabb.min[1] - pY) ** 2.0;
-    else if (pY > aabb.max[1])
-        sqDist += (pY - aabb.max[1]) ** 2.0;
-
-    if (pZ < aabb.min[2])
-        sqDist += (aabb.min[2] - pZ) ** 2.0;
-    else if (pZ > aabb.max[2])
-        sqDist += (pZ - aabb.max[2]) ** 2.0;
-
-    return sqDist;
 }

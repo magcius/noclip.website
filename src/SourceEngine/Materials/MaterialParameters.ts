@@ -54,6 +54,10 @@ export class ParameterTexture {
             }
 
             this.texture = await materialCache.fetchVTF(filename, this.isSRGB);
+
+            // Some envmap assignments appear to use spherical envmaps; e.g. HL2's dirtfloor003b.vmt uses envmap001a.vtf which is a spherical map.
+            if (this.isEnvmap && !this.texture.isCubemap())
+                this.texture = null;
         }
     }
 

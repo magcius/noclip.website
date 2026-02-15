@@ -882,6 +882,10 @@ class SceneDesc {
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
 
+        globals.particleCtrl = new dPa_control_c(renderer.renderCache);
+        globals.particleCtrl.createCommon(globals, JPA.parse(modelCache.getFileData(particleArchives[0])));
+        globals.particleCtrl.createRoomScene(globals, JPA.parse(modelCache.getFileData(particleArchives[1])));
+
         const pcId = fpcSCtRq_Request(framework, null, dProcName_e.d_s_play, null);
         assert(pcId !== null);
 
@@ -912,10 +916,6 @@ class SceneDesc {
             globals.mStayNo = Math.abs(this.roomList[0]);
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
-
-        globals.particleCtrl = new dPa_control_c(renderer.renderCache);
-        globals.particleCtrl.createCommon(globals, JPA.parse(modelCache.getFileData(particleArchives[0])));
-        globals.particleCtrl.createRoomScene(globals, JPA.parse(modelCache.getFileData(particleArchives[1])));
 
         // dStage_Create
         dKankyo_create(globals);
@@ -1063,11 +1063,9 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 // Append the timestamp comment at the end of each line to jump to the relevant part of the video.
 const demoDescs = [
     // Outset Island
-    new DemoDesc("LinkRM", "Grandma's Tale", [0], "tale.stb", 8, 0, [0, 0, 0], 0, 0, 0), // ?t=312s
     new DemoDesc("LinkRM", "Grandma's Tale (Second Playthrough)", [0], "tale_2.stb", 8, 0, [0, 0, 0], 0, 0, 0),
     new DemoDesc("sea", "Tetra Kidnapped", [44], "kaizoku_zelda_fly.stb", 0, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0), // ?t=425s
     new DemoDesc("A_mori", "Meet Tetra", [0], "meet_tetra.stb", 0, 0, [0, 0, 0], 0, 0, 0), // ?t=643s
-    new DemoDesc("LinkRM", "Grandma Gives Link His Shield", [0], "get_shield.stb", 9, 0, [0, 0, 0], 0, 201, 0), // ?t=887s
 
     // Forsaken Fortress
     new DemoDesc("MajyuE", "Forsaken Fortress Infiltration", [0], "maju_shinnyu.stb", 0, 0, [0, 0, 0], 0, 0, 0), // ?t=1011s
@@ -1110,7 +1108,6 @@ const demoDescs = [
     new DemoDesc("kenroom", "Zelda Awakens", [0], "awake_zelda.stb", 9, 1, [0.0, 0.0, 0.0], 0.0, 2, 0), // ?t=4474s
     
     // Fairy Fountain
-    new DemoDesc("sea", "Fairy Fountain", [9], "fairy.stb", 8, 1, [-180000.0, 740.0, -199937.0], 25.0, 2, 0), // ?t=4955s
     new DemoDesc("sea", "Fairy Fountain (Second Playthrough)", [9], "fairy_flag_on.stb", 8, 1, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
 
     // Dragon Roost Island, after visiting Hyrule
@@ -1168,8 +1165,12 @@ const sceneDescs = [
     "Cutscenes",
     new DemoDesc("sea_T", "Title Screen", [44], "title.stb", 0, 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
     new DemoDesc("sea", "Awaken", [44], "awake.stb", 0, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0), // ?t=215
+    new DemoDesc("LinkRM", "Grandma's Tale", [0], "tale.stb", 8, 0, [0, 0, 0], 0, 0, 0), // ?t=312s
     new DemoDesc("sea", "Stolen Sister", [44], "stolensister.stb", 9, 0, [0.0, 0.0, 20000.0], 0, 0, 0), // ?t=701
+    new DemoDesc("LinkRM", "Grandma Gives Link His Shield", [0], "get_shield.stb", 9, 0, [0, 0, 0], 0, 201, 0), // ?t=887s
     new DemoDesc("sea", "Departure", [44], "departure.stb", 10, 0, [-200000.0, 0.0, 320000.0], 0.0, 204, 0), // ?t=929
+    new DemoDesc("sea", "Fairy Fountain", [9], "fairy.stb", 8, 1, [-180000.0, 740.0, -199937.0], 25.0, 2, 0), // ?t=4955s
+    new DemoDesc("Hyrule", "Hyrule Barrier Break", [0], "seal.stb", 4, 1, [0.0, 0.0, 0.0], 0, 0, 0), // ?t=6046s
 
     "Outset Island",
     new SceneDesc("sea_T", "Title Screen", [44]),

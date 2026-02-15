@@ -20,7 +20,6 @@ import { AABB } from "../../Geometry.js";
 
 // TODO(jstpierre):
 //  - Billboard text (world-space position, always faces user)
-//  - Screen printing
 //  - Integrate GPU debug system (requires WGSL?)
 export enum DebugDrawFlags {
     WorldSpace = 0,
@@ -721,7 +720,6 @@ export class DebugDraw {
         const baseVertex = page.getCurrentVertexID();
         options = setFlags(options, DebugDrawFlags.Font);
 
-        let sy = 100;
         iterString((charIdx, cx, cy, advanceX) => {
             // TL, TR, BL, BR
             cx += baseX;

@@ -117,30 +117,6 @@ export class DkrControlGlobals {
         },
     };
 
-    static ANIM_THIRD_PERSON = {
-        type: 'checkbox',
-        label: 'Detach From Animation Camera',
-        on: false,
-        elem: null!,
-    };
-
-    static ANIM_TRACK_SELECT = {
-        type: 'singleSelect',
-        selectedIndex: -1,
-        elem: null!,
-        selectedIndexUpdated: () => {
-            if (DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex === -1)
-                DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel = -1;
-            else
-                DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel = DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels![DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex];
-        },
-        // Only for this element.
-        trackSelectOptions: {} as { [k: string]: string },
-        trackSelectOptionKeys: null! as string[],
-        currentChannel: -1,
-        selectableChannels: null as (number[] | null),
-    }
-
     /************ Panels ************/
 
     static PANEL_RENDER_OPTIONS = {
@@ -168,11 +144,6 @@ export class DkrControlGlobals {
             DkrControlGlobals.ANIM_PAUSED,
             DkrControlGlobals.ANIM_PROGRESS,
             DkrControlGlobals.ANIM_SPEED,
-            /*
-            DkrControlGlobals.ANIM_THIRD_PERSON,
-            { type: 'html', tag: 'hr' }, // Add a horizontal rule to seperate the track select.
-            DkrControlGlobals.ANIM_TRACK_SELECT,
-            */
         ],
         elem: null!,
     };

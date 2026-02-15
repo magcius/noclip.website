@@ -46,7 +46,7 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
 const chk = new dBgS_GndChk();
 
 // "Legacy actor" for noclip
-class d_a_noclip_legacy extends fopAc_ac_c {
+export class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public morf: mDoExt_McaMorf;
     public shadowChk: dBgS_GndChk;
@@ -359,6 +359,23 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             // TODO: setShadowReal( ... )
         }
     }
+    else if (actorName === 'SPitem') {
+        const itemId = (actor.parameters & 0x000000FF);
+        
+        // Hero's Shield (Link's House)
+        if (itemId === 0x3B ) fetchArchive(`VshiN`).then((rarc) => {
+            const model = buildModel(rarc, `bdl/vshin.bdl`);
+            mat4.fromTranslation(model.modelMatrix, legacy.pos);
+            mDoMtx_ZXYrotM(model.modelMatrix, vec3.fromValues(4000, 4200, 5200));
+            scaleMatrix(model.modelMatrix, model.modelMatrix, 1.5, 1.5, 1.5);
+        });
+        // Boko Belt (Orca's House)
+        else if( itemId === 0x48 ) fetchArchive(`Vbelt`).then((rarc) => {
+            const model = buildModel(rarc, `bdl/vbelt.bdl`)
+            mat4.translate(model.modelMatrix, model.modelMatrix, vec3.fromValues(0, 24, 0));
+        });
+        else console.warn(`Unknown special item: ${hexzero(itemId, 2)}`);
+    }
     // Heart Container
     else if (actorName === 'Bitem') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/vhutl.bdl`).bindTTK1(parseBTK(rarc, `btk/vhutl.btk`)));
     // Forsaken Fortress warp to Ganon's tower
@@ -388,7 +405,19 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // Tingle
     else if (actorName === 'Tc') fetchArchive(`Tc`).then((rarc) => {
-        buildModel(rarc, `bdlm/tc.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        const tingleColor = actor.parameters & 0xFF;
+        const tingleBdlPath = `bdlm/tc.bdl`;
+        let m: BMDObjectRenderer;
+
+        switch(tingleColor) {
+            case 0: m = buildModel(rarc, tingleBdlPath); break;
+            case 1: m = buildModelBMT(rarc, tingleBdlPath, `bmt/tcc.bmt`); break;
+            case 2: m = buildModelBMT(rarc, tingleBdlPath, `bmt/tcb.bmt`); break;
+            case 3: m = buildModelBMT(rarc, tingleBdlPath, `bmt/tca.bmt`); break;
+            default: throw('unknown Tingle Color');
+        }
+
+        m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
         setShadow(800, 150, 20);
     });
     // Grandma
@@ -1530,7 +1559,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             // TODO: particles (0x8124 for red, 0x8123 for blue)
         }
     });
-    else if (actorName === 'nezumi') fetchArchive(`Nz`).then((rarc) => buildModel(rarc, `bdlm/nz.bdl`));
+    else if (actorName === 'nezumi') fetchArchive(`Nz`).then((rarc) => {
+        const m = buildModel(rarc, `bdlm/nz.bdl`);
+        m.bindANK1(parseBCK(rarc, 'bck/nz_wait.bck'));
+    });
     else if (actorName === 'moZOU') fetchArchive(`Mozo`).then((rarc) => buildModel(rarc, `bdlm/moz.bdl`));
     else if (actorName === 'MtoriSU') fetchArchive(`MtoriSU`).then((rarc) => buildModel(rarc, `bdl/mtorisu.bdl`));
     // Darknut
@@ -1709,7 +1741,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildModel(rarc, `bdl/ekskz.bdl`);
         const yocwd00 = buildModel(rarc, `bdlm/yocwd00.bdl`);
         yocwd00.bindANK1(parseBCK(rarc, `bck/yocwd00.bck`));
-        yocwd00.bindTRK1(parseBRK(rarc, `brk/yocwd00.brk`));
+        yocwd00.bindTRK1(parseBRK(rarc, `brk/yocwd00.brk`), animFrame(0));
         yocwd00.bindTTK1(parseBTK(rarc, `btk/yocwd00.btk`));
     });
     else if (actorName === 'Ocanon') fetchArchive(`WallBom`).then((rarc) => buildModel(rarc, `bdl/wallbom.bdl`));
@@ -1744,9 +1776,21 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // Loot the Sailor (Boating Course)
     else if (actorName === 'Sarace') {
-        fetchArchive(`Sarace`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));;
-        setShadow(800, 130, 20);
+        fetchArchive(`Sarace`).then((rarc) => {
+            const lootMdl = buildModel(rarc, `bdl/sa.bdl`);
+            buildChildModel(rarc, `bdl/sa01_head.bdl`).setParentJoint(lootMdl, `head`);
+
+            lootMdl.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
+
+            setShadow(800, 130, 20);
+            setToNearestFloor(lootMdl.modelMatrix, lootMdl.modelMatrix);
+        });
+        
     }
+    // else if (actorName === 'Ktarur') fetchArchive(`Ktaru_00`).then((rarc) => {
+    //     const m = buildModel(rarc, `bdlm/ktaru_00.bdl`);
+    //     m.bindTRK1(parseBRK(rarc, `brk/ktaru_00.brk`));
+    // });
     else if (actorName === 'Ocloud' || actorName === 'Rcloud') fetchArchive(`BVkumo`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bvkumo.bdl`);
         m.bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`));
@@ -1976,7 +2020,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Hys2') fetchArchive(`Hys`).then((rarc) => buildModel(rarc, `bdlm/hys.bdl`));
     else if (actorName === 'Ywarp00') fetchArchive(`Ywarp00`).then((rarc) => {
         const m = buildModel(rarc, `bmdm/ywarp00.bmd`);
-        m.bindANK1(parseBCK(rarc, `bck/ywarp00.bck`));
+        m.bindANK1(parseBCK(rarc, `bck/ywarp00.bck`), animFrame(28));
         m.bindTRK1(parseBRK(rarc, `brk/ywarp00.brk`));
     });
     // Hyrule.

@@ -6,8 +6,7 @@ import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextur
 
 import { AreaLight, AreaLightType, Material, MaterialSet, MREA, Surface, UVAnimationType } from './mrea.js';
 import * as Viewer from '../viewer.js';
-import { AABB, squaredDistanceFromPointToAABB } from '../Geometry.js';
-import { TXTR } from './txtr.js';
+import { AABB } from '../Geometry.js';
 import { CMDL } from './cmdl.js';
 import { GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers.js';
@@ -94,7 +93,7 @@ class ActorLights {
 
             for (let i = 0; i < layer.lights.length; i++) {
                 const light = layer.lights[i];
-                const sqDist = squaredDistanceFromPointToAABB(light.gxLight.Position, actorBounds);
+                const sqDist = actorBounds.sqDistFromClosestPoint(light.gxLight.Position);
 
                 if (sqDist < (light.radius ** 2)) {
                     // Shadow cast logic

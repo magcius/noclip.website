@@ -89,6 +89,7 @@ import * as Scenes_WorldOfWarcraft from './WorldOfWarcraft/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_CounterStrike from './GoldSrc/Scenes_CounterStrike.js';
+import * as Scenes_TeamFortressClassic from './GoldSrc/Scenes_TeamFortressClassic.js';
 import * as Scenes_Quake from './Quake/Scenes_Quake.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
 import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
@@ -110,7 +111,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui.js';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera.js';
-import { assertExists, assert, arrayRemoveIfExist } from './util.js';
+import { assertExists, assert } from './util.js';
 import { loadRustLib } from './rustlib.js';
 import { DataFetcher } from './DataFetcher.js';
 import { atob, btoa } from './Ascii85.js';
@@ -144,6 +145,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_WiiSports.sceneGroup,
     Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
+    Scenes_KirbyAirRide.sceneGroup,
     Scenes_LuigisMansion.sceneGroup,
     Scenes_MarioKartDoubleDash.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP1,
@@ -220,7 +222,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
-    Scenes_KirbyAirRide.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
     Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
@@ -239,6 +240,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_JetSetRadio.sceneGroup,
     Scenes_HalfLife.sceneGroup,
     Scenes_CounterStrike.sceneGroup,
+    Scenes_TeamFortressClassic.sceneGroup,
     Scenes_Quake.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
@@ -969,6 +971,8 @@ class Main {
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)
             sceneGroup.hidden = false;
+        if (sceneDesc.hidden)
+            sceneDesc.hidden = false;
 
         this.currentSceneDesc = sceneDesc;
         this.ui.sceneSelect.setCurrentDesc(sceneGroup, this.currentSceneDesc);
