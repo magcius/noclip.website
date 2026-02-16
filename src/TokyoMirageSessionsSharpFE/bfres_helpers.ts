@@ -160,7 +160,7 @@ export function convert_attribute_format(format: nngfx_enum.AttributeFormat): Gf
             return GfxPlatform.GfxFormat.U8_R_NORM;
 
         case nngfx_enum.AttributeFormat._8_Uint:
-            return GfxPlatform.GfxFormat.U8_RG;
+            return GfxPlatform.GfxFormat.U8_R;
 
         case nngfx_enum.AttributeFormat._8_8_8_8_Uint:
             return GfxPlatform.GfxFormat.U8_RGBA;
@@ -185,6 +185,10 @@ export function convert_attribute_format(format: nngfx_enum.AttributeFormat): Gf
 
         case nngfx_enum.AttributeFormat._16_16_Snorm:
             return GfxPlatform.GfxFormat.S16_RG_NORM;
+
+        case nngfx_enum.AttributeFormat._10_10_10_2_Snorm:
+            // these buffers are converted
+            return GfxPlatform.GfxFormat.S16_RGBA_NORM;
 
         case nngfx_enum.AttributeFormat._16_16_Float:
             return GfxPlatform.GfxFormat.F16_RG;
@@ -325,4 +329,46 @@ export function convert_cull_mode(cull_mode: TMSFECullMode): GfxPlatform.GfxCull
             console.error(`unknown cull_mode ${cull_mode}`);
             throw("whoops");
     }
+}
+
+export function parse_bfres(buffer: ArrayBufferSlice): BFRES.FRES
+{
+    let fres = BFRES.parse(buffer);
+
+    // Tokyo Mirage Sessions uses 10 10 10 2 snorm to store normals, which isn't supported
+    // these needs to be converted to s16 rgba norm
+    // do it here to avoid duplicating this converision if the fres is used multiple times
+    // note: this code assumes that there is only one 10 10 10 2 attribute in a buffer
+    for (let model_index = 0; model_index < fres.fmdl.length; model_index++)
+    {
+        let fmdl = fres.fmdl[model_index];
+        for (let fvtx_index = 0; fvtx_index < fmdl.fvtx.length; fvtx_index++)
+        {
+            let fvtx = fmdl.fvtx[fvtx_index];
+            let _10_10_10_2_offset = -1;
+            let _10_10_10_2_buffer_index = -1;
+            for (let attribute_index = 0; attribute_index < fvtx.vertexAttributes.length; attribute_index++)
+            {
+                let attribute = fvtx.vertexAttributes[attribute_index];
+                if (attribute.format === nngfx_enum.AttributeFormat._10_10_10_2_Snorm)
+                {
+                    _10_10_10_2_offset = attribute.offset;
+                    _10_10_10_2_buffer_index = attribute.bufferIndex;
+                    convert_10_10_10_2_snorm(attribute.offset, attribute.bufferIndex, fvtx.vertexBuffers);
+                }
+            }
+
+            // in the event that a buffer had to be converted, update the offsets to account for it going from 4 to 8 bytes
+            for (let attribute_index = 0; attribute_index < fvtx.vertexAttributes.length; attribute_index++)
+            {
+                let attribute = fvtx.vertexAttributes[attribute_index];
+                if (attribute.bufferIndex == _10_10_10_2_buffer_index && attribute.offset > _10_10_10_2_offset)
+                {
+                    attribute.offset += 0x4;
+                }
+            }
+        }
+    }
+
+    return fres;
 }

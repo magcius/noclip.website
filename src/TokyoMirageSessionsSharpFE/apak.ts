@@ -4,6 +4,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as BFRES from "../fres_nx/bfres.js";
+import * as bfres_helpers from "./bfres_helpers.js";
 import { assert, readString } from "../util.js";
 import { DataFetcher } from "../DataFetcher.js";
 
@@ -85,7 +86,7 @@ export async function get_fres_from_apak(apak_path: string, bfres_name: string, 
         console.error(`file ${bfres_name} not found`);
         throw("whoops");
     }
-    const fres = BFRES.parse(bfres);
+    const fres = bfres_helpers.parse_bfres(bfres);
     return fres;
 }
 
@@ -98,7 +99,7 @@ export async function get_animations_from_apak(apak_path: string, data_fetcher: 
     let animations: BFRES.FRES[] = [];
     for (let i = 0; i < animation_files.length; i++)
     {
-        animations.push(BFRES.parse(animation_files[i]));
+        animations.push(bfres_helpers.parse_bfres(animation_files[i]));
     }
     return animations;
 }

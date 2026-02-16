@@ -3,11 +3,12 @@
 
 import { get_file_by_name, get_fres_from_apak, parseAPAK } from "../apak.js";
 import * as BFRES from "../../fres_nx/bfres.js";
+import * as bfres_helpers from "../bfres_helpers.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
-import { gimmick } from "./../gimmick.js";
+import { gimmick } from "../gimmick.js";
 import { vec3 } from "gl-matrix";
-import { MapLayout } from "./../maplayout.js";
+import { MapLayout } from "../maplayout.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 import { assert } from "../../util.js";
 import { AABB } from "../../Geometry.js";
@@ -25,7 +26,7 @@ export async function create_f003_06_gimmicks(layout: MapLayout, data_fetcher: D
 
     if (ilyana_animation_bfres != undefined)
     {
-        ilyana_animation_fres = BFRES.parse(ilyana_animation_bfres);
+        ilyana_animation_fres = bfres_helpers.parse_bfres(ilyana_animation_bfres);
     }
 
     const ilyana_position = vec3.fromValues(50.0, 0.0, 20.0);

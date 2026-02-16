@@ -33,6 +33,7 @@ import { create_f010_01_music_fes_gimmicks } from "./maps/f010_01.js";
 
 import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
 import * as BFRES from "../fres_nx/bfres.js";
+import * as bfres_helpers from "./bfres_helpers.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -97,7 +98,7 @@ class TMSFESceneDesc implements SceneDesc
             const model_bfres_data = get_file_by_name(apak, model_file_name);
             if (model_bfres_data != undefined)
             {
-                model_fres = BFRES.parse(model_bfres_data);
+                model_fres = bfres_helpers.parse_bfres(model_bfres_data);
             }
             else
             {
@@ -112,7 +113,7 @@ class TMSFESceneDesc implements SceneDesc
                 const animation_bfres_data = get_file_by_name(apak, animation_file_name);
                 if (animation_bfres_data != undefined)
                 {
-                    animation_fres = BFRES.parse(animation_bfres_data);
+                    animation_fres = bfres_helpers.parse_bfres(animation_bfres_data);
                 }
                 else
                 {

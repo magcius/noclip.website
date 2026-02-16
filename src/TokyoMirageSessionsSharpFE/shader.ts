@@ -10,7 +10,6 @@ export class TMSFEProgram extends DeviceProgram
     public static vertex_attribute_codes = [ '_p0', '_c0', '_c1', '_u0', '_u1', '_u2', '_u3', '_u4', '_n0', '_t0', '_i0', '_w0' ];
     public static vertex_attribute_names = [ 'a_Position', 'a_Color0', 'a_Color1', 'a_TexCoord0', 'a_TexCoord1', 'a_TexCoord2', 'a_TexCoord3', 'a_TexCoord4', 'a_Normal', 'a_Tangent', 'a_BlendIndex0', 'a_BlendWeight0' ];
     public static vertex_attribute_types = [ 'vec3', 'vec4', 'float', 'vec2', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4', 'placeholder', 'placeholder' ];
-
     public static ub_SceneParams = 0;
 
     constructor
@@ -18,7 +17,7 @@ export class TMSFEProgram extends DeviceProgram
         public vertex_attributes: BFRES.FVTX_VertexAttribute[],
         public sampler_info: BFRES.FMAT_SamplerInfo[],
         public vertex_skin_weight_count: number,
-        public bone_matrix_array_length: number
+        public bone_matrix_array_length: number,
     )
     {
         super();

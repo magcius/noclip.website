@@ -59,42 +59,18 @@ export class fshp_renderer
 
         // convert vertex attribute format numbers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-        let _10_10_10_2_offset = 0;
-        let _10_10_10_2_buffer_index = -1;
         for (let i = 0; i < fvtx.vertexAttributes.length; i++)
         {
             const vertex_attribute = fvtx.vertexAttributes[i];
-            let format = -1;
-            // Tokyo Mirage Sessions uses _10_10_10_2_Snorm to store normal data, which is not supported and needs to be converted to S16_RGBA_NORM
-            if (vertex_attribute.format === nngfx_enum.AttributeFormat._10_10_10_2_Snorm)
-            {
-                _10_10_10_2_offset = vertex_attribute.offset;
-                _10_10_10_2_buffer_index = vertex_attribute.bufferIndex;
-                bfres_helpers.convert_10_10_10_2_snorm(_10_10_10_2_offset, _10_10_10_2_buffer_index, fvtx.vertexBuffers);
-                format = GfxFormat.S8_RGBA_NORM;
-            }
-            else
-            {
-                format = bfres_helpers.convert_attribute_format(vertex_attribute.format);
-            }
+            const format = bfres_helpers.convert_attribute_format(vertex_attribute.format);
 
             vertexAttributeDescriptors.push
             ({
                 location: i,
                 format,
-                bufferIndex: fvtx.vertexAttributes[i].bufferIndex,
-                bufferByteOffset: fvtx.vertexAttributes[i].offset
+                bufferIndex: vertex_attribute.bufferIndex,
+                bufferByteOffset: vertex_attribute.offset
             });
-        }
-
-        // in the event that a buffer had to be remade because of _10_10_10_2_Snorm data
-        // update the offsets to account for it going from 4 bytes to 8 bytes
-        for (let i = 0; i < vertexAttributeDescriptors.length; i++)
-        {
-            if (vertexAttributeDescriptors[i].bufferIndex == _10_10_10_2_buffer_index && vertexAttributeDescriptors[i].bufferByteOffset > _10_10_10_2_offset)
-            {
-                vertexAttributeDescriptors[i].bufferByteOffset += 0x4;
-            }
         }
 
         const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
@@ -202,7 +178,7 @@ export class fshp_renderer
             use_alpha_test = true;
         }
         this.program.setDefineBool('USE_ALPHA_TEST', use_alpha_test);
-        this.program.setDefineBool('USE_LIGHTMAPS', use_lightmaps);
+        // this.program.setDefineBool('USE_LIGHTMAPS', use_lightmaps);
     }
 
     /**
