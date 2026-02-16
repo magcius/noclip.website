@@ -1,17 +1,14 @@
 // render_fmdl.ts
 // handles all the common tasks shared between the separate meshes of a model, such as materials and animations
 
-import { Curve } from './bfres/animation_common.js';
+import * as BFRES from "../fres_nx/bfres.js";
+import * as bfres_helpers from "./bfres_helpers.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { colorNewFromRGBA } from '../Color.js';
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { FMAA, ShaderParamAnimation } from './bfres/fmaa.js';
-import { FMDL } from "./bfres/fmdl";
-import { FSKA } from './bfres/fska.js';
-import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { AABB } from '../Geometry.js';
-import { GfxDevice, GfxTexture, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
-import { vec3, mat4 } from "gl-matrix";
+import { GfxDevice, GfxTexture, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSamplerDescriptor } from "../gfx/platform/GfxPlatform";
+import { vec3, vec4, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { LightmapTexture } from './lightmap.js';
@@ -25,14 +22,15 @@ export class fmdl_renderer
 {
     public animation_play: boolean = true;
 
-    protected fskl: FSKL;
-    protected fska: FSKA | undefined;
-    protected fmaa: FMAA | undefined;
+    protected fskl: BFRES.FSKL;
+    protected fska: BFRES.FSKA | undefined;
+    protected fmaa: BFRES.FMAA | undefined;
     protected lightmap_sampler_bindings: GfxSamplerBinding[] = [];
     protected bone_to_bone_animation_indices: number[] = [];
-    protected current_bones: FSKL_Bone[];
+    protected current_bones: BFRES.FSKL_Bone[];
     protected smooth_rigid_matrix_array: mat4[] = [];
     protected material_to_material_animation_indices: number[] = [];
+    protected material_to_curve_index_maps: (Map<string, string> | undefined)[] = [];
     protected fshp_to_lightmap_indices: number[] = [];
     protected texture_srt_matrices: mat4[] = [];
     protected transform_matrix: mat4 = mat4.create();
@@ -45,11 +43,11 @@ export class fmdl_renderer
 
     constructor
     (
-        fmdl: FMDL,
+        fmdl: BFRES.FMDL,
         bntx: BNTX.BNTX,
         gfx_texture_array: GfxTexture[],
-        fska: FSKA | undefined,
-        fmaa: FMAA | undefined,
+        fska: BFRES.FSKA | undefined,
+        fmaa: BFRES.FMAA | undefined,
         lightmaps: LightmapTexture[] | undefined,
         position: vec3,
         rotation: vec3,
@@ -69,9 +67,9 @@ export class fmdl_renderer
             const fmat = fmdl.fmat[i];
             let sampler_bindings: GfxSamplerBinding[] = [];
 
-            for (let i = 0; i < fmat.sampler_names.length; i++)
+            for (let i = 0; i < fmat.samplerInfo.length; i++)
             {
-                const texture_name = fmat.texture_names[i];
+                const texture_name = fmat.textureName[i];
                 if (texture_name === undefined)
                 {
                     // invalid material, these are usually just for casting shadows and are set to not render
@@ -83,7 +81,7 @@ export class fmdl_renderer
                 {
                     const gfx_texture_index = bntx.textures.indexOf(texture);
                     const gfx_texture = gfx_texture_array[gfx_texture_index];
-                    const sampler_descriptor = fmat.sampler_descriptors[i];
+                    const sampler_descriptor = bfres_helpers.make_sampler_descriptor(fmat.samplerInfo[i]);
                     const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
                     sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null });
                 }
@@ -120,7 +118,7 @@ export class fmdl_renderer
         // setup skeleton
         this.fskl = fmdl.fskl;
         this.fska = fska;
-        assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
+        assert(this.fskl.smoothRigidIndices.length < BONE_MATRIX_MAX_LENGTH);
 
         // for each bone, which element of the fska bone_animations array applies to it
         if (this.fska !== undefined)
@@ -128,10 +126,10 @@ export class fmdl_renderer
             for (let i = 0; i < this.fskl.bones.length; i++)
             {
                 let bone_animation_index = -1;
-                const bone_animation = this.fska.bone_animations.find((f) => f.name === this.fskl.bones[i].name);
+                const bone_animation = this.fska.boneAnimations.find((f) => f.name === this.fskl.bones[i].name);
                 if (bone_animation != undefined)
                 {
-                    bone_animation_index = this.fska.bone_animations.indexOf(bone_animation);
+                    bone_animation_index = this.fska.boneAnimations.indexOf(bone_animation);
                 }
                 this.bone_to_bone_animation_indices.push(bone_animation_index);
             }
@@ -139,18 +137,21 @@ export class fmdl_renderer
 
         this.fmaa = fmaa;
 
-        // for each material, which element of the material_animations array applies to it
         if (this.fmaa !== undefined)
         {
+            // for each material, which element of the material_animations array applies to it
             for (let i = 0; i < fmdl.fmat.length; i++)
             {
                 let material_animation_index = -1;
-                const material_animation = this.fmaa.material_animations.find((f) => f.target_material === fmdl.fmat[i].name);
+                let curve_index_map = undefined;
+                const material_animation = this.fmaa.materialAnimations.find((f) => f.name === fmdl.fmat[i].name);
                 if (material_animation != undefined)
                 {
-                    material_animation_index = this.fmaa.material_animations.indexOf(material_animation);
+                    material_animation_index = this.fmaa.materialAnimations.indexOf(material_animation);
+                    curve_index_map = parse_material_animation_curve_index_map(this.fmaa, material_animation.name);
                 }
                 this.material_to_material_animation_indices.push(material_animation_index);
+                this.material_to_curve_index_maps.push(curve_index_map);
             }
         }
 
@@ -167,12 +168,12 @@ export class fmdl_renderer
         for (let shape_index = 0; shape_index < fmdl.fshp.length; shape_index++)
         {
             const fshp = fmdl.fshp[shape_index];
-            const fvtx = fmdl.fvtx[fshp.fvtx_index];
-            const fmat = fmdl.fmat[fshp.fmat_index];
+            const fvtx = fmdl.fvtx[fshp.vertexIndex];
+            const fmat = fmdl.fmat[fshp.materialIndex];
             let bone_matrix_array_length = 1;
-            if (fshp.vertex_skin_weight_count > 0)
+            if (fshp.vertexSkinWeightCount > 0)
             {
-                bone_matrix_array_length = this.fskl.smooth_rigid_indices.length;
+                bone_matrix_array_length = this.fskl.smoothRigidIndices.length;
             }
 
             // for each fshp, which element of the lightmaps array applies to it
@@ -180,7 +181,7 @@ export class fmdl_renderer
             let lightmap_srt_matrix = mat4.create();
             if (lightmaps !== undefined)
             {
-                const fshp_bone_name = fmdl.fskl.bones[fshp.bone_index].name;
+                const fshp_bone_name = fmdl.fskl.bones[fshp.boneIndex].name;
                 let lightmap_index = -1;
                 const lightmap = lightmaps.find((f) => f.bone_name === fshp_bone_name);
                 if (lightmap != undefined)
@@ -194,14 +195,14 @@ export class fmdl_renderer
 
             // disable meshes that are set to not render
             let render_mesh = true;
-            const bone_user_data = fmdl.fskl.bones[fshp.bone_index].user_data;
+            const bone_user_data = fmdl.fskl.bones[fshp.boneIndex].userData;
             const render_mesh_enable = bone_user_data.get("render_mesh_enable");
             if (render_mesh_enable !== undefined && render_mesh_enable[0] === 0)
             {
                 render_mesh = false;
             }
             // disable meshes with invalid materials
-            if (this.material_samplers_array[fshp.fmat_index]?.length === 0)
+            if (this.material_samplers_array[fshp.materialIndex]?.length === 0)
             {
                 render_mesh = false;
             }
@@ -275,14 +276,14 @@ export class fmdl_renderer
 
     animate(viewerInput: ViewerRenderInput)
     {
-        let current_bones: FSKL_Bone[] = [];
+        let current_bones: BFRES.FSKL_Bone[] = [];
         if (this.fska != undefined)
         {
             // this model has an animated skeleton
             if (this.animation_play)
             {
                 this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
-                this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
+                this.current_animation_frame = this.current_animation_frame % this.fska.frameCount;
             }
             this.current_bones = this.animate_skeleton(this.current_animation_frame);
         }
@@ -294,15 +295,15 @@ export class fmdl_renderer
 
         // remake smooth rigid matrix
         this.smooth_rigid_matrix_array = [];
-        for (let i = 0; i < this.fskl.smooth_rigid_indices.length; i++)
+        for (let i = 0; i < this.fskl.smoothRigidIndices.length; i++)
         {
-            const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], this.current_bones)
+            const transformation_matrix = bfres_helpers.recursive_bone_transform(this.fskl.smoothRigidIndices[i], this.current_bones)
 
-            if (i < this.fskl.bone_local_from_bind_pose_matrices.length)
+            if (i < this.fskl.boneLocalFromBindPoseMatrices.length)
             {
                 // smooth skinned vertices are stored in bind pose space, and need to be converted to bone local space
                 const new_matrix: mat4 = mat4.create();
-                mat4.multiply(new_matrix, transformation_matrix, this.fskl.bone_local_from_bind_pose_matrices[i])
+                mat4.multiply(new_matrix, transformation_matrix, this.fskl.boneLocalFromBindPoseMatrices[i])
                 this.smooth_rigid_matrix_array.push(new_matrix);
             }
             else
@@ -316,7 +317,7 @@ export class fmdl_renderer
         if (this.fmaa != undefined)
         {
             this.current_material_animation_frame += viewerInput.deltaTime * FPS_RATE;
-            this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frame_count;
+            this.current_material_animation_frame = this.current_material_animation_frame % this.fmaa.frameCount;
             this.texture_srt_matrices = this.animate_materials(this.current_material_animation_frame);
         }
     }
@@ -325,7 +326,7 @@ export class fmdl_renderer
      * returns a bone array of all the bones at a specified frame of the animation
      * @param current_frame the frame to animate the skeleton at
      */
-    animate_skeleton(current_frame: number): FSKL_Bone[]
+    animate_skeleton(current_frame: number): BFRES.FSKL_Bone[]
     {
         if (this.fska == undefined)
         {
@@ -333,7 +334,7 @@ export class fmdl_renderer
             throw("whoops");
         }
 
-        let bones: FSKL_Bone[] = [];
+        let bones: BFRES.FSKL_Bone[] = [];
         for (let bone_index = 0; bone_index < this.fskl.bones.length; bone_index++)
         {
             let bone = this.fskl.bones[bone_index];
@@ -346,7 +347,7 @@ export class fmdl_renderer
                 continue;
             }
             
-            const bone_animation = this.fska.bone_animations[bone_animation_index]
+            const bone_animation = this.fska.boneAnimations[bone_animation_index]
 
             let transformation_flags = bone_animation.flags >> 6;
             let transformation_values: number[] = [];
@@ -368,8 +369,8 @@ export class fmdl_renderer
                 else
                 {
                     // this transformation doesn't have an animation curve
-                    // use the initial value
-                    transformation_values.push(bone_animation.initial_values[i]);
+                    // use the initial values
+                    transformation_values.push(bone_animation.initialValues[i]);
                 }
 
                 transformation_flags >>= 1;
@@ -378,11 +379,11 @@ export class fmdl_renderer
             bone =
             {
                 name: bone.name,
-                parent_index: bone.parent_index,
+                parentIndex: bone.parentIndex,
                 scale: vec3.fromValues(transformation_values[0], transformation_values[1], transformation_values[2]),
-                rotation: vec3.fromValues(transformation_values[3], transformation_values[4], transformation_values[5]),
+                rotation: vec4.fromValues(transformation_values[3], transformation_values[4], transformation_values[5], 1.0),
                 translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
-                user_data: bone.user_data,
+                userData: bone.userData,
             };
         
             bones.push(bone);
@@ -405,12 +406,12 @@ export class fmdl_renderer
 
         let texture_srt_matrices: mat4[] = [];
             
-        for (let i = 0; i < this.material_to_material_animation_indices.length; i++)
+        for (let fmat_index = 0; fmat_index < this.material_to_material_animation_indices.length; fmat_index++)
         {
             let texture_srt_matrix = mat4.create();
             mat4.identity(texture_srt_matrix);
 
-            const material_animation_index = this.material_to_material_animation_indices[i];
+            const material_animation_index = this.material_to_material_animation_indices[fmat_index];
 
             if (material_animation_index === -1)
             {
@@ -420,14 +421,14 @@ export class fmdl_renderer
             {
                 // TODO: can i avoid rounding the frame number? without it some animations display incorrectly
                 const frame_integer = Math.floor(current_frame);
-                const material_animation = this.fmaa.material_animations[material_animation_index];
-                const shader_param_animation = material_animation.shader_param_animations[0];
-
-                let scale_x = get_shader_param_animation_value(1.0, material_animation.curve_index_map, "albedo0_scale_x", shader_param_animation, frame_integer);
-                let scale_y = get_shader_param_animation_value(1.0, material_animation.curve_index_map, "albedo0_scale_y", shader_param_animation, frame_integer);
-                let rotation = get_shader_param_animation_value(0.0, material_animation.curve_index_map, "albedo0_rotate", shader_param_animation, frame_integer);
-                let translate_x = get_shader_param_animation_value(0.0, material_animation.curve_index_map, "albedo0_translate_x", shader_param_animation, frame_integer);
-                let translate_y = get_shader_param_animation_value(0.0, material_animation.curve_index_map, "albedo0_translate_y", shader_param_animation, frame_integer);
+                const material_animation = this.fmaa.materialAnimations[material_animation_index];
+                const curve_index_map = this.material_to_curve_index_maps[fmat_index];
+                assert(curve_index_map !== undefined);
+                let scale_x = get_shader_param_animation_value(1.0, curve_index_map, "albedo0_scale_x", material_animation, frame_integer);
+                let scale_y = get_shader_param_animation_value(1.0, curve_index_map, "albedo0_scale_y", material_animation, frame_integer);
+                let rotation = get_shader_param_animation_value(0.0, curve_index_map, "albedo0_rotate", material_animation, frame_integer);
+                let translate_x = get_shader_param_animation_value(0.0, curve_index_map, "albedo0_translate_x", material_animation, frame_integer);
+                let translate_y = get_shader_param_animation_value(0.0, curve_index_map, "albedo0_translate_y", material_animation, frame_integer);
 
                 // maya style matrix
                 const theta = rotation;
@@ -450,9 +451,9 @@ export class fmdl_renderer
     get_fshp_bone_matrix(fshp_index: number): mat4[]
     {
         let bone_matrix_array: mat4[] = [];
-        if (this.fshp_renderers[fshp_index].fshp.vertex_skin_weight_count == 0)
+        if (this.fshp_renderers[fshp_index].fshp.vertexSkinWeightCount == 0)
         {
-            let transformation_matrix = recursive_bone_transform(this.fshp_renderers[fshp_index].fshp.bone_index, this.current_bones);
+            let transformation_matrix = bfres_helpers.recursive_bone_transform(this.fshp_renderers[fshp_index].fshp.boneIndex, this.current_bones);
             bone_matrix_array.push(transformation_matrix);
         }
         else
@@ -472,7 +473,7 @@ export class fmdl_renderer
         }
         else
         {
-            texture_srt_matrix = this.texture_srt_matrices[this.fshp_renderers[fshp_index].fmat_index];
+            texture_srt_matrix = this.texture_srt_matrices[this.fshp_renderers[fshp_index].fshp.materialIndex];
         }
         return texture_srt_matrix;
     }
@@ -485,12 +486,10 @@ export class fmdl_renderer
             return this.override_bounding_box;
         }
 
-        // last bounding box in the array is the one that covers the entire mesh
-        const last_bounding_box_index = this.fshp_renderers[fshp_index].fshp.bounding_boxes.length - 1;
-        const original_bounding_box = this.fshp_renderers[fshp_index].fshp.bounding_boxes[last_bounding_box_index];
+        const original_bounding_box = this.fshp_renderers[fshp_index].fshp.mesh[0].bbox;
         let new_bounding_box = new AABB();
 
-        if (this.fshp_renderers[fshp_index].fshp.vertex_skin_weight_count == 0)
+        if (this.fshp_renderers[fshp_index].fshp.vertexSkinWeightCount == 0)
         {
             // non skinned mesh
             // if this model has a skeletal animation, update it every frame
@@ -512,10 +511,10 @@ export class fmdl_renderer
             // skinned mesh
             // transform the bounding box to each bone that contributes to this mesh
             // then union them all together
-            for (let i = 0; i < this.fshp_renderers[fshp_index].fshp.skin_bone_indices.length; i++)
+            for (let i = 0; i < this.fshp_renderers[fshp_index].fshp.skinBoneIndices.length; i++)
             {
-                const bone_index = this.fshp_renderers[fshp_index].fshp.skin_bone_indices[i];
-                const bone_matrix = recursive_bone_transform(bone_index, this.current_bones);
+                const bone_index = this.fshp_renderers[fshp_index].fshp.skinBoneIndices[i];
+                const bone_matrix = bfres_helpers.recursive_bone_transform(bone_index, this.current_bones);
                 let world_matrix = mat4.create();
                 mat4.multiply(world_matrix, this.transform_matrix, bone_matrix);
                 const per_bone_bounding_box = new AABB();
@@ -530,7 +529,7 @@ export class fmdl_renderer
     get_fshp_sampler_bindings(fshp_index: number): GfxSamplerBinding[] | undefined
     {
         const new_sampler_bindings: GfxSamplerBinding[] = [];
-        let sampler_bindings = this.material_samplers_array[this.fshp_renderers[fshp_index].fmat_index];
+        let sampler_bindings = this.material_samplers_array[this.fshp_renderers[fshp_index].fshp.materialIndex];
         if (sampler_bindings === undefined)
         {
             return undefined;
@@ -560,14 +559,14 @@ export class fmdl_renderer
  * @param curve the curve to read from
  * @param current_frame which frame of the animation to read the curve at
  */
-function get_keyframe_value(curve: Curve, current_frame: number): number
+function get_keyframe_value(curve: BFRES.Curve, current_frame: number): number
 {
     for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
     {
         if (current_frame == curve.frames[frame_index])
         {
             // interpolation is unnecessary, just return the constant
-            const value = curve.keys[frame_index][3];
+            const value = curve.keys[frame_index][0];
             return value;
         }
         else if (current_frame < curve.frames[frame_index])
@@ -578,7 +577,7 @@ function get_keyframe_value(curve: Curve, current_frame: number): number
             const frame_delta = after_frame - before_frame;
             const t = (current_frame - before_frame) / frame_delta;
             const key_frame = curve.keys[frame_index - 1];
-            const value = getPointCubic(key_frame, t);
+            const value = getPointCubic(vec4.fromValues(key_frame[3], key_frame[2], key_frame[1], key_frame[0]), t);
             return value;
         }
     }
@@ -595,7 +594,7 @@ function get_keyframe_value(curve: Curve, current_frame: number): number
  * @param shader_param_animation the shader param animation to read a value from
  * @param current_frame which frame of the animation to read the curve at
  */
-function get_shader_param_animation_value(default_value: number, curve_index_map: Map<string, string>, key: string, shader_param_animation: ShaderParamAnimation, current_frame: number)
+function get_shader_param_animation_value(default_value: number, curve_index_map: Map<string, string>, key: string, material_animation: BFRES.MaterialAnimation, current_frame: number)
 {
     const curve_index = curve_index_map.get(key);
     if (curve_index === undefined || curve_index === "-1")
@@ -604,9 +603,37 @@ function get_shader_param_animation_value(default_value: number, curve_index_map
     }
     else
     {
-        const curve = shader_param_animation.curves[Number(curve_index)];
+        const curve = material_animation.curves[Number(curve_index)];
         return get_keyframe_value(curve, current_frame);
     }
+}
+
+/**
+ * for texture SRT animations the curves are stored in materialAnimation structs,
+ * but which curve applies to which transformation is specified in the userdata.
+ * Parse the userdata and return a map with the key being the name of the transformation,
+ * and the value being the index of the curve to use for this transformation
+ */
+function parse_material_animation_curve_index_map(fmaa: BFRES.FMAA, material_name: string)
+{
+    let curve_index_map = new Map<string, string>();
+    // the user data key is the material name
+    const curve_index_table = fmaa.userData.get(material_name);
+    if (curve_index_table != undefined)
+    {
+        // the user data value is a string array: odd indices are the shader param name, even indices are the curve index
+        for (let value_index = 0; value_index < curve_index_table.length; value_index += 2)
+        {
+            const key: string = String(curve_index_table[value_index]);
+            const value: string = String(curve_index_table[value_index + 1]);
+            curve_index_map.set(key, value);
+        }
+    
+        return curve_index_map;
+    }
+
+    console.error(`material name ${material_name} not found in user data when parsing curve index map`);
+    throw("whoops");
 }
 
 const FPS = 30;

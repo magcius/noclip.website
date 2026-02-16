@@ -2,7 +2,7 @@
 // Anzu
 
 import { get_file_by_name, get_fres_from_apak, parseAPAK } from "../apak.js";
-import { parseBFRES } from "../bfres/bfres_switch.js";
+import * as BFRES from "../../fres_nx/bfres.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
@@ -133,7 +133,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
     let cath_animation_fres;
     if (cath_animation_bfres != undefined)
     {
-        cath_animation_fres = parseBFRES(cath_animation_bfres);
+        cath_animation_fres = BFRES.parse(cath_animation_bfres);
     }
     
     gimmicks.push

@@ -2,7 +2,7 @@
 // Café Seiren
 
 import { get_file_by_name, get_fres_from_apak, parseAPAK } from "../apak.js";
-import { parseBFRES } from "../bfres/bfres_switch.js";
+import * as BFRES from "../../fres_nx/bfres.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./../gimmick.js";
@@ -25,7 +25,7 @@ export async function create_f003_06_gimmicks(layout: MapLayout, data_fetcher: D
 
     if (ilyana_animation_bfres != undefined)
     {
-        ilyana_animation_fres = parseBFRES(ilyana_animation_bfres);
+        ilyana_animation_fres = BFRES.parse(ilyana_animation_bfres);
     }
 
     const ilyana_position = vec3.fromValues(50.0, 0.0, 20.0);

@@ -106,11 +106,14 @@ export enum ImageFormat {
 }
 
 export enum AttributeFormat {
+    _8_Unorm           = ((ChannelFormat.R8              << TypeFormat.$Bits) | TypeFormat.Unorm),
+    _8_Uint            = ((ChannelFormat.R8              << TypeFormat.$Bits) | TypeFormat.Uint),
     _8_8_Unorm         = ((ChannelFormat.R8_G8           << TypeFormat.$Bits) | TypeFormat.Unorm),
     _8_8_Snorm         = ((ChannelFormat.R8_G8           << TypeFormat.$Bits) | TypeFormat.Snorm),
     _8_8_Uint          = ((ChannelFormat.R8_G8           << TypeFormat.$Bits) | TypeFormat.Uint),
     _8_8_8_8_Unorm     = ((ChannelFormat.R8_G8_B8_A8     << TypeFormat.$Bits) | TypeFormat.Unorm),
     _8_8_8_8_Snorm     = ((ChannelFormat.R8_G8_B8_A8     << TypeFormat.$Bits) | TypeFormat.Snorm),
+    _8_8_8_8_Uint      = ((ChannelFormat.R8_G8_B8_A8     << TypeFormat.$Bits) | TypeFormat.Uint),
     _10_10_10_2_Snorm  = ((ChannelFormat.R10_G10_B10_A2  << TypeFormat.$Bits) | TypeFormat.Snorm),
     _16_16_Unorm       = ((ChannelFormat.R16_G16         << TypeFormat.$Bits) | TypeFormat.Unorm),
     _16_16_Snorm       = ((ChannelFormat.R16_G16         << TypeFormat.$Bits) | TypeFormat.Snorm),
@@ -130,6 +133,18 @@ export function getTypeFormat(format: ImageFormat | AttributeFormat): TypeFormat
 
 export enum TextureAddressMode {
     Repeat, Mirror, ClampToEdge, ClampToBorder, MirrorClampToEdge,
+}
+
+export enum CompareMode
+{
+    Never,
+    Less,
+    Equal,
+    LessOrEqual,
+    Greater,
+    NotEqual,
+    GreaterOrEqual,
+    Always,
 }
 
 export enum FilterMode {

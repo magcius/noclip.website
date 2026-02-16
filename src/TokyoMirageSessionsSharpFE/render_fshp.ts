@@ -1,19 +1,19 @@
 // render_fshp.ts
 // renders a single mesh from a model in a bfres file
 
+import * as BFRES from "../fres_nx/bfres.js";
+import * as bfres_helpers from "./bfres_helpers.js";
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { computeViewMatrixSkybox, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
-import { FVTX } from "./bfres/fvtx.js";
-import { FSHP } from "./bfres/fshp.js";
-import { FMAT, BlendMode } from "./bfres/fmat.js";
 import { AABB } from '../Geometry.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
-         GfxBuffer, GfxSamplerBinding, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, GfxSamplerBinding, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
+import * as nngfx_enum from "../fres_nx/nngfx_enum";
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { ViewerRenderInput } from "../viewer.js";
@@ -23,8 +23,7 @@ import { ViewerRenderInput } from "../viewer.js";
  */
 export class fshp_renderer
 {
-    public fshp: FSHP;
-    public fmat_index: number;
+    public fshp: BFRES.FSHP;
     public render_mesh: boolean = true;
     public stored_bounding_box: AABB | undefined = undefined;
 
@@ -41,9 +40,9 @@ export class fshp_renderer
 
     constructor
     (
-        fvtx: FVTX,
-        fshp: FSHP,
-        fmat: FMAT,
+        fvtx: BFRES.FVTX,
+        fshp: BFRES.FSHP,
+        fmat: BFRES.FMAT,
         bone_matrix_array_length: number,
         render_mesh: boolean,
         use_lightmaps: boolean,
@@ -52,24 +51,50 @@ export class fshp_renderer
         renderHelper: GfxRenderHelper,
     )
     {
-        // TODO: at this point just store the fshp itself
         this.fshp = fshp;
-        this.fmat_index = fshp.fmat_index;
-        this.blend_mode = fmat.blend_mode;
         this.render_mesh = render_mesh;
         this.lightmap_srt_matrix = lightmap_srt_matrix;
 
         // create vertex buffers
+
+        // convert vertex attribute format numbers
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+        let _10_10_10_2_offset = 0;
+        let _10_10_10_2_buffer_index = -1;
         for (let i = 0; i < fvtx.vertexAttributes.length; i++)
         {
+            const vertex_attribute = fvtx.vertexAttributes[i];
+            let format = -1;
+            // Tokyo Mirage Sessions uses _10_10_10_2_Snorm to store normal data, which is not supported and needs to be converted to S16_RGBA_NORM
+            if (vertex_attribute.format === nngfx_enum.AttributeFormat._10_10_10_2_Snorm)
+            {
+                _10_10_10_2_offset = vertex_attribute.offset;
+                _10_10_10_2_buffer_index = vertex_attribute.bufferIndex;
+                bfres_helpers.convert_10_10_10_2_snorm(_10_10_10_2_offset, _10_10_10_2_buffer_index, fvtx.vertexBuffers);
+                format = GfxFormat.S8_RGBA_NORM;
+            }
+            else
+            {
+                format = bfres_helpers.convert_attribute_format(vertex_attribute.format);
+            }
+
             vertexAttributeDescriptors.push
             ({
                 location: i,
-                format: fvtx.vertexAttributes[i].format,
+                format,
                 bufferIndex: fvtx.vertexAttributes[i].bufferIndex,
-                bufferByteOffset: fvtx.vertexAttributes[i].bufferOffset
+                bufferByteOffset: fvtx.vertexAttributes[i].offset
             });
+        }
+
+        // in the event that a buffer had to be remade because of _10_10_10_2_Snorm data
+        // update the offsets to account for it going from 4 bytes to 8 bytes
+        for (let i = 0; i < vertexAttributeDescriptors.length; i++)
+        {
+            if (vertexAttributeDescriptors[i].bufferIndex == _10_10_10_2_buffer_index && vertexAttributeDescriptors[i].bufferByteOffset > _10_10_10_2_offset)
+            {
+                vertexAttributeDescriptors[i].bufferByteOffset += 0x4;
+            }
         }
 
         const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
@@ -88,21 +113,35 @@ export class fshp_renderer
         }
         
         const mesh = fshp.mesh[0];
-
+        const index_buffer_format = bfres_helpers.convert_index_format(mesh.indexFormat);
         this.input_layout = renderHelper.renderCache.createInputLayout
         ({
             vertexAttributeDescriptors,
             vertexBufferDescriptors: inputLayoutBufferDescriptors,
-            indexBufferFormat: mesh.index_buffer_format,
+            indexBufferFormat: index_buffer_format,
         });
 
         // create index buffer
-        this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.index_buffer_data);
-        this.index_count = mesh.index_count;
+        this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexBufferData);
+        this.index_count = mesh.count;
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
-        // mega state flags
-        this.mega_state_flags = { cullMode: fmat.cull_mode, depthWrite: false };
+        // set mega state flags
+        let cull_mode = GfxCullMode.Back; // TODO: some materials don't have user data, I'm under the assumption that these materials are only used on meshes that don't render
+        const original_cull_mode = fmat.userData.get("cull_mode");
+        if (original_cull_mode !== undefined)
+        {
+            cull_mode = bfres_helpers.convert_cull_mode(original_cull_mode[0] as number);
+        }
+        
+        const original_blend_mode = fmat.userData.get("blend_mode");
+        this.blend_mode = BlendMode.Opaque;
+        if (original_blend_mode != undefined)
+        {
+            this.blend_mode = original_blend_mode[0] as number;
+        }
+
+        this.mega_state_flags = { cullMode: cull_mode, depthWrite: false };
         switch(this.blend_mode)
         {
             case BlendMode.Opaque:
@@ -112,6 +151,7 @@ export class fshp_renderer
                 break;
 
             case BlendMode.BlendMode3:
+            case BlendMode.BlendMode6:
                 setAttachmentStateSimple
                 (
                     this.mega_state_flags,
@@ -124,6 +164,7 @@ export class fshp_renderer
                 break;
 
             case BlendMode.BlendMode4:
+            case BlendMode.BlendMode7:
                 setAttachmentStateSimple
                 (
                     this.mega_state_flags,
@@ -147,37 +188,13 @@ export class fshp_renderer
                 );
                 break;
 
-            case BlendMode.BlendMode6:
-                setAttachmentStateSimple
-                (
-                    this.mega_state_flags,
-                    {
-                        blendMode: GfxBlendMode.Add,
-                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-                    }
-                );
-                break;
-
-            case BlendMode.BlendMode7:
-                setAttachmentStateSimple
-                (
-                    this.mega_state_flags,
-                    {
-                        blendMode: GfxBlendMode.Add,
-                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                        blendDstFactor: GfxBlendFactor.One,
-                    }
-                );
-                break;
-
             default:
                 console.error(`unknown blend mode ${this.blend_mode}`);
                 throw("whoops");
         }
 
         // initialize shader
-        this.program = new TMSFEProgram(fvtx, fmat, fshp, bone_matrix_array_length);
+        this.program = new TMSFEProgram(fvtx.vertexAttributes, fmat.samplerInfo, fshp.vertexSkinWeightCount, bone_matrix_array_length);
 
         let use_alpha_test = false;
         if(this.blend_mode == BlendMode.AlphaTest)
@@ -280,4 +297,15 @@ export class fshp_renderer
         }
         device.destroyBuffer(this.index_buffer);
     }
+}
+
+enum BlendMode
+{
+    Opaque = 1,
+    AlphaTest = 2,
+    BlendMode3 = 3,
+    BlendMode4 = 4,
+    BlendMode5 = 5,
+    BlendMode6 = 6,
+    BlendMode7 = 7,
 }

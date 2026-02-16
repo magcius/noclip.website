@@ -1,3 +1,4 @@
+import * as BFRES from "../fres_nx/bfres.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
@@ -17,7 +18,7 @@ import { Light } from './lights.js';
 import { MapLayout } from './maplayout.js';
 import { fmdl_renderer } from "./render_fmdl.js";
 import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { computeModelMatrixSRT } from '../MathHelpers.js';
@@ -62,16 +63,18 @@ export class TMSFEScene implements SceneGfx
         {
             const model_fres = level_models[level_models_index].model_fres;
             const fmdl = model_fres.fmdl[0];
+            let lightmaps: LightmapTexture[] | undefined = level_models[level_models_index].lightmaps;
+            let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
             // initialize textures
             // textures are stored in an embedded .bntx file
-            const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
+            const bntx = BNTX.parse(model_fres.externalFiles[0].buffer);
             const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
             const replacement_textures_group = replacement_texture_groups.find((f) => f.model_name === fmdl.name);
             
             // get animations
-            let fska: FSKA | undefined = undefined;
-            let fmaa: FMAA | undefined = undefined;
+            let fska: BFRES.FSKA | undefined = undefined;
+            let fmaa: BFRES.FMAA | undefined = undefined;
             const animation_fres = level_models[level_models_index].animation_fres;
             if (animation_fres != undefined)
             {
@@ -84,10 +87,6 @@ export class TMSFEScene implements SceneGfx
                     fmaa = animation_fres.fmaa[0];
                 }
             }
-
-            let lightmaps: LightmapTexture[] | undefined = level_models[level_models_index].lightmaps;
-
-            let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
             let renderer: fmdl_renderer;
             if (replacement_textures_group != undefined)
@@ -162,8 +161,8 @@ export class TMSFEScene implements SceneGfx
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
 
         // render skybox first, then clear the depth buffer and render everything else

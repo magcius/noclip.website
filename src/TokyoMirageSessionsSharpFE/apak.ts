@@ -3,7 +3,7 @@
 // as far as I'm aware Tokyo Mirage Sessions ♯FE is the only game that uses this
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import * as BFRES from "../fres_nx/bfres.js";
 import { assert, readString } from "../util.js";
 import { DataFetcher } from "../DataFetcher.js";
 
@@ -76,7 +76,7 @@ export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice | u
     }
 }
 
-export async function get_fres_from_apak(apak_path: string, bfres_name: string, data_fetcher: DataFetcher): Promise<FRES>
+export async function get_fres_from_apak(apak_path: string, bfres_name: string, data_fetcher: DataFetcher): Promise<BFRES.FRES>
 {
     const apak = parseAPAK(await data_fetcher.fetchData(apak_path));
     const bfres = get_file_by_name(apak, bfres_name);
@@ -85,20 +85,20 @@ export async function get_fres_from_apak(apak_path: string, bfres_name: string, 
         console.error(`file ${bfres_name} not found`);
         throw("whoops");
     }
-    const fres = parseBFRES(bfres);
+    const fres = BFRES.parse(bfres);
     return fres;
 }
 
-export async function get_animations_from_apak(apak_path: string, data_fetcher: DataFetcher): Promise<FRES[]>
+export async function get_animations_from_apak(apak_path: string, data_fetcher: DataFetcher): Promise<BFRES.FRES[]>
 {
     const apak_data = await data_fetcher.fetchData(apak_path)
     const apak = parseAPAK(apak_data);
     const animation_files = get_files_of_type(apak, "anm");
 
-    let animations: FRES[] = [];
+    let animations: BFRES.FRES[] = [];
     for (let i = 0; i < animation_files.length; i++)
     {
-        animations.push(parseBFRES(animation_files[i]));
+        animations.push(BFRES.parse(animation_files[i]));
     }
     return animations;
 }

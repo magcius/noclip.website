@@ -1,11 +1,9 @@
 // shader.ts
 // the vertex and fragment shader for rendering maps from Tokyo Mirage Sessions ♯FE
 
-import { DeviceProgram } from '../Program.js';
+import * as BFRES from "../fres_nx/bfres.js";
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
-import { FVTX } from "./bfres/fvtx.js";
-import { FMAT } from "./bfres/fmat.js";
-import { FSHP } from './bfres/fshp.js';
+import { DeviceProgram } from '../Program.js';
 
 export class TMSFEProgram extends DeviceProgram
 {
@@ -15,11 +13,15 @@ export class TMSFEProgram extends DeviceProgram
 
     public static ub_SceneParams = 0;
 
-    // TODO: only get the information i need, not the whole fvtx fmat and fshp objects
-    constructor(public fvtx: FVTX, public fmat: FMAT, public fshp: FSHP, public bone_matrix_array_length: number)
+    constructor
+    (
+        public vertex_attributes: BFRES.FVTX_VertexAttribute[],
+        public sampler_info: BFRES.FMAT_SamplerInfo[],
+        public vertex_skin_weight_count: number,
+        public bone_matrix_array_length: number
+    )
     {
         super();
-        this.name = this.fmat.name;
     }
 
     public override both = `
@@ -45,26 +47,26 @@ ${this.define_inputs()}
 
 void mainVS()
 {
-    #if ${this.fshp.vertex_skin_weight_count} == 0
+    #if ${this.vertex_skin_weight_count} == 0
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[0]) * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.vertex_skin_weight_count} == 1
+    #elif ${this.vertex_skin_weight_count} == 1
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.vertex_skin_weight_count} == 2
+    #elif ${this.vertex_skin_weight_count} == 2
     mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
     vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.vertex_skin_weight_count} == 3
+    #elif ${this.vertex_skin_weight_count} == 3
     mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
     vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
-    #elif ${this.fshp.vertex_skin_weight_count} == 4
+    #elif ${this.vertex_skin_weight_count} == 4
     mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
     t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
@@ -126,15 +128,15 @@ void mainPS()
     {
         let lines = '';
 
-        for (let i = 0; i < this.fvtx.vertexAttributes.length; i++)
+        for (let i = 0; i < this.vertex_attributes.length; i++)
         {
-            let attribute_code = this.fvtx.vertexAttributes[i].name;
+            let attribute_code = this.vertex_attributes[i].name;
             let attribute_index = TMSFEProgram.vertex_attribute_codes.indexOf(attribute_code);
             let attribute_name = TMSFEProgram.vertex_attribute_names[attribute_index]
             let type = TMSFEProgram.vertex_attribute_types[attribute_index];
             if (attribute_code == '_i0')
             {
-                switch(this.fshp.vertex_skin_weight_count)
+                switch(this.vertex_skin_weight_count)
                 {
                     case 1:
                         type = 'uint';
@@ -153,13 +155,13 @@ void mainPS()
                         break;
                     
                     default:
-                        console.error(`fshp ${this.fshp.name} _i0 defintion has ${this.fshp.vertex_skin_weight_count} skin bones`);
+                        console.error(`_i0 defintion has ${this.vertex_skin_weight_count} skin bones`);
                         throw("whoops");
                 }
             }
             if (attribute_code == '_w0')
             {
-                switch(this.fshp.vertex_skin_weight_count)
+                switch(this.vertex_skin_weight_count)
                 {
                     case 2:
                         type = 'vec2';
@@ -174,7 +176,7 @@ void mainPS()
                         break;
 
                     default:
-                        console.error(`fshp ${this.fshp.name} _w0 defintion has ${this.fshp.vertex_skin_weight_count} vertex skin weights`);
+                        console.error(`_w0 defintion has ${this.vertex_skin_weight_count} vertex skin weights`);
                         throw("whoops");
                 }
             }
@@ -191,9 +193,9 @@ void mainPS()
     {
         let lines = '';
 
-        for (let i = 0; i < this.fmat.sampler_names.length; i++)
+        for (let i = 0; i < this.sampler_info.length; i++)
         {
-            const name = this.fmat.sampler_names[i];
+            const name = this.sampler_info[i].name;
             lines += `uniform sampler2D ${name};\n`;
         }
 

@@ -1,8 +1,8 @@
 // mannequinbig.ts
 // the large maid dress mannequins in Illusory 106
 
-import { FRES } from "./bfres/bfres_switch.js";
 import { AABB } from "../Geometry.js";
+import * as BFRES from "../fres_nx/bfres.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { gimmick } from "./gimmick";
@@ -11,9 +11,9 @@ import { LayoutPoint } from "./maplayout";
 
 export class MannequinBig extends gimmick
 {
-    private animations: FRES[];
+    private animations: BFRES.FRES[];
 
-    constructor(layout_point: LayoutPoint, model_fres: FRES, animation_fres_array: FRES[], device: GfxDevice)
+    constructor(layout_point: LayoutPoint, model_fres: BFRES.FRES, animation_fres_array: BFRES.FRES[], device: GfxDevice)
     {
         let bounding_box = new AABB();
         const bb_center = vec3.fromValues(layout_point.position[0], layout_point.position[1] + 75.0, layout_point.position[2]);

@@ -32,7 +32,7 @@ import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
 import { create_f010_01_music_fes_gimmicks } from "./maps/f010_01.js";
 
 import { parseAPAK, get_file_by_name, get_fres_from_apak, get_animations_from_apak } from "./apak.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import * as BFRES from "../fres_nx/bfres.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { create_common_gimmicks } from "./gimmick.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -44,7 +44,6 @@ import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 import { replacement_texture_group } from "./render_fmdl_texture_replace.js";
-import * as BFRES from "../fres_nx/bfres.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -85,31 +84,20 @@ class TMSFESceneDesc implements SceneDesc
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
         if (this.special_skybox == undefined) { this.special_skybox = false };
 
-        // const testapak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/b003_01/model.apak`));
-        // const testbfres = get_file_by_name(testapak, `obj01.anm`);
-        // if (testbfres != undefined)
-        // {
-        //     const testfres = BFRES.parse(testbfres);
-        // }
-
-        // const testbfres = await dataFetcher.fetchData(`Test/CmnYoshi.bfres`);
-        // const testfres = BFRES.parse(testbfres);
-        // console.log(testfres);
-
         // Load the map file
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
 
         // get model files
         let level_models: level_model[] = [];
-        let model_fres: FRES;
-        let animation_fres: FRES | undefined = undefined;
+        let model_fres: BFRES.FRES;
+        let animation_fres: BFRES.FRES | undefined = undefined;
         for (let i = 0; i < this.model_file_names.length; i++)
         {
             const model_file_name = `${this.model_file_names[i]}.bfres`
             const model_bfres_data = get_file_by_name(apak, model_file_name);
             if (model_bfres_data != undefined)
             {
-                model_fres = parseBFRES(model_bfres_data);
+                model_fres = BFRES.parse(model_bfres_data);
             }
             else
             {
@@ -124,7 +112,7 @@ class TMSFESceneDesc implements SceneDesc
                 const animation_bfres_data = get_file_by_name(apak, animation_file_name);
                 if (animation_bfres_data != undefined)
                 {
-                    animation_fres = parseBFRES(animation_bfres_data);
+                    animation_fres = BFRES.parse(animation_bfres_data);
                 }
                 else
                 {
@@ -190,8 +178,8 @@ class TMSFESceneDesc implements SceneDesc
 
 export interface level_model
 {
-    model_fres: FRES;
-    animation_fres: FRES | undefined;
+    model_fres: BFRES.FRES;
+    animation_fres: BFRES.FRES | undefined;
     lightmaps: LightmapTexture[] | undefined;
 }
 
@@ -323,7 +311,7 @@ const sceneDescs =
     new TMSFESceneDesc("f010_07", "Tokyo Millennium Collection Venue", ["f010_07", "f010_07_obj01", "f010_07_obj02"], ["", "f010_07_obj01", "f010_07_obj02"]),
     new TMSFESceneDesc("guambeach_00", "Guam Beach Day", ["guambeach_00"], [""]),
     new TMSFESceneDesc("guambeach_02", "Guam Beach Sunset", ["guambeach_02"], [""]),
-    "Extra",
+    "Unused Levels",
     // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
     // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
     // new TMSFESceneDesc("d002_04", "d003_02_PLAN_TEST_STAND", ["d002_04", "sky"], ["", "sky"]), wii u file v3.4.0.2

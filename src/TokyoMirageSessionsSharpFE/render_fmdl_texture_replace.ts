@@ -2,12 +2,11 @@
 // a fmdl renderer with the ability to swap out textures dynamically
 // this is used to replace tv screens, posters, advertisements, and the panels in LCD Panels
 
+import * as BFRES from "../fres_nx/bfres.js";
+import * as bfres_helpers from "./bfres_helpers.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from './bntx_helpers.js';
 import { DataFetcher } from '../DataFetcher.js';
-import { FMAA } from './bfres/fmaa.js';
-import { FMDL } from "./bfres/fmdl";
-import { FSKA } from './bfres/fska.js';
 import { AABB } from '../Geometry.js';
 import { GfxDevice, GfxSamplerBinding, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec3 } from "gl-matrix";
@@ -25,11 +24,11 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
 
     constructor
     (
-        fmdl: FMDL,
+        fmdl: BFRES.FMDL,
         bntx: BNTX.BNTX,
         gfx_texture_array: GfxTexture[],
-        fska: FSKA | undefined,
-        fmaa: FMAA | undefined,
+        fska: BFRES.FSKA | undefined,
+        fmaa: BFRES.FMAA | undefined,
         lightmaps: LightmapTexture[] | undefined,
         position: vec3,
         rotation: vec3,
@@ -49,11 +48,12 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         {
             const replacement_texture = replacement_textures[i];
 
-            const material = fmdl.fmat.find((f) => f.name === replacement_texture.material_name);
-            if (material != undefined)
+            const fmat = fmdl.fmat.find((f) => f.name === replacement_texture.material_name);
+            if (fmat != undefined)
             {
-                this.replacement_texture_fmat_indices.push(fmdl.fmat.indexOf(material));
-                const sampler_descriptor = material.sampler_descriptors[0]; // s_diffuse
+                const fmat_index = fmdl.fmat.indexOf(fmat);
+                this.replacement_texture_fmat_indices.push(fmat_index);
+                const sampler_descriptor = bfres_helpers.make_sampler_descriptor(fmat.samplerInfo[S_DIFFUSE_INDEX]);
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
                 replacement_texture.sampler_binding = { gfxTexture: replacement_texture.gfx_texture, gfxSampler: gfx_sampler, lateBinding: null };
             }
@@ -83,12 +83,11 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
             let replacement_sampler_binding: GfxSamplerBinding | undefined = undefined;
             for (let replacement_texture_index = 0; replacement_texture_index < this.replacement_textures.length; replacement_texture_index++)
             {
-                if (this.replacement_texture_fmat_indices[replacement_texture_index] == this.fshp_renderers[i].fmat_index)
+                if (this.replacement_texture_fmat_indices[replacement_texture_index] == this.fshp_renderers[i].fshp.materialIndex)
                 {
                     replacement_sampler_binding = this.replacement_textures[replacement_texture_index].sampler_binding;
                     assert(replacement_sampler_binding !== undefined);
-                    // replace s_diffuse
-                    sampler_bindings[0] = replacement_sampler_binding;
+                    sampler_bindings[S_DIFFUSE_INDEX] = replacement_sampler_binding;
                 }
             }
 
@@ -134,3 +133,5 @@ export async function create_replacement_texture(texture_path: string, material_
     const gfx_texture = deswizzle_and_upload_bntx_textures(bntx, device)[0];
     return { material_name, gfx_texture, sampler_binding: undefined };
 }
+
+const S_DIFFUSE_INDEX = 0;

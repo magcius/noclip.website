@@ -2,12 +2,10 @@
 // represents a dynamic or interactable object in levels, such as treasure boxes or warp pads
 
 import { get_fres_from_apak } from "./apak.js";
-import { FRES } from "./bfres/bfres_switch.js";
+import * as BFRES from "../fres_nx/bfres.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
 import { DataFetcher } from "../DataFetcher.js";
-import { FMAA } from './bfres/fmaa.js';
-import { FSKA } from "./bfres/fska.js";
 import { AABB } from "../Geometry.js";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -22,17 +20,17 @@ export class gimmick
     /**
      * @param rotation euler XYZ rotation in radians
      */
-    constructor (position: vec3, rotation: vec3, scale: vec3, model_fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper, animation_fres?: FRES, override_bounding_box?: AABB)
+    constructor (position: vec3, rotation: vec3, scale: vec3, model_fres: BFRES.FRES, device: GfxDevice, renderHelper: GfxRenderHelper, animation_fres?: BFRES.FRES, override_bounding_box?: AABB)
     {
         // initialize textures
-        const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
+        const bntx = BNTX.parse(model_fres.externalFiles[0].buffer);
         const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
 
         const fmdl = model_fres.fmdl[0];
 
         // get animations
-        let fska: FSKA | undefined = undefined;
-        let fmaa: FMAA | undefined = undefined;
+        let fska: BFRES.FSKA | undefined = undefined;
+        let fmaa: BFRES.FMAA | undefined = undefined;
         if (animation_fres != undefined)
         {
             if (animation_fres.fska.length > 0)
@@ -275,7 +273,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
             const entry = layout.gate_entries[i];
-            let gate_fres: FRES;
+            let gate_fres: BFRES.FRES;
             const gate_type = entry.unk_8C;
             switch(gate_type)
             {

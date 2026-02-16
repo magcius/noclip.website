@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString, align } from "../util.js";
-import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum.js";
+import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode, CompareMode } from "./nngfx_enum.js";
 import { AABB } from "../Geometry.js";
 import { vec2, vec3, vec4, mat4 } from "gl-matrix";
 import { Color } from "../Color.js";
@@ -102,7 +102,9 @@ export interface FMAT_SamplerInfo {
     name: string;
     addrModeU: TextureAddressMode; 
     addrModeV: TextureAddressMode; 
-    addrModeW: TextureAddressMode; 
+    addrModeW: TextureAddressMode;
+    compareMode: CompareMode;
+    maxAnisotropy: number;
     filterMode: FilterMode;
     minLOD: number;
     maxLOD: number;
@@ -244,7 +246,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     const bones: FSKL_Bone[] = [];
     for (let i = 0; i < boneCount; i++) {
         const name = readBinStr(buffer, view.getUint32(boneArrayIdx + 0x00, littleEndian), littleEndian);
-        const userDataArrayOffs = view.getUint16(boneArrayIdx + 0x08, littleEndian);
+        const userDataArrayOffs = view.getUint32(boneArrayIdx + 0x08, littleEndian);
         const index = view.getUint16(boneArrayIdx + 0x28, littleEndian);
         const parentIndex = view.getInt16(boneArrayIdx + 0x2A, littleEndian);
         const smoothMtxIndex = view.getInt16(boneArrayIdx + 0x2C, littleEndian);
@@ -702,16 +704,16 @@ function parseFMAT(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         const addrModeU: TextureAddressMode = view.getUint8(samplerInfoArrayIdx + 0x00);
         const addrModeV: TextureAddressMode = view.getUint8(samplerInfoArrayIdx + 0x01);
         const addrModeW: TextureAddressMode = view.getUint8(samplerInfoArrayIdx + 0x02);
-        // Comparison mode, only used for shadow sampler types I believe...
+        const compareMode: CompareMode = view.getUint8(samplerInfoArrayIdx + 0x3);
         // Border color type
-        const maxAnistropy = view.getUint8(samplerInfoArrayIdx + 0x05);
+        const maxAnisotropy = view.getUint8(samplerInfoArrayIdx + 0x05);
         const filterMode: FilterMode = view.getUint16(samplerInfoArrayIdx + 0x06, littleEndian);
         const minLOD = view.getFloat32(samplerInfoArrayIdx + 0x08, littleEndian);
         const maxLOD = view.getFloat32(samplerInfoArrayIdx + 0x0C, littleEndian);
         const lodBias = view.getFloat32(samplerInfoArrayIdx + 0x10, littleEndian);
         samplerInfoArrayIdx += 0x20;
         samplerInfoDicIdx += 0x10;
-        samplerInfo.push({ name, addrModeU, addrModeV, addrModeW, filterMode, minLOD, maxLOD, lodBias });
+        samplerInfo.push({ name, addrModeU, addrModeV, addrModeW, compareMode, maxAnisotropy, filterMode, minLOD, maxLOD, lodBias });
     }
 
     // ShaderParam
@@ -1107,7 +1109,7 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         materialAnimationArrayOffset = view.getUint32(offset + 0x28, littleEndian);
         userDataArrayOffset = view.getUint32(offset + 0x40, littleEndian);
         userDataResDicOffset = view.getUint32(offset + 0x48, littleEndian);
-        frameCount = view.getUint32(offset + 0x50, littleEndian);
+        frameCount = view.getUint32(offset + 0x58, littleEndian);
         userDataCount = view.getUint16(offset + 0x60, littleEndian);
         materialAnimationCount = view.getUint16(offset + 0x62, littleEndian);
     }
@@ -1268,6 +1270,5 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         externalFilesTableIdx += 0x10;
     }
 
-    console.log({ fmdl, fska, fmaa,  externalFiles });
     return { fmdl, fska, fmaa, externalFiles };
 }

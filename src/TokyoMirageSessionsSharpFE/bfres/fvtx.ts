@@ -185,7 +185,7 @@ function convert_attribute_format(format: AttributeFormat)
         case AttributeFormat._8_Unorm:
             return GfxFormat.U8_R_NORM;
 
-        case AttributeFormat._8_8_Uint_dupe:
+        case AttributeFormat._8_Uint:
             return GfxFormat.U8_RG;
 
         case AttributeFormat._8_8_8_8_Uint:
@@ -236,7 +236,7 @@ function convert_attribute_format(format: AttributeFormat)
 enum AttributeFormat
 {
     _8_Unorm            = 0x0201, // used for color
-    _8_8_Uint_dupe      = 0x0203, // used for blend index
+    _8_Uint             = 0x0203, // used for blend index
     _8_8_Unorm          = 0x0901,
     _8_8_Snorm          = 0x0902,
     _8_8_Uint           = 0x0903,
