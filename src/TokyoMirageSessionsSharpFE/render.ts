@@ -4,8 +4,6 @@ import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
 import { colorNewFromRGBA } from '../Color.js';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { FMAA } from './bfres/fmaa.js';
-import { FSKA } from "./bfres/fska.js";
 import { AABB } from '../Geometry.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';

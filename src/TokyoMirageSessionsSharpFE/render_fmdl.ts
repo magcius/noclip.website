@@ -380,6 +380,7 @@ export class fmdl_renderer
             {
                 name: bone.name,
                 parentIndex: bone.parentIndex,
+                boneFlag: bone.boneFlag,
                 scale: vec3.fromValues(transformation_values[0], transformation_values[1], transformation_values[2]),
                 rotation: vec4.fromValues(transformation_values[3], transformation_values[4], transformation_values[5], 1.0),
                 translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
