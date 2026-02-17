@@ -200,7 +200,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const manager = new FileManager(context.dataFetcher, [
-            "poldc0.all",
+            "polDC0.all",
             "texDC0.all",
             `pol${this.id}.all`,
             `pol${this.id}_stream.all`,
