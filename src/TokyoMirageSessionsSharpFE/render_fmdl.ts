@@ -637,6 +637,6 @@ function parse_material_animation_curve_index_map(fmaa: BFRES.FMAA, material_nam
     throw("whoops");
 }
 
-const FPS = 30;
+const FPS = 60;
 const FPS_RATE = FPS/1000;
 const BONE_MATRIX_MAX_LENGTH = 209; // shibuya lumps all the animated trees and street lamps into one model
