@@ -44,16 +44,19 @@ export class FileManager {
         return data.slice(loc.offset, loc.offset + loc.length);
     }
 
-    async fetch() {
+    public async fetch() {
         const basePath = "CrazyTaxi/files/ct";
-        for (const fileName of this.fileNames) {
-            const data = await this.dataFetcher.fetchData(`${basePath}/${fileName}`);
+        this.fileData = await Promise.all(this.fileNames.map(async (fileName) => {
+            return this.dataFetcher.fetchData(`${basePath}/${fileName}`);
+        }));
+        
+        for (let i = 0; i < this.fileNames.length; i++) {
+            const fileName = this.fileNames[i], data = this.fileData[i];
             if (fileName.endsWith('.all')) {
                 this.fileStore.append_archive(fileName, data.createTypedArray(Uint8Array));
             } else {
                 this.fileStore.append_file(fileName, data.createTypedArray(Uint8Array));
             }
-            this.fileData.push(data);
         }
     }
 }
