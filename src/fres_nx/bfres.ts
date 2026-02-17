@@ -6,16 +6,21 @@ import { AABB } from "../Geometry.js";
 import { vec2, vec3, vec4, mat4 } from "gl-matrix";
 import { Color } from "../Color.js";
 
-export interface Version
-{
+export interface Version {
     major: number;
     minor: number;
     micro: number;
 }
 
+export enum BoneFlag {
+    RotationMode_Quat     = 0x00 << 12,
+    RotationMode_EulerXyz = 0x01 << 12,
+}
+
 export interface FSKL_Bone {
     name: string;
     parentIndex: number;
+    boneFlag: BoneFlag;
     scale: vec3;
     rotation: vec4;
     translation: vec3;
@@ -102,7 +107,7 @@ export interface FMAT_SamplerInfo {
     name: string;
     addrModeU: TextureAddressMode; 
     addrModeV: TextureAddressMode; 
-    addrModeW: TextureAddressMode;
+    addrModeW: TextureAddressMode; 
     compareMode: CompareMode;
     maxAnisotropy: number;
     filterMode: FilterMode;
@@ -155,7 +160,7 @@ export enum CurveType {
     StepInteger  = 4,
     BakedInteger = 5,
     StepBoolean  = 6,
-    BakedBoolean = 1,
+    BakedBoolean = 7,
 }
 
 export interface Curve {
@@ -221,8 +226,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     let smoothMtxCount;
     let rigidMtxCount;
 
-    if (fresVersion.major < 9)
-    {
+    if (fresVersion.major < 9) {
         boneArrayOffs = view.getUint32(offs + 0x18, littleEndian);
         smoothRigidIndexArrayOffset = view.getUint32(offs + 0x20, littleEndian);
         boneLocalFromBindPoseMatrixArrayOffset = view.getUint32(offs + 0x28, littleEndian);
@@ -231,8 +235,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         smoothMtxCount = view.getUint16(offs + 0x4E, littleEndian);
         rigidMtxCount = view.getUint16(offs + 0x50, littleEndian);
     }
-    else
-    {
+    else {
         flag = view.getUint32(offs + 0x4, littleEndian);
         boneArrayOffs = view.getUint32(offs + 0x10, littleEndian);
         smoothRigidIndexArrayOffset = view.getUint32(offs + 0x18, littleEndian);
@@ -252,8 +255,8 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         const smoothMtxIndex = view.getInt16(boneArrayIdx + 0x2C, littleEndian);
         const rigidMtxIndex = view.getInt16(boneArrayIdx + 0x2E, littleEndian);
         const billboardIndex = view.getInt16(boneArrayIdx + 0x30, littleEndian);
-        const userDataCount = view.getInt16(boneArrayIdx + 0x32, littleEndian);
-        const boneFlag = view.getUint32(boneArrayIdx + 0x34, littleEndian);
+        const userDataCount = view.getUint16(boneArrayIdx + 0x32, littleEndian);
+        const boneFlag: BoneFlag = view.getUint32(boneArrayIdx + 0x34, littleEndian);
 
         const scaleX = view.getFloat32(boneArrayIdx + 0x38, littleEndian);
         const scaleY = view.getFloat32(boneArrayIdx + 0x3C, littleEndian);
@@ -273,7 +276,7 @@ function parseFSKL(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
 
         const userData = parseUserData(buffer, fresVersion, userDataArrayOffs, userDataCount, littleEndian);
 
-        bones.push({ name, parentIndex, scale, rotation, translation, userData });
+        bones.push({ name, parentIndex, boneFlag, scale, rotation, translation, userData });
         boneArrayIdx += 0x60;
     }
 
@@ -379,8 +382,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     let vertexSkinWeightCount;
     let meshCount;
 
-    if (fresVersion.major < 9)
-    {
+    if (fresVersion.major < 9) {
         name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
         // 0x18 vertex
         meshArrayOffs = view.getUint32(offs + 0x20, littleEndian);
@@ -401,8 +403,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         // 0x68 key shape count
         // 0x69 target attr count
     }
-    else
-    {
+    else {
         name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
 
         meshArrayOffs = view.getUint32(offs + 0x18, littleEndian);
@@ -560,8 +561,7 @@ function parseFMAT(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
     let rawParamSize;
     let userDataCount;
 
-    if (fresVersion.major < 9)
-    {
+    if (fresVersion.major < 9) {
         name = readBinStr(buffer, view.getUint32(offs + 0x10, littleEndian), littleEndian);
         renderInfoArrayOffs = view.getUint32(offs + 0x18, littleEndian);
         shaderAssignOffs = view.getUint32(offs + 0x28, littleEndian);
@@ -583,8 +583,7 @@ function parseFMAT(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         rawParamSize = view.getUint16(offs + 0xB0, littleEndian);
         userDataCount = view.getUint16(offs + 0xB2, littleEndian);
     }
-    else
-    {
+    else {
         name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
         renderInfoArrayOffs = view.getUint32(offs + 0x10, littleEndian);
         shaderAssignOffs = view.getUint32(offs + 0x20, littleEndian);

@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { WowWmoGroupDescriptor } from "../../rust/pkg/noclip_support";
+import { WowWmoGroupDescriptor } from "noclip-rust-support";
 import { invlerp, lerp } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";

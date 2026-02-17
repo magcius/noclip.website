@@ -135,8 +135,7 @@ export enum TextureAddressMode {
     Repeat, Mirror, ClampToEdge, ClampToBorder, MirrorClampToEdge,
 }
 
-export enum CompareMode
-{
+export enum CompareMode {
     Never,
     Less,
     Equal,

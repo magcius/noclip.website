@@ -28,7 +28,10 @@
         "types": [
             "gl-matrix",
             "webxr"
-        ]
+        ],
+        "paths": {
+          "noclip-rust-support": ["./rust/pkg"]
+        }
     },
     "include": [
         "./src/",
