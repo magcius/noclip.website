@@ -22,7 +22,7 @@ export async function create_d007_01_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(elevator_to_ahead_point.position[0], elevator_to_ahead_point.position[1] - 5.0, elevator_to_ahead_point.position[2]),
             elevator_to_ahead_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d007/elevator_nosphere/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d007/elevator_nosphere/skin/01/model",
             "elevator_nosphere_01.bfres",
             data_fetcher,
             device
@@ -39,7 +39,7 @@ export async function create_d007_01_gimmicks(layout: MapLayout, data_fetcher: D
                 vec3.fromValues(movable_floor_point.position[0], movable_floor_point.position[1] - 5.0, movable_floor_point.position[2]),
                 elevator_to_ahead_point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/gimmick/d007/movablefloor/skin/01/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/gimmick/d007/movablefloor/skin/01/model",
                 "movablefloor_01.bfres",
                 data_fetcher,
                 device

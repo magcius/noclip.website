@@ -22,7 +22,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzucar/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzucar/skin/00/model",
             "anzucar_00.bfres",
             data_fetcher,
             device
@@ -36,7 +36,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzucat/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzucat/skin/00/model",
             "anzucat_00.bfres",
             data_fetcher,
             device
@@ -50,7 +50,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzurabbit/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzurabbit/skin/00/model",
             "anzurabbit_00.bfres",
             data_fetcher,
             device
@@ -64,7 +64,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzuhorse/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzuhorse/skin/00/model",
             "anzuhorse_00.bfres",
             data_fetcher,
             device
@@ -78,7 +78,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzubear/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzubear/skin/00/model",
             "anzubear_00.bfres",
             data_fetcher,
             device
@@ -92,7 +92,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzulion/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzulion/skin/00/model",
             "anzulion_00.bfres",
             data_fetcher,
             device
@@ -106,7 +106,7 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzuleftclothshelf/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzuleftclothshelf/skin/00/model",
             "anzuleftclothshelf_00.bfres",
             data_fetcher,
             device
@@ -120,15 +120,15 @@ export async function create_f003_08_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/anzurightclothshelf/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/anzurightclothshelf/skin/00/model",
             "anzurightclothshelf_00.bfres",
             data_fetcher,
             device
         )
     );
 
-    const cath_model_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/nonplayer/np123/skin/01/model.apak", "np123_01.bfres", data_fetcher);
-    const cath_animation_apak_data = await data_fetcher.fetchData("TokyoMirageSessionsSharpFE/nonplayer/np123/skin/01/model_common.apak");
+    const cath_model_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/nonplayer/np123/skin/01/model", "np123_01.bfres", data_fetcher);
+    const cath_animation_apak_data = await data_fetcher.fetchData("TokyoMirageSessionsSharpFE/Character/nonplayer/np123/skin/01/model_common.zip");
     const cath_animation_apak = parseAPAK(cath_animation_apak_data);
     const cath_animation_bfres = get_file_by_name(cath_animation_apak, "fd_idle_00.anm");
     let cath_animation_fres;

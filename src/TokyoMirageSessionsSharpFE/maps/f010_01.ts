@@ -18,7 +18,7 @@ export async function create_f010_01_music_fes_gimmicks(layout: MapLayout, data_
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/largeprops05/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/largeprops05/skin/00/model",
             "largeprops05_00.bfres",
             data_fetcher,
             device

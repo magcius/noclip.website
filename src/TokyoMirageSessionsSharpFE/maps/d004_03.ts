@@ -27,7 +27,7 @@ export async function create_d004_03_gimmicks(layout: MapLayout, data_fetcher: D
                 camera_floor_red_point.position,
                 camera_floor_red_point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/01/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/gimmick/d004/photofloor/skin/01/model",
                 "photofloor_01.bfres",
                 data_fetcher,
                 device
@@ -45,7 +45,7 @@ export async function create_d004_03_gimmicks(layout: MapLayout, data_fetcher: D
                 camera_floor_blue_point.position,
                 camera_floor_blue_point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/02/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/gimmick/d004/photofloor/skin/02/model",
                 "photofloor_02.bfres",
                 data_fetcher,
                 device
@@ -61,7 +61,7 @@ export async function create_d004_03_gimmicks(layout: MapLayout, data_fetcher: D
             fallen_pictures_green_point.position,
             fallen_pictures_green_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/fallenpictures/skin/03/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d004/fallenpictures/skin/03/model",
             "fallenpictures_03.bfres",
             data_fetcher,
             device
@@ -76,7 +76,7 @@ export async function create_d004_03_gimmicks(layout: MapLayout, data_fetcher: D
             floor_button_red.position,
             floor_button_red.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/switch_red/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d004/switch_red/skin/01/model",
             "switch_red_01.bfres",
             data_fetcher,
             device
@@ -91,7 +91,7 @@ export async function create_d004_03_gimmicks(layout: MapLayout, data_fetcher: D
             floor_button_blue.position,
             floor_button_blue.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/switch_blue/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d004/switch_blue/skin/01/model",
             "switch_blue_01.bfres",
             data_fetcher,
             device

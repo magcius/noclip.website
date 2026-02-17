@@ -20,7 +20,7 @@ export async function create_f003_02_gimmicks(layout: MapLayout, data_fetcher: D
             notepc_point.position,
             notepc_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/notepc01/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/notepc01/skin/00/model",
             "notepc01_00.bfres",
             data_fetcher,
             device
@@ -42,7 +42,7 @@ export async function create_f003_02_party_gimmicks(layout: MapLayout, data_fetc
             notepc_point.position,
             notepc_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/notepc01/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/notepc01/skin/00/model",
             "notepc01_00.bfres",
             data_fetcher,
             device
@@ -56,7 +56,7 @@ export async function create_f003_02_party_gimmicks(layout: MapLayout, data_fetc
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/partyset/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/partyset/skin/00/model",
             "partyset_00.bfres",
             data_fetcher,
             device

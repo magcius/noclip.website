@@ -26,7 +26,7 @@ export async function create_f005_01_gimmicks(layout: MapLayout, data_fetcher: D
                 point.position,
                 point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/prop/monitor/skin/00/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/prop/monitor/skin/00/model",
                 "monitor_00.bfres",
                 data_fetcher,
                 device
@@ -42,7 +42,7 @@ export async function create_f005_01_gimmicks(layout: MapLayout, data_fetcher: D
             hdcamera_point.position,
             hdcamera_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/hdcamera/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/hdcamera/skin/00/model",
             "hdcamera_00.bfres",
             data_fetcher,
             device
@@ -59,7 +59,7 @@ export async function create_f005_01_gimmicks(layout: MapLayout, data_fetcher: D
                 point.position,
                 point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/prop/notepc01/skin/00/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/prop/notepc01/skin/00/model",
                 "notepc01_00.bfres",
                 data_fetcher,
                 device
@@ -77,7 +77,7 @@ export async function create_f005_01_gimmicks(layout: MapLayout, data_fetcher: D
                 point.position,
                 point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/prop/desk01/skin/00/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/prop/desk01/skin/00/model",
                 "desk01_00.bfres",
                 data_fetcher,
                 device
@@ -95,7 +95,7 @@ export async function create_f005_01_gimmicks(layout: MapLayout, data_fetcher: D
                 point.position,
                 point.rotation,
                 vec3.fromValues(1.0, 1.0, 1.0),
-                "TokyoMirageSessionsSharpFE/prop/spotlight/skin/00/model.apak",
+                "TokyoMirageSessionsSharpFE/Character/prop/spotlight/skin/00/model",
                 "spotlight_00.bfres",
                 data_fetcher,
                 device
@@ -110,7 +110,7 @@ export async function create_f005_01_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/stepladder01/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/stepladder01/skin/00/model",
             "stepladder01_00.bfres",
             data_fetcher,
             device
@@ -131,7 +131,7 @@ export async function create_f005_01_music_fes_gimmicks(layout: MapLayout, data_
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/largeprops03/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/largeprops03/skin/00/model",
             "largeprops03_00.bfres",
             data_fetcher,
             device

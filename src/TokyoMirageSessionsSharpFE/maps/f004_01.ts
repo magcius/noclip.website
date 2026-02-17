@@ -18,7 +18,7 @@ export async function create_f004_01_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/largeprops01/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/largeprops01/skin/00/model",
             "largeprops01_00.bfres",
             data_fetcher,
             device
@@ -39,7 +39,7 @@ export async function create_f004_01_music_fes_gimmicks(layout: MapLayout, data_
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/largeprops02/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/largeprops02/skin/00/model",
             "largeprops02_00.bfres",
             data_fetcher,
             device

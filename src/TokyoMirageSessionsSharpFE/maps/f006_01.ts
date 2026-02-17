@@ -18,7 +18,7 @@ export async function create_f006_01_barrier_gimmicks(layout: MapLayout, data_fe
             vec3.fromValues(0.0, 0.0, -2250.0),
             vec3.fromValues(0.0, 0.0, 0.0),
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/cosmicbarrier/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/cosmicbarrier/skin/00/model",
             "cosmicbarrier_00.bfres",
             data_fetcher,
             device

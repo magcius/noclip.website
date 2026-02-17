@@ -13,11 +13,11 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
 {
     const gimmicks: gimmick[] = [];
 
-    const mannequinbig_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/01/model.apak",
+    const mannequinbig_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequinbig/skin/01/model",
                                                             "mannequinbig_01.bfres", data_fetcher);
-    const mannequinbig_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/02/model.apak",
+    const mannequinbig_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequinbig/skin/02/model",
                                                             "mannequinbig_02.bfres", data_fetcher);
-    const mannequinbig_animations = await get_animations_from_apak("TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/01/model_common.apak", data_fetcher);
+    const mannequinbig_animations = await get_animations_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequinbig/skin/01/model_common", data_fetcher);
 
     const swA1_POINT_MANNEQUIN = 1510;
     const swA2_POINT_MANNEQUIN = 1511;
@@ -34,7 +34,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swA1_mannequin_point.position,
             swA1_mannequin_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/04/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/04/model",
             "mannequin_04.bfres",
             data_fetcher,
             device
@@ -49,7 +49,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swA1_mannequin_point2.position,
             swA1_mannequin_point2.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/01/model",
             "mannequin_01.bfres",
             data_fetcher,
             device
@@ -64,7 +64,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swA1_mannequin_point3.position,
             swA1_mannequin_point3.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/05/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/05/model",
             "mannequin_05.bfres",
             data_fetcher,
             device
@@ -79,7 +79,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swA2_mannequin_point.position,
             swA2_mannequin_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/02/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/02/model",
             "mannequin_02.bfres",
             data_fetcher,
             device
@@ -94,7 +94,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swA2_mannequin_point2.position,
             swA2_mannequin_point2.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/03/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/03/model",
             "mannequin_03.bfres",
             data_fetcher,
             device
@@ -109,7 +109,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swA2_mannequin_point3.position,
             swA2_mannequin_point3.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/04/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/04/model",
             "mannequin_04.bfres",
             data_fetcher,
             device
@@ -124,7 +124,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swB1_mannequin_point.position,
             swB1_mannequin_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/12/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/12/model",
             "mannequin_12.bfres",
             data_fetcher,
             device
@@ -139,7 +139,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swB1_mannequin_point2.position,
             swB1_mannequin_point2.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/10/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/10/model",
             "mannequin_10.bfres",
             data_fetcher,
             device
@@ -154,7 +154,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swB1_mannequin_point3.position,
             swB1_mannequin_point3.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/09/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/09/model",
             "mannequin_09.bfres",
             data_fetcher,
             device
@@ -169,7 +169,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swB2_mannequin_point.position,
             swB2_mannequin_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/07/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/07/model",
             "mannequin_07.bfres",
             data_fetcher,
             device
@@ -184,7 +184,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swB2_mannequin_point2.position,
             swB2_mannequin_point2.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/12/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/12/model",
             "mannequin_12.bfres",
             data_fetcher,
             device
@@ -199,7 +199,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             swB2_mannequin_point3.position,
             swB2_mannequin_point3.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/13/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/13/model",
             "mannequin_13.bfres",
             data_fetcher,
             device
@@ -226,7 +226,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             red_stand_mannequin_point.position,
             red_stand_mannequin_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/09/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/09/model",
             "mannequin_09.bfres",
             data_fetcher,
             device
@@ -241,7 +241,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             blue_stand_mannequin_point.position,
             blue_stand_mannequin_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequin/skin/05/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequin/skin/05/model",
             "mannequin_05.bfres",
             data_fetcher,
             device
@@ -256,7 +256,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             blue_stand_point.position,
             blue_stand_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequinstand/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequinstand/skin/01/model",
             "mannequinstand_01.bfres",
             data_fetcher,
             device
@@ -271,7 +271,7 @@ export async function create_d003_03_gimmicks(layout: MapLayout, data_fetcher: D
             red_stand_point.position,
             red_stand_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequinstand/skin/02/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d003/mannequinstand/skin/02/model",
             "mannequinstand_02.bfres",
             data_fetcher,
             device

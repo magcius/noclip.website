@@ -22,7 +22,7 @@ export async function create_d005_03_gimmicks(layout: MapLayout, data_fetcher: D
             condition_wall_1_point.position,
             condition_wall_1_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d005/conditionwall/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d005/conditionwall/skin/01/model",
             "conditionwall_01.bfres",
             data_fetcher,
             device
@@ -37,7 +37,7 @@ export async function create_d005_03_gimmicks(layout: MapLayout, data_fetcher: D
             condition_wall_2_point.position,
             condition_wall_2_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d005/conditionwall/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d005/conditionwall/skin/01/model",
             "conditionwall_01.bfres",
             data_fetcher,
             device

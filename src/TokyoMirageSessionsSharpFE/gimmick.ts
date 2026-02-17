@@ -105,12 +105,12 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 
     if (layout.treasurebox_01_entries.length > 0 || layout.treasurebox_02_entries.length > 0)
     {
-        const treasurebox_01_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model_common.apak", "fd_idle_00.anm", data_fetcher);
+        const treasurebox_01_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/treasurebox/skin/01/model_common", "fd_idle_00.anm", data_fetcher);
 
         // yellow treasure boxes
         if (layout.treasurebox_01_entries.length > 0)
         {
-            const treasure_box_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model.apak", "treasurebox_01.bfres", data_fetcher);
+            const treasure_box_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/treasurebox/skin/01/model", "treasurebox_01.bfres", data_fetcher);
 
             for (let i = 0; i < layout.treasurebox_01_entries.length; i++)
             {
@@ -139,7 +139,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
         // blue treasure boxes in Illusory Area of Aspirations
         if (layout.treasurebox_02_entries.length > 0)
         {
-            const treasure_box_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/02/model.apak", "treasurebox_02.bfres", data_fetcher);
+            const treasure_box_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/treasurebox/skin/02/model", "treasurebox_02.bfres", data_fetcher);
 
             for (let i = 0; i < layout.treasurebox_02_entries.length; i++)
             {
@@ -184,7 +184,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 
     if (layout.blockside_entries.length > 0)
     {
-        const blockside_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/blockside/skin/01/model.apak", "blockside_01.bfres", data_fetcher);
+        const blockside_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/blockside/skin/01/model", "blockside_01.bfres", data_fetcher);
 
         for (let i = 0; i < layout.blockside_entries.length; i++)
         {
@@ -214,7 +214,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 
     if (layout.blockwall_entries.length > 0)
     {
-        const blockwall_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/blockwall/skin/01/model.apak", "blockwall_01.bfres", data_fetcher);
+        const blockwall_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/blockwall/skin/01/model", "blockwall_01.bfres", data_fetcher);
 
         for (let i = 0; i < layout.blockwall_entries.length; i++)
         {
@@ -246,7 +246,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
     // }
     if (layout.warp_entries.length > 0)
     {
-        const warp_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/warp/skin/01/model.apak", "warp_01.bfres", data_fetcher);
+        const warp_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/warp/skin/01/model", "warp_01.bfres", data_fetcher);
 
         for (let i = 0; i < layout.warp_entries.length; i++)
         {
@@ -268,7 +268,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
 
     if (layout.gate_entries.length > 0)
     {
-        const gate_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model_common.apak", "fd_idle_00.anm", data_fetcher);
+        const gate_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/01/model_common", "fd_idle_00.anm", data_fetcher);
 
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
@@ -280,27 +280,27 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
                 case "":
                 case "1":
                     // GIMMICK_GATE_L
-                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model.apak", "gate_01.bfres", data_fetcher);
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/01/model", "gate_01.bfres", data_fetcher);
                     break;
 
                 case "2":
                     // GIMMICK_GATE_M
-                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/02/model.apak", "gate_02.bfres", data_fetcher);
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/02/model", "gate_02.bfres", data_fetcher);
                     break;
 
                 case "5":
                     // GIMMICK_GATE_F004 slightly forward version of GIMMICK_GATE_L to avoid clipping in Daitou TV
-                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/05/model.apak", "gate_05.bfres", data_fetcher);
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/05/model", "gate_05.bfres", data_fetcher);
                     break;
 
                 case "6":
                     // GIMMICK_GATE_BLOOM
-                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/06/model.apak", "gate_06.bfres", data_fetcher);
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/06/model", "gate_06.bfres", data_fetcher);
                     break;
 
                 case "7":
                     // GIMMICK_GATE_DLC
-                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/07/model.apak", "gate_07.bfres", data_fetcher);
+                    gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/07/model", "gate_07.bfres", data_fetcher);
                     break;
             
                 default:
@@ -360,7 +360,7 @@ export async function create_elevator
         position,
         point.rotation,
         vec3.fromValues(1.0, 1.0, 1.0),
-        "TokyoMirageSessionsSharpFE/gimmick/d002/elevator/skin/01/model.apak",
+        "TokyoMirageSessionsSharpFE/Character/gimmick/d002/elevator/skin/01/model",
         "elevator_01.bfres",
         data_fetcher,
         device
@@ -391,7 +391,7 @@ export async function create_transparent_floor_first
         position,
         point.rotation,
         scale,
-        "TokyoMirageSessionsSharpFE/gimmick/d007/transparentfloor/skin/01/model.apak",
+        "TokyoMirageSessionsSharpFE/Character/gimmick/d007/transparentfloor/skin/01/model",
         "transparentfloor_01.bfres",
         data_fetcher,
         device

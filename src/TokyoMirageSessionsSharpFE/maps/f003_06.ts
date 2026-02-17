@@ -17,8 +17,8 @@ export async function create_f003_06_gimmicks(layout: MapLayout, data_fetcher: D
 {
     const gimmicks: gimmick[] = [];
 
-    const ilyana_model_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/nonplayer/np122/skin/01/model.apak", "np122_01.bfres", data_fetcher);
-    const ilyana_animation_apak_data = await data_fetcher.fetchData("TokyoMirageSessionsSharpFE/nonplayer/np122/skin/01/model_common.apak");
+    const ilyana_model_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/nonplayer/np122/skin/01/model", "np122_01.bfres", data_fetcher);
+    const ilyana_animation_apak_data = await data_fetcher.fetchData("TokyoMirageSessionsSharpFE/Character/nonplayer/np122/skin/01/model_common.zip");
     const ilyana_animation_apak = parseAPAK(ilyana_animation_apak_data);
     const ilyana_animation_bfres = get_file_by_name(ilyana_animation_apak, "fd_idle_00.anm");
     assert(ilyana_animation_bfres !== undefined);

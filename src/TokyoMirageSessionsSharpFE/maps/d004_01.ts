@@ -21,7 +21,7 @@ export async function create_d004_01_gimmicks(layout: MapLayout, data_fetcher: D
             fallen_pictures_red_point.position,
             fallen_pictures_red_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/fallenpictures/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d004/fallenpictures/skin/01/model",
             "fallenpictures_01.bfres",
             data_fetcher,
             device

@@ -19,7 +19,7 @@ export async function create_f002_03_gimmicks(layout: MapLayout, data_fetcher: D
             heehawballoon_point.position,
             heehawballoon_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/prop/heehawballoon/skin/00/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/prop/heehawballoon/skin/00/model",
             "heehawballoon_00.bfres",
             data_fetcher,
             device

@@ -21,7 +21,7 @@ export async function create_d007_09_gimmicks(layout: MapLayout, data_fetcher: D
             vec3.fromValues(elevator_to_behind_point.position[0], elevator_to_behind_point.position[1] - 5.0, elevator_to_behind_point.position[2]),
             elevator_to_behind_point.rotation,
             vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d007/elevator_nosphere/skin/01/model.apak",
+            "TokyoMirageSessionsSharpFE/Character/gimmick/d007/elevator_nosphere/skin/01/model",
             "elevator_nosphere_01.bfres",
             data_fetcher,
             device
