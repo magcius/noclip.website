@@ -1,5 +1,5 @@
 import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
-import type { ConvexHull } from "../../rust/pkg/noclip_support";
+import type { ConvexHull } from "noclip-rust-support";
 import { CameraController } from "../Camera.js";
 import { AABB, Frustum } from "../Geometry.js";
 import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";

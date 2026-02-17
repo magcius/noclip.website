@@ -1,5 +1,5 @@
 
-import init, * as rust from '../rust/pkg/noclip_support';
+import init, * as rust from 'noclip-rust-support';
 
 export { rust };
 
