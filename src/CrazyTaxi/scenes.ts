@@ -22,10 +22,9 @@ export class Scene implements Viewer.SceneGfx {
     private materials: MaterialCache;
     private skyboxMaterials: MaterialCache;
 
-    constructor(device: GfxDevice, private manager: FileManager, public textureCache: TextureCache, public debugPos: vec3[][], public shapes: Shape[]) {
+    constructor(device: GfxDevice, private manager: FileManager, public textureCache: TextureCache, public shapes: Shape[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
-        console.log('adding shapes')
         this.materials = new MaterialCache(this.renderHelper.renderCache, this.textureCache);
         this.skyboxMaterials = new MaterialCache(this.renderHelper.renderCache, this.textureCache);
         for (const shape of shapes) {
@@ -37,36 +36,6 @@ export class Scene implements Viewer.SceneGfx {
         }
         this.materials.finish();
         this.skyboxMaterials.finish();
-        console.log('done')
-    }
-
-    private drawDebugPoints(points: vec3[], viewerInput: Viewer.ViewerRenderInput, color?: Color, connect?: boolean) {
-        for (let i = 0; i < points.length; i++) {
-            const pos = points[i];
-            const t = i / points.length;
-            drawWorldSpacePoint(
-                getDebugOverlayCanvas2D(),
-                viewerInput.camera.clipFromWorldMatrix,
-                pos,
-                color ? color : colorNewFromRGBA(t, t, 1),
-                10,
-            );
-            if (connect) {
-                let pos2 = points[i + 1];
-                if (i+1 % 8 === 0 || i+1 === points.length) {
-                    pos2 = points[i - 7];
-                }
-                if (vec3.sqrLen(pos2) < 0.01) {
-                    continue;
-                }
-                drawWorldSpaceLine(
-                    getDebugOverlayCanvas2D(),
-                    viewerInput.camera.clipFromWorldMatrix,
-                    pos, pos2,
-                    color ? color : colorNewFromRGBA(t, t, 1),
-                )
-            }
-        }
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -230,7 +199,6 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        console.log('loading scene data');
         const manager = new FileManager(context.dataFetcher, [
             "poldc0.all",
             "texDC0.all",
@@ -241,15 +209,6 @@ class SceneDesc implements Viewer.SceneDesc {
             "white.tex",
         ]);
         await manager.fetch();
-        const mainData = await context.dataFetcher.fetchData("CrazyTaxi/sys/main.dol");
-
-        let debugPos = [
-            parseCustomerData(mainData),
-            parseDeliveryZones(mainData),
-            parseUnkPosData(mainData),
-        ];
-        let unkNames1 = parseUnkNames1(mainData);
-        let unkNames2 = parseUnkNames2(mainData);
 
         const textures: Texture[] = [];
         for (const filename of manager.fileStore.list_textures()) {
@@ -268,8 +227,7 @@ class SceneDesc implements Viewer.SceneDesc {
         for (const shapeName of names) {
             shapes.push(new Shape(shapeName, manager));
         }
-        console.log('done')
-        const scene = new Scene(gfxDevice, manager, textureCache, debugPos, shapes);
+        const scene = new Scene(gfxDevice, manager, textureCache, shapes);
         return scene;
     }
 }
