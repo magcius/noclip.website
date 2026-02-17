@@ -32,7 +32,12 @@ impl<'a> ArchiveReader<'a> {
     pub fn new(data: &'a [u8]) -> Result<Self> {
         let mut reader = Reader::new(Cursor::new(data));
         let header = AllHeader::from_reader_with_ctx(&mut reader, ())?;
-        let offset = reader.stream_position()? as usize;
+        let mut offset = reader.stream_position()? as usize;
+        if offset % 0x20 != 0 {
+            // entries are aligned to 0x20 sized blocks
+            let diff = 0x20 - (offset % 0x20);
+            offset += diff;
+        }
         Ok(ArchiveReader {
             data,
             header,
@@ -53,13 +58,9 @@ impl<'a> Iterator for ArchiveReader<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let item = self.header.items.get(self.item_idx)?;
-        let mut entry_offset = self.offset;
+        let entry_offset = self.offset;
         let entry_size = item.size as usize;
-        if entry_offset % 0x20 != 0 {
-            // entries are aligned to 0x20 sized blocks
-            let diff = 0x20 - (self.offset % 0x20);
-            entry_offset += diff;
-        }
+        assert_eq!(entry_offset % 0x20, 0, "archive entry not aligned to 0x20 bytes");
 
         self.item_idx += 1;
         self.offset += item.size as usize;
