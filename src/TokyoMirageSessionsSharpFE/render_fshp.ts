@@ -103,7 +103,7 @@ export class fshp_renderer
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
         // set mega state flags
-        let cull_mode = GfxCullMode.Back; // TODO: some materials don't have user data, I'm under the assumption that these materials are only used on meshes that don't render
+        let cull_mode = GfxCullMode.Back;
         const original_cull_mode = fmat.userData.get("cull_mode");
         if (original_cull_mode !== undefined)
         {

@@ -37,7 +37,7 @@ export class fmdl_renderer
     protected fshp_renderers: fshp_renderer[] = [];
     protected special_skybox: boolean;
     protected current_animation_frame: number = 0.0;
-    protected current_material_animation_frame: number = 0.0; // TODO: do I need separate ones? not sure if theres a model with both material and skeletal animations
+    protected current_material_animation_frame: number = 0.0;
     protected override_bounding_box: AABB | undefined;
     protected material_samplers_array: (GfxSamplerBinding[] | undefined)[] = [];
 
@@ -420,7 +420,6 @@ export class fmdl_renderer
             }
             else
             {
-                // TODO: can i avoid rounding the frame number? without it some animations display incorrectly
                 const frame_integer = Math.floor(current_frame);
                 const material_animation = this.fmaa.materialAnimations[material_animation_index];
                 const curve_index_map = this.material_to_curve_index_maps[fmat_index];
@@ -535,7 +534,6 @@ export class fmdl_renderer
         {
             return undefined;
         }
-        // TODO: is there a better way to join two arrays than iterating over it?
         for (let i = 0; i < sampler_bindings.length; i++)
         {
             new_sampler_bindings.push(sampler_bindings[i]);

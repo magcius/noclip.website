@@ -234,16 +234,6 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
         }
     }
 
-    // heal points
-    // TODO: these are particle effects, which aren't implemented yet
-    // if (layout.heal_point_entries.length > 0)
-    // {
-    //     for (let i = 0; i < layout.heal_point_entries.length; i++)
-    //     {
-    //         const entry = layout.heal_point_entries[i];
-
-    //     }
-    // }
     if (layout.warp_entries.length > 0)
     {
         const warp_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/warp/skin/01/model", "warp_01.bfres", data_fetcher);

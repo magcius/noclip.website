@@ -14,8 +14,13 @@ export function parse_atlm(buffer: ArrayBufferSlice, device: GfxDevice): Lightma
     
     const view = buffer.createDataView();
 
-    // TODO: determine this dynamically
     let little_endian = true;
+    if (view.getUint8(0xC) === 0)
+    {
+        little_endian = false;
+        // TODO: Office Storage has a wii u atlm file, and there isn't support for parsing wii u textures yet
+        return [];
+    }
 
     const lightmap_array_offset = view.getUint32(0xC, little_endian);
     const count = view.getUint32(0x10, little_endian);

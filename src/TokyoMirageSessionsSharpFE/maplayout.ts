@@ -17,7 +17,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const view = buffer.createDataView();
     
     let little_endian = false;
-    if (view.getUint8(0x4) == 9)
+    if (view.getUint8(0x4) === 9)
     {
         little_endian = true;
     }
