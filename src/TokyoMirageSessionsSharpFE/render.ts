@@ -245,15 +245,15 @@ export class TMSFEScene implements SceneGfx
     {
         if (this.layout != undefined)
         {
-            const group = this.layout.entries;
+            const group = this.layout.npc_entries;
             
             for (let i = 0; i < group.length; i++)
             {
                 const entry = group[i];
-                if (entry.group_index != 12)
-                {
-                    continue;
-                }
+                // if (entry.group_index != 12)
+                // {
+                //     continue;
+                // }
                 const box = new AABB();
                 box.setFromCenterAndHalfExtents(vec3.fromValues(0.0, 0.0, 0.0), entry.half_extents);
                 const transform_matrix = mat4.create();

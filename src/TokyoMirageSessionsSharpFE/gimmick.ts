@@ -1,8 +1,9 @@
 // gimmick.ts
 // represents a dynamic or interactable object in levels, such as treasure boxes or warp pads
 
-import { get_fres_from_apak } from "./apak.js";
+import { parseAPAK, get_fres_from_apak, get_file_by_name } from "./apak.js";
 import * as BFRES from "../fres_nx/bfres.js";
+import * as bfres_helpers from "./bfres_helpers.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
 import { DataFetcher } from "../DataFetcher.js";
@@ -390,3 +391,33 @@ export async function create_transparent_floor_first
 
 const TRANSPARENT_FLOOR_SCALE = 1.25;
 const TRANSPARENT_FLOOR_HEIGHT_OFFSET = 13.75;
+
+export async function create_actor(path: string, bfres_name: string, animation_name: string, position: vec3, yaw: number, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick>
+{
+    const model_fres = await get_fres_from_apak(`${path}/model`, bfres_name, data_fetcher);
+    const animation_apak_data = await data_fetcher.fetchData(`${path}/model_common.zip`);
+    const animation_apak = parseAPAK(animation_apak_data);
+    const animation_bfres = get_file_by_name(animation_apak, animation_name);
+    let animation_fres;
+    if (animation_bfres != undefined)
+    {
+        animation_fres = bfres_helpers.parse_bfres(animation_bfres);
+    }
+
+    let bounding_box = new AABB();
+    const bb_center = vec3.fromValues(position[0], position[1] + 10.0, position[2]);
+    const bb_extents = vec3.fromValues(10.0, 10.0, 10.0);
+    bounding_box.setFromCenterAndHalfExtents(bb_center, bb_extents);
+
+    return new gimmick
+    (
+        position,
+        vec3.fromValues(0.0, yaw, 0.0),
+        vec3.fromValues(1.0, 1.0, 1.0),
+        model_fres,
+        device,
+        new GfxRenderHelper(device),
+        animation_fres,
+        bounding_box,
+    )
+}

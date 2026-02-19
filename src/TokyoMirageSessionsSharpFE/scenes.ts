@@ -23,9 +23,13 @@ import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 import { f001_01_replacement_textures } from "./maps/f001_01.js";
 import { create_f002_03_gimmicks } from "./maps/f002_03.js";
+import { create_f003_01_gimmicks } from "./maps/f003_01.js";
 import { create_f003_02_gimmicks, create_f003_02_party_gimmicks, f003_02_replacement_textures } from "./maps/f003_02.js";
+import { create_f003_04_gimmicks } from "./maps/f003_04.js";
 import { create_f003_06_gimmicks } from "./maps/f003_06.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
+import { create_f003_09_gimmicks } from "./maps/f003_09.js";
+import { create_f003_10_gimmicks } from "./maps/f003_10.js";
 import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
 import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
@@ -217,11 +221,11 @@ const sceneDescs =
     new TMSFESceneDesc("Map/field/f007/f007_01", "f007_01", "Harajuku", ["f007_01", "sky"], ["", "sky"]),
     new TMSFESceneDesc("Map/dungeon/d008/d008_01", "d008_01", "Illusory Urahara Arena", ["d008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
     "Shops",
-    new TMSFESceneDesc("Map/field/f003/f003_01", "f003_01", "Hee Ho Mart", ["f003_01"], [""]),
-    new TMSFESceneDesc("Map/field/f003/f003_09", "f003_09", "Hee Ho Mart (Dead)", ["f003_09"], [""]),
-    new TMSFESceneDesc("Map/field/f003/f003_04", "f003_04", "Jewelry Carabia", ["f003_04", "obj01"], ["", "obj01"]),
+    new TMSFESceneDesc("Map/field/f003/f003_01", "f003_01", "Hee Ho Mart", ["f003_01"], [""], create_f003_01_gimmicks),
+    new TMSFESceneDesc("Map/field/f003/f003_09", "f003_09", "Hee Ho Mart (Dead)", ["f003_09"], [""], create_f003_09_gimmicks),
+    new TMSFESceneDesc("Map/field/f003/f003_04", "f003_04", "Jewelry Carabia", ["f003_04", "obj01"], ["", "obj01"], create_f003_04_gimmicks),
     new TMSFESceneDesc("Map/field/f003/f003_06", "f003_06", "Café Seiren", ["f003_06", "sky"], ["", ""], create_f003_06_gimmicks),
-    new TMSFESceneDesc("Map/field/f003/f003_10", "f003_10", "Café Seiren (Dead)", ["f003_10", "sky"], ["", ""]),
+    new TMSFESceneDesc("Map/field/f003/f003_10", "f003_10", "Café Seiren (Dead)", ["f003_10", "sky"], ["", ""], create_f003_10_gimmicks),
     new TMSFESceneDesc("Map/field/f003/f003_08", "f003_08", "Anzu", ["f003_08"], [""], create_f003_08_gimmicks),
     "Illusory 106",
     new TMSFESceneDesc("Map/dungeon/d003/d003_01", "d003_01", "Illusory 106 1F to 3F", ["d003_01", "obj01", "obj02"], ["", "obj01", "obj02"], create_d003_01_gimmicks),
