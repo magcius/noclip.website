@@ -105,7 +105,7 @@ import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
 import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
 import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
 import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
-import * as Scenes_Spyro1 from './Spyro1/scenes.js';
+import * as Scenes_Spyro from './Spyro/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
@@ -208,6 +208,9 @@ const sceneGroups: (string | SceneGroup)[] = [
     "Experimental",
     Scenes_CrashWarped.sceneGroup,
     Scenes_CrazyTaxi.sceneGroup,
+    Scenes_Spyro.sceneGroup,
+    Scenes_Spyro.sceneGroup2,
+    Scenes_Spyro.sceneGroup3,
     Scenes_PlusForXP.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
@@ -251,7 +254,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent1.sceneGroup,
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
-    Scenes_Spyro1.sceneGroup,
 ];
 
 enum SaveStatesAction {
