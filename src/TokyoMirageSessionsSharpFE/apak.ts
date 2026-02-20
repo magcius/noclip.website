@@ -1,21 +1,20 @@
 // apak.ts
-// handles APAK (Atlas PAK?) data, which bundles multiple files together
-// as far as I'm aware Tokyo Mirage Sessions ♯FE is the only game that uses this
+// handles APAK (Atlas PAK) data, which bundles multiple files together
+// Tokyo Mirage Sessions ♯FE is the only game that uses this
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as BFRES from "../fres_nx/bfres.js";
-import * as bfres_helpers from "./bfres_helpers.js";
+import { parse_bfres } from "./bfres_helpers.js";
 import { assert, readString } from "../util.js";
 import { DataFetcher } from "../DataFetcher.js";
 import * as ZipFile from '../ZipFile.js';
 
 /**
- * reads an APAK file and returns an APAK object
- * @param buffer the APAK file
+ * reads a zip file containing an APAK file and returns an APAK object
+ * APAK files are zipped because they have no compression and both APAK and BFRES files contain large amounts of empty space
  */
 export function parseAPAK(buffer: ArrayBufferSlice): APAK
 {
-    // These are zipped because both apak and bfres files contain tons of empty space
     // first get the apak file from the zip
     const zip = ZipFile.parseZipFile(buffer);
     const apak_buffer = ZipFile.decompressZipFileEntry(zip[0]);
@@ -45,7 +44,6 @@ const FILE_INFO_ENTRY_SIZE = 0x40;
 
 /**
  * returns an array of all the files in an APAK file with a specified file extension
- * @param apak the apak file
  * @param type the file extension to look for
  */
 export function get_files_of_type(apak: APAK, type: string)
@@ -65,11 +63,6 @@ export function get_files_of_type(apak: APAK, type: string)
     return file_data_array;
 }
 
-/**
- * returns a file that matches the specified filename
- * @param apak the apak file
- * @param name the file name
- */
 export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice | undefined
 {
     const file = apak.files.find((f) => f.name === name);
@@ -83,6 +76,9 @@ export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice | u
     }
 }
 
+/**
+ * @param apak_path the path to the apak containing the bfres file, without a file extension
+ */
 export async function get_fres_from_apak(apak_path: string, bfres_name: string, data_fetcher: DataFetcher): Promise<BFRES.FRES>
 {
     const with_extension = `${apak_path}.zip`;
@@ -93,10 +89,13 @@ export async function get_fres_from_apak(apak_path: string, bfres_name: string, 
         console.error(`file ${bfres_name} not found`);
         throw("whoops");
     }
-    const fres = bfres_helpers.parse_bfres(bfres);
+    const fres = parse_bfres(bfres);
     return fres;
 }
 
+/**
+ * @param apak_path the path to the apak containing the bfres file, without a file extension
+ */
 export async function get_animations_from_apak(apak_path: string, data_fetcher: DataFetcher): Promise<BFRES.FRES[]>
 {
     const with_extension = `${apak_path}.zip`;
@@ -106,7 +105,7 @@ export async function get_animations_from_apak(apak_path: string, data_fetcher: 
     let animations: BFRES.FRES[] = [];
     for (let i = 0; i < animation_files.length; i++)
     {
-        animations.push(bfres_helpers.parse_bfres(animation_files[i]));
+        animations.push(parse_bfres(animation_files[i]));
     }
     return animations;
 }

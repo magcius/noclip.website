@@ -7,7 +7,7 @@ import { gimmick, create_actor } from "../gimmick.js";
 import { vec3 } from "gl-matrix";
 import { MapLayout } from "../maplayout.js";
 
-export async function create_f003_10_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 

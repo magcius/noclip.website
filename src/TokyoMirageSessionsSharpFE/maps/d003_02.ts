@@ -4,12 +4,12 @@
 import { get_animations_from_apak, get_fres_from_apak } from "../apak.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
-import { gimmick, create_gimmick } from "./../gimmick.js";
+import { gimmick, create_gimmick } from "../gimmick.js";
 import { vec3 } from "gl-matrix";
 import { MannequinBig } from "../mannequinbig.js";
-import { get_layout_point, MapLayout } from "./../maplayout.js";
+import { get_layout_point, MapLayout } from "../maplayout.js";
 
-export async function create_d003_02_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 
@@ -22,7 +22,6 @@ export async function create_d003_02_gimmicks(layout: MapLayout, data_fetcher: D
 
     const swA1_POINT_MANNEQUIN = 1510;
     const swA2_POINT_MANNEQUIN = 1511;
-    const swA3_POINT_MANNEQUIN = 1512;
     const swA_POINT_MANNEQUIN_BIG = 1550;
     const swB1_POINT_MANNEQUIN = 1610;
     const swB2_POINT_MANNEQUIN = 1611;

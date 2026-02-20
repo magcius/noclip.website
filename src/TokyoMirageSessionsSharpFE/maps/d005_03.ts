@@ -3,11 +3,12 @@
 
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
-import { gimmick, create_gimmick } from "./../gimmick.js";
+import { gimmick, create_gimmick } from "../gimmick.js";
 import { vec3 } from "gl-matrix";
-import { get_layout_point, MapLayout } from "./../maplayout.js";
+import { get_layout_point, MapLayout } from "../maplayout.js";
+import { replacement_texture, replacement_texture_group, create_replacement_texture } from "../render_fmdl_texture_replace.js";
 
-export async function create_d005_03_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 
@@ -45,4 +46,15 @@ export async function create_d005_03_gimmicks(layout: MapLayout, data_fetcher: D
     );
 
     return gimmicks;
+}
+
+export async function replacement_textures(data_fetcher: DataFetcher, device: GfxDevice): Promise<replacement_texture_group[]>
+{
+    const replacement_texture_groups: replacement_texture_group[] = [];
+    
+    const d005_03_textures: replacement_texture[] = [];
+    d005_03_textures.push(await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_JP/Gimmick/d005_03_kanban06.gtx", "pasted__pasted__phong83", data_fetcher, device));
+    replacement_texture_groups.push({ model_name: "d005_03", replacement_textures: d005_03_textures });
+
+    return replacement_texture_groups;
 }

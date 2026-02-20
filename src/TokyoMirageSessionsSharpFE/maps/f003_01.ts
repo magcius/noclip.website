@@ -7,8 +7,9 @@ import { gimmick, create_actor } from "../gimmick.js";
 import { vec3 } from "gl-matrix";
 import { MapLayout } from "../maplayout.js";
 import * as MathHelpers from "../../MathHelpers.js";
+import { replacement_texture, replacement_texture_group, create_replacement_texture } from "../render_fmdl_texture_replace.js";
 
-export async function create_f003_01_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 
@@ -28,4 +29,15 @@ export async function create_f003_01_gimmicks(layout: MapLayout, data_fetcher: D
     );
 
     return gimmicks;
+}
+
+export async function replacement_textures(data_fetcher: DataFetcher, device: GfxDevice): Promise<replacement_texture_group[]>
+{
+    const replacement_texture_groups: replacement_texture_group[] = [];
+
+    const f003_01_textures: replacement_texture[] = [];
+    f003_01_textures.push(await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_US/Notice/notice_tex051.gtx", "notice14", data_fetcher, device));
+    replacement_texture_groups.push({ model_name: "f003_01", replacement_textures: f003_01_textures });
+
+    return replacement_texture_groups;
 }

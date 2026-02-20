@@ -329,22 +329,20 @@ const WALL_HEIGHT_OFFSET = 30.0;
 const GATE_HEIGHT_OFFSET = 20.0;
 
 /**
- * port of gimCreateElevator() from lua scripts.
- * @param layout the map layout object for the current level
- * @param layout_id1 layout id for the elevator start position
- * @param layout_id2 layout id for the elevator end position
- * @returns an elevator gimmick
+ * equivalent to gimCreateElevator() from TMSFE
+ * @param start_id layout id for the elevator start position
+ * @param end_id layout id for the elevator end position
  */
 export async function create_elevator
 (
     layout: MapLayout,
-    layout_id1: number,
-    layout_id2: number,
+    start_id: number,
+    end_id: number,
     data_fetcher: DataFetcher,
     device: GfxDevice
 ): Promise<gimmick>
 {
-    const point = get_point_from_group(layout.elevator_entries, layout_id1);
+    const point = get_point_from_group(layout.elevator_entries, start_id);
     const position = vec3.fromValues(point.position[0], point.position[1] - ELEVATOR_HEIGHT_OFFSET, point.position[2]);
     return await create_gimmick
     (

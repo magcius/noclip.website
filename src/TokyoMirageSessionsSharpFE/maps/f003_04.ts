@@ -8,7 +8,7 @@ import { vec3 } from "gl-matrix";
 import { MapLayout } from "../maplayout.js";
 import * as MathHelpers from "../../MathHelpers.js";
 
-export async function create_f003_04_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 

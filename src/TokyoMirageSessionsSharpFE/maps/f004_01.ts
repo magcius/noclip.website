@@ -3,11 +3,11 @@
 
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
-import { gimmick, create_gimmick } from "./../gimmick.js";
+import { gimmick, create_gimmick } from "../gimmick.js";
 import { vec3 } from "gl-matrix";
-import { MapLayout } from "./../maplayout.js";
+import { MapLayout } from "../maplayout.js";
 
-export async function create_f004_01_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 
@@ -28,7 +28,7 @@ export async function create_f004_01_gimmicks(layout: MapLayout, data_fetcher: D
     return gimmicks;
 }
 
-export async function create_f004_01_music_fes_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_music_fes_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 

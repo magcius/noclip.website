@@ -190,9 +190,9 @@ const GROUP_INDEX_36 = 36;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
 /**
- * port of mapGetLayoutPoint() from lua scripts.
+ * equivalent of mapGetLayoutPoint() from TMSFE
  * @param layout the maplayout file to read from
- * @param id the point's ID. all layout points are stored in group index 1.
+ * @param id the point's ID. all layout points are stored in the LAYOUT_EVENT_DIR group.
  * @param offset_x this offset is relative to the layout point's facing direction
  * @param offset_y this offset is relative to the layout point's facing direction
  * @param offset_z this offset is relative to the layout point's facing direction
