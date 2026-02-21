@@ -15,7 +15,7 @@ import * as ZipFile from '../ZipFile.js';
  */
 export function parseAPAK(buffer: ArrayBufferSlice): APAK
 {
-    // first get the apak file from the zip
+    // get the apak file from the zip
     const zip = ZipFile.parseZipFile(buffer);
     const apak_buffer = ZipFile.decompressZipFileEntry(zip[0]);
 

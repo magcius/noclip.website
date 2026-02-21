@@ -53,25 +53,25 @@ void mainVS()
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
     #elif ${this.vertex_skin_weight_count} == 2
-    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
-    vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+    mat4x3 WorldFromLocalMatrix = mat4x3(0.0);
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
+    vec3 WorldPosition = WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #elif ${this.vertex_skin_weight_count} == 3
-    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
-    vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+    mat4x3 WorldFromLocalMatrix = mat4x3(0.0);
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
+    vec3 WorldPosition = WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #elif ${this.vertex_skin_weight_count} == 4
-    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
-    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.w]) * a_BlendWeight0.w;
-    vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+    mat4x3 WorldFromLocalMatrix = mat4x3(0.0);
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
+    WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.w]) * a_BlendWeight0.w;
+    vec3 WorldPosition = WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #endif
     

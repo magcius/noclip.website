@@ -1,11 +1,9 @@
 // bntx_helpers.ts
-// the fres_nx code supports version v0.4.0.0, which Tokyo Mirage Sessions ♯FE uses
-// these functions build off that code
+// functions for dealing with textures from BNTX files
 
 import * as BNTX from '../fres_nx/bntx.js';
-import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat, GfxTextureDimension, GfxTextureUsage } from '../gfx/platform/GfxPlatform.js';
-import { getChannelFormat, ChannelFormat, getTypeFormat, TypeFormat, ChannelSource } from '../fres_nx/nngfx_enum.js';
-import { rust } from "../rustlib.js";
+import * as GfxPlatform from "../gfx/platform/GfxPlatform";
+import * as nngfx_enum from "../fres_nx/nngfx_enum";
 import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
 import { assert } from '../util.js';
 
@@ -17,9 +15,9 @@ import { assert } from '../util.js';
  * @param bntx the bntx object containing all the textures
  * @returns a GfxTexture array of the uploaded textures
  */
-export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxDevice): GfxTexture[]
+export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxPlatform.GfxDevice): GfxPlatform.GfxTexture[]
 {
-    const gfx_texture_array: GfxTexture[] = [];
+    const gfx_texture_array: GfxPlatform.GfxTexture[] = [];
 
     for (let texture_index = 0; texture_index < bntx.textures.length; texture_index++)
     {
@@ -30,21 +28,22 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
         if (texture.imageDimension === 1)
         {
             // normal texture
-            const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
+            const texture_descriptor = GfxPlatform.makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
             const gfx_texture = device.createTexture(texture_descriptor);
             gfx_texture_array.push(gfx_texture);
-            deswizzle_and_upload_normal(texture, mip_count, device, gfx_texture);
+            deswizzle_and_upload_standard(texture, mip_count, device, gfx_texture);
         }
         else
         {
             // cubemap
+            // TODO: properly upload these, I think they need a different sampler descriptor
             assert(texture.imageDimension === 3);
             assert(texture.arraySize === 6);
 
-            const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
+            const texture_descriptor = GfxPlatform.makeTextureDescriptor2D(new_format, texture.width, texture.height, mip_count);
             const gfx_texture = device.createTexture(texture_descriptor);
             gfx_texture_array.push(gfx_texture);
-            deswizzle_and_upload_normal(texture, mip_count, device, gfx_texture);
+            deswizzle_and_upload_standard(texture, mip_count, device, gfx_texture);
 
             // const gfx_texture = device.createTexture
             // ({
@@ -73,7 +72,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
  * @param channel_source an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
  * @returns a remapped rgba_pixels array
  */
-function remap_r8_g8_b8_a8_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint8Array | Int8Array
+function remap_r8_g8_b8_a8_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: nngfx_enum.ChannelSource[]): Uint8Array | Int8Array
 {
     const pixel_count = rgba_pixels.length / 4;
     let offset = 0;
@@ -93,7 +92,7 @@ function remap_r8_g8_b8_a8_channels(rgba_pixels: Uint8Array | Int8Array, channel
     return rgba_pixels;
 }
 
-function remap_r16_g16_b16_a16_float_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: ChannelSource[]): Uint16Array
+function remap_r16_g16_b16_a16_float_channels(rgba_pixels: Uint8Array | Int8Array, channel_source: nngfx_enum.ChannelSource[]): Uint16Array
 {
     let buffer = new Uint16Array(rgba_pixels.buffer);
     const pixel_count = buffer.length / 4;
@@ -114,10 +113,10 @@ function remap_r16_g16_b16_a16_float_channels(rgba_pixels: Uint8Array | Int8Arra
     return buffer;
 }
 
-async function deswizzle_and_upload_normal(texture: BNTX.BRTI, mip_count: number, device: GfxDevice, gfx_texture: GfxTexture)
+async function deswizzle_and_upload_standard(texture: BNTX.BRTI, mip_count: number, device: GfxPlatform.GfxDevice, gfx_texture: GfxPlatform.GfxTexture)
 {
-    const channelFormat = getChannelFormat(texture.imageFormat);
-    const type_format = getTypeFormat(texture.imageFormat);
+    const channelFormat = nngfx_enum.getChannelFormat(texture.imageFormat);
+    const type_format = nngfx_enum.getTypeFormat(texture.imageFormat);
 
     for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
     {
@@ -133,7 +132,7 @@ async function deswizzle_and_upload_normal(texture: BNTX.BRTI, mip_count: number
             {
                 const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                 let remapped_rgba_pixels;
-                if (type_format === TypeFormat.Float)
+                if (type_format === nngfx_enum.TypeFormat.Float)
                 {
                     remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
                 }
@@ -147,10 +146,10 @@ async function deswizzle_and_upload_normal(texture: BNTX.BRTI, mip_count: number
     }
 }
 
-async function deswizzle_and_upload_cubemap(texture: BNTX.BRTI, mip_count: number, device: GfxDevice, gfx_texture: GfxTexture)
+async function deswizzle_and_upload_cubemap(texture: BNTX.BRTI, mip_count: number, device: GfxPlatform.GfxDevice, gfx_texture: GfxPlatform.GfxTexture)
 {
-    const channelFormat = getChannelFormat(texture.imageFormat);
-    const type_format = getTypeFormat(texture.imageFormat);
+    const channelFormat = nngfx_enum.getChannelFormat(texture.imageFormat);
+    const type_format = nngfx_enum.getTypeFormat(texture.imageFormat);
 
     for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
     {
@@ -179,7 +178,7 @@ async function deswizzle_and_upload_cubemap(texture: BNTX.BRTI, mip_count: numbe
             combined_buffer.set(buffers_for_this_mip_level[texture_index] as Uint8Array, offset);
         }
 
-        if (type_format == TypeFormat.Float)
+        if (type_format == nngfx_enum.TypeFormat.Float)
         {
             device.uploadTextureData(gfx_texture, mipLevel, [new Uint16Array(combined_buffer)]);
         }

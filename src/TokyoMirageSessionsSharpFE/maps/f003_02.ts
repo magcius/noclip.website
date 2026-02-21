@@ -76,10 +76,10 @@ export async function replacement_textures(data_fetcher: DataFetcher, device: Gf
     f003_02_textures.push(await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_US/Notice/notice_tex130.gtx", "notice21", data_fetcher, device));
     replacement_texture_groups.push({ model_name: "f003_02", replacement_textures: f003_02_textures });
 
-    const obj10_textures = await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/tv_tex024.gtx", "obj10_tv", data_fetcher, device);
+    const obj10_textures = await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/tv_tex001.gtx", "obj10_tv", data_fetcher, device);
     replacement_texture_groups.push({ model_name: "obj10", replacement_textures: [obj10_textures] });
 
-    const obj11_textures = await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/tv_tex001.gtx", "obj11_tv", data_fetcher, device);
+    const obj11_textures = await create_replacement_texture("TokyoMirageSessionsSharpFE/Interface/_JP/Notice/tv_tex024.gtx", "obj11_tv", data_fetcher, device);
     replacement_texture_groups.push({ model_name: "obj11", replacement_textures: [obj11_textures] });
 
     return replacement_texture_groups;

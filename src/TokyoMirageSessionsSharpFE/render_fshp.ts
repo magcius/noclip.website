@@ -9,11 +9,8 @@ import { AABB } from '../Geometry.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
-         GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
-         GfxBuffer, GfxSamplerBinding, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
+import * as GfxPlatform from "../gfx/platform/GfxPlatform";
 import { mat4 } from "gl-matrix";
-import * as nngfx_enum from "../fres_nx/nngfx_enum";
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { ViewerRenderInput } from "../viewer.js";
@@ -27,15 +24,15 @@ export class fshp_renderer
     public render_mesh: boolean = true;
     public stored_bounding_box: AABB | undefined = undefined;
 
-    private vertex_buffers: GfxBuffer[] = [];
-    private vertex_buffer_descriptors: GfxVertexBufferDescriptor[] = [];
-    private index_buffer: GfxBuffer;
-    private index_buffer_descriptor: GfxVertexBufferDescriptor;
+    private vertex_buffers: GfxPlatform.GfxBuffer[] = [];
+    private vertex_buffer_descriptors: GfxPlatform.GfxVertexBufferDescriptor[] = [];
+    private index_buffer: GfxPlatform.GfxBuffer;
+    private index_buffer_descriptor: GfxPlatform.GfxVertexBufferDescriptor;
     private index_count: number;
-    private input_layout: GfxInputLayout;
+    private input_layout: GfxPlatform.GfxInputLayout;
     private program: TMSFEProgram;
     private blend_mode: BlendMode;
-    private mega_state_flags: Partial<GfxMegaStateDescriptor>;
+    private mega_state_flags: Partial<GfxPlatform.GfxMegaStateDescriptor>;
     private lightmap_srt_matrix: mat4;
 
     constructor
@@ -47,7 +44,7 @@ export class fshp_renderer
         render_mesh: boolean,
         use_lightmaps: boolean,
         lightmap_srt_matrix: mat4,
-        device: GfxDevice,
+        device: GfxPlatform.GfxDevice,
         renderHelper: GfxRenderHelper,
     )
     {
@@ -57,8 +54,7 @@ export class fshp_renderer
 
         // create vertex buffers
 
-        // convert vertex attribute format numbers
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+        const vertexAttributeDescriptors: GfxPlatform.GfxVertexAttributeDescriptor[] = [];
         for (let i = 0; i < fvtx.vertexAttributes.length; i++)
         {
             const vertex_attribute = fvtx.vertexAttributes[i];
@@ -73,17 +69,17 @@ export class fshp_renderer
             });
         }
 
-        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+        const inputLayoutBufferDescriptors: GfxPlatform.GfxInputLayoutBufferDescriptor[] = [];
 
         for (let i = 0; i < fvtx.vertexBuffers.length; i++)
         {
             inputLayoutBufferDescriptors.push
             ({
                 byteStride: fvtx.vertexBuffers[i].stride,
-                frequency: GfxVertexBufferFrequency.PerVertex
+                frequency: GfxPlatform.GfxVertexBufferFrequency.PerVertex
             });
 
-            const vertex_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[i].data);
+            const vertex_buffer = createBufferFromSlice(device, GfxPlatform.GfxBufferUsage.Vertex, GfxPlatform.GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[i].data);
             this.vertex_buffers.push(vertex_buffer);
             this.vertex_buffer_descriptors.push({ buffer: this.vertex_buffers[i] });
         }
@@ -98,12 +94,12 @@ export class fshp_renderer
         });
 
         // create index buffer
-        this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexBufferData);
+        this.index_buffer = createBufferFromSlice(device, GfxPlatform.GfxBufferUsage.Index, GfxPlatform.GfxBufferFrequencyHint.Static, mesh.indexBufferData);
         this.index_count = mesh.count;
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
         // set mega state flags
-        let cull_mode = GfxCullMode.Back;
+        let cull_mode = GfxPlatform.GfxCullMode.Back;
         const original_cull_mode = fmat.userData.get("cull_mode");
         if (original_cull_mode !== undefined)
         {
@@ -122,7 +118,6 @@ export class fshp_renderer
         {
             case BlendMode.Opaque:
             case BlendMode.AlphaTest:
-                // opaque
                 this.mega_state_flags.depthWrite = true;
                 break;
 
@@ -132,9 +127,9 @@ export class fshp_renderer
                 (
                     this.mega_state_flags,
                     {
-                        blendMode: GfxBlendMode.Add,
-                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                        blendMode: GfxPlatform.GfxBlendMode.Add,
+                        blendSrcFactor: GfxPlatform.GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxPlatform.GfxBlendFactor.OneMinusSrcAlpha,
                     }
                 );
                 break;
@@ -145,9 +140,9 @@ export class fshp_renderer
                 (
                     this.mega_state_flags,
                     {
-                        blendMode: GfxBlendMode.Add,
-                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                        blendDstFactor: GfxBlendFactor.One,
+                        blendMode: GfxPlatform.GfxBlendMode.Add,
+                        blendSrcFactor: GfxPlatform.GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxPlatform.GfxBlendFactor.One,
                     }
                 );
                 break;
@@ -157,9 +152,9 @@ export class fshp_renderer
                 (
                     this.mega_state_flags,
                     {
-                        blendMode: GfxBlendMode.ReverseSubtract,
-                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                        blendDstFactor: GfxBlendFactor.One,
+                        blendMode: GfxPlatform.GfxBlendMode.ReverseSubtract,
+                        blendSrcFactor: GfxPlatform.GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxPlatform.GfxBlendFactor.One,
                     }
                 );
                 break;
@@ -196,7 +191,7 @@ export class fshp_renderer
         albedo0_srt_matrix: mat4,
         special_skybox: boolean,
         bounding_box: AABB,
-        sampler_bindings: GfxSamplerBinding[],
+        sampler_bindings: GfxPlatform.GfxSamplerBinding[],
     ): void
     {
         // the template is necessary to use uniform buffers
@@ -210,7 +205,7 @@ export class fshp_renderer
         const program = renderHelper.renderCache.createProgram(this.program);
         renderInst.setGfxProgram(program);
 
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: sampler_bindings.length }];
+        const bindingLayouts: GfxPlatform.GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: sampler_bindings.length }];
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
@@ -265,7 +260,7 @@ export class fshp_renderer
         renderHelper.renderInstManager.popTemplate();
     }
 
-    destroy(device: GfxDevice): void
+    destroy(device: GfxPlatform.GfxDevice): void
     {
         for (let i = 0; i < this.vertex_buffers.length; i++)
         {

@@ -1,5 +1,5 @@
 // gimmick.ts
-// represents a dynamic or interactable object in levels, such as treasure boxes or warp pads
+// represents dynamic objects in levels, such as treasure boxes, props, etc
 
 import { parseAPAK, get_fres_from_apak, get_file_by_name } from "./apak.js";
 import * as BFRES from "../fres_nx/bfres.js";
@@ -68,6 +68,10 @@ export class gimmick
     }
 }
 
+/**
+ * @param apak_path the path to the apak file containing the model's bfres file, with no extension
+ * @param bfres_name the mode's filename, with extension
+ */
 export async function create_gimmick
 (
     position: vec3,
@@ -280,7 +284,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
                     break;
 
                 case "5":
-                    // GIMMICK_GATE_F004 slightly forward version of GIMMICK_GATE_L to avoid clipping in Daitou TV
+                    // GIMMICK_GATE_F004 same as GIMMICK_GATE_L, but moved slightly forward to avoid clipping in Daitou TV
                     gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/Character/gimmick/common/gate/skin/05/model", "gate_05.bfres", data_fetcher);
                     break;
 
@@ -359,10 +363,7 @@ export async function create_elevator
 const ELEVATOR_HEIGHT_OFFSET = 5.0;
 
 /**
- * port of gimSetTransFloorFirst() from lua scripts
- * @param layout the map layout object for the current level
- * @param layout_id layout id for the transparent floor start position
- * @returns a transparent floor gimmick
+ * equivalent to gimSetTransFloorFirst() from TMSFE
  */
 export async function create_transparent_floor_first
 (
@@ -390,6 +391,9 @@ export async function create_transparent_floor_first
 const TRANSPARENT_FLOOR_SCALE = 1.25;
 const TRANSPARENT_FLOOR_HEIGHT_OFFSET = 13.75;
 
+/**
+ * equivalent to chrCreateActor() from TMSFE
+ */
 export async function create_actor(path: string, bfres_name: string, animation_name: string, position: vec3, yaw: number, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick>
 {
     const model_fres = await get_fres_from_apak(`${path}/model`, bfres_name, data_fetcher);

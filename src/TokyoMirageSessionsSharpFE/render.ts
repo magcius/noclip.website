@@ -2,7 +2,6 @@ import * as BFRES from "../fres_nx/bfres.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
-import { colorNewFromRGBA } from '../Color.js';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB } from '../Geometry.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -13,13 +12,13 @@ import { gimmick } from "./gimmick.js";
 import { vec3, mat4 } from "gl-matrix";
 import { LightmapTexture } from './lightmap.js';
 import { Light } from './lights.js';
+import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { MapLayout } from './maplayout.js';
 import { fmdl_renderer } from "./render_fmdl.js";
 import { fmdl_renderer_texture_replace, replacement_texture_group } from './render_fmdl_texture_replace.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { computeModelMatrixSRT } from '../MathHelpers.js';
 
 export class TMSFEScene implements SceneGfx
 {
@@ -28,7 +27,7 @@ export class TMSFEScene implements SceneGfx
     private renderInstListTranslucent = new GfxRenderInstList();
     private renderInstListSkybox = new GfxRenderInstList();
     private fmdl_renderers: fmdl_renderer[] = [];
-    private layout: MapLayout | undefined; // this level's MapLayout, containing coordinates and areas to spawn objects or trigger flags
+    private layout: MapLayout | undefined;
     private common_gimmicks: gimmick[] = [];
     private map_gimmicks: gimmick[] = [];
     private lights: Light[] = [];
@@ -37,6 +36,7 @@ export class TMSFEScene implements SceneGfx
      * @param level_models array of level_model objects containing groups of FRES objects for a single model
      * @param special_skybox this level has a smaller skybox that follows the camera
      * @param replacement_textures for displaying dynamic posters, tvs, and advertisements in certain maps
+     * @param layout this level's MapLayout, containing coordinates and areas to spawn objects or trigger flags
      */
     constructor
     (

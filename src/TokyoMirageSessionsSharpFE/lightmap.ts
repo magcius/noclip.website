@@ -1,5 +1,5 @@
 // lightmap.ts
-// handles lightmap textures contained in .atlm files
+// handles lightmap textures contained in .atlm (Atlus Lightmap) files
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as BNTX from "../fres_nx/bntx.js";
@@ -43,9 +43,10 @@ export function parse_atlm(buffer: ArrayBufferSlice, device: GfxDevice): Lightma
         srt_matrix[0]  = scale_x;
         srt_matrix[4]  = 0;
         srt_matrix[12] = translate_x;
-
         srt_matrix[1]  = 0;
         srt_matrix[5]  = scale_y;
+        // these transformations use bottom left as 0, however the uv coordinates in vertex buffers use top left as 0
+        // the (1 - scale_y) part shifts down to the bottom left, then subtract translate y to move up
         srt_matrix[13] = (1 - scale_y) - translate_y;
 
         const bone_name_offset = view.getUint32(lightmap_entry_offset + 0x10, little_endian);

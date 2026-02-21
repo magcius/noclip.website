@@ -29,8 +29,6 @@ import * as f001_02 from "./maps/f001_02.js";
 import * as f001_03 from "./maps/f001_03.js";
 import * as f001_04 from "./maps/f001_04.js";
 import * as f001_05 from "./maps/f001_05.js";
-import * as f001_06 from "./maps/f001_06.js";
-import * as f001_07 from "./maps/f001_07.js";
 import * as f002_03 from "./maps/f002_03.js";
 import * as f003_01 from "./maps/f003_01.js";
 import * as f003_02 from "./maps/f003_02.js";
@@ -42,6 +40,7 @@ import * as f003_10 from "./maps/f003_10.js";
 import * as f004_01 from "./maps/f004_01.js";
 import * as f005_01 from "./maps/f005_01.js";
 import * as f006_01 from "./maps/f006_01.js";
+import * as f007_01 from "./maps/f007_01.js";
 import * as f010_01 from "./maps/f010_01.js";
 import * as f010_07 from "./maps/f010_07.js";
 
@@ -70,7 +69,7 @@ class TMSFESceneDesc implements SceneDesc
      * @param id Identifier for each map. Displayed in the URL.
      * @param name The map's display name in the UI
      * @param model_file_names which model files in model.apak to load
-     * @param animation_file_names which animation files in model.apak to load
+     * @param animation_file_names which animation files in model.apak to load, the order matches model_file_names
      * @param map_gimmick_function per map function that spawns objects in a level
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
      * @param special_skybox this map has a small skybox mesh that follows the camera
@@ -121,7 +120,7 @@ class TMSFESceneDesc implements SceneDesc
                 throw("whoops");
             }
 
-            // get animation file if it exists
+            // get animation file
             if (this.animation_file_names[i] != "")
             {
                 const animation_file_name = `${this.animation_file_names[i]}.anm`
@@ -210,30 +209,28 @@ export interface level_model
 // name: The game's display name in the UI
 // sceneDescs: List of all the levels that are a part of this game. They are grouped into separate categories
 const id = `TokyoMirageSessionsSharpFE`;
-const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
+const name = "Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
     "Daitama Observatory",
-    new TMSFESceneDesc("Map/dungeon/d002/d002_01", "d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], d002_01.create_gimmicks),
-    new TMSFESceneDesc("Map/dungeon/d002/d002_02", "d002_02", "Illusory Daitama Blue Observatory", ["d002_02"], [""]),
-    new TMSFESceneDesc("Map/dungeon/d002/d002_03", "d002_03", "Illusory Daitama Red Observatory", ["d002_03"], [""]),
     new TMSFESceneDesc("Map/field/f002/f002_01", "f002_01", "Daitama Observatory (Prologue)", ["f002_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("Map/field/f002/f002_02", "f002_02", "Daitama Observatory (Dead)", ["f002_02", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("Map/field/f002/f002_03", "f002_03", "Daitama Observatory", ["f002_03", "obj01", "obj02", "obj12", "sky"], ["", "", "obj02", "obj12", ""], f002_03.create_gimmicks, false, true, false, f002_03.replacement_textures),
+    new TMSFESceneDesc("Map/dungeon/d002/d002_01", "d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], ["", "obj01", "obj02", "obj03", "sky"], d002_01.create_gimmicks),
+    new TMSFESceneDesc("Map/dungeon/d002/d002_02", "d002_02", "Illusory Daitama Blue Observatory", ["d002_02"], [""]),
+    new TMSFESceneDesc("Map/dungeon/d002/d002_03", "d002_03", "Illusory Daitama Red Observatory", ["d002_03"], [""]),
     "Tokyo",
     new TMSFESceneDesc("Map/field/f001/f001_01", "f001_01", "Shibuya", ["f001_01", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"], undefined, false, false, false, f001_01.replacement_textures),
     new TMSFESceneDesc("Map/field/f001/f001_02", "f001_02", "Shibuya (Dead)", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", ""], undefined, false, false, false, f001_02.replacement_textures),
     new TMSFESceneDesc("Map/field/f001/f001_03", "f001_03", "Shibuya (Half Dead)", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", "sky"], f001_03.create_half_dead_gimmicks, false, false, false, f001_03.replacement_textures),
     new TMSFESceneDesc("Map/field/f001/f001_04", "f001_04", "Shibuya (Music Fes)", ["f001_04", "obj01", "obj02", "obj10", "obj11", "obj12", "sky"], ["", "obj01", "obj02", "obj10", "obj11", "", "sky"], undefined, false, false, false, f001_04.replacement_textures),
     new TMSFESceneDesc("Map/field/f001/f001_05", "f001_05", "Shibuya (SIV-LIVE)", ["f001_05", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"], undefined, false, false, false, f001_05.replacement_textures),
-    new TMSFESceneDesc("Map/field/f001/f001_06", "f001_06", "Shibuya (Dead 2)", ["f001_06", "obj01", "obj02", "obj04", "obj10", "sky"], ["", "obj01", "obj02", "obj04", "obj10", ""], undefined, false, false, false, f001_06.replacement_textures),
-    new TMSFESceneDesc("Map/field/f001/f001_07", "f001_07", "Shibuya (Epilogue)", ["f001_07", "obj01", "obj02", "obj10", "sky"], ["", "obj01", "obj02", "obj10", "sky"], undefined, false, false, false, f001_07.replacement_textures),
     new TMSFESceneDesc("Map/field/f003/f003_02", "f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], f003_02.create_gimmicks, false, false, false, f003_02.replacement_textures),
     new TMSFESceneDesc("Map/field/f003/f003_02", "f003_02_party", "Fortuna Office (Fifth Anniversary Party)", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], ["", "obj10", "obj11", "obj12", "obj13", "", "sky"], f003_02.create_party_gimmicks, false, false, false, f003_02.replacement_textures),
     new TMSFESceneDesc("Map/field/f010/f010_01", "f010_01", "Toubo Rooftop", ["f010_01", "sky"], ["", "sky"], undefined, false, false, false, f010_01.replacement_textures),
     new TMSFESceneDesc("Map/field/f010/f010_01", "f010_01_fes", "Toubo Rooftop (Music Fes)", ["f010_01", "sky"], ["", "sky"], f010_01.create_music_fes_gimmicks, false, false, false, f010_01.replacement_textures),
     new TMSFESceneDesc("Map/field/f010/f010_02", "f010_02", "Classroom Film Set", ["f010_02", "sky"], ["", ""]),
-    new TMSFESceneDesc("Map/field/f007/f007_01", "f007_01", "Harajuku", ["f007_01", "sky"], ["", "sky"]),
+    new TMSFESceneDesc("Map/field/f007/f007_01", "f007_01", "Harajuku", ["f007_01", "sky"], ["", "sky"], undefined, false, false, false, f007_01.replacement_textures),
     new TMSFESceneDesc("Map/dungeon/d008/d008_01", "d008_01", "Illusory Urahara Arena", ["d008_01", "obj01", "obj02", "obj03"], ["", "obj01", "obj02", "obj03"]),
     "Shops",
     new TMSFESceneDesc("Map/field/f003/f003_01", "f003_01", "Hee Ho Mart", ["f003_01"], [""], f003_01.create_gimmicks, false, false, false, f003_01.replacement_textures),
@@ -269,7 +266,7 @@ const sceneDescs =
     "Daiba Studio",
     new TMSFESceneDesc("Map/field/f005/f005_01", "f005_01", "Daiba Studio", ["f005_01"], [""], f005_01.create_gimmicks),
     new TMSFESceneDesc("Map/field/f005/f005_01", "f005_01_fes", "Daiba Studio (Music Fes)", ["f005_01"], [""], f005_01.create_music_fes_gimmicks),
-    new TMSFESceneDesc("Map/field/f005/f005_02", "f005_02", "Daiba Studio (Dead)", ["f005_02", "obj01"], ["", "obj01"]),
+    new TMSFESceneDesc("Map/field/f005/f005_02", "f005_02", "Daiba Studio (Dead)", ["f005_02", "obj01"], ["", "obj01"], f005_01.create_gimmicks),
     new TMSFESceneDesc("Map/dungeon/d006/d006_10", "d006_10", "Illusory Daiba Studio Entrance", ["d006_10", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("Map/dungeon/d006/d006_01", "d006_01", "Illusory Daiba Studio Monitor Room", ["d006_01", "obj01"], ["", "obj01"]),
     new TMSFESceneDesc("Map/dungeon/d006/d006_02", "d006_02", "Illusory Daiba Studio Main Hallway", ["d006_02", "obj01"], ["", "obj01"], undefined, false, false, false, d006_02.replacement_textures),

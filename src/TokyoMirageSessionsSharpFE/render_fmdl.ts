@@ -7,7 +7,7 @@ import * as BNTX from '../fres_nx/bntx.js';
 import { colorNewFromRGBA } from '../Color.js';
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB } from '../Geometry.js';
-import { GfxDevice, GfxTexture, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSamplerDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { vec3, vec4, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -36,7 +36,7 @@ export class fmdl_renderer
     protected transform_matrix: mat4 = mat4.create();
     protected fshp_renderers: fshp_renderer[] = [];
     protected special_skybox: boolean;
-    protected current_animation_frame: number = 0.0;
+    protected current_skeletal_animation_frame: number = 0.0;
     protected current_material_animation_frame: number = 0.0;
     protected override_bounding_box: AABB | undefined;
     protected material_samplers_array: (GfxSamplerBinding[] | undefined)[] = [];
@@ -62,9 +62,9 @@ export class fmdl_renderer
         this.override_bounding_box = override_bounding_box;
 
         // create samplers
-        for (let i = 0; i < fmdl.fmat.length; i++)
+        for (let fmat_index = 0; fmat_index < fmdl.fmat.length; fmat_index++)
         {
-            const fmat = fmdl.fmat[i];
+            const fmat = fmdl.fmat[fmat_index];
             let sampler_bindings: GfxSamplerBinding[] = [];
 
             for (let i = 0; i < fmat.samplerInfo.length; i++)
@@ -131,15 +131,17 @@ export class fmdl_renderer
                 {
                     bone_animation_index = this.fska.boneAnimations.indexOf(bone_animation);
                 }
+
                 this.bone_to_bone_animation_indices.push(bone_animation_index);
             }
         }
 
+        // setup material animations
         this.fmaa = fmaa;
 
+        // for each material, which element of the material_animations array applies to it
         if (this.fmaa !== undefined)
         {
-            // for each material, which element of the material_animations array applies to it
             for (let i = 0; i < fmdl.fmat.length; i++)
             {
                 let material_animation_index = -1;
@@ -165,9 +167,9 @@ export class fmdl_renderer
         );
 
         // make all the fshp renderers
-        for (let shape_index = 0; shape_index < fmdl.fshp.length; shape_index++)
+        for (let i = 0; i < fmdl.fshp.length; i++)
         {
-            const fshp = fmdl.fshp[shape_index];
+            const fshp = fmdl.fshp[i];
             const fvtx = fmdl.fvtx[fshp.vertexIndex];
             const fmat = fmdl.fmat[fshp.materialIndex];
             let bone_matrix_array_length = 1;
@@ -282,10 +284,10 @@ export class fmdl_renderer
             // this model has an animated skeleton
             if (this.animation_play)
             {
-                this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
-                this.current_animation_frame = this.current_animation_frame % this.fska.frameCount;
+                this.current_skeletal_animation_frame += viewerInput.deltaTime * FPS_RATE;
+                this.current_skeletal_animation_frame = this.current_skeletal_animation_frame % this.fska.frameCount;
             }
-            this.current_bones = this.animate_skeleton(this.current_animation_frame);
+            this.current_bones = this.animate_skeleton(this.current_skeletal_animation_frame);
         }
         else
         {
@@ -554,9 +556,7 @@ export class fmdl_renderer
 }
 
 /**
- * returns the value of an animatino curve at the specified frame
- * @param curve the curve to read from
- * @param current_frame which frame of the animation to read the curve at
+ * returns the value of an animation curve at the specified frame
  */
 function get_keyframe_value(curve: BFRES.Curve, current_frame: number): number
 {

@@ -4,9 +4,9 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as BFRES from "../fres_nx/bfres.js";
 import * as GfxPlatform from "../gfx/platform/GfxPlatform";
-import * as MathHelpers from "../MathHelpers.js";
-import * as nngfx_enum from "../fres_nx/nngfx_enum";
 import { mat4 } from "gl-matrix";
+import { computeModelMatrixSRT } from "../MathHelpers.js";
+import * as nngfx_enum from "../fres_nx/nngfx_enum";
 
 /**
  * uses the data from an FMAT's SamplerInfo to create a GfxSamplerDescriptor
@@ -130,7 +130,7 @@ export function recursive_bone_transform(bone_index: number, bones: BFRES.FSKL_B
 {
     const bone = bones[bone_index];
     let transform_matrix: mat4 = mat4.create();
-    MathHelpers.computeModelMatrixSRT
+    computeModelMatrixSRT
     (
         transform_matrix,
         bone.scale[0], bone.scale[1], bone.scale[2],
@@ -210,6 +210,7 @@ export function convert_attribute_format(format: nngfx_enum.AttributeFormat): Gf
 
 /**
  * remakes a vertex buffer where _10_10_10_2_Snorm data is converted into S16_RGBA_NORM data.
+ * note: this code assumes that there is only one 10 10 10 2 attribute in a buffer
  * @param buffer_offset the _10_10_10_2_Snorm attribute's buffer offset
  * @param buffer_index which buffer the _10_10_10_2_Snorm attribute is in
  * @param vertex_buffers buffer to modify
@@ -338,7 +339,6 @@ export function parse_bfres(buffer: ArrayBufferSlice): BFRES.FRES
     // Tokyo Mirage Sessions uses 10 10 10 2 snorm to store normals, which isn't supported
     // these needs to be converted to s16 rgba norm
     // do it here to avoid duplicating this converision if the fres is used multiple times
-    // note: this code assumes that there is only one 10 10 10 2 attribute in a buffer
     for (let model_index = 0; model_index < fres.fmdl.length; model_index++)
     {
         let fmdl = fres.fmdl[model_index];
