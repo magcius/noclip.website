@@ -13,7 +13,7 @@ export function parseLights(buffer: ArrayBufferSlice): Light[]
     const view = buffer.createDataView();
 
     let little_endian = true;
-    if (view.getUint8(0x20) == 0)
+    if (view.getUint8(0x20) === 0)
     {
         little_endian = false;
     }
@@ -25,7 +25,7 @@ export function parseLights(buffer: ArrayBufferSlice): Light[]
 
     // b016_01.lig has the counts of each section written in little endian, despite every other file using big endian
     let count_little_endian = false;
-    if (view.getUint32(ldat_offset + 0x8, false) == 0x12000000)
+    if (view.getUint32(ldat_offset + 0x8, false) === 0x12000000)
     {
         count_little_endian = true;
     }

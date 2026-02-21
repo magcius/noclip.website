@@ -202,7 +202,7 @@ export function get_layout_point(layout: MapLayout, id: number, offset_x: number
 {
     const layout_point = get_point_from_group(layout.event_dir_entries, id);
 
-    if (offset_x == 0.0 && offset_y == 0.0 && offset_z == 0.0)
+    if (offset_x === 0.0 && offset_y === 0.0 && offset_z === 0.0)
     {
         return { position: layout_point.position, rotation: layout_point.rotation };
     }
@@ -247,7 +247,7 @@ export function get_point_from_group(group: MapLayoutEntry[], id: number): Layou
 {
     for (let i = 0; i < group.length; i++)
     {
-        if (group[i].id == id)
+        if (group[i].id === id)
         {
             const layout_point = group[i];
             return { position: layout_point.position, rotation: layout_point.rotation };

@@ -178,7 +178,7 @@ async function deswizzle_and_upload_cubemap(texture: BNTX.BRTI, mip_count: numbe
             combined_buffer.set(buffers_for_this_mip_level[texture_index] as Uint8Array, offset);
         }
 
-        if (type_format == nngfx_enum.TypeFormat.Float)
+        if (type_format === nngfx_enum.TypeFormat.Float)
         {
             device.uploadTextureData(gfx_texture, mipLevel, [new Uint16Array(combined_buffer)]);
         }

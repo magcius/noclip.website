@@ -84,7 +84,7 @@ export async function get_fres_from_apak(apak_path: string, bfres_name: string, 
     const with_extension = `${apak_path}.zip`;
     const apak = parseAPAK(await data_fetcher.fetchData(with_extension));
     const bfres = get_file_by_name(apak, bfres_name);
-    if (bfres == undefined)
+    if (bfres === undefined)
     {
         console.error(`file ${bfres_name} not found`);
         throw("whoops");

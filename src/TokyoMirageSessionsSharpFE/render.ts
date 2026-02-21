@@ -62,7 +62,7 @@ export class TMSFEScene implements SceneGfx
             const model_fres = level_models[level_models_index].model_fres;
             const fmdl = model_fres.fmdl[0];
             let lightmaps: LightmapTexture[] | undefined = level_models[level_models_index].lightmaps;
-            let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
+            let special_skybox_model: boolean = special_skybox && fmdl.name === "sky";
 
             // initialize textures
             // textures are stored in an embedded .bntx file
@@ -74,7 +74,7 @@ export class TMSFEScene implements SceneGfx
             let fska: BFRES.FSKA | undefined = undefined;
             let fmaa: BFRES.FMAA | undefined = undefined;
             const animation_fres = level_models[level_models_index].animation_fres;
-            if (animation_fres != undefined)
+            if (animation_fres !== undefined)
             {
                 if (animation_fres.fska.length > 0)
                 {
@@ -87,7 +87,7 @@ export class TMSFEScene implements SceneGfx
             }
 
             let renderer: fmdl_renderer;
-            if (replacement_textures_group != undefined)
+            if (replacement_textures_group !== undefined)
             {
                 renderer = new fmdl_renderer_texture_replace
                 (
@@ -243,14 +243,14 @@ export class TMSFEScene implements SceneGfx
 
     debug_draw_layout_entries(viewerInput: ViewerRenderInput)
     {
-        if (this.layout != undefined)
+        if (this.layout !== undefined)
         {
             const group = this.layout.npc_entries;
             
             for (let i = 0; i < group.length; i++)
             {
                 const entry = group[i];
-                // if (entry.group_index != 12)
+                // if (entry.group_index !== 12)
                 // {
                 //     continue;
                 // }
@@ -272,7 +272,7 @@ export class TMSFEScene implements SceneGfx
 
     debug_draw_lights(viewerInput: ViewerRenderInput)
     {
-        if (this.lights != undefined)
+        if (this.lights !== undefined)
         {
             for (let i = 0; i < this.lights.length; i++)
             {

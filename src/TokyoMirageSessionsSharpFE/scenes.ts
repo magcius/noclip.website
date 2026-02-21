@@ -97,8 +97,8 @@ class TMSFESceneDesc implements SceneDesc
     {
         const dataFetcher = context.dataFetcher;
 
-        if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
-        if (this.special_skybox == undefined) { this.special_skybox = false };
+        if (this.is_d018_03 === undefined) { this.is_d018_03 = false };
+        if (this.special_skybox === undefined) { this.special_skybox = false };
 
         const apak = APAK.parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/${this.path}/model.zip`));
 
@@ -110,7 +110,7 @@ class TMSFESceneDesc implements SceneDesc
         {
             const model_file_name = `${this.model_file_names[i]}.bfres`
             const model_bfres_data = APAK.get_file_by_name(apak, model_file_name);
-            if (model_bfres_data != undefined)
+            if (model_bfres_data !== undefined)
             {
                 model_fres = bfres_helpers.parse_bfres(model_bfres_data);
             }
@@ -121,11 +121,11 @@ class TMSFESceneDesc implements SceneDesc
             }
 
             // get animation file
-            if (this.animation_file_names[i] != "")
+            if (this.animation_file_names[i] !== "")
             {
                 const animation_file_name = `${this.animation_file_names[i]}.anm`
                 const animation_bfres_data = APAK.get_file_by_name(apak, animation_file_name);
-                if (animation_bfres_data != undefined)
+                if (animation_bfres_data !== undefined)
                 {
                     animation_fres = bfres_helpers.parse_bfres(animation_bfres_data);
                 }
@@ -152,7 +152,7 @@ class TMSFESceneDesc implements SceneDesc
         }
 
         let replacement_texture_groups: replacement_texture_group[] = [];
-        if (this.replacement_texture_function != undefined)
+        if (this.replacement_texture_function !== undefined)
         {
             replacement_texture_groups = await this.replacement_texture_function(dataFetcher, device);
         }
@@ -161,16 +161,16 @@ class TMSFESceneDesc implements SceneDesc
         let common_gimmicks: gimmick[] = [];
         let map_gimmicks: gimmick[] = [];
         const maplayout_data = APAK.get_file_by_name(apak, "maplayout.layout");
-        if (maplayout_data != undefined)
+        if (maplayout_data !== undefined)
         {
             layout = parseLayout(maplayout_data);
             common_gimmicks = await create_common_gimmicks(layout, this.is_d018_03, dataFetcher, device);
-            if (this.map_gimmick_function != undefined)
+            if (this.map_gimmick_function !== undefined)
             {
                 map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
         }
-        else if (this.id == "f010_07")
+        else if (this.id === "f010_07")
         {
             // this map has no maplayout.layout file
             map_gimmicks = await f010_07.create_gimmicks(dataFetcher, device);

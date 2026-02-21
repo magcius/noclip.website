@@ -137,7 +137,7 @@ export function recursive_bone_transform(bone_index: number, bones: BFRES.FSKL_B
         bone.rotation[0], bone.rotation[1], bone.rotation[2],
         bone.translation[0], bone.translation[1], bone.translation[2],
     );
-    if (bone.parentIndex == -1)
+    if (bone.parentIndex === -1)
     {
         return transform_matrix;
     }
@@ -362,7 +362,7 @@ export function parse_bfres(buffer: ArrayBufferSlice): BFRES.FRES
             for (let attribute_index = 0; attribute_index < fvtx.vertexAttributes.length; attribute_index++)
             {
                 let attribute = fvtx.vertexAttributes[attribute_index];
-                if (attribute.bufferIndex == _10_10_10_2_buffer_index && attribute.offset > _10_10_10_2_offset)
+                if (attribute.bufferIndex === _10_10_10_2_buffer_index && attribute.offset > _10_10_10_2_offset)
                 {
                     attribute.offset += 0x4;
                 }

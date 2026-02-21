@@ -108,7 +108,7 @@ export class fshp_renderer
         
         const original_blend_mode = fmat.userData.get("blend_mode");
         this.blend_mode = BlendMode.Opaque;
-        if (original_blend_mode != undefined)
+        if (original_blend_mode !== undefined)
         {
             this.blend_mode = original_blend_mode[0] as number;
         }
@@ -168,7 +168,7 @@ export class fshp_renderer
         this.program = new TMSFEProgram(fvtx.vertexAttributes, fmat.samplerInfo, fshp.vertexSkinWeightCount, bone_matrix_array_length);
 
         let use_alpha_test = false;
-        if(this.blend_mode == BlendMode.AlphaTest)
+        if(this.blend_mode === BlendMode.AlphaTest)
         {
             use_alpha_test = true;
         }
@@ -243,7 +243,7 @@ export class fshp_renderer
         {
             renderHelper.renderInstManager.setCurrentList(renderInstListSkybox);
         }
-        else if (this.blend_mode == BlendMode.Opaque || this.blend_mode == BlendMode.AlphaTest)
+        else if (this.blend_mode === BlendMode.Opaque || this.blend_mode === BlendMode.AlphaTest)
         {
             renderHelper.renderInstManager.setCurrentList(renderInstListOpaque);
         }

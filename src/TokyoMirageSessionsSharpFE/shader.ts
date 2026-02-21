@@ -133,7 +133,7 @@ void mainPS()
             let attribute_index = TMSFEProgram.vertex_attribute_codes.indexOf(attribute_code);
             let attribute_name = TMSFEProgram.vertex_attribute_names[attribute_index]
             let type = TMSFEProgram.vertex_attribute_types[attribute_index];
-            if (attribute_code == '_i0')
+            if (attribute_code === '_i0')
             {
                 switch(this.vertex_skin_weight_count)
                 {
@@ -158,7 +158,7 @@ void mainPS()
                         throw("whoops");
                 }
             }
-            if (attribute_code == '_w0')
+            if (attribute_code === '_w0')
             {
                 switch(this.vertex_skin_weight_count)
                 {

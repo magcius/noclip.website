@@ -32,7 +32,7 @@ export class gimmick
         // get animations
         let fska: BFRES.FSKA | undefined = undefined;
         let fmaa: BFRES.FMAA | undefined = undefined;
-        if (animation_fres != undefined)
+        if (animation_fres !== undefined)
         {
             if (animation_fres.fska.length > 0)
             {
@@ -152,7 +152,7 @@ export async function create_common_gimmicks(layout: MapLayout, is_d018_03: bool
                 let scale = vec3.fromValues(1.0, 1.0, 1.0);
                 let bounding_box = new AABB();
 
-                if (entry.id == 1130 || entry.id == 1230 || entry.id == 1430)
+                if (entry.id === 1130 || entry.id === 1230 || entry.id === 1430)
                 {  
                     // scale up the special chests at the end of each room
                     scale = vec3.fromValues(D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE);
@@ -401,7 +401,7 @@ export async function create_actor(path: string, bfres_name: string, animation_n
     const animation_apak = parseAPAK(animation_apak_data);
     const animation_bfres = get_file_by_name(animation_apak, animation_name);
     let animation_fres;
-    if (animation_bfres != undefined)
+    if (animation_bfres !== undefined)
     {
         animation_fres = bfres_helpers.parse_bfres(animation_bfres);
     }

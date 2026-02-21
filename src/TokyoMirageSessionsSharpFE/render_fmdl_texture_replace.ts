@@ -49,7 +49,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
             const replacement_texture = replacement_textures[i];
 
             const fmat = fmdl.fmat.find((f) => f.name === replacement_texture.material_name);
-            if (fmat != undefined)
+            if (fmat !== undefined)
             {
                 const fmat_index = fmdl.fmat.indexOf(fmat);
                 this.replacement_texture_fmat_indices.push(fmat_index);
@@ -83,7 +83,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
             let replacement_sampler_binding: GfxSamplerBinding | undefined = undefined;
             for (let replacement_texture_index = 0; replacement_texture_index < this.replacement_textures.length; replacement_texture_index++)
             {
-                if (this.replacement_texture_fmat_indices[replacement_texture_index] == this.fshp_renderers[i].fshp.materialIndex)
+                if (this.replacement_texture_fmat_indices[replacement_texture_index] === this.fshp_renderers[i].fshp.materialIndex)
                 {
                     replacement_sampler_binding = this.replacement_textures[replacement_texture_index].sampler_binding;
                     assert(replacement_sampler_binding !== undefined);
