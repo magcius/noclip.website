@@ -7,7 +7,7 @@ import * as BNTX from '../fres_nx/bntx.js';
 import { colorNewFromRGBA } from '../Color.js';
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB } from '../Geometry.js';
-import { GfxDevice, GfxTexture, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import * as GfxPlatform from "../gfx/platform/GfxPlatform";
 import { vec3, vec4, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -25,7 +25,7 @@ export class fmdl_renderer
     protected fskl: BFRES.FSKL;
     protected fska: BFRES.FSKA | undefined;
     protected fmaa: BFRES.FMAA | undefined;
-    protected lightmap_sampler_bindings: GfxSamplerBinding[] = [];
+    protected lightmap_sampler_bindings: GfxPlatform.GfxSamplerBinding[] = [];
     protected bone_to_bone_animation_indices: number[] = [];
     protected current_bones: BFRES.FSKL_Bone[];
     protected smooth_rigid_matrix_array: mat4[] = [];
@@ -39,13 +39,13 @@ export class fmdl_renderer
     protected current_skeletal_animation_frame: number = 0.0;
     protected current_material_animation_frame: number = 0.0;
     protected override_bounding_box: AABB | undefined;
-    protected material_samplers_array: (GfxSamplerBinding[] | undefined)[] = [];
+    protected material_samplers_array: (GfxPlatform.GfxSamplerBinding[] | undefined)[] = [];
 
     constructor
     (
         fmdl: BFRES.FMDL,
         bntx: BNTX.BNTX,
-        gfx_texture_array: GfxTexture[],
+        gfx_texture_array: GfxPlatform.GfxTexture[],
         fska: BFRES.FSKA | undefined,
         fmaa: BFRES.FMAA | undefined,
         lightmaps: LightmapTexture[] | undefined,
@@ -53,7 +53,7 @@ export class fmdl_renderer
         rotation: vec3,
         scale: vec3,
         special_skybox: boolean,
-        device: GfxDevice,
+        device: GfxPlatform.GfxDevice,
         renderHelper: GfxRenderHelper,
         override_bounding_box?: AABB,
     )
@@ -65,7 +65,7 @@ export class fmdl_renderer
         for (let fmat_index = 0; fmat_index < fmdl.fmat.length; fmat_index++)
         {
             const fmat = fmdl.fmat[fmat_index];
-            let sampler_bindings: GfxSamplerBinding[] = [];
+            let sampler_bindings: GfxPlatform.GfxSamplerBinding[] = [];
 
             for (let i = 0; i < fmat.samplerInfo.length; i++)
             {
@@ -100,12 +100,12 @@ export class fmdl_renderer
         {
             const sampler_descriptor = 
             {
-                wrapS: GfxWrapMode.Repeat,
-                wrapT: GfxWrapMode.Repeat,
-                wrapQ: GfxWrapMode.Repeat,
-                minFilter: GfxTexFilterMode.Bilinear,
-                magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.Linear,
+                wrapS: GfxPlatform.GfxWrapMode.Repeat,
+                wrapT: GfxPlatform.GfxWrapMode.Repeat,
+                wrapQ: GfxPlatform.GfxWrapMode.Repeat,
+                minFilter: GfxPlatform.GfxTexFilterMode.Bilinear,
+                magFilter: GfxPlatform.GfxTexFilterMode.Bilinear,
+                mipFilter: GfxPlatform.GfxMipFilterMode.Linear,
             };
             for (let i = 0; i < lightmaps.length; i++)
             {
@@ -268,7 +268,7 @@ export class fmdl_renderer
         }
     }
 
-    public destroy(device: GfxDevice): void
+    public destroy(device: GfxPlatform.GfxDevice): void
     {
         for (let i = 0; i < this.fshp_renderers.length; i++)
         {
@@ -528,9 +528,9 @@ export class fmdl_renderer
         return new_bounding_box;
     }
 
-    get_fshp_sampler_bindings(fshp_index: number): GfxSamplerBinding[] | undefined
+    get_fshp_sampler_bindings(fshp_index: number): GfxPlatform.GfxSamplerBinding[] | undefined
     {
-        const new_sampler_bindings: GfxSamplerBinding[] = [];
+        const new_sampler_bindings: GfxPlatform.GfxSamplerBinding[] = [];
         let sampler_bindings = this.material_samplers_array[this.fshp_renderers[fshp_index].fshp.materialIndex];
         if (sampler_bindings === undefined)
         {

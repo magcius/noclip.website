@@ -1,3 +1,4 @@
+
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString, assert } from "../util.js";
 import { isMarkerLittleEndian, readBinStr } from "./bfres.js";

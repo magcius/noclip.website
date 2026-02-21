@@ -90,19 +90,18 @@ export enum PrimitiveTopology {
 }
 
 export enum ImageFormat {
-    Bc1_Unorm             = (ChannelFormat.Bc1             << TypeFormat.$Bits) | TypeFormat.Unorm,
-    Bc1_UnormSrgb         = (ChannelFormat.Bc1             << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
-    Bc2_Unorm             = (ChannelFormat.Bc2             << TypeFormat.$Bits) | TypeFormat.Unorm,
-    Bc2_UnormSrgb         = (ChannelFormat.Bc2             << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
-    Bc3_Unorm             = (ChannelFormat.Bc3             << TypeFormat.$Bits) | TypeFormat.Unorm,
-    Bc3_UnormSrgb         = (ChannelFormat.Bc3             << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
-    Bc4_Unorm             = (ChannelFormat.Bc4             << TypeFormat.$Bits) | TypeFormat.Unorm,
-    Bc4_Snorm             = (ChannelFormat.Bc4             << TypeFormat.$Bits) | TypeFormat.Snorm,
-    Bc5_Unorm             = (ChannelFormat.Bc5             << TypeFormat.$Bits) | TypeFormat.Unorm,
-    Bc5_Snorm             = (ChannelFormat.Bc5             << TypeFormat.$Bits) | TypeFormat.Snorm,
-    R8_Unorm              = (ChannelFormat.R8              << TypeFormat.$Bits) | TypeFormat.Unorm,
-    R8_G8_B8_A8_Unorm     = (ChannelFormat.R8_G8_B8_A8     << TypeFormat.$Bits) | TypeFormat.Unorm,
-    R16_G16_B16_A16_Float = (ChannelFormat.R16_G16_B16_A16 << TypeFormat.$Bits) | TypeFormat.Float,
+    Bc1_Unorm         = (ChannelFormat.Bc1         << TypeFormat.$Bits) | TypeFormat.Unorm,
+    Bc1_UnormSrgb     = (ChannelFormat.Bc1         << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
+    Bc2_Unorm         = (ChannelFormat.Bc2         << TypeFormat.$Bits) | TypeFormat.Unorm,
+    Bc2_UnormSrgb     = (ChannelFormat.Bc2         << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
+    Bc3_Unorm         = (ChannelFormat.Bc3         << TypeFormat.$Bits) | TypeFormat.Unorm,
+    Bc3_UnormSrgb     = (ChannelFormat.Bc3         << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
+    Bc4_Unorm         = (ChannelFormat.Bc4         << TypeFormat.$Bits) | TypeFormat.Unorm,
+    Bc4_Snorm         = (ChannelFormat.Bc4         << TypeFormat.$Bits) | TypeFormat.Snorm,
+    Bc5_Unorm         = (ChannelFormat.Bc5         << TypeFormat.$Bits) | TypeFormat.Unorm,
+    Bc5_Snorm         = (ChannelFormat.Bc5         << TypeFormat.$Bits) | TypeFormat.Snorm,
+    R8_Unorm          = (ChannelFormat.R8          << TypeFormat.$Bits) | TypeFormat.Unorm,
+    R8_G8_B8_A8_Unorm = (ChannelFormat.R8_G8_B8_A8 << TypeFormat.$Bits) | TypeFormat.Unorm,
 }
 
 export enum AttributeFormat {

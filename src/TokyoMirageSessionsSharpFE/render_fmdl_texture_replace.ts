@@ -8,7 +8,7 @@ import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from './bntx_helpers.js';
 import { DataFetcher } from '../DataFetcher.js';
 import { AABB } from '../Geometry.js';
-import { GfxDevice, GfxSamplerBinding, GfxTexture } from "../gfx/platform/GfxPlatform";
+import * as GfxPlatform from "../gfx/platform/GfxPlatform";
 import { vec3 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -26,7 +26,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
     (
         fmdl: BFRES.FMDL,
         bntx: BNTX.BNTX,
-        gfx_texture_array: GfxTexture[],
+        gfx_texture_array: GfxPlatform.GfxTexture[],
         fska: BFRES.FSKA | undefined,
         fmaa: BFRES.FMAA | undefined,
         lightmaps: LightmapTexture[] | undefined,
@@ -34,7 +34,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
         rotation: vec3,
         scale: vec3,
         special_skybox: boolean,
-        device: GfxDevice,
+        device: GfxPlatform.GfxDevice,
         renderHelper: GfxRenderHelper,
         replacement_textures: replacement_texture[],
         override_bounding_box?: AABB,
@@ -80,7 +80,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
             const texture_srt_matrix = this.get_fshp_texture_srt_matrix(i);
             const bounding_box = this.get_fshp_bounding_box(i, bone_matrix_array);
 
-            let replacement_sampler_binding: GfxSamplerBinding | undefined = undefined;
+            let replacement_sampler_binding: GfxPlatform.GfxSamplerBinding | undefined = undefined;
             for (let replacement_texture_index = 0; replacement_texture_index < this.replacement_textures.length; replacement_texture_index++)
             {
                 if (this.replacement_texture_fmat_indices[replacement_texture_index] === this.fshp_renderers[i].fshp.materialIndex)
@@ -122,11 +122,11 @@ export interface replacement_texture_group
 export interface replacement_texture
 {
     material_name: string;
-    gfx_texture: GfxTexture;
-    sampler_binding: GfxSamplerBinding | undefined;
+    gfx_texture: GfxPlatform.GfxTexture;
+    sampler_binding: GfxPlatform.GfxSamplerBinding | undefined;
 }
 
-export async function create_replacement_texture(texture_path: string, material_name: string, data_fetcher: DataFetcher, device: GfxDevice): Promise<replacement_texture>
+export async function create_replacement_texture(texture_path: string, material_name: string, data_fetcher: DataFetcher, device: GfxPlatform.GfxDevice): Promise<replacement_texture>
 {    
     const bntx_buffer = await data_fetcher.fetchData(texture_path);
     const bntx = BNTX.parse(bntx_buffer);

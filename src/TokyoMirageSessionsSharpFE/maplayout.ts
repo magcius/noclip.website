@@ -1,5 +1,5 @@
 // maplayout.ts
-// handles data from maplayout.layout files, which contain the 3d coordinates of gimmicks and more
+// handles data from maplayout.layout files, which contain 3d coordinates for placing objects, trigger areas, etc
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4, vec3 } from "gl-matrix";
