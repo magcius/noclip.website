@@ -204,7 +204,7 @@ class SceneDesc implements Viewer.SceneDesc {
             "texDC0.all",
             `pol${this.id}.all`,
             `pol${this.id}_stream.all`,
-            `tex${this.id.toUpperCase()}.all`,
+            `tex${this.id === 'dc3' ? this.id : this.id.toUpperCase()}.all`,
             "misc.all",
             "white.tex",
         ]);
