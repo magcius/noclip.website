@@ -83,7 +83,7 @@ export class fmdl_renderer
                     const gfx_texture = gfx_texture_array[gfx_texture_index];
                     const sampler_descriptor = bfres_helpers.make_sampler_descriptor(fmat.samplerInfo[i]);
                     const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
-                    sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null });
+                    sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler });
                 }
                 else
                 {
@@ -111,7 +111,7 @@ export class fmdl_renderer
             {
                 const lightmap = lightmaps[i];
                 const gfxSampler = renderHelper.renderCache.createSampler(sampler_descriptor);
-                this.lightmap_sampler_bindings.push({ gfxTexture: lightmap.gfx_texture, gfxSampler, lateBinding: null })
+                this.lightmap_sampler_bindings.push({ gfxTexture: lightmap.gfx_texture, gfxSampler })
             }
         }
 

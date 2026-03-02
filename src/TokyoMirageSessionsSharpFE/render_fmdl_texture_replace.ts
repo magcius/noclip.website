@@ -55,7 +55,7 @@ export class fmdl_renderer_texture_replace extends fmdl_renderer
                 this.replacement_texture_fmat_indices.push(fmat_index);
                 const sampler_descriptor = bfres_helpers.make_sampler_descriptor(fmat.samplerInfo[S_DIFFUSE_INDEX]);
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
-                replacement_texture.sampler_binding = { gfxTexture: replacement_texture.gfx_texture, gfxSampler: gfx_sampler, lateBinding: null };
+                replacement_texture.sampler_binding = { gfxTexture: replacement_texture.gfx_texture, gfxSampler: gfx_sampler };
             }
         }
     }

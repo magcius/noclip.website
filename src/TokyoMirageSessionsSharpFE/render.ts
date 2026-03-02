@@ -218,7 +218,7 @@ export class TMSFEScene implements SceneGfx
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListOpaque.reset();
         this.renderInstListTranslucent.reset();
         this.renderInstListSkybox.reset();
