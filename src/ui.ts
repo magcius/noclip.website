@@ -1489,10 +1489,10 @@ export class Slider implements Widget {
 
         if (label !== undefined)
             this.setLabel(label);
-        if (value !== undefined)
-            this.setValue(value, false);
         if (min !== undefined && max !== undefined)
             this.setRange(min, max);
+        if (value !== undefined)
+            this.setValue(value, false);
     }
 
     private onInput(): void {
