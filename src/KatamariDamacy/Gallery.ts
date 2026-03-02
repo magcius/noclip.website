@@ -298,7 +298,7 @@ export class GallerySceneRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

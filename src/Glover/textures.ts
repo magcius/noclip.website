@@ -1,7 +1,6 @@
 import * as Viewer from '../viewer.js';
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { getImageFormatString } from "../BanjoKazooie/f3dex.js";
 import {
     ImageFormat, ImageSize, TexCM,
     TextureLUT,
@@ -15,7 +14,6 @@ import {
     parseTLUT
 } from "../Common/N64/Image.js";
 import { TextureHolder } from "../TextureHolder.js";
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 
 import { GloverTexbank } from './parsers/index.js';
@@ -50,24 +48,6 @@ function blur_ci8(data: Uint8Array, width: number, height: number): void {
         }
     }
 }
-
-
-function textureToCanvas(texture: Image): Viewer.Texture {
-    const surfaces: HTMLCanvasElement[] = [];
-
-    for (let i = 0; i < texture.levels.length; i++) {
-        const width = texture.width >>> i;
-        const height = texture.height >>> i;
-        const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.levels[i]), width, height);
-        surfaces.push(canvas);
-    }
-
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getImageFormatString(texture.format, texture.siz));
-
-    return { name: texture.name, extraInfo, surfaces };
-}
-
 
 export class GloverTextureHolder extends TextureHolder {
     private banks: GloverTexbank[] = [];
@@ -240,7 +220,7 @@ export class GloverTextureHolder extends TextureHolder {
 
         device.uploadTextureData(gfxTexture, 0, texture.levels);
 
-        const viewerTexture: Viewer.Texture = textureToCanvas(texture);
+        const viewerTexture: Viewer.Texture = { gfxTexture };
         this.gfxTextures.push(gfxTexture);
         this.viewerTextures.push(viewerTexture);
         this.textureNames.push(texture.name);

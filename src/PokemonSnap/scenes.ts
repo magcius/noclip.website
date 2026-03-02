@@ -6,10 +6,9 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { SceneContext } from '../SceneBase.js';
-import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { ModelRenderer, buildTransform } from './render.js';
 import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room.js';
-import { RenderData, textureToCanvas } from '../BanjoKazooie/render.js';
+import { RenderData } from '../BanjoKazooie/render.js';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder.js';
 import { hexzero } from '../util.js';
 import { CameraController } from '../Camera.js';
@@ -133,7 +132,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         globals.renderInstListSky.reset();
         globals.renderInstListMain.reset();
     }
@@ -172,8 +171,6 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const sceneRenderer = new SnapRenderer(context, holder, this.id);
             const level = parseLevel(archives);
-            for (let i = 0; i < level.sharedCache.textures.length; i++)
-                viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
             sceneRenderer.globals.init(sceneRenderer.renderHelper.renderCache, level);
 
@@ -190,9 +187,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 skyboxRenderer.forceLoop();
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
-                for (let j = 0; j < skyboxData.sharedOutput.textureCache.textures.length; j++) {
-                    viewerTextures.push(textureToCanvas(skyboxData.sharedOutput.textureCache.textures[j]));
-                }
+                viewerTextures.push(...skyboxData.textures.map((gfxTexture) => { return { gfxTexture }; }));
             }
 
             const projData: RenderData[] = [];
@@ -207,9 +202,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     eggInputSetup(cache, data, level.eggData!);
                 objectDatas.push(data);
                 sceneRenderer.renderData.push(data);
-                for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++) {
-                    data.sharedOutput.textureCache.textures[j].name = `${level.objectInfo[i].id}_${j}`;
-                    viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
+
+                for (let j = 0; j < data.textures.length; j++) {
+                    device.setResourceName(data.textures[j], `${level.objectInfo[i].id}_${j}`);
+                    viewerTextures.push({ gfxTexture: data.textures[j] });
                 }
             }
 
@@ -217,23 +213,20 @@ class SceneDesc implements Viewer.SceneDesc {
             if (level.haunterData) {
                 haunterData = new RenderData(device, cache, level.haunterData[1].model!.sharedOutput);
                 sceneRenderer.renderData.push(haunterData);
-                for (let j = 0; j < haunterData.sharedOutput.textureCache.textures.length; j++) {
-                    haunterData.sharedOutput.textureCache.textures[j].name = `93_${j + 1}`;
-                    viewerTextures.push(textureToCanvas(haunterData.sharedOutput.textureCache.textures[j]));
+                for (let j = 0; j < haunterData.textures.length; j++) {
+                    device.setResourceName(haunterData.textures[j], `93_${j + 1}`);
+                    viewerTextures.push({ gfxTexture: haunterData.textures[j] });
                 }
             }
-
-            for (let particle of level.levelParticles.particleTextures)
-                for (let texture of particle)
-                    viewerTextures.push(textureToCanvas(texture));
 
             sceneRenderer.modelRenderers.push(
                 ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, level)
             );
             sceneRenderer.globals.particles = new ParticleManager(device, cache, level.levelParticles, level.pesterParticles);
-
+            
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, cache, level.rooms[i].node.model!.sharedOutput);
+                viewerTextures.push(...renderData.textures.map((gfxTexture) => { return { gfxTexture }; }));
                 const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node], []);
                 if (level.rooms[i].animation !== null) {
                     roomRenderer.animations.push(level.rooms[i].animation!);

@@ -805,7 +805,7 @@ export class OrthoCameraController implements CameraController {
             zTargetAdjAmt -= 80.0;
         if (inputManager.isKeyDown('KeyE'))
             zTargetAdjAmt += 80.0;
-        this.zTarget += zTargetAdjAmt * this.sceneMoveSpeedMult;
+        this.zTarget += zTargetAdjAmt;
         if (this.zTarget > -10)
             this.zTarget = -10;
         let zTargetDelta = this.zTarget - this.z;
@@ -854,10 +854,10 @@ export class OrthoCameraController implements CameraController {
             this.z += zTargetDelta * kSpringZ;
 
             getMatrixAxisX(scratchVec3a, this.camera.worldMatrix);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * this.z);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * this.z * this.sceneMoveSpeedMult);
 
             getMatrixAxisY(scratchVec3a, this.camera.worldMatrix);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * this.z);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * this.z * this.sceneMoveSpeedMult);
 
             this.forceUpdate = false;
         }
@@ -868,7 +868,7 @@ export class OrthoCameraController implements CameraController {
         vec3.scale(eyePos, eyePos, -this.farPlane / 2);
         vec3.add(eyePos, eyePos, this.translation);
         mat4.targetTo(this.camera.worldMatrix, eyePos, this.translation, Vec3UnitY);
-        this.camera.setOrthographic(-this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
+        this.camera.setOrthographic(-this.z * 10 * this.sceneMoveSpeedMult, this.camera.aspect, this.nearPlane, this.farPlane);
         this.camera.worldMatrixUpdated();
 
         return updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;

@@ -3,7 +3,7 @@ import { hexzero } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as GX_Texture from '../gx/gx_texture.js';
 import * as GX from '../gx/gx_enum.js';
-import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx, GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
+import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx, GXTextureMapping } from '../gx/gx_render.js';
 import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
 import { DataFetcher } from '../DataFetcher.js';
 import * as UI from '../ui.js';
@@ -12,9 +12,10 @@ import { GameInfo } from './scenes.js';
 import { loadRes } from './resource.js';
 import { readUint32 } from './util.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import * as Viewer from '../viewer.js';
 
 export class SFATexture {
-    public viewerTexture?: GXViewerTexture;
+    public viewerTexture?: Viewer.Texture;
 
     constructor(public gfxTexture: GfxTexture, public gfxSampler: GfxSampler, public width: number, public height: number) {
     }
@@ -249,11 +250,13 @@ class TextureFile {
                 const texture = loadTextureArrayFromTable(cache, this.tab, this.bin, num, this.isBeta);
                 if (texture !== null) {
                     for (let arrayIdx = 0; arrayIdx < texture.textures.length; arrayIdx++) {
-                        const viewerTexture = texture.textures[arrayIdx].viewerTexture;
-                        if (viewerTexture !== undefined)
-                            viewerTexture.name = `${this.name} #${num}`;
+                        const gfxTexture = texture.textures[arrayIdx].gfxTexture;
+                        if (gfxTexture !== null) {
+                            let name = `${this.name} #${num}`;
                             if (texture.textures.length > 1)
-                                viewerTexture!.name += `.${arrayIdx}`;
+                                name += `.${arrayIdx}`;
+                            cache.device.setResourceName(gfxTexture, name);
+                        }
                     }
                 }
                 this.textures[num] = texture;
@@ -322,18 +325,15 @@ class SubdirTextureFiles {
 }
 
 class TextureListHolder implements UI.TextureListHolder {
-    public viewerTextures: GXViewerTexture[] = [];
-    public onnewtextures: (() => void) | null = null;
+    public viewerTextures: Viewer.Texture[] = [];
+    public onnewtextures: (() => void) = (() => {});
 
     public get textureNames(): string[] {
-        return this.viewerTextures.map((texture) => texture.name);
+        return this.viewerTextures.map((texture) => texture.gfxTexture.ResourceName!);
     }
 
     public async getViewerTexture(i: number) {
-        const tex = this.viewerTextures[i];
-        if (tex.surfaces.length === 0)
-            await tex.activate();
-        return tex;
+        return this.viewerTextures[i];
     }
 }
 

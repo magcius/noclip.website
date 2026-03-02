@@ -327,7 +327,7 @@ export class LevelRenderer {
                 depthState.depthCompare = GfxCompareMode.GreaterEqual;
                 depthInst.setMegaStateFlags(depthState);
                 depthInst.setDrawCount(batch.indexCount, batch.indexOffset);
-                depthInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: texture.gfxTexture, gfxSampler: sampler, lateBinding: null }]);
+                depthInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: texture.gfxTexture, gfxSampler: sampler }]);
                 renderInstManager.submitRenderInst(depthInst);
             }
             const renderInst = renderInstManager.newRenderInst();
@@ -346,8 +346,7 @@ export class LevelRenderer {
             renderInst.setMegaStateFlags(megaState);
             renderInst.setSamplerBindingsFromTextureMappings([{
                 gfxTexture: texture.gfxTexture,
-                gfxSampler: sampler,
-                lateBinding: null
+                gfxSampler: sampler
             }]);
             renderInst.setDrawCount(batch.indexCount, batch.indexOffset);
             renderInstManager.submitRenderInst(renderInst);

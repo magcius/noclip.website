@@ -133,7 +133,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
     }

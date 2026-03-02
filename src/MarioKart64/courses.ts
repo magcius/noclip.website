@@ -2099,7 +2099,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
         this.prepareToRender(device, viewerInput);
-        renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
     }

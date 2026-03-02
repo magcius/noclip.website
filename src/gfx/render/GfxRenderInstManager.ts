@@ -271,7 +271,7 @@ export class GfxRenderInst {
         for (let j = bindingDescriptor.uniformBufferBindings.length; j < bindingLayout.numUniformBuffers; j++)
             bindingDescriptor.uniformBufferBindings.push({ buffer: null!, byteSize: 0 });
         for (let j = bindingDescriptor.samplerBindings.length; j < bindingLayout.numSamplers; j++)
-            bindingDescriptor.samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
+            bindingDescriptor.samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: undefined });
     }
 
     /**
@@ -379,7 +379,7 @@ export class GfxRenderInst {
             if (binding === undefined || binding === null) {
                 dst.gfxTexture = null;
                 dst.gfxSampler = null;
-                dst.lateBinding = null;
+                dst.lateBinding = undefined;
                 continue;
             }
 
@@ -432,13 +432,13 @@ export class GfxRenderInst {
                         dst.gfxTexture = null;
                         dst.gfxSampler = null;
                     } else {
-                        assert(binding.lateBinding === null);
+                        assert(binding.lateBinding === undefined);
                         dst.gfxTexture = binding.gfxTexture;
                         if (binding.gfxSampler !== null)
                             dst.gfxSampler = binding.gfxSampler;
                     }
     
-                    dst.lateBinding = null;
+                    dst.lateBinding = undefined;
                 }
             }
         }

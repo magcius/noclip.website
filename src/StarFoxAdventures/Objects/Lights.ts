@@ -71,7 +71,7 @@ export class LGTProjecte extends SFAClass {
             this.texture = obj.world.resColl.texFetcher.getTexture(obj.world.renderCache, 0x5dc, false);
         else
             this.texture = obj.world.resColl.texFetcher.getTexture(obj.world.renderCache, texId, false);
-        console.log(`loaded projected light texture ${this.texture?.viewerTexture?.name}`);
+        console.log(`loaded projected light texture ${this.texture?.gfxTexture.ResourceName!}`);
 
         vec3.zero(scratchVec0);
         this.light = createPointLight(scratchVec0, color, refDistance, radius);

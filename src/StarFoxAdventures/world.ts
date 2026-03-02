@@ -274,8 +274,8 @@ class WorldRenderer extends SFARenderer {
     // XXX: for testing
     public loadTexture(id: number, useTex1: boolean = false) {
         const texture = this.world.resColl.texFetcher.getTexture(this.world.renderCache, id, useTex1);
-        if (texture !== null && texture.viewerTexture !== undefined)
-            console.log(`Loaded texture "${texture.viewerTexture.name}"`);
+        if (texture !== null)
+            console.log(`Loaded texture "${texture.gfxTexture.ResourceName!}"`);
         else
             console.log(`Failed to load texture`);
     }

@@ -190,7 +190,6 @@ export class LevelRenderer {
                     wrapS: GfxWrapMode.Clamp,
                     wrapT: GfxWrapMode.Clamp,
                 }),
-                lateBinding: null,
             }
         ]);
 

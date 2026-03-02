@@ -1,7 +1,3 @@
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { convertToCanvasData } from "../gfx/helpers/TextureConversionHelpers.js";
-import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
-import { assert } from "../util.js";
 
 interface DecodedSurfaceBase {
     width: number;
@@ -393,20 +389,5 @@ export function decompressBC(surface: DecodedSurfaceBC): DecodedSurfaceSW {
     case 'BC4':
     case 'BC5':
         return decompressBC45Surface(surface);
-    }
-}
-
-export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfaceSW) {
-    canvas.width = surface.width;
-    canvas.height = surface.height;
-
-    assert(surface.type === 'RGBA');
-    if (surface.flag === 'UNORM') {
-        convertToCanvasData(canvas, ArrayBufferSlice.fromView(surface.pixels), GfxFormat.U8_RGBA_NORM);
-    } else if (surface.flag === 'SRGB') {
-        // TODO(jstpierre): What to do with SRGB?
-        convertToCanvasData(canvas, ArrayBufferSlice.fromView(surface.pixels), GfxFormat.U8_RGBA_NORM);
-    } else if (surface.flag === 'SNORM') {
-        convertToCanvasData(canvas, ArrayBufferSlice.fromView(surface.pixels), GfxFormat.S8_RGBA_NORM);
     }
 }

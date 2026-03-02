@@ -17,7 +17,7 @@ import * as BUNDLE from "./bundle.js";
 import * as CHR from './chr.js';
 import * as IMG from './img.js';
 import * as MAP from './map.js';
-import { CHRRenderer, MAPRenderer, MDSInstance, fillSceneParamsDataOnTemplate, textureToCanvas } from './render.js';
+import { CHRRenderer, MAPRenderer, MDSInstance, fillSceneParamsDataOnTemplate } from './render.js';
 import * as SINFO from "./sceneInfo.js";
 import * as STB from "./stb.js";
 
@@ -104,7 +104,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 
@@ -207,7 +207,6 @@ class SceneDesc implements Viewer.SceneDesc {
         const texNameToTextureData = new Map<string, IMG.TextureData>();
         const renderer = new DQ8Renderer(gfxDevice, fakeTextureHolder, this, texNameToTextureData);
         const cache = renderer.getRenderCache();
-        const canvasTexMap = new Map<string, boolean>();
         const chrMap = new Map<string, CHR.CHR>();
         const chrs: CHR.CHR[] = [];
         const stbs: (STB.STB | null)[] = [];
@@ -326,33 +325,18 @@ class SceneDesc implements Viewer.SceneDesc {
                 chrDayPeriodFlags.push(map.chrDayPeriodFlags[i]);
                 chrProgressFlags.push(null);
             }
-            if (map.img !== null) {
-                for (let i = 0; i < map.img.textures.length; i++) {
-                    const imgTex = map.img.textures[i];
-                    if (!canvasTexMap.has(imgTex.name)) {
-                        canvasTexMap.set(imgTex.name, true);
-                        viewerTextures.push(textureToCanvas(imgTex));
-                    }
-                }
-            }
             for (const [k, v] of map.textureDataMap) {
                 if (texNameToTextureData.has(k))
                     throw "already there";
                 texNameToTextureData.set(k, v);
+                viewerTextures.push({ gfxTexture: v.texture });
             }
             for (let j = 0; j < map.skies.length; j++) {
                 const sky = map.skies[j];
-                if (sky.img !== null) {
-                    for (let i = 0; i < sky.img.textures.length; i++) {
-                        const imgTex = sky.img.textures[i];
-                        if (!canvasTexMap.has(imgTex.name)) {
-                            canvasTexMap.set(imgTex.name, true);
-                            viewerTextures.push(textureToCanvas(imgTex));
-                        }
-                    }
-                }
-                for (const [k, v] of sky.textureDataMap)
+                for (const [k, v] of sky.textureDataMap) {
                     texNameToTextureData.set(k, v);
+                    viewerTextures.push({ gfxTexture: v.texture });
+                }
             }
             renderer.MAPRenderers.push(new MAPRenderer(cache, [map]));
 
@@ -362,17 +346,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
         for (let j = 0; j < chrs.length; j++) {
             const chrImg = chrs[j].img;
-            if (chrImg !== null) {
-                for (let i = 0; i < chrImg.textures.length; i++) {
-                    const imgTex = chrImg.textures[i];
-                    if (!canvasTexMap.has(imgTex.name)) {
-                        canvasTexMap.set(imgTex.name, true);
-                        viewerTextures.push(textureToCanvas(imgTex));
-                    }
-                }
-            }
-            for (const [k, v] of chrs[j].textureDataMap)
+            for (const [k, v] of chrs[j].textureDataMap) {
                 texNameToTextureData.set(chrs[j].name + k, v);
+                viewerTextures.push({ gfxTexture: v.texture });
+            }
         }
         renderer.CHRRenderers.push(new CHRRenderer(renderer.sceneInfo, cache, chrs, chrTransforms, chrEulerRotations, chrNPCDayPeriods, chrDayPeriodFlags, stbs, chrProgressFlags));
 

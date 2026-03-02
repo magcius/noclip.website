@@ -10,8 +10,6 @@ import { LevelRenderer } from "./render.js";
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 
 const CLEAR_COLORS: number[][] = [ // hardcode to approx fog colors for now
@@ -45,7 +43,6 @@ class CasperRenderer implements SceneGfx {
         for (const [name, texture] of textures.entries()) {
             viewerTextures.push(convertToViewerTexture(name, texture));
         }
-        viewerTextures.sort(function(a, b) { return a.name < b.name ? -1 : 1 });
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -77,7 +74,7 @@ class CasperRenderer implements SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 
@@ -169,12 +166,11 @@ async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, level:
 }
 
 function convertToViewerTexture(name: string, texture: Texture): ViewerTexture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.rgba), texture.width, texture.height);
-    canvas.title = name;
     const extraInfo = new Map<string, string>();
+    extraInfo.set("Name", `${name}`);
     extraInfo.set("Has Alpha", `${texture.hasAlpha}`);
     extraInfo.set("Bit Depth", texture.bitDepth.toString());
-    return { name, surfaces: [canvas], extraInfo };
+    return { gfxTexture: texture.gfxTexture, extraInfo };
 }
 
 const id = "CasperSD";

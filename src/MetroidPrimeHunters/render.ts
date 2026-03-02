@@ -15,20 +15,8 @@ import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { MPHbin } from "./mph_binModel.js";
 import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { White, colorNewCopy } from "../Color.js";
-
-function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), bmdTex.width, bmdTex.height);
-    canvas.title = name;
-
-    const surfaces = [ canvas ];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatName(bmdTex.format));
-    return { name, surfaces, extraInfo };
-}
 
 function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
     if (flip)
@@ -136,7 +124,9 @@ class MaterialInstance {
 
         device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.viewerTextures.push(textureToCanvas(texture, pixels, fullTextureName));
+        const extraInfo = new Map<string, string>();
+        extraInfo.set('Format', getFormatName(texture.format));
+        this.viewerTextures.push({ gfxTexture, extraInfo });
     }
 
     public setOnRenderInst(template: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {

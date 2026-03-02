@@ -1,23 +1,21 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
-import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin.js";
-import { DeviceProgram } from "../Program.js";
-import * as Viewer from "../viewer.js";
 import { ReadonlyMat4, mat4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { nArray, assert } from "../util.js";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GSAlphaCompareMode, GSAlphaFailMode, GSDepthCompareMode, GSPixelStorageFormat, GSTextureFilter, GSTextureFunction, psmToString } from "../Common/PS2/GS.js";
 import { AABB } from "../Geometry.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { fillColor, fillMatrix4x2, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { assert, nArray } from "../util.js";
+import * as Viewer from "../viewer.js";
+import { BINModel, BINModelPart, BINModelSector, BINTexture, GSConfiguration } from "./bin.js";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -385,12 +383,16 @@ class BINTextureData {
 
             if (pixels !== 'framebuffer') {
                 const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-                device.setResourceName(gfxTexture, texture.name);
+                device.setResourceName(gfxTexture, `${texture.name}/${i}`);
 
                 device.uploadTextureData(gfxTexture, 0, [pixels]);
                 this.gfxTexture[i] = gfxTexture;
-    
-                this.viewerTexture[i] = textureToCanvas(texture, `${texture.name}/${i}`, pixels);
+
+                const extraInfo = new Map<string, string>();
+                const psm: GSPixelStorageFormat = (texture.tex0_data0 >>> 20) & 0x3F;
+                extraInfo.set('Format', psmToString(psm));
+
+                this.viewerTexture[i] = { gfxTexture, extraInfo };
             }
         }
     }
@@ -430,17 +432,4 @@ export class BINModelSectorData {
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
     }
-}
-
-function textureToCanvas(texture: BINTexture, name: string, pixels: Uint8Array): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), texture.width, texture.height);
-    canvas.title = name;
-
-    const surfaces = [canvas];
-
-    const extraInfo = new Map<string, string>();
-    const psm: GSPixelStorageFormat = (texture.tex0_data0 >>> 20) & 0x3F;
-    extraInfo.set('Format', psmToString(psm));
-
-    return { name: name, surfaces, extraInfo };
 }

@@ -1301,7 +1301,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentRenderPassDescriptor = descriptor;
 
         const { colorAttachments, depthStencilAttachment } = descriptor;
-        this._setRenderPassParametersBegin(colorAttachments.length);
+        this._setRenderPassParametersBegin(colorAttachments);
         for (let i = 0; i < colorAttachments.length; i++)
             this._setRenderPassParametersColor(i, colorAttachments[i]);
         this._setRenderPassParametersDepthStencil(depthStencilAttachment);
@@ -1385,7 +1385,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     }
 
-    public copyCanvasToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement): void {
+    public copyExternalImageToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement | ImageBitmap): void {
         const gl = this.gl;
 
         const dst = dst_ as GfxTextureP_GL;
@@ -1397,7 +1397,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_format = this.translateTextureFormat(dst.pixelFormat);
         const gl_type = this.translateTextureType(dst.pixelFormat);
 
-        gl.texSubImage3D(gl_target, 0, 0, 0, dstZ, dst.width, dst.height, 1, gl_format, gl_type, src);
+        if (dst.dimension === GfxTextureDimension.n2D) {
+            assert(dstZ === 0);
+            gl.texSubImage2D(gl_target, 0, 0, 0, dst.width, dst.height, gl_format, gl_type, src);
+        } else if (dst.dimension === GfxTextureDimension.Cube) {
+            const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (dstZ % 6);
+            gl.texSubImage2D(face_target, 0, 0, 0, dst.width, dst.height, gl_format, gl_type, src);
+        } else if (dst.dimension === GfxTextureDimension.n3D || dst.dimension === GfxTextureDimension.n2DArray) {
+            gl.texSubImage3D(gl_target, 0, 0, 0, dstZ, dst.width, dst.height, 1, gl_format, gl_type, src);
+        }
     }
 
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
@@ -1861,12 +1869,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentSampleCount = sampleCount;
     }
 
-    private _setRenderPassParametersBegin(numColorAttachments: number): void {
+    private _setRenderPassParametersBegin(colorAttachments: (GfxRenderPassAttachmentColor | null)[]): void {
         const gl = this.gl;
+
+        if (colorAttachments.length === 1 && (colorAttachments[0]?.renderTarget as GfxRenderTargetP_GL).gfxTexture  === this._scTexture) {
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._scPlatformFramebuffer);
+            return;
+        }
 
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._renderPassDrawFramebuffer);
         gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
-        for (let i = numColorAttachments; i < this._currentColorAttachment.length; i++) {
+        for (let i = colorAttachments.length; i < this._currentColorAttachment.length; i++) {
             const attachment = this._currentColorAttachment[i];
             if (!attachment)
                 continue;
@@ -1876,7 +1889,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
             this._currentColorAttachment[i] = null;
         }
-        this._currentColorAttachment.length = numColorAttachments;
+        this._currentColorAttachment.length = colorAttachments.length;
     }
 
     private _setRenderPassParametersColor(i: number, passAttachment: GfxRenderPassAttachmentColor | null): void {

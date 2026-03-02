@@ -170,7 +170,7 @@ export interface GfxBufferBinding {
 export interface GfxSamplerBinding {
     gfxTexture: GfxTexture | null;
     gfxSampler: GfxSampler | null;
-    lateBinding: string | null;
+    lateBinding?: string;
 }
 
 export enum GfxSamplerFormatKind {
@@ -453,7 +453,7 @@ export interface GfxDevice {
 
     // Copying.
     copySubTexture2D(dst: GfxTexture, dstX: number, dstY: number, src: GfxTexture, srcX: number, srcY: number): void;
-    copyCanvasToTexture(dst: GfxTexture, dstZ: number, src: HTMLCanvasElement): void;
+    copyExternalImageToTexture(dst: GfxTexture, dstZ: number, src: HTMLCanvasElement | ImageBitmap): void;
 
     // Data submission
     zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void;

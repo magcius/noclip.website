@@ -1,9 +1,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import { decode as tifDecode } from "tiff";
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { FakeTextureHolder } from "../TextureHolder.js";
-import { align } from "../util.js";
 import { SCX } from "./scx/types.js";
 import { SceneNode, Texture } from "./types.js";
 
@@ -57,19 +55,10 @@ export const decodeImage = async (path: string, imageBytes: ArrayBufferLike): Pr
     return null;
 };
 
-export const createTextureHolder = (textures: Texture[]) =>
-    new FakeTextureHolder(
-        textures.map((texture) => {
-            const { path: name, rgba8, width, height } = texture;
-            const canvas = document.createElement("canvas");
-            [canvas.width, canvas.height] = [width, height];
-            const ctx = canvas.getContext("2d")!;
-            const imageData = ctx.createImageData(width, height);
-            imageData.data.set(rgba8);
-            ctx.putImageData(imageData, 0, 0);
-            return { name, surfaces: [canvas] };
-        }),
-    );
+export const createTextureHolder = (textures: Texture[]) => {
+    const gfxTextures = textures.map((texture) => texture.gfxTexture).filter((gfxTexture) => gfxTexture !== undefined);
+    return new FakeTextureHolder(gfxTextures.map((gfxTexture) => { return { gfxTexture }; }));
+}
 
 export const cloneTransform = (transform: Partial<SCX.Transform>): SCX.Transform => ({
     trans: vec3.clone(transform.trans ?? vec3.create()),

@@ -513,7 +513,7 @@ export default class SandPendulum extends Simulation {
         const sand = template.mapUniformBufferF32(SandProgram.ub_SandParams);
         offset += fillVec4(sand, offset, ...(this.lastCoord as [number, number]), ...(this.coord as [number, number]));
         offset += fillVec4(sand, offset, this.fade, this.numParticles);
-        template.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.originalSandTexture.gfxTexture!, gfxSampler: this.sampler, lateBinding: null }]);
+        template.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.originalSandTexture.gfxTexture!, gfxSampler: this.sampler }]);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexAttributes, this.indexBufferDescriptor);

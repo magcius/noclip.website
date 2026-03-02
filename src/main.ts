@@ -3,6 +3,7 @@
 
 import { Viewer, SceneGfx, InitErrorCode, makeErrorUI, resizeCanvas, ViewerUpdateInfo, initializeViewerWebGL2, initializeViewerWebGPU } from './viewer.js';
 
+import * as Scenes_Example from './Example/Scenes.js';
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes.js';
 import * as Scenes_ZeldaTwilightPrincess from './ZeldaTwilightPrincess/Main.js';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes.js';
@@ -107,6 +108,7 @@ import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
 import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
 import * as Scenes_Spyro1 from './Spyro1/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
+import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
@@ -134,6 +136,9 @@ import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
+    "Development",
+    Scenes_Example.sceneGroup,
+
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
@@ -254,6 +259,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_Spyro1.sceneGroup,
+    Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
 ];
 
 enum SaveStatesAction {
