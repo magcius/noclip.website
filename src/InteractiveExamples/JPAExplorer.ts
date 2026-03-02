@@ -506,7 +506,7 @@ export class Explorer implements SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 const opaqueSceneTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
-                this.indirectList.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null, lateBinding: null });
+                this.indirectList.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null });
                 this.indirectList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
@@ -514,7 +514,7 @@ export class Explorer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
     }
 
     public destroy(device: GfxDevice) {

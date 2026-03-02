@@ -4,8 +4,9 @@ import * as GX from '../../gx/gx_enum.js';
 import { assert } from "../../util.js";
 import { GfxSampler, GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy, GXTextureMapping, GXViewerTexture } from "../../gx/gx_render.js";
+import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy, GXTextureMapping } from "../../gx/gx_render.js";
 import { calcMipChain, TextureInputGX } from "../../gx/gx_texture.js";
+import * as Viewer from "../../viewer.js";
 
 export interface BTI_Texture extends TextureInputGX {
     wrapS: GX.WrapMode;
@@ -93,7 +94,7 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampl
 export class BTIData {
     private gfxSampler: GfxSampler;
     private gfxTexture: GfxTexture;
-    public viewerTexture: GXViewerTexture;
+    public viewerTexture: Viewer.Texture;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public btiTexture: BTI_Texture) {
         this.gfxSampler = translateSampler(device, cache, btiTexture);
@@ -104,7 +105,7 @@ export class BTIData {
     }
 
     public fillTextureMapping(m: GXTextureMapping): void {
-        m.lateBinding = null;
+        m.lateBinding = undefined;
         m.gfxTexture = this.gfxTexture;
         m.gfxSampler = this.gfxSampler;
         m.lodBias = this.btiTexture.lodBias;

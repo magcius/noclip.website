@@ -40,7 +40,7 @@ class EmptyClearScene implements Viewer.SceneGfx {
 
         builder.resolveRenderTargetToExternalTexture(mainColorID, viewerInput.onscreenTexture);
 
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
     }
 
     public destroy(device: GfxDevice): void {

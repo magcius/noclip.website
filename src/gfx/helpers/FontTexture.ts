@@ -68,7 +68,7 @@ export class FontTexture {
             ctx.strokeText(char, extra, extra);
             ctx.fillText(char, extra, extra);
 
-            device.copyCanvasToTexture(this.gfxTexture, i, canvas);
+            device.copyExternalImageToTexture(this.gfxTexture, i, canvas);
         }
     }
 

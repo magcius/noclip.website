@@ -1073,7 +1073,7 @@ class dDlst_shadowControl_c {
             pass.exec((passRenderer, scope) => {
                 globals.camera.applyScissor(passRenderer);
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler, lateBinding: null });
+                globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler });
                 globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
@@ -1088,8 +1088,8 @@ class dDlst_shadowControl_c {
                 pass.exec((passRenderer, scope) => {
                     globals.camera.applyScissor(passRenderer);
                     const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                    this.realVolumeInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler, lateBinding: null });
-                    this.realVolumeInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: this.shadowAtlas, gfxSampler: this.cache.linearSampler, lateBinding: null });
+                    this.realVolumeInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler });
+                    this.realVolumeInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: this.shadowAtlas, gfxSampler: this.cache.linearSampler });
                     this.realVolumeInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 });
             });

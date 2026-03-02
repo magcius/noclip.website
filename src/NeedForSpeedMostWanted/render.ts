@@ -290,7 +290,7 @@ export class NfsRenderer implements SceneGfx {
 
         this.renderHelper.prepareToRender();
 
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
 
         viewerInput.debugConsole.addInfoLine(`Region ID: ${this.activeRegion.id}`);

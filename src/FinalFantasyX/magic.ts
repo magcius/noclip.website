@@ -2267,7 +2267,6 @@ export class MagicSceneRenderer implements SceneGfx {
             this.textureData.push(data);
             this.textureHolder.viewerTextures.push(data.viewerTexture);
         }
-        this.textureHolder.viewerTextures.sort((a, b) => a.name.localeCompare(b.name));
         const data = new ParticleData(parsed, device, cache, this.textureData);
         const dummy = new ActorObj({actorResources: new Map()} as LevelObjectHolder, 0);
         if (parsed.magicProgram && parsed.behaviors.length > 1 && desc.layout !== "vars") {
@@ -2397,7 +2396,7 @@ export class MagicSceneRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInsts.reset();
     }
 

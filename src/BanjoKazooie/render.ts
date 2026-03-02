@@ -1,28 +1,24 @@
-import * as Viewer from '../viewer.js';
-import * as RDP from '../Common/N64/RDP.js';
-import { DeviceProgram } from "../Program.js";
-import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP.js';
-import { getImageFormatString, Vertex, DrawCall, RSP_Geometry, RSPSharedOutput, translateCullMode } from "./f3dex.js";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { assert, nArray, assertExists } from '../util.js';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
-import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
+import { mat4, vec2, vec3, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
-import { TextureMapping } from '../TextureHolder.js';
-import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { TextFilt } from '../Common/N64/Image.js';
-import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo.js';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix, calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers.js';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook.js';
+import * as RDP from '../Common/N64/RDP.js';
+import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { CalcBillboardFlags, calcBillboardMatrix, clamp, lerp, MathConstants, scaleMatrix, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from '../TextureHolder.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { AABB } from '../Geometry.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInstManager, setSortKeyDepth, setSortKeyDepthKey } from '../gfx/render/GfxRenderInstManager.js';
+import { assert, assertExists, nArray } from '../util.js';
+import * as Viewer from '../viewer.js';
+import { DrawCall, RSP_Geometry, RSPSharedOutput, translateCullMode, Vertex } from "./f3dex.js";
+import { Flipbook, FlipbookMode, LoopMode, MirrorMode, ReverseMode } from './flipbook.js';
+import { AnimationSetup, Bone, GeoFlags, Geometry, GeoNode, isSelector, isSorter, TextureAnimationSetup, VertexAnimationEffect, VertexEffectType } from './geo.js';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -347,16 +343,6 @@ ${this.generateAlphaTest()}
 }
 `;
     }
-}
-
-export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
-    canvas.title = texture.name;
-
-    const surfaces = [ canvas ];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
-    return { name: texture.name, surfaces, extraInfo };
 }
 
 function makeVertexBufferData(v: Vertex[]): Float32Array {

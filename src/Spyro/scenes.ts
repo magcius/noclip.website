@@ -1,9 +1,9 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
-import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { parseTextures, buildLevel, buildSkybox, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
-import { LevelRenderer, SkyboxRenderer, convertToViewerTexture } from "./render.js"
+import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
@@ -44,18 +44,24 @@ Nice to have
 */
 
 class SpyroRenderer implements SceneGfx {
+    public textureHolder: TextureHolder;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox, public textureHolder: TextureHolder, private mobyInstances: MobyInstance[]) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox, private mobyInstances: MobyInstance[]) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
         this.levelRenderer = new LevelRenderer(cache, level, this.mobyInstances);
         this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
+        const viewerTextures = [];
+        for (const t of this.levelRenderer.textures) {
+            viewerTextures.push({gfxTexture: t});
+        }
+        this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -87,7 +93,7 @@ class SpyroRenderer implements SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 
@@ -141,13 +147,7 @@ class SpyroScene implements SceneDesc {
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const viewerTextures: Texture[] = [];
-        for (let i = 0; i < textures.tiles.length; i++) {
-            const rgba = textures.colors[i];
-            viewerTextures.push(convertToViewerTexture(i, rgba));
-        }
-        const textureHolder = new FakeTextureHolder(viewerTextures);
-        return new SpyroRenderer(device, level, skybox, textureHolder, mobys);
+        return new SpyroRenderer(device, level, skybox, mobys);
     }
 }
 
@@ -169,13 +169,7 @@ class SpyroScene2 implements SceneDesc {
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const viewerTextures: Texture[] = [];
-        for (let i = 0; i < textures.tiles.length; i++) {
-            const rgba = textures.colors[i];
-            viewerTextures.push(convertToViewerTexture(i, rgba));
-        }
-        const textureHolder = new FakeTextureHolder(viewerTextures);
-        return new SpyroRenderer(device, level, skybox, textureHolder, mobys);
+        return new SpyroRenderer(device, level, skybox, mobys);
     }
 }
 
@@ -203,13 +197,7 @@ class SpyroScene3 implements SceneDesc {
         const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
         const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        const viewerTextures: Texture[] = [];
-        for (let i = 0; i < textures.tiles.length; i++) {
-            const rgba = textures.colors[i];
-            viewerTextures.push(convertToViewerTexture(i, rgba));
-        }
-        const textureHolder = new FakeTextureHolder(viewerTextures);
-        return new SpyroRenderer(device, level, skybox, textureHolder, mobys);
+        return new SpyroRenderer(device, level, skybox, mobys);
     }
 }
 

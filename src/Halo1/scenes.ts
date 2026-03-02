@@ -911,7 +911,6 @@ class MaterialRender_TransparencyWater {
     public visible = true;
 
     constructor(private mgr: HaloSceneManager, textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparentWater, fogEnabled: boolean) {
-        console.log('oh')
         const device = cache.device;
         this.rippleTexture = device.createTexture({
             pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -2015,7 +2014,7 @@ class HaloScene implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

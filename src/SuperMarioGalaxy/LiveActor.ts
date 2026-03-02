@@ -7,7 +7,6 @@ import { GfxDevice, GfxFormat } from "../gfx/platform/GfxPlatform.js";
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from "../gx/gx_displaylist.js";
 import { calcEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix, Mat4Identity } from "../MathHelpers.js";
 import { align, assertExists, fallback, nArray, nullify } from "../util.js";
-import * as Viewer from '../viewer.js';
 import { calcGravity, connectToScene, invalidateCollisionPartsForActor, isBckExist, isBckPlaying, isBpkExist, isBpkPlaying, isBrkExist, isBrkPlaying, isBtkExist, isBtkPlaying, isBtpExist, isBtpPlaying, isBvaExist, isBvaPlaying, resetAllCollisionMtx, startBck, startBpk, startBrk, startBtk, startBtp, startBva, validateCollisionPartsForActor } from "./ActorUtil.js";
 import { BckCtrl, BrkPlayer, BtkPlayer, BtpPlayer, BvaPlayer, XanimePlayer } from "./Animation.js";
 import { Binder, CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, invalidateCollisionParts, setCollisionMtx } from "./Collision.js";
@@ -24,10 +23,11 @@ import { Spine } from "./Spine.js";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch.js";
 import * as GX from '../gx/gx_enum.js';
 import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeMtxType, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { MaterialParams, DrawParams, GXViewerTexture } from "../gx/gx_render.js";
+import { MaterialParams, DrawParams } from "../gx/gx_render.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive.js";
 import { GX_Program } from "../gx/gx_material.js";
+import * as Viewer from "../viewer.js";
 
 class ActorAnimDataInfo {
     public Name: string;
@@ -317,7 +317,7 @@ export class ResourceHolder {
     public brkTable = new Map<string, TRK1>();
     public bvaTable = new Map<string, VAF1>();
     public banmtTable = new Map<string, BckCtrl>();
-    public viewerTextures: GXViewerTexture[] = [];
+    public viewerTextures: Viewer.Texture[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, objectName: string, public arc: JKRArchive) {
         initEachResTable(this.arc, this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
@@ -325,7 +325,7 @@ export class ResourceHolder {
             patchBMD(bmd);
             const modelData = new J3DModelData(device, cache, bmd, file.name);
             patchModelData(modelData);
-            this.addTEX1(modelData.modelMaterialData.tex1Data, objectName, filenameWithoutExtension);
+            this.addTEX1(device, modelData.modelMaterialData.tex1Data, objectName, filenameWithoutExtension);
             return modelData;
         });
 
@@ -347,7 +347,7 @@ export class ResourceHolder {
         initEachResTable(this.arc, this.banmtTable, ['.banmt'], (file) => BckCtrl.parse(file.buffer));
     }
 
-    private addTEX1(tex1Data: TEX1Data | null, objectName: string, filenameWithoutExtension: string): void {
+    private addTEX1(device: GfxDevice, tex1Data: TEX1Data | null, objectName: string, filenameWithoutExtension: string): void {
         if (tex1Data === null)
             return;
 
@@ -356,7 +356,8 @@ export class ResourceHolder {
             const texture = tex1Data.viewerTextures[i];
             if (texture === null)
                 continue;
-            texture.name = `${prefix}/${texture.name}`;
+
+            device.setResourceName(texture.gfxTexture, `${prefix}/${texture.gfxTexture.ResourceName}`);
             this.viewerTextures.push(texture);
         }
     }

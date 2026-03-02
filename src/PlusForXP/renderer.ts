@@ -265,7 +265,7 @@ export default class Renderer implements SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
         this.prepareToRender(viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.simulation?.renderReset();
         this.renderInstListMain.reset();
     }
@@ -357,12 +357,10 @@ export default class Renderer implements SceneGfx {
                     {
                         gfxTexture: mesh.material.gfxTexture ?? this.world.defaultTexture,
                         gfxSampler: this.sampler,
-                        lateBinding: null,
                     },
                     {
                         gfxTexture: envMap.texture,
                         gfxSampler: this.sampler,
-                        lateBinding: null,
                     },
                 ]);
 

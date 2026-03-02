@@ -473,7 +473,7 @@ export class RwGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.viewerInput.onscreenTexture);
         
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
 
         this.renderInstList.reset();
     }

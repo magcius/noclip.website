@@ -1,40 +1,28 @@
 
+import { mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import * as BYML from '../byml.js';
+import { CameraController } from "../Camera.js";
+import { Magenta, White } from "../Color.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, hexzero0x, readString } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import * as AFS from './AFS.js';
-import * as BYML from '../byml.js';
-import * as PVRT from "./PVRT.js";
 import * as Ninja from "./Ninja.js";
+import * as PVRT from "./PVRT.js";
 import { NjsActionData, NjsActionInstance } from "./Render.js";
-import { CameraController } from "../Camera.js";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { mat4 } from "gl-matrix";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { DataFetcher } from "../DataFetcher.js";
-import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
-import { Cyan, Magenta, Yellow , White} from "../Color.js";
-import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
 const pathBase = `JetSetRadio`;
-
-function surfaceToCanvas(textureLevel: PVRT.PVR_TextureLevel): HTMLCanvasElement {
-    return convertToCanvas(ArrayBufferSlice.fromView(textureLevel.data), textureLevel.width, textureLevel.height);
-}
-
-function textureToCanvas(texture: PVRT.PVR_Texture) {
-    const surfaces = texture.levels.map((textureLevel) => surfaceToCanvas(textureLevel));
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', PVRT.getFormatName(texture.format));
-    return { name: texture.name, surfaces, extraInfo };
-}
 
 export class PVRTextureHolder extends TextureHolder {
     public texMappingMagenta = new TextureMapping();
@@ -61,9 +49,8 @@ export class PVRTextureHolder extends TextureHolder {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
         device.setResourceName(gfxTexture, textureEntry.name);
         device.uploadTextureData(gfxTexture, 0, textureEntry.levels.reverse().map((level) => level.data));
-        const viewerTexture = textureToCanvas(textureEntry);
         this.gfxTextures.push(gfxTexture);
-        this.viewerTextures.push(viewerTexture);
+        this.viewerTextures.push({ gfxTexture });
         this.textureNames.push(textureEntry.name);
     }
 }
@@ -111,7 +98,7 @@ class JetSetRadioRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

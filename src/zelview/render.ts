@@ -15,18 +15,7 @@ import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorH
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
 import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
-
-export function textureToCanvas(texture: Texture): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
-    canvas.title = texture.name;
-    const surfaces = [ canvas ];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
-    return { name: texture.name, surfaces, extraInfo };
-}
 
 enum TexCM {
     WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,

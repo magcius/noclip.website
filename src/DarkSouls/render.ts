@@ -2982,7 +2982,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.popTemplate();
 
         this.prepareToRender(viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
 
         this.renderContext.reset();
     }

@@ -6,7 +6,6 @@ import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 
 import * as BNTX from './bntx.js';
-import { surfaceToCanvas } from '../Common/bc_texture.js';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture.js';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres.js';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -46,7 +45,6 @@ export class BRTITextureHolder extends TextureHolder {
             return;
 
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.textureDataArray[0].mipBuffers.length));
-        const canvases: HTMLCanvasElement[] = [];
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
 
@@ -62,17 +60,13 @@ export class BRTITextureHolder extends TextureHolder {
                 const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
                 const rgbaPixels = rgbaTexture.pixels;
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-    
-                const canvas = document.createElement('canvas');
-                surfaceToCanvas(canvas, rgbaTexture);
-                canvases.push(canvas);
             });
         }
 
         const extraInfo = new Map<string, string>();
         extraInfo.set('Format', getImageFormatString(textureEntry.imageFormat));
 
-        const viewerTexture: Viewer.Texture = { name: textureEntry.name, surfaces: canvases, extraInfo };
+        const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
         this.gfxTextures.push(gfxTexture);
         this.viewerTextures.push(viewerTexture);
         this.textureNames.push(textureEntry.name);
@@ -874,7 +868,7 @@ export class BasicFRESRenderer {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

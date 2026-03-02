@@ -1,7 +1,11 @@
 
-import { GfxColor, GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../platform/GfxPlatform.js";
+import { GfxColor, GfxDevice, GfxFormat, GfxTexture, GfxTextureUsage, makeTextureDescriptor2D } from "../platform/GfxPlatform.js";
 import { getFormatBlockSizeInTexels, getFormatByteSizePerBlock } from "../platform/GfxPlatformFormat.js";
 
+/**
+ * Creates a new {@type GfxTexture} containing the given {@param color}; the texture is 1x1, is of format
+ * {@see GfxFormat.U8_RGBA_NORM}, and contains only one mipmap.
+ */
 export function makeSolidColorTexture2D(device: GfxDevice, color: GfxColor): GfxTexture {
     const tex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
     const data = new Uint8Array(4);
@@ -10,6 +14,18 @@ export function makeSolidColorTexture2D(device: GfxDevice, color: GfxColor): Gfx
     data[2] = color.b * 0xFF;
     data[3] = color.a * 0xFF;
     device.uploadTextureData(tex, 0, [data]);
+    return tex;
+}
+
+/**
+ * Creates a new {@type GfxTexture} for the given {@param imageBitmap}; the returned texture is currently
+ * of format {@see GfxFormat.U8_RGBA_NORM}, and contains only one mipmap.
+ */
+export function makeImageBitmapTexture2D(device: GfxDevice, imageBitmap: ImageBitmap): GfxTexture {
+    const desc = makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageBitmap.width, imageBitmap.height, 1);
+    desc.usage |= GfxTextureUsage.RenderTarget;
+    const tex = device.createTexture(desc);
+    device.copyExternalImageToTexture(tex, 0, imageBitmap);
     return tex;
 }
 

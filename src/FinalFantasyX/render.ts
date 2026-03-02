@@ -13,8 +13,6 @@ import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareM
 import { AttachmentStateSimple, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { Vec3UnitZ, Vec3Zero, clamp, computeModelMatrixR, getMatrixTranslation, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { getPointHermite } from "../Spline.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Flipbook, ParticleGeometryEntry, TrailArgs, WaterArgs } from "./particle.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -2327,6 +2325,7 @@ export class ShadowRenderer {
 export class TextureData {
     public gfxTexture: GfxTexture;
     public viewerTexture: Viewer.Texture;
+    public extraInfo = new Map<string, string>();
 
     constructor(device: GfxDevice, public data: BIN.Texture) {
         const desc = makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, data.width, data.height, 1);
@@ -2336,21 +2335,11 @@ export class TextureData {
         device.uploadTextureData(gfxTexture, 0, [data.pixels]);
         this.gfxTexture = gfxTexture;
 
-        this.viewerTexture = textureToCanvas(data);
+        this.extraInfo.set('Format', psmToString(data.tex0.psm));
+        this.viewerTexture = this;
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
     }
-}
-
-function textureToCanvas(texture: BIN.Texture): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
-    canvas.title = texture.name;
-
-    const surfaces = [canvas];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', psmToString(texture.tex0.psm));
-
-    return { name: texture.name, surfaces, extraInfo };
 }

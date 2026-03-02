@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { FakeTextureHolder } from '../TextureHolder.js';
-import { KingdomHeartsRenderer, textureToCanvas } from './render.js';
+import { KingdomHeartsRenderer } from './render.js';
 import { SceneContext } from '../SceneBase.js';
 
 const pathBase = `KingdomHearts`;
@@ -18,33 +18,7 @@ export class KingdomHeartsSceneDesc implements Viewer.SceneDesc {
         const pathImg = `${pathBase}/${this.id}.img`;
         return Promise.all([dataFetcher.fetchData(pathBin), dataFetcher.fetchData(pathImg)]).then(([binBuffer, imgBuffer]) => {
             const bin = BIN.parse(binBuffer, imgBuffer);
-
-            const viewerTextures: Viewer.Texture[] = [];
-            for (let i = 0; i < bin.mapTextureBlocks.length; i++) {
-                for (let j = 0; j < bin.mapTextureBlocks[i].textures.length; j++) {
-                    viewerTextures.push(textureToCanvas(bin.mapTextureBlocks[i].textures[j]));
-                }
-            }
-            for (let i = 0; i < bin.sky0TextureBlocks.length; i++) {
-                for (let j = 0; j < bin.sky0TextureBlocks[i].textures.length; j++) {
-                    const texture = textureToCanvas(bin.sky0TextureBlocks[i].textures[j]);
-                    texture.name = `sky_0_${i}`;
-                    viewerTextures.push(texture);
-                }
-            }
-            for (let i = 0; i < bin.sky1TextureBlocks.length; i++) {
-                for (let j = 0; j < bin.sky1TextureBlocks[i].textures.length; j++) {
-                    const texture = textureToCanvas(bin.sky1TextureBlocks[i].textures[j]);
-                    texture.name = `sky_1_${i}`;
-                    viewerTextures.push(texture);
-                }
-            }
-            viewerTextures.sort(function(a, b) {
-                return a.name < b.name ? -1 : 1;
-            });
-            const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-
-            const renderer = new KingdomHeartsRenderer(device, fakeTextureHolder, bin);
+            const renderer = new KingdomHeartsRenderer(device, bin);
             return renderer;
         });
     }

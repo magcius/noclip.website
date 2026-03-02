@@ -109,9 +109,8 @@ class WarpedRenderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-
         this.prepareToRender(device, viewerInput);
-        this.globals.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.globals.renderInstListMain.reset();
         this.globals.renderInstListSkybox.reset();
 
@@ -243,7 +242,7 @@ class CrashWarpedScene implements SceneDesc {
             renderer.textureHolder.viewerTextures.push(data.viewerTexture);
         }
 
-        renderer.textureHolder.viewerTextures.sort((a: Texture, b: Texture) => a.name.localeCompare(b.name));
+        renderer.textureHolder.viewerTextures.sort((a: Texture, b: Texture) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         QuadListData.textureAnimator = new TextureAnimator([], [], [], renderer.textureData);
 
         const cache = renderer.globals.renderHelper.renderCache;

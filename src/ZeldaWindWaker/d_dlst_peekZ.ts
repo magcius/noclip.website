@@ -195,7 +195,7 @@ void main() {
                 }]);
                 renderInst.setDrawCount(3);
 
-                const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: resolvedDepthTexture, gfxSampler: this.depthSampler, lateBinding: null }];
+                const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: resolvedDepthTexture, gfxSampler: this.depthSampler }];
                 renderInst.setSamplerBindingsFromTextureMappings(samplerBindings);
 
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);

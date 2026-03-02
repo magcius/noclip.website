@@ -54,6 +54,7 @@ rust/target/
 
 data/*
 !data/.gitkeep
+!data/Examples/
 dist/
 
 .wireit

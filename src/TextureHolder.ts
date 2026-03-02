@@ -12,12 +12,12 @@ export interface TextureBase {
 export class TextureMapping {
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
-    public lateBinding: string | null = null;
+    public lateBinding: string | undefined = undefined;
 
     public reset(): void {
         this.gfxTexture = null;
         this.gfxSampler = null;
-        this.lateBinding = null;
+        this.lateBinding = undefined;
     }
 
     public copy(other: TextureMapping): void {
@@ -32,7 +32,7 @@ export class TextureHolder implements TextureListHolder {
     public gfxTextures: GfxTexture[] = [];
     public viewerTextures: Viewer.Texture[] = [];
     public _textureNames: string[] = [];
-    public onnewtextures: (() => void) | null = null;
+    public onnewtextures: (() => void) = (() => {});
 
     public get textureNames(): string[] {
         return this._textureNames;
@@ -67,6 +67,6 @@ export class FakeTextureHolder extends TextureHolder {
     }
 
     public override get textureNames(): string[] {
-        return this.viewerTextures.map((tex) => tex.name);
+        return this.viewerTextures.filter((tex) => tex.gfxTexture.ResourceName).map((tex) => tex.gfxTexture.ResourceName!);
     }
 }

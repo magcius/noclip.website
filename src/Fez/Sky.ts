@@ -258,7 +258,7 @@ export class SkyRenderer {
             renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.BACKGROUND + 2 + i);
 
             setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
-            renderInst.setSamplerBindings(0, [{ gfxTexture, gfxSampler: this.skyData.starsTextureMapping[0].gfxSampler, lateBinding: null }]);
+            renderInst.setSamplerBindings(0, [{ gfxTexture, gfxSampler: this.skyData.starsTextureMapping[0].gfxSampler }]);
 
             const view = viewerInput.camera.viewMatrix;
             const o = (Math.atan2(-view[2], view[0]) / MathConstants.TAU) * 4;

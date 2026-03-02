@@ -1155,7 +1155,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 colorRegisters.push(TransparentBlack);
         }
 
-        const indTexStages: GX_Material.IndTexStage[] = [];
         const indTexMatrices: Float32Array[] = [];
 
         const indirectEntryOffs = indirectOffs + i * 0x138;
@@ -1172,12 +1171,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 // SetIndTexOrder
                 const indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
                 const texCoordId: GX.TexCoordID = view.getUint8(indTexOrderOffs + 0x00);
-                const texture: GX.TexMapID = view.getUint8(indTexOrderOffs + 0x01);
+                const texMapID: GX.TexMapID = view.getUint8(indTexOrderOffs + 0x01);
                 // SetIndTexCoordScale
                 const indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
                 const scaleS: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x00);
                 const scaleT: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x01);
-                indTexStages.push({ texCoordId, texture, scaleS, scaleT });
+                mb.setIndTexOrder(j, texCoordId, texMapID);
+                mb.setIndTexScale(j, scaleS, scaleT);
                 // SetIndTexMatrix
                 const indTexMatrixOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + j * 0x1C;
                 const p00 = view.getFloat32(indTexMatrixOffs + 0x00);

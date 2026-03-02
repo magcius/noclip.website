@@ -1,41 +1,57 @@
 
 import * as RDP from '../Common/N64/RDP.js';
 
-import {
-    GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
-    GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor,
-    GfxBufferFrequencyHint,
-} from "../gfx/platform/GfxPlatform.js";
-import { SceneGfx, ViewerRenderInput, Texture } from "../viewer.js";
-import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, assert, hexzero, nArray } from "../util.js";
-import { decompress } from "../Common/Compression/MIO0.js";
-import { DeviceProgram } from "../Program.js";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { RSP_Geometry, TextureState, translateCullMode } from "../BanjoKazooie/f3dex.js";
+import { F3DEX_Program } from "../BanjoKazooie/render.js";
 import { CameraController } from "../Camera.js";
+import { colorNewFromRGBA } from '../Color.js';
+import { decompress } from "../Common/Compression/MIO0.js";
+import { ImageFormat, ImageSize, decodeTex_I4, decodeTex_I8, decodeTex_IA16, decodeTex_IA4, decodeTex_IA8, decodeTex_RGBA16, getImageFormatName, getImageSizeName } from "../Common/N64/Image.js";
+import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
+import { DataFetcher } from "../DataFetcher.js";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers.js";
-import { TextureState, RSP_Geometry, translateCullMode } from "../BanjoKazooie/f3dex.js";
-import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image.js";
+import { DeviceProgram } from "../Program.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { getCoeffHermite, getDerivativeCubic, getPointCubic, getPointHermite } from "../Spline.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { Endianness } from "../endian.js";
-import { DataFetcher } from "../DataFetcher.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { getCoeffHermite, getDerivativeCubic, getPointCubic, getPointHermite } from "../Spline.js";
-import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui.js";
-import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { F3DEX_Program } from "../BanjoKazooie/render.js";
-import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
-import { colorNewFromRGBA } from '../Color.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import {
+    GfxBindingLayoutDescriptor,
+    GfxBlendFactor, GfxBlendMode,
+    GfxBuffer,
+    GfxBufferFrequencyHint,
+    GfxBufferUsage,
+    GfxDevice,
+    GfxFormat,
+    GfxIndexBufferDescriptor,
+    GfxInputLayout,
+    GfxInputLayoutBufferDescriptor,
+    GfxMegaStateDescriptor,
+    GfxMipFilterMode,
+    GfxProgram,
+    GfxSampler,
+    GfxTexFilterMode,
+    GfxTexture,
+    GfxVertexAttributeDescriptor,
+    GfxVertexBufferDescriptor,
+    GfxVertexBufferFrequency,
+    GfxWrapMode,
+    makeTextureDescriptor2D,
+} from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, getSortKeyLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { COOL_BLUE_COLOR, Panel, SingleSelect, TIME_OF_DAY_ICON } from "../ui.js";
+import { assert, hexzero, nArray, readString } from "../util.js";
+import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1929,21 +1945,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
 ];
 
-function textureToCanvas(texture: UVTX): Texture {
-    const surfaces: HTMLCanvasElement[] = [];
-
-    for (let i = 0; i < texture.levels.length; i++) {
-        const level = texture.levels[i];
-        const canvas = convertToCanvas(ArrayBufferSlice.fromView(level.pixels), level.width, level.height);
-        surfaces.push(canvas);
-    }
-
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', `${getImageFormatName(texture.fmt)}${getImageSizeName(texture.siz)}`);
-
-    return { name: texture.name, extraInfo, surfaces };
-}
-
 class TextureData {
     public gfxTexture: GfxTexture;
     public gfxSampler: GfxSampler;
@@ -1968,7 +1969,10 @@ class TextureData {
             minLOD: 0, maxLOD: 0,
         });
 
-        this.viewerTexture = textureToCanvas(uvtx);
+        const extraInfo = new Map<string, string>();
+        extraInfo.set('Format', `${getImageFormatName(texture.fmt)}${getImageSizeName(texture.siz)}`);
+
+        this.viewerTexture = { gfxTexture: this.gfxTexture, extraInfo };
     }
 
     public fillTextureMapping(m: TextureMapping): void {
@@ -2921,7 +2925,7 @@ class Pilotwings64Renderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
         this.renderInstListSky.reset();
         this.renderInstListPost.reset();

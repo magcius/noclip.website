@@ -12,7 +12,6 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 class LevelProgram extends DeviceProgram {
@@ -123,18 +122,12 @@ const scratchViewNoTransform = mat4.create();
 const scratchClipFromWorldNoTransform = mat4.create();
 const MAX_TILES = 144;
 
-export function convertToViewerTexture(index: number, colors: Uint8Array): Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(colors), 32, 32);
-    const name = "tile_" + index.toString();
-    canvas.title = name;
-    return { name, surfaces: [canvas] };
-}
-
 export class LevelRenderer {
     public showMobys: boolean = false;
     public showLOD: boolean = false;
     public showTextures: boolean = true;
     public cullMode: GfxCullMode = GfxCullMode.None;
+    public textures: GfxTexture[] = [];
     private vertexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
@@ -146,7 +139,6 @@ export class LevelRenderer {
     private batchesTransparent: { tileIndex: number, indexOffset: number, indexCount: number }[] = [];
     private batchesLOD: { tileIndex: number, indexOffset: number, indexCount: number }[] = [];
     private inputLayout: GfxInputLayout;
-    private textures: GfxTexture[] = [];
     private tileCount: number;
     private gameNumber: number;
     private scrollFlags: Float32Array;
@@ -166,6 +158,7 @@ export class LevelRenderer {
                 dimension: GfxTextureDimension.n2D,
                 depthOrArrayLayers: 1
             });
+            device.setResourceName(texture, `tile_${i}`);
             device.uploadTextureData(texture, 0, [rgba]);
             this.textures[i] = texture;
         }
@@ -257,7 +250,7 @@ export class LevelRenderer {
                     });
                 }
                 inst.setMegaStateFlags(megaState);
-                inst.setSamplerBindingsFromTextureMappings([{ gfxTexture, gfxSampler, lateBinding: null }]);
+                inst.setSamplerBindingsFromTextureMappings([{ gfxTexture, gfxSampler }]);
                 inst.setVertexInput(this.inputLayout,
                     [
                         { buffer: this.vertexBuffer, byteOffset: 0 },

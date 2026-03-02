@@ -1,30 +1,29 @@
 
 // Common helpers for GX rendering.
 
-import { mat4, ReadonlyMat4 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
+import * as Viewer from '../viewer.js';
 import * as GX from './gx_enum.js';
 import * as GX_Material from './gx_material.js';
 import * as GX_Texture from './gx_texture.js';
-import * as Viewer from '../viewer.js';
 
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { TextureMapping } from '../TextureHolder.js';
 import { assert, nArray, setBitFlagEnabled } from '../util.js';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 
+import { Color, colorFromRGBA, colorNewCopy, TransparentBlack } from '../Color.js';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
-import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxTexture, GfxSampler } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color.js';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureListHolder } from '../ui.js';
 
 export enum ColorKind {
@@ -193,37 +192,9 @@ export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas
     , name);
 }
 
-export class GXViewerTexture implements Viewer.Texture {
-    public surfaces: HTMLCanvasElement[] = [];
-
-    constructor(public mipChain: GX_Texture.MipChain, public extraInfo: Map<string, string> | null = null, public name: string = mipChain.name) {
-    }
-
-    public activate(): Promise<void> {
-        assert(this.surfaces.length === 0);
-
-        const promises: Promise<void>[] = [];
-        for (let i = 0; i < this.mipChain.mipLevels.length; i++) {
-            const mipLevel = this.mipChain.mipLevels[i];
-
-            const canvas = document.createElement('canvas');
-            canvas.width = mipLevel.width;
-            canvas.height = mipLevel.height;
-            canvas.title = mipLevel.name;
-            this.surfaces.push(canvas);
-
-            promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
-                convertToCanvasData(canvas, ArrayBufferSlice.fromView(rgbaTexture.pixels));
-            }));
-        }
-
-        return Promise.all(promises) as any as Promise<void>;
-    }
-}
-
 interface LoadedTexture {
     gfxTexture: GfxTexture;
-    viewerTexture: GXViewerTexture;
+    viewerTexture: Viewer.Texture;
 }
 
 export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.MipChain): LoadedTexture {
@@ -241,10 +212,10 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
         }));
     }
 
-    const viewerExtraInfo = new Map<string, string>();
-    viewerExtraInfo.set("Format", GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));
+    const extraInfo = new Map<string, string>();
+    extraInfo.set("Format", GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));
 
-    const viewerTexture = new GXViewerTexture(mipChain, viewerExtraInfo);
+    const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
     return { gfxTexture, viewerTexture };
 }
 
@@ -300,10 +271,10 @@ interface TextureOverride {
 
 export class GXTextureHolder implements TextureListHolder {
     private textureOverrides = new Map<string, TextureOverride>();
-    public onnewtextures: (() => void) | null = null;
+    public onnewtextures: (() => void) = (() => {});
     public textureEntries: GX_Texture.TextureInputGX[] = [];
     public gfxTextures: GfxTexture[] = [];
-    public viewerTextures: GXViewerTexture[] = [];
+    public viewerTextures: Viewer.Texture[] = [];
 
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         this.textureOverrides.set(name, textureOverride);
@@ -318,10 +289,7 @@ export class GXTextureHolder implements TextureListHolder {
     }
 
     public async getViewerTexture(i: number): Promise<Viewer.Texture> {
-        const tex = this.viewerTextures[i];
-        if (tex.surfaces.length === 0)
-            await tex.activate();
-        return tex;
+        return this.viewerTextures[i];
     }
 
     public hasTexture(name: string): boolean {
@@ -342,8 +310,7 @@ export class GXTextureHolder implements TextureListHolder {
         this.viewerTextures.push(viewerTexture);
         this.gfxTextures.push(gfxTexture);
         this.textureEntries.push(texture);
-        if (this.onnewtextures !== null)
-            this.onnewtextures();
+        this.onnewtextures();
     }
 
     public fillTextureMapping(dst: GXTextureMapping, name: string): boolean {
@@ -736,7 +703,7 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

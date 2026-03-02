@@ -240,7 +240,7 @@ export class VTF {
     private versionMajor: number;
     private versionMinor: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean, public lateBinding: string | null = null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean, public lateBinding: string | undefined = undefined) {
         if (buffer === null)
             return;
 

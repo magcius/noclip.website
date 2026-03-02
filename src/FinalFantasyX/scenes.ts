@@ -165,7 +165,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
     constructor(public renderHelper: GfxRenderHelper, public levelObjects: LevelObjectHolder, public textureData: TextureData[], public modelData: Destroyable[], private shared: FFXShared) {
         for (let tex of textureData)
             this.textureHolder.viewerTextures.push(tex.viewerTexture);
-        this.textureHolder.viewerTextures.sort((a, b) => a.name.localeCompare(b.name));
+        this.textureHolder.viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
     }
 
     public adjustCameraController(c: CameraController) {
@@ -228,7 +228,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
         }
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

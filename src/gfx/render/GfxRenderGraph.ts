@@ -244,7 +244,7 @@ export interface GfxrPassScope {
      * {@see GfxrGraphBuilder::resolveRenderTargetPassAttachmentSlot}, or
      * {@see GfxrGraphBuilder::resolveRenderTargetToExternalTexture}.
      */
-    getResolveTextureForID(id: number): GfxTexture;
+    getResolveTextureForID(id: GfxrResolveTextureID): GfxTexture;
 
     /**
      * Retrieve the underlying texture resource for a given attachment slot {@param slot}. This is not
@@ -351,6 +351,11 @@ export interface GfxrGraphBuilder {
      */
     pushDebugGroup(name: string): void;
     popDebugGroup(): void;
+
+    /**
+     * Execute our render graph now that it's set up.
+     */
+    execute(): void;
 
     /**
      * Internal API.
@@ -516,7 +521,6 @@ function fillArray<T>(L: T[], n: number, v: T): void {
 
 export interface GfxrRenderGraph {
     newGraphBuilder(): GfxrGraphBuilder;
-    execute(builder: GfxrGraphBuilder): void;
     destroy(): void;
 }
 
@@ -543,8 +547,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         return this;
     }
 
-    public execute(builder: GfxrGraphBuilder): void {
-        assert(builder === this);
+    public execute(): void {
         const graph = assertExists(this.currentGraph);
         this.execGraph(graph);
         this.currentGraph = null;

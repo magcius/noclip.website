@@ -1,21 +1,19 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxTexture, makeTextureDescriptor2D, GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
+import { AttachmentStateSimple, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { fillMatrix4x2, fillMatrix4x3, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { CalcBillboardFlags, calcBillboardMatrix, getMatrixAxisX, getMatrixTranslation, invlerp, Mat4Identity, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { assertExists, nArray } from "../util.js";
 import * as Viewer from "../viewer.js";
 import * as BIN from "./bin.js";
-import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { fillMatrix4x2, fillMatrix4x3, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { AttachmentStateSimple, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { assert, assertExists, nArray } from "../util.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { CalcBillboardFlags, calcBillboardMatrix, getMatrixAxisX, getMatrixTranslation, invlerp, Mat4Identity, transformVec3Mat4w0 } from "../MathHelpers.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 export class WarpedProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
@@ -217,21 +215,12 @@ export class TextureData {
         device.uploadTextureData(gfxTexture, 0, [page.data]);
         this.gfxTexture = gfxTexture;
 
-        this.viewerTexture = textureToCanvas(page);
+        this.viewerTexture = this;
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
     }
-}
-
-function textureToCanvas(texture: BIN.TexturePage): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.data), texture.width, texture.height, GfxFormat.U8_RGBA_NORM);
-    canvas.title = texture.name;
-
-    const surfaces = [canvas];
-    const extraInfo = new Map<string, string>();
-    return { name: texture.name, surfaces, extraInfo };
 }
 
 const additiveBlend: Partial<AttachmentStateSimple> = {

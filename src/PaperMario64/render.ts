@@ -1,15 +1,15 @@
 
 import { mat4 } from "gl-matrix";
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { getImageFormatString } from "../BanjoKazooie/f3dex.js";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { TextFilt } from '../Common/N64/Image.js';
 import { translateCM } from '../Common/N64/RDP.js';
 import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
 import { AABB } from "../Geometry.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -21,8 +21,6 @@ import * as Viewer from '../viewer.js';
 import { RSPOutput, Vertex } from "./f3dex2.js";
 import { ModelTreeGroup, ModelTreeLeaf, ModelTreeNode, PropertyType } from "./map_shape.js";
 import * as Tex from './tex.js';
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -221,22 +219,6 @@ export class N64Data {
     }
 }
 
-function textureToCanvas(texture: Tex.Image): Viewer.Texture {
-    const surfaces: HTMLCanvasElement[] = [];
-
-    for (let i = 0; i < texture.levels.length; i++) {
-        const width = texture.width >>> i;
-        const height = texture.height >>> i;
-        const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.levels[i]), width, height);
-        surfaces.push(canvas);
-    }
-
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getImageFormatString(texture.format, texture.siz));
-
-    return { name: texture.name, extraInfo, surfaces };
-}
-
 export class PaperMario64TextureHolder extends TextureHolder {
     public addTextureArchive(device: GfxDevice, texArc: Tex.TextureArchive): void {
         for (let i = 0; i < texArc.textureEnvironments.length; i++) {
@@ -251,9 +233,12 @@ export class PaperMario64TextureHolder extends TextureHolder {
         device.setResourceName(gfxTexture, texture.name);
 
         device.uploadTextureData(gfxTexture, 0, texture.levels);
-
-        const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         this.gfxTextures.push(gfxTexture);
+
+        const extraInfo = new Map<string, string>();
+        extraInfo.set('Format', getImageFormatString(texture.format, texture.siz));
+        const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
+
         this.viewerTextures.push(viewerTexture);
         this.textureNames.push(texture.name);
     }

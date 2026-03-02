@@ -1,7 +1,6 @@
 
 import { mat2d, mat4 } from "gl-matrix";
 import AnimationController from "../AnimationController.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera.js";
 import { White, colorNewCopy } from "../Color.js";
 import { AABB } from "../Geometry.js";
@@ -11,7 +10,6 @@ import { Texture, getFormatName, parseTexImageParamWrapModeS, parseTexImageParam
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render.js';
 import { TextureMapping } from "../TextureHolder.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import { fillColor, fillMatrix3x2, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -19,14 +17,6 @@ import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaqu
 import { assertExists, nArray } from "../util.js";
 import * as Viewer from '../viewer.js';
 import { MDL0Material, MDL0Model, MDL0Node, MDL0Shape, PAT0, PAT0TexAnimator, SRT0, SRT0TexMtxAnimator, TEX0, TEX0Texture, bindPAT0, bindSRT0 } from "./NNS_G3D.js";
-
-function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), bmdTex.width, bmdTex.height);
-    const surfaces = [ canvas ];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatName(bmdTex.format));
-    return { name, surfaces, extraInfo };
-}
 
 const scratchTexMatrix = mat2d.create();
 class MaterialInstance {
@@ -133,7 +123,10 @@ class MaterialInstance {
 
         device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.viewerTextures.push(textureToCanvas(texture, pixels, fullTextureName));
+        const extraInfo = new Map<string, string>();
+        extraInfo.set('Format', getFormatName(texture.format));
+        this.viewerTextures.push({ gfxTexture, extraInfo });
+
         return texture;
     }
 

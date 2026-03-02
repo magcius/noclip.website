@@ -20,8 +20,7 @@ export interface ViewerUpdateInfo {
 }
 
 export interface Texture {
-    name: string;
-    surfaces: HTMLCanvasElement[];
+    gfxTexture: GfxTexture;
     extraInfo?: Map<string, string> | null;
 }
 
