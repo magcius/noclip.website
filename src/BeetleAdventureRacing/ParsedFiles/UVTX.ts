@@ -590,7 +590,7 @@ class TextureData {
     }
 
     public getTextureMapping()  {
-        return { gfxTexture: this.gfxTexture, gfxSampler: this.gfxSampler, lateBinding: null };
+        return { gfxTexture: this.gfxTexture, gfxSampler: this.gfxSampler };
     }
 
     public destroy(device: GfxDevice): void {

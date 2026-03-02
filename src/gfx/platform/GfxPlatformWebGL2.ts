@@ -1385,7 +1385,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     }
 
-    public copyCanvasToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement): void {
+    public copyExternalImageToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement | ImageBitmap): void {
         const gl = this.gl;
 
         const dst = dst_ as GfxTextureP_GL;
@@ -1397,7 +1397,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_format = this.translateTextureFormat(dst.pixelFormat);
         const gl_type = this.translateTextureType(dst.pixelFormat);
 
-        gl.texSubImage3D(gl_target, 0, 0, 0, dstZ, dst.width, dst.height, 1, gl_format, gl_type, src);
+        if (dst.dimension === GfxTextureDimension.n2D) {
+            assert(dstZ === 0);
+            gl.texSubImage2D(gl_target, 0, 0, 0, dst.width, dst.height, gl_format, gl_type, src);
+        } else if (dst.dimension === GfxTextureDimension.Cube) {
+            const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (dstZ % 6);
+            gl.texSubImage2D(face_target, 0, 0, 0, dst.width, dst.height, gl_format, gl_type, src);
+        } else if (dst.dimension === GfxTextureDimension.n3D || dst.dimension === GfxTextureDimension.n2DArray) {
+            gl.texSubImage3D(gl_target, 0, 0, 0, dstZ, dst.width, dst.height, 1, gl_format, gl_type, src);
+        }
     }
 
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {

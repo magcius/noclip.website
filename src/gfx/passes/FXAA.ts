@@ -116,7 +116,7 @@ export class FXAA {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setSamplerBindingsFromTextureMappings([
-                    { gfxTexture: scope.getResolveTextureForID(mainColorResolveTextureID), gfxSampler: this.gfxSampler, lateBinding: null },
+                    { gfxTexture: scope.getResolveTextureForID(mainColorResolveTextureID), gfxSampler: this.gfxSampler },
                 ]);
                 renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
             });

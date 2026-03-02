@@ -26,7 +26,7 @@ export function gfxSamplerBindingCopy(a: Readonly<GfxSamplerBinding>): GfxSample
 }
 
 export function gfxSamplerBindingNew(): GfxSamplerBinding {
-    return { gfxSampler: null, gfxTexture: null, lateBinding: null };
+    return { gfxSampler: null, gfxTexture: null };
 }
 
 export function gfxBufferBindingCopy(a: Readonly<GfxBufferBinding>): GfxBufferBinding {

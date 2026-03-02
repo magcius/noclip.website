@@ -825,8 +825,8 @@ export class DebugDraw {
                     const depthTexture = depthResolveTextureID !== null ? scope.getResolveTextureForID(depthResolveTextureID) : null;
                     const fontTexture = page.fontTexture !== null ? page.fontTexture.gfxTexture : null;
                     page.renderInst.setSamplerBindings(0, [
-                        { gfxTexture: depthTexture, gfxSampler: this.depthSampler, lateBinding: null },
-                        { gfxTexture: fontTexture, gfxSampler: this.fontSampler, lateBinding: null },
+                        { gfxTexture: depthTexture, gfxSampler: this.depthSampler },
+                        { gfxTexture: fontTexture, gfxSampler: this.fontSampler },
                     ]);
                     page.renderInst.drawOnPass(this.renderCache, passRenderer);
                 }

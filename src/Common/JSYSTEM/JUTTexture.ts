@@ -104,7 +104,7 @@ export class BTIData {
     }
 
     public fillTextureMapping(m: GXTextureMapping): void {
-        m.lateBinding = null;
+        m.lateBinding = undefined;
         m.gfxTexture = this.gfxTexture;
         m.gfxSampler = this.gfxSampler;
         m.lodBias = this.btiTexture.lodBias;

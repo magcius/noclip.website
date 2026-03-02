@@ -12,12 +12,12 @@ export interface TextureBase {
 export class TextureMapping {
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
-    public lateBinding: string | null = null;
+    public lateBinding: string | undefined = undefined;
 
     public reset(): void {
         this.gfxTexture = null;
         this.gfxSampler = null;
-        this.lateBinding = null;
+        this.lateBinding = undefined;
     }
 
     public copy(other: TextureMapping): void {

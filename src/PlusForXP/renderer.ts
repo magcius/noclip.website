@@ -357,12 +357,10 @@ export default class Renderer implements SceneGfx {
                     {
                         gfxTexture: mesh.material.gfxTexture ?? this.world.defaultTexture,
                         gfxSampler: this.sampler,
-                        lateBinding: null,
                     },
                     {
                         gfxTexture: envMap.texture,
                         gfxSampler: this.sampler,
-                        lateBinding: null,
                     },
                 ]);
 
