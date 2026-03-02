@@ -23,6 +23,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { makeImageBitmapTexture2D } from "../gfx/helpers/TextureHelpers";
+import { FakeTextureHolder } from "../TextureHolder";
 
 // When we want to load files or assets at runtime, what directory are these assets in?
 // We're going to be loading data/Examples/mandrill.jpg from here later; pathBase is relative to the data/ directory.
@@ -314,6 +315,8 @@ class ExampleScene implements SceneGfx {
     public enablePostProcessing = true;
     public aberrationStrength = 0.2;
 
+    public textureHolder = new FakeTextureHolder([]);
+
     constructor(private sceneContext: SceneContext) {
         // The GfxRenderHelper is a helper class that contains several helpers.
         this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
@@ -364,6 +367,11 @@ class ExampleScene implements SceneGfx {
         const device = this.renderHelper.device;
         this.cubeTexture = makeImageBitmapTexture2D(device, imageBitmap);
         device.setResourceName(this.cubeTexture, 'Cube Texture (Mandrill)');
+
+        this.textureHolder.viewerTextures.push({
+            gfxTexture: this.cubeTexture!,
+        });
+        this.textureHolder.onnewtextures!();
     }
 
     private fillSceneParams(template: GfxRenderInst, viewerInput: ViewerRenderInput): void {

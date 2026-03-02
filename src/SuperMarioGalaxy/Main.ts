@@ -18,7 +18,7 @@ import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
-import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias, GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
+import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias, GXTextureMapping } from '../gx/gx_render.js';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material.js';
 import { GXRenderHelperGfx } from '../gx/gx_render.js';
 
@@ -856,25 +856,22 @@ function getLayerDirName(index: LayerId) {
 }
 
 class TextureListHolder implements UI.TextureListHolder {
-    private viewerTextures: GXViewerTexture[] = [];
+    private viewerTextures: Viewer.Texture[] = [];
     public onnewtextures: (() => void) | null = null;
 
     public get textureNames(): string[] {
-        return this.viewerTextures.map((texture) => texture.name);
+        return this.viewerTextures.map((texture) => texture.gfxTexture.ResourceName!);
     }
 
     public async getViewerTexture(i: number) {
-        const tex = this.viewerTextures[i];
-        if (tex.surfaces.length === 0 && tex.activate !== undefined)
-            await tex.activate();
-        return tex;
+        return this.viewerTextures[i];
     }
 
-    public addTextures(textures: GXViewerTexture[]): void {
+    public addTextures(textures: Viewer.Texture[]): void {
         let changed = false;
         for (let i = 0; i < textures.length; i++) {
-            if (this.viewerTextures.find((texture) => textures[i].name === texture.name) === undefined) {
-                spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.name.localeCompare(b.name));
+            if (this.viewerTextures.find((texture) => textures[i].gfxTexture.ResourceName === texture.gfxTexture.ResourceName) === undefined) {
+                spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
                 changed = true;
             }
         }

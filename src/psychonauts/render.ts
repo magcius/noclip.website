@@ -3,7 +3,7 @@ import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf.js";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform.js";
 import * as Viewer from "../viewer.js";
-import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture.js";
+import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture.js";
 import { EMeshFrag, EMesh, EScene, EDomain, MaterialFlags } from "./plb.js";
 import { DeviceProgram } from "../Program.js";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
@@ -59,10 +59,6 @@ export class PsychonautsTextureHolder extends TextureHolder {
             const decodedSurface = decodeTextureData(texture.format, mipWidth, mipHeight, pixels);
             levelDatas.push(decodedSurface.pixels as Uint8Array);
 
-            const canvas = document.createElement('canvas');
-            surfaceToCanvas(canvas, decodedSurface);
-            surfaces.push(canvas);
-
             if (mipWidth > 1) mipWidth >>>= 1;
             if (mipHeight > 1) mipHeight >>>= 1;
         }
@@ -73,7 +69,7 @@ export class PsychonautsTextureHolder extends TextureHolder {
         const extraInfo = new Map<string, string>();
         extraInfo.set('Format', getTextureFormatName(texture.format));
         const displayName = texture.name.split('/').pop()!;
-        const viewerTexture: Viewer.Texture = { name: displayName, surfaces, extraInfo };
+        const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
         device.setResourceName(gfxTexture, displayName);
 
         this.ppakTextures.push(texture);

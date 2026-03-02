@@ -1,10 +1,9 @@
 import * as MAP from './map.js';
 import * as Viewer from '../viewer.js';
 
-import { FakeTextureHolder } from '../TextureHolder.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
-import { textureToCanvas, textureAnimationToCanvas, KingdomHeartsIIRenderer } from './render.js';
+import { KingdomHeartsIIRenderer } from './render.js';
 
 const pathBase = `KingdomHearts2FinalMix`;
 
@@ -17,37 +16,7 @@ export class KingdomHeartsIISceneDesc implements Viewer.SceneDesc {
         const mapData = await dataFetcher.fetchData(`${pathBase}/${this.id}.map`);
         const map = MAP.parseMap(mapData);
 
-        const viewerTextures: Viewer.Texture[] = [];
-        for (const textureBlock of map.mapGroup.textureBlocks) {
-            for (const texture of textureBlock.textures) {
-                viewerTextures.push(textureToCanvas(texture, "map"));
-                if (texture.textureAnim) {
-                    viewerTextures.push(textureAnimationToCanvas(texture.textureAnim, texture, "map"));
-                }
-            }
-        }
-        for (const textureBlock of map.sky0Group.textureBlocks) {
-            for (const texture of textureBlock.textures) {
-                viewerTextures.push(textureToCanvas(texture, "sky0"));
-                if (texture.textureAnim) {
-                    viewerTextures.push(textureAnimationToCanvas(texture.textureAnim, texture, "sky0"));
-                }
-            }
-        }
-        for (const textureBlock of map.sky1Group.textureBlocks) {
-            for (const texture of textureBlock.textures) {
-                viewerTextures.push(textureToCanvas(texture, "sky1"));
-                if (texture.textureAnim) {
-                    viewerTextures.push(textureAnimationToCanvas(texture.textureAnim, texture, "sky1"));
-                }
-            }
-        }
-        viewerTextures.sort(function(a, b) {
-            return a.name < b.name ? -1 : 1;
-        });
-        const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-
-        const renderer = new KingdomHeartsIIRenderer(device, fakeTextureHolder, map);
+        const renderer = new KingdomHeartsIIRenderer(device, map);
         return renderer;
     }
 }

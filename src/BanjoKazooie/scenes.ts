@@ -8,7 +8,7 @@ import * as Actors from './actors.js';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
-import { textureToCanvas, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render.js';
+import { GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render.js';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -513,11 +513,12 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry<Geo.BKGeoNode>): GeometryRenderer {
-        for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
-            viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
-
         const geoData = new GeometryData(device, cache, geo);
         sceneRenderer.geoDatas.push(geoData.renderData);
+
+        for (let i = 0; i < geoData.renderData.textures.length; i++)
+            viewerTextures.push({ gfxTexture: geoData.renderData.textures[i] });
+
         const geoRenderer = new GeometryRenderer(device, geoData);
         sceneRenderer.geoRenderers.push(geoRenderer);
         return geoRenderer;

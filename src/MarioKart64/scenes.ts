@@ -6,7 +6,6 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { Mk64Renderer, MarioRacewayRenderer, BowsersCastleRenderer, BansheeBoardwalkRenderer, YoshiValleyRenderer, FrappeSnowlandRenderer, KoopaBeachRenderer, RoyalRacewayRenderer, LuigiRacewayRenderer, ToadsTurnpikeRenderer, KalamariDesertRenderer, SherbetLandRenderer, RainbowRoadRenderer, WarioStadiumRenderer, DkJungleRenderer, MooMooFarmRenderer, Mk64Globals } from "./courses.js";
 import { FakeTextureHolder } from "../TextureHolder.js";
-import { textureToCanvas } from "../BanjoKazooie/render.js";
 
 const pathBase = `MarioKart64`;
 
@@ -101,12 +100,9 @@ export class SceneDesc implements Viewer.SceneDesc {
                 break;
         }
 
-        const viewerTextures: Viewer.Texture[] = [];
-
-        for (const texture of globals.rspState.textureCache.textures) {
-            viewerTextures.push(textureToCanvas(texture));
-        }
-
+        const viewerTextures: Viewer.Texture[] = [...renderer!.globals.gfxTextureCache.values()].map((gfxTexture) => {
+            return { gfxTexture };
+        })
         renderer!.textureHolder = new FakeTextureHolder(viewerTextures);
 
         return renderer!;

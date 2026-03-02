@@ -16,7 +16,8 @@ import { getJointMtxByName } from './ActorUtil.js';
 import { Binder, Triangle, getFloorCodeIndex, FloorCode } from './Collision.js';
 import { Frustum } from '../Geometry.js';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader.js';
-import { GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
+import { GXTextureMapping } from '../gx/gx_render.js';
+import * as Viewer from "../viewer.js";
 
 export class ParticleResourceHolder {
     private effectNameToIndex = new Map<string, number>();
@@ -63,7 +64,7 @@ export class ParticleResourceHolder {
     }
 
     private addTexturesForResource(sceneObjHolder: SceneObjHolder, resData: JPA.JPAResourceData): void {
-        const viewerTextures: GXViewerTexture[] = [];
+        const viewerTextures: Viewer.Texture[] = [];
         for (let i = 0; i < resData.textureIds.length; i++) {
             const textureId = resData.textureIds[i];
             if (textureId === undefined)
@@ -72,7 +73,7 @@ export class ParticleResourceHolder {
 
             if (!viewerTexture.extraInfo!.has('Category')) {
                 viewerTexture.extraInfo!.set('Category', 'JPA');
-                viewerTexture.name = `ParticleData/${viewerTexture.name}`;
+                sceneObjHolder.modelCache.device.setResourceName(viewerTexture.gfxTexture, `ParticleData/${viewerTexture.gfxTexture.ResourceName!}`);
             }
 
             viewerTextures.push(this.jpacData.texData[textureId].viewerTexture);

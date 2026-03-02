@@ -67,6 +67,6 @@ export class FakeTextureHolder extends TextureHolder {
     }
 
     public override get textureNames(): string[] {
-        return this.viewerTextures.map((tex) => tex.name);
+        return this.viewerTextures.filter((tex) => tex.gfxTexture.ResourceName).map((tex) => tex.gfxTexture.ResourceName!);
     }
 }

@@ -6,7 +6,7 @@ import * as BYML from '../byml.js';
 
 import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
-import { textureToCanvas, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render.js';
+import { RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render.js';
 import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { SceneContext } from '../SceneBase.js';
@@ -589,11 +589,12 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BTRenderer, geo: Geo.Geometry<Geo.BTGeoNode>): GeometryRenderer {
-        for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
-            viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
-
         const geoData = new GeometryData(device, cache, geo);
         sceneRenderer.geoDatas.push(geoData.renderData);
+
+        for (let i = 0; i < geoData.renderData.textures.length; i++)
+            viewerTextures.push({ gfxTexture: geoData.renderData.textures[i] });
+
         const geoRenderer = new GeometryRenderer(device, geoData);
         sceneRenderer.geoRenderers.push(geoRenderer);
         return geoRenderer;

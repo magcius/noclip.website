@@ -1,14 +1,14 @@
 import { mat4, quat, vec3 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
 import { colorNewFromRGBA } from '../Color.js';
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers.js';
 import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat.js';
@@ -22,10 +22,8 @@ import * as MAP from './map.js';
 import * as MDS from './mds.js';
 import * as MOT from './mot.js';
 import * as SINFO from './sceneInfo.js';
-import * as STB from './stb.js';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
-import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { DQ8Renderer } from './scenes.js';
+import * as STB from './stb.js';
 
 export class DQ8Program extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -692,13 +690,3 @@ export class MAPRenderer {
             this.MDSRenderers[i].destroy(device);
     }
 }
-
-export function textureToCanvas(texture: IMG.Texture): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
-    const name = texture.name;
-    canvas.title = name;
-
-    const surfaces = [canvas];
-    return { name, surfaces };
-}
-

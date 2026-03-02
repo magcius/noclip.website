@@ -9,7 +9,6 @@ import { Descent2Level } from "./D2/D2Level.js";
 import { Descent2PigFile } from "./D2/D2PigFile.js";
 import { Descent2VHamFile } from "./D2/D2VHamFile.js";
 import { DescentRenderer } from "./Render/Renderer.js";
-import { descentGfxTextureToCanvas } from "./Render/TextureToCanvas.js";
 
 const pathBase = `Descent1_2`;
 
@@ -77,12 +76,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const renderer = new DescentRenderer(device, level, palette, pig, vham);
 
-        const viewerTextures: Viewer.Texture[] = [];
-        for (const texture of renderer.textureList.getAllTextures()) {
-            const canvas = descentGfxTextureToCanvas(texture);
-            if (canvas !== null) viewerTextures.push(canvas);
-        }
-        renderer.textureHolder = new FakeTextureHolder(viewerTextures);
+        renderer.textureHolder = new FakeTextureHolder(renderer.textureList.getAllTextures());
         return renderer;
     }
 }

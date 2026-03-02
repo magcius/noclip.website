@@ -5,7 +5,7 @@ import * as BYML from '../byml.js';
 import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render.js';
+import { F3DEX_Program } from '../BanjoKazooie/render.js';
 import { translateBlendMode, RSP_Geometry, translateCullMode } from '../zelview/f3dzex.js';
 import { nArray, align, assert } from '../util.js';
 import { DeviceProgram } from '../Program.js';
@@ -709,8 +709,8 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 
-        for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
-            sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
+        // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
+        //     sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
 
         // Load setup data, ported from ScriptHawk's dumpSetup() function
         /*

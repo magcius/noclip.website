@@ -4,7 +4,7 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader.js';
 
 import * as GX_Material from '../../../gx/gx_material.js';
-import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout, GXTextureMapping, GXViewerTexture } from '../../../gx/gx_render.js';
+import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout, GXTextureMapping } from '../../../gx/gx_render.js';
 import { GXMaterialHelperGfx } from '../../../gx/gx_render.js';
 
 import { computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera.js';
@@ -20,6 +20,7 @@ import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache.js';
 import { translateSampler } from '../JUTTexture.js';
 import { calcJointMatrixFromTransform } from './J3DGraphAnimator.js';
 import { LoadedVertexDraw } from '../../../gx/gx_displaylist.js';
+import * as Viewer from '../../../viewer.js';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into the parent joint's space.
@@ -654,7 +655,7 @@ export class TEX1Data {
 
     private gfxSamplers: GfxSampler[] = [];
     private gfxTextures: (GfxTexture | null)[] = [];
-    public viewerTextures: (GXViewerTexture | null)[] = [];
+    public viewerTextures: (Viewer.Texture | null)[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public tex1: TEX1) {
         for (let i = 0; i < this.tex1.samplers.length; i++) {

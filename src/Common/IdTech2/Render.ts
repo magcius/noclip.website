@@ -1,27 +1,26 @@
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { assert, assertExists, nArray, readString } from "../../util.js";
-import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { convertToCanvas } from "../../gfx/helpers/TextureConversionHelpers.js";
-import { SceneGfx, Texture, ViewerRenderInput } from "../../viewer.js";
-import { DeviceProgram } from "../../Program.js";
-import { BSPEntity, BSPFile, Model, Surface, SurfaceLightmapData } from "./BSPFile.js";
-import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
-import { TextureMapping } from "../../TextureHolder.js";
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { getMatrixTranslation } from "../../MathHelpers.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { Camera, CameraController } from "../../Camera.js";
-import { fillMatrix4x4, fillVec3v } from "../../gfx/helpers/UniformBufferHelpers.js";
-import { WAD, WAD2LumpType, WAD3LumpType } from "./WAD.js";
-import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
-import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
-import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
-import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
+import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
+import { fillMatrix4x4, fillVec3v } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { getMatrixTranslation } from "../../MathHelpers.js";
+import { DeviceProgram } from "../../Program.js";
+import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
+import { TextureMapping } from "../../TextureHolder.js";
 import { TextureListHolder } from "../../ui.js";
+import { assert, nArray, readString } from "../../util.js";
+import { SceneGfx, Texture, ViewerRenderInput } from "../../viewer.js";
+import { BSPEntity, BSPFile, Model, Surface, SurfaceLightmapData } from "./BSPFile.js";
+import { QuakeSkyProgram, QuakeSkyTextureData } from "./Quake.js";
+import { WAD, WAD2LumpType, WAD3LumpType } from "./WAD.js";
 import { WorldLightingState } from "./WorldLightingState.js";
-import { QuakeSkyTextureData, QuakeSkyProgram } from "./Quake.js";
 
 export const IdTech2Games = ['Quake', 'GoldSrc'] as const;
 export type IdTech2Game = typeof IdTech2Games[number];
@@ -104,14 +103,13 @@ export class MIPTEXData {
             }
 
             mipDatas.push(mipData);
-            surfaces.push(convertToCanvas(new ArrayBufferSlice(mipData.buffer), mipW, mipH, GfxFormat.U8_RGBA_NORM));
 
             mipW >>= 1;
             mipH >>= 1;
         }
 
         device.uploadTextureData(this.gfxTexture, 0, mipDatas);
-        this.viewerTexture = { name: this.name, surfaces };
+        this.viewerTexture = this;
     }
 
     public destroy(device: GfxDevice): void {

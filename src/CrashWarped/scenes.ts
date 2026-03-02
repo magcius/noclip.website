@@ -242,7 +242,7 @@ class CrashWarpedScene implements SceneDesc {
             renderer.textureHolder.viewerTextures.push(data.viewerTexture);
         }
 
-        renderer.textureHolder.viewerTextures.sort((a: Texture, b: Texture) => a.name.localeCompare(b.name));
+        renderer.textureHolder.viewerTextures.sort((a: Texture, b: Texture) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         QuadListData.textureAnimator = new TextureAnimator([], [], [], renderer.textureData);
 
         const cache = renderer.globals.renderHelper.renderCache;

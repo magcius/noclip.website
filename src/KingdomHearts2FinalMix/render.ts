@@ -8,41 +8,15 @@ import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMod
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { FakeTextureHolder, TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { nArray, assertExists, assert } from '../util.js';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
-
-export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
-    const name = `${baseName}_tex_${("000" + texture.index).slice(-3)}`
-    canvas.title = name;
-
-    const surfaces = [canvas];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', texture.parent.format);
-    return { name: name, surfaces, extraInfo };
-}
-
-export function textureAnimationToCanvas(textureAnim: MAP.TextureAnimation, parentTexture: MAP.Texture, baseName: string): Viewer.Texture {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureAnim.pixels), textureAnim.sheetWidth, textureAnim.sheetHeight);
-    const name = `${baseName}_tex_${("000" + parentTexture.index).slice(-3)}_texa`
-    canvas.title = name;
-    const surfaces = [canvas];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', parentTexture.parent.format);
-    extraInfo.set('Sprite Width', textureAnim.spriteWidth.toString());
-    extraInfo.set('Sprite Height', textureAnim.spriteHeight.toString());
-    extraInfo.set('Sprite Count', textureAnim.numSprites.toString());
-    return { name: name, surfaces, extraInfo };
-}
 
 class KingdomHeartsIIProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -195,6 +169,7 @@ export class MapData {
 
     public textures: GfxTexture[] = [];
     public sampler: GfxSampler;
+    public viewerTextures: Viewer.Texture[] = [];
 
     private vertices = 0;
     private indices = 0;
@@ -202,7 +177,10 @@ export class MapData {
     private atlasHeight = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, map: MAP.KingdomHeartsIIMap) {
-        this.textures.push(this.buildTextureAtlas(device, map));
+        const textureAtlas = this.buildTextureAtlas(device, map);
+        this.textures.push(textureAtlas);
+        this.viewerTextures.push(this.createViewerTexture(null, null, textureAtlas));
+
         this.processTextureAnimations(device, map);
         this.sampler = this.createSampler(cache);
 
@@ -220,7 +198,9 @@ export class MapData {
         for (const textureBlock of textureBlocks) {
             for (const texture of textureBlock.textures) {
                 if (texture.textureAnim) {
-                    this.textures.push(this.translateTextureAnimation(device, texture.textureAnim));
+                    const gfxTexture = this.translateTextureAnimation(device, texture.textureAnim);
+                    this.textures.push(gfxTexture);
+                    this.viewerTextures.push(this.createViewerTexture(textureBlock, texture.textureAnim, gfxTexture));
                     texture.textureAnim.index = index++;
                     this.textureAnimations.push(texture.textureAnim);
                 }
@@ -234,6 +214,18 @@ export class MapData {
 
         device.uploadTextureData(gfxTexture, 0, [textureAnim.pixels]);
         return gfxTexture;
+    }
+
+    private createViewerTexture(textureBlock: MAP.TextureBlock | null, textureAnim: MAP.TextureAnimation | null, gfxTexture: GfxTexture): Viewer.Texture {
+        const extraInfo = new Map<string, string>();
+        if (textureBlock !== null)
+            extraInfo.set('Format', textureBlock.format);
+        if (textureAnim !== null) {
+            extraInfo.set('Sprite Width', textureAnim.spriteWidth.toString());
+            extraInfo.set('Sprite Height', textureAnim.spriteHeight.toString());
+            extraInfo.set('Sprite Count', textureAnim.numSprites.toString());
+        }
+        return { gfxTexture, extraInfo };
     }
 
     private buildTextureAtlas(device: GfxDevice, map: MAP.KingdomHeartsIIMap): GfxTexture {
@@ -293,7 +285,7 @@ export class MapData {
             }
         }
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.atlasWidth, this.atlasHeight, 1));
-        device.setResourceName(gfxTexture, `textureAtlas`);
+        device.setResourceName(gfxTexture, `Texture Atlas`);
 
         device.uploadTextureData(gfxTexture, 0, [pixels]);
         return gfxTexture;
@@ -691,12 +683,15 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private mapRenderer: SceneRenderer;
     private mapData: MapData;
+    public textureHolder: TextureHolder;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder, map: MAP.KingdomHeartsIIMap) {
+    constructor(device: GfxDevice, map: MAP.KingdomHeartsIIMap) {
         this.renderHelper = new GfxRenderHelper(device);
 
         this.mapData = new MapData(device, this.renderHelper.renderCache, map);
         this.mapRenderer = new SceneRenderer(device, this.mapData, this.mapData.drawCalls);
+
+        this.textureHolder = new FakeTextureHolder(this.mapData.viewerTextures);
     }
 
     public createPanels(): UI.Panel[] {

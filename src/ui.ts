@@ -1,23 +1,24 @@
 
 // New UI system
 
-import * as Viewer from './viewer.js';
-import { assertExists, assert } from './util.js';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, CameraController, Camera } from './Camera.js';
+import { GIT_SHORT_REVISION, GITHUB_REVISION_URL, GITHUB_URL, IS_DEVELOPMENT } from './BuildVersion.js';
+import { Camera, CameraController, CameraControllerClass, FPSCameraController, OrbitCameraController, OrthoCameraController } from './Camera.js';
 import { Color, colorToCSS } from './Color.js';
-import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion.js';
-import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
-import { RenderStatistics } from './RenderStatistics.js';
-import { GlobalGrabManager } from './GrabManager.js';
-import { clamp, invlerp, lerp, MathConstants } from './MathHelpers.js';
 import { DebugFloaterHolder } from './DebugFloaters.js';
+import { GlobalGrabManager } from './GrabManager.js';
 import { DraggingMode } from './InputManager.js';
-import { CLAPBOARD_ICON, StudioPanel } from './Studio.js';
+import { clamp, invlerp, lerp, MathConstants } from './MathHelpers.js';
+import { RenderStatistics } from './RenderStatistics.js';
+import { GlobalSaveManager, SaveManager } from "./SaveManager.js";
 import { SceneDesc, SceneGroup } from './SceneBase.js';
+import { CLAPBOARD_ICON, StudioPanel } from './Studio.js';
+import { assert, assertExists } from './util.js';
+import * as Viewer from './viewer.js';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
 import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
+import { TextureCanvas } from './TextureViewer.js';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1288,7 +1289,7 @@ export class TextureViewer extends Panel {
     private newTexturesDebouncer = new FrameDebouncer();
     private textureList: TextureListHolder | null = null;
 
-    constructor() {
+    constructor(private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(TEXTURES_ICON, 'Textures');
@@ -1379,19 +1380,17 @@ export class TextureViewer extends Panel {
         const textureIdx = this.textureList!.textureNames.findIndex(haystack => haystack === name);
         assert(textureIdx !== undefined);
         const texture = await this.textureList!.getViewerTexture(textureIdx);
-        assert(texture.surfaces.length > 0);
 
         this.scrollList.setHighlighted(filteredNameIdx);
 
         const properties = new Map<string, string>();
-        properties.set('Name', texture.name);
-        properties.set('Mipmaps', '' + texture.surfaces.length);
-        properties.set('Width', '' + texture.surfaces[0].width);
-        properties.set('Height', '' + texture.surfaces[0].height);
+        properties.set('Name', texture.gfxTexture.ResourceName!);
+        properties.set('Mipmaps', '' + texture.gfxTexture.numLevels);
+        properties.set('Width', '' + texture.gfxTexture.width);
+        properties.set('Height', '' + texture.gfxTexture.height);
 
-        if (texture.extraInfo) {
+        if (texture.extraInfo)
             texture.extraInfo.forEach((value, key) => properties.set(key, value));
-        }
 
         this.properties.innerHTML = `<div style="display: grid; grid-template-columns: 1fr 1fr"></div>`;
 
@@ -1406,10 +1405,15 @@ export class TextureViewer extends Panel {
             div.appendChild(valueSpan);
         });
 
-        if (texture.surfaces.length > 0)
-            this.showInSurfaceView(texture.surfaces[0]);
+        const textureCanvas = new TextureCanvas(this.viewer.gfxSwapChain, texture.gfxTexture, 0, 0);
+        this.showInSurfaceView(textureCanvas.canvas);
 
-        this.showInFullSurfaceView(texture.surfaces);
+        const mipSurfaces: HTMLCanvasElement[] = [];
+        for (let i = 0; i < texture.gfxTexture.numLevels; i++) {
+            const textureCanvas = new TextureCanvas(this.viewer.gfxSwapChain, texture.gfxTexture, i, 0);
+            mipSurfaces.push(textureCanvas.canvas);
+        }
+        this.showInFullSurfaceView(mipSurfaces);
     }
 
     public setTextureList(textureList: TextureListHolder | null = null): void {
@@ -2814,7 +2818,7 @@ export class UI {
         this.bottomBar.addWidgets(BottomBarArea.Right, this.fullscreenButton);
 
         this.sceneSelect = new SceneSelect();
-        this.textureViewer = new TextureViewer();
+        this.textureViewer = new TextureViewer(viewer);
         this.viewerSettings = new ViewerSettings(this);
         this.xrSettings = new XRSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel();

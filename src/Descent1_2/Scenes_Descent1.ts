@@ -7,7 +7,6 @@ import { DescentDataReader } from "./Common/DataReader.js";
 import { Descent1Level } from "./D1/D1Level.js";
 import { Descent1PigFile } from "./D1/D1PigFile.js";
 import { DescentRenderer } from "./Render/Renderer.js";
-import { descentGfxTextureToCanvas } from "./Render/TextureToCanvas.js";
 
 const pathBase = `Descent1_2`;
 
@@ -57,12 +56,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const renderer = new DescentRenderer(device, level, palette, pig, pig);
 
-        const viewerTextures: Viewer.Texture[] = [];
-        for (const texture of renderer.textureList.getAllTextures()) {
-            const canvas = descentGfxTextureToCanvas(texture);
-            if (canvas !== null) viewerTextures.push(canvas);
-        }
-        renderer.textureHolder = new FakeTextureHolder(viewerTextures);
+        renderer.textureHolder = new FakeTextureHolder(renderer.textureList.getAllTextures());
         return renderer;
     }
 }
