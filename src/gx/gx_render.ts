@@ -736,7 +736,7 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

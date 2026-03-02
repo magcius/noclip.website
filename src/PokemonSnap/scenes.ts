@@ -133,7 +133,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         globals.renderInstListSky.reset();
         globals.renderInstListMain.reset();
     }

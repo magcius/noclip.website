@@ -598,7 +598,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
     }
 
     public destroy(device: GfxDevice) {

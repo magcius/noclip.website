@@ -109,9 +109,8 @@ class WarpedRenderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-
         this.prepareToRender(device, viewerInput);
-        this.globals.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.globals.renderInstListMain.reset();
         this.globals.renderInstListSkybox.reset();
 

@@ -692,7 +692,7 @@ export class IdTech2Renderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(renderInstManager, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.mainView.reset();
     }
 

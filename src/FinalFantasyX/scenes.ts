@@ -228,7 +228,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
         }
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

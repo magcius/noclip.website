@@ -292,7 +292,7 @@ export class DescentRenderer implements Viewer.SceneGfx {
         );
 
         this.prepareToRender(renderInstManager, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.renderInstListMain.reset();
     }
 

@@ -2071,7 +2071,7 @@ export class SourceRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderGraph.execute(builder);
+        builder.execute();
         this.resetViews();
 
         this.renderContext.debugStatistics.addToConsole(viewerInput);

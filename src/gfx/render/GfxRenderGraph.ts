@@ -353,6 +353,11 @@ export interface GfxrGraphBuilder {
     popDebugGroup(): void;
 
     /**
+     * Execute our render graph now that it's set up.
+     */
+    execute(): void;
+
+    /**
      * Internal API.
      */
     getDebug(): GfxrGraphBuilderDebug;
@@ -516,7 +521,6 @@ function fillArray<T>(L: T[], n: number, v: T): void {
 
 export interface GfxrRenderGraph {
     newGraphBuilder(): GfxrGraphBuilder;
-    execute(builder: GfxrGraphBuilder): void;
     destroy(): void;
 }
 
@@ -543,8 +547,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         return this;
     }
 
-    public execute(builder: GfxrGraphBuilder): void {
-        assert(builder === this);
+    public execute(): void {
         const graph = assertExists(this.currentGraph);
         this.execGraph(graph);
         this.currentGraph = null;
