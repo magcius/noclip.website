@@ -40,8 +40,11 @@ class CasperRenderer implements SceneGfx {
 
     constructor(device: GfxDevice, level: Level, textures: Map<string, Texture>, objInstances: ObjectInstance[], objMeshes: Map<string, Mesh>) {
         const viewerTextures: ViewerTexture[] = [];
-        for (const [name, texture] of textures.entries()) {
-            viewerTextures.push(convertToViewerTexture(name, texture));
+        for (const texture of textures.values()) {
+            const extraInfo = new Map<string, string>();
+            extraInfo.set("Has Alpha", `${texture.hasAlpha}`);
+            extraInfo.set("Bit Depth", texture.bitDepth.toString());
+            viewerTextures.push({ gfxTexture: texture.gfxTexture, extraInfo });
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
@@ -163,14 +166,6 @@ async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, level:
         meshes.set(instance.name, mesh);
     }
     return meshes;
-}
-
-function convertToViewerTexture(name: string, texture: Texture): ViewerTexture {
-    const extraInfo = new Map<string, string>();
-    extraInfo.set("Name", `${name}`);
-    extraInfo.set("Has Alpha", `${texture.hasAlpha}`);
-    extraInfo.set("Bit Depth", texture.bitDepth.toString());
-    return { gfxTexture: texture.gfxTexture, extraInfo };
 }
 
 const id = "CasperSD";
