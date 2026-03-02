@@ -244,7 +244,7 @@ export interface GfxrPassScope {
      * {@see GfxrGraphBuilder::resolveRenderTargetPassAttachmentSlot}, or
      * {@see GfxrGraphBuilder::resolveRenderTargetToExternalTexture}.
      */
-    getResolveTextureForID(id: number): GfxTexture;
+    getResolveTextureForID(id: GfxrResolveTextureID): GfxTexture;
 
     /**
      * Retrieve the underlying texture resource for a given attachment slot {@param slot}. This is not
