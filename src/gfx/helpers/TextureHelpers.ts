@@ -1,5 +1,5 @@
 
-import { GfxColor, GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../platform/GfxPlatform.js";
+import { GfxColor, GfxDevice, GfxFormat, GfxTexture, GfxTextureUsage, makeTextureDescriptor2D } from "../platform/GfxPlatform.js";
 import { getFormatBlockSizeInTexels, getFormatByteSizePerBlock } from "../platform/GfxPlatformFormat.js";
 
 /**
@@ -22,7 +22,9 @@ export function makeSolidColorTexture2D(device: GfxDevice, color: GfxColor): Gfx
  * of format {@see GfxFormat.U8_RGBA_NORM}, and contains only one mipmap.
  */
 export function makeImageBitmapTexture2D(device: GfxDevice, imageBitmap: ImageBitmap): GfxTexture {
-    const tex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageBitmap.width, imageBitmap.height, 1));
+    const desc = makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageBitmap.width, imageBitmap.height, 1);
+    desc.usage |= GfxTextureUsage.RenderTarget;
+    const tex = device.createTexture(desc);
     device.copyExternalImageToTexture(tex, 0, imageBitmap);
     return tex;
 }

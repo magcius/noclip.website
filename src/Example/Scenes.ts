@@ -45,22 +45,8 @@ class CubeProgram extends DeviceProgram {
     public override vert = `
 // Now we're writing a GLSL shader. The vertex shader will be run once for every vertex in a triangle.
 
-// Import our helper code. In this case, we use a special matrix library as a workaround for some computers
-// with incomplete WebGL implementations.
-${GfxShaderLibrary.MatrixLibrary}
-
-// Declare our uniform data. These are parameters that are constant across the entire draw call,
-// and do not change per vertex or per pixel.
-layout(std140) uniform ub_SceneParams {
-    // Define our ViewProjection, or "ClipFromWorld" matrix, since it transforms us into clip space, from world space.
-    // I use a "u_" prefix for uniform parameters.
-    Mat4x4 u_ClipFromWorld;
-};
-
-// Define a second matrix for our cube's transform.
-layout(std140) uniform ub_CubeParams {
-    Mat3x4 u_WorldFromLocal;
-};
+// Include our common declarations; this includes our uniform buffers and our textures.
+${CubeProgram.Common}
 
 // Here are our input vertex attributes. I use an "a_" prefix for vertex attributes.
 layout(location = ${CubeProgram.a_Position}) in vec3 a_Position;
@@ -84,16 +70,41 @@ void main() {
     // The GLSL code for the fragment shader.
     public override frag = `
 // Now we're in the fragment shader (also sometimes called a pixel shader). This shader runs once for each pixel.
-in vec2 v_UV;
 
-// Declare our texture for the cube.
-layout(location = 0) uniform sampler2D u_Texture;
+${CubeProgram.Common}
+
+// This will be filled in by the output of our vertex shader.
+in vec2 v_UV;
 
 void main() {
     // Use the UV coordinates output by the vertex shader to sample our texture.
     gl_FragColor = texture(SAMPLER_2D(u_Texture), v_UV.xy);
 }
 `;
+
+    // Common declarations in both the vertex and fragment shader. This includes uniform data and textures.
+    public static Common = `
+// Import our helper code. In this case, we use a special matrix library as a workaround for some computers
+// with incomplete WebGL implementations.
+${GfxShaderLibrary.MatrixLibrary}
+
+// Declare our uniform data. These are parameters that are constant across the entire draw call,
+// and do not change per vertex or per pixel.
+layout(std140) uniform ub_SceneParams {
+    // Define our ViewProjection, or "ClipFromWorld" matrix, since it transforms us into clip space, from world space.
+    // I use a "u_" prefix for uniform parameters.
+    Mat4x4 u_ClipFromWorld;
+};
+
+// Define a second matrix for our cube's transform.
+layout(std140) uniform ub_CubeParams {
+    Mat3x4 u_WorldFromLocal;
+};
+
+// Declare our texture for the cube.
+layout(location = 0) uniform sampler2D u_Texture;
+`;
+
 }
 
 // Our second shader program. This one is for the post-processing "chromatic aberration" effect.
@@ -103,17 +114,14 @@ class PostProcessingProgram extends DeviceProgram {
 
     // Definitions and code that will be in both the vertex and fragment shader.
     public static Common = `
-// All textures and uniform buffers should really be defined in both the vertex and fragment shader.
-// though it will technically work in very limited circumstances (if you only use one texture, or only
-// use textures / uniform buffer in the vertex shader, it will work).
-uniform sampler2D u_TextureColor;
-
 layout(std140) uniform ub_PostProcessingParams {
     // For complex GPU reasons, it's best to keep parameters in vec4's or other groups of 4. Look up
     // the rules around std140 packing if you want more information about why. The convention I use
     // is to have a field called "u_Misc" and then use #define's to give more names to individual members.
     vec4 u_Misc[1];
 };
+
+layout(location = 0) uniform sampler2D u_TextureColor;
 
 // Aberration Strength
 #define u_AberrationStrength (u_Misc[0].x)
@@ -136,13 +144,13 @@ in vec2 v_TexCoord;
 
 void main() {
     // A simple Chromatic abberation effect.
-    gl_FragColor = texture(u_TextureColor, v_TexCoord.xy);
+    gl_FragColor = texture(SAMPLER_2D(u_TextureColor), v_TexCoord.xy);
 
     // Shift the red and blue texture coordinates by different amounts depending on the strength.
     // mix() is a lerp function; when u_AberrationStrength is 0, the mix() function will return 1.0f,
     // aka no shifting. When it's 1, it will shift by the full 1.1f or 0.9f.
-    gl_FragColor.r = texture(u_TextureColor, v_TexCoord.xy * mix(1.0f, 1.1f, u_AberrationStrength)).r;
-    gl_FragColor.b = texture(u_TextureColor, v_TexCoord.xy * mix(1.0f, 0.9f, u_AberrationStrength)).b;
+    gl_FragColor.r = texture(SAMPLER_2D(u_TextureColor), v_TexCoord.xy * mix(1.0f, 1.1f, u_AberrationStrength)).r;
+    gl_FragColor.b = texture(SAMPLER_2D(u_TextureColor), v_TexCoord.xy * mix(1.0f, 0.9f, u_AberrationStrength)).b;
 }
 `;
 }
