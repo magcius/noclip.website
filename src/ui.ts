@@ -1437,7 +1437,7 @@ export class Slider implements Widget {
     public elem: HTMLElement;
     public onvalue: ((value: number) => void) | null = null;
 
-    constructor() {
+    constructor(label?: string, value?: number, min?: number, max?: number) {
         this.toplevel = document.createElement('div');
 
         // DOM lacks a coherent way of adjusting pseudostyles, so this is what we end up with...
@@ -1486,6 +1486,13 @@ export class Slider implements Widget {
         this.sliderInput.oninput = this.onInput.bind(this);
 
         this.elem = this.toplevel;
+
+        if (label !== undefined)
+            this.setLabel(label);
+        if (value !== undefined)
+            this.setValue(value, false);
+        if (min !== undefined && max !== undefined)
+            this.setRange(min, max);
     }
 
     private onInput(): void {

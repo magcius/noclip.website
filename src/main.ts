@@ -3,6 +3,7 @@
 
 import { Viewer, SceneGfx, InitErrorCode, makeErrorUI, resizeCanvas, ViewerUpdateInfo, initializeViewerWebGL2, initializeViewerWebGPU } from './viewer.js';
 
+import * as Scenes_Example from './Example/Scenes.js';
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes.js';
 import * as Scenes_ZeldaTwilightPrincess from './ZeldaTwilightPrincess/Main.js';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes.js';
@@ -133,6 +134,9 @@ import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
+    "Development",
+    Scenes_Example.sceneGroup,
+
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
