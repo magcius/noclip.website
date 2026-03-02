@@ -33,7 +33,7 @@ import { dBgS } from './d_bg.js';
 import { CameraTrimHeight, dCamera_c } from './d_camera.js';
 import { EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
-import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
+import { dKankyo_create, dKy__RegisterConstructors, dKy_daynight_check, dKy_getdaytime_hour, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { ParticleGroup, dPa_control_c } from './d_particle.js';
 import { Placename, PlacenameState, dPn__update, d_pn__RegisterConstructors } from './d_place_name.js';
@@ -245,6 +245,13 @@ class WindWakerRoom {
     public setVisible(v: boolean) { this.visible = v; }
 }
 
+class WindWakerLayer implements UI.Layer {
+    constructor(public layerNo: number, public name: string, initLayerMask: number
+    ) { this.visible = !!(initLayerMask & (1 << layerNo)); }
+    public visible: boolean;
+    public setVisible(v: boolean) { this.visible = v; }
+}
+
 enum EffectDrawGroup {
     Main = 0,
     Indirect = 1,
@@ -262,8 +269,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
-    public time: number; // In milliseconds, affected by pause and time scaling
+    public layers: WindWakerLayer[] = [];
+    public layerPanel: UI.LayerPanel;
     public roomLayerMask: number = 1;
+    public useLayerSelect: boolean = false;
+
+    public time: number; // In milliseconds, affected by pause and time scaling
 
     // Time of day control
     private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
@@ -288,26 +299,25 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     private setVisibleLayerMask(m: number): void {
         this.roomLayerMask = m;
+        for (let i = 0; i < this.layers.length; i++) {
+            this.layers[i].setVisible(objectLayerVisible(m, this.layers[i].layerNo));
+        }
+        this.layerPanel.syncLayerVisibility();
     }
 
     public createPanels(): UI.Panel[] {
-        const getScenarioMask = () => {
-            let mask: number = 0;
-            for (let i = 0; i < scenarioSelect.getNumItems(); i++)
-                if (scenarioSelect.itemIsOn[i])
-                    mask |= (1 << i);
-            return mask;
+        const scenarioPanel = new UI.LayerPanel();
+        scenarioPanel.setLayers(this.layers);
+        scenarioPanel.onlayertoggled = () => {
+            this.useLayerSelect = true;
+            let layerMask = 0;
+            for (let i = 0; i < this.layers.length; i++) {
+                if (this.layers[i].visible)
+                    layerMask |= (1 << this.layers[i].layerNo);
+            }
+            this.roomLayerMask = layerMask;
         };
-        const scenarioPanel = new UI.Panel();
-        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
-        const scenarioSelect = new UI.MultiSelect();
-        scenarioSelect.onitemchanged = () => {
-            this.setVisibleLayerMask(getScenarioMask());
-        };
-        scenarioSelect.setStrings(range(0, 12).map((i) => `Layer ${i}`));
-        scenarioSelect.setItemsSelected(range(0, 12).map((i) => (this.roomLayerMask & (1 << i)) !== 0));
-        scenarioPanel.contents.append(scenarioSelect.elem);
+        this.layerPanel = scenarioPanel;
 
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -398,6 +408,13 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // Update time-of-day panel display
         if (this.timeOfDayPanel !== null && this.useSystemTime) {
             this.timeOfDayPanel.setTime(globals.g_env_light.curTime / 360);
+        }
+
+        // noclip modification: If we're on an island, and the user has not manually selected a layer, toggle between night and day layers based on time of day.
+        if (this.globals.stageName == 'sea' && this.useLayerSelect === false) {
+            const hour = dKy_getdaytime_hour(globals);
+            const defaultLayer = (hour >= 6 && hour < 18) ? 0 : 1;
+            this.setVisibleLayerMask(1 << defaultLayer);
         }
 
         // noclip hack: if only one room is visible, make it the mStayNo
@@ -824,7 +841,7 @@ class SceneDesc {
     public id: string;
     protected globals: dGlobals;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0]) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public layerNames: Record<number, string> = []) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -948,6 +965,24 @@ class SceneDesc {
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
+        }
+
+        // If no layer names were specified, build a list of layers which have actors
+        if (Object.keys(this.layerNames).length === 0) {
+            let activeLayers = globals.dStage_dt.activeLayers;
+            for (let r = 0; r < this.roomList.length; r++) {
+                const roomNo = Math.abs(this.roomList[r]);
+                activeLayers = activeLayers | globals.roomCtrl.status[roomNo].data.activeLayers;
+            }
+
+            for (let i = 0; i < 12; i++) {
+                if (activeLayers & (1 << i))
+                    this.layerNames[i] = `Layer ${i.toString()}`;
+            }
+        }
+
+        for (const [layerNo, name] of Object.entries(this.layerNames)) {
+            renderer.layers.push(new WindWakerLayer(Number(layerNo), name, renderer.roomLayerMask));
         }
 
         return renderer;
@@ -1173,8 +1208,9 @@ const sceneDescs = [
     new DemoDesc("Hyrule", "Hyrule Barrier Break", [0], "seal.stb", 4, 1, [0.0, 0.0, 0.0], 0, 0, 0), // ?t=6046s
 
     "Outset Island",
+    // See dComIfG_play_c::getLayerNo()
     new SceneDesc("sea_T", "Title Screen", [44]),
-    new SceneDesc("sea", "Outset Island", [44]),
+    new SceneDesc("sea", "Outset Island", [44], {0: 'Intro (Day)', 1: 'Intro (Night)', 2: 'Pirates Arrived', 4: 'Day', 5: 'Night',  8: 'Demo: Ending', 9: 'Demo: Sister Kidnapped', 10: 'Demo: Departure'}),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),
