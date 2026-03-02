@@ -366,12 +366,11 @@ class ExampleScene implements SceneGfx {
         // Now create a GfxTexture for the image bitmap.
         const device = this.renderHelper.device;
         this.cubeTexture = makeImageBitmapTexture2D(device, imageBitmap);
-        device.setResourceName(this.cubeTexture, 'Cube Texture (Mandrill)');
+        device.setResourceName(this.cubeTexture, mandrillJPEG.name);
 
-        this.textureHolder.viewerTextures.push({
-            gfxTexture: this.cubeTexture!,
-        });
-        this.textureHolder.onnewtextures!();
+        // Display the Mandrill texture in the Texture List on the left-hand side.
+        this.textureHolder.viewerTextures.push({ gfxTexture: this.cubeTexture });
+        this.textureHolder.onnewtextures();
     }
 
     private fillSceneParams(template: GfxRenderInst, viewerInput: ViewerRenderInput): void {

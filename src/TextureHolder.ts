@@ -32,7 +32,7 @@ export class TextureHolder implements TextureListHolder {
     public gfxTextures: GfxTexture[] = [];
     public viewerTextures: Viewer.Texture[] = [];
     public _textureNames: string[] = [];
-    public onnewtextures: (() => void) | null = null;
+    public onnewtextures: (() => void) = (() => {});
 
     public get textureNames(): string[] {
         return this._textureNames;

@@ -1296,8 +1296,8 @@ export class TextureViewer extends Panel {
         this.setVisible(false);
 
         this.searchBar = new TextEntry();
-        this.searchBar.ontext = (text) => {
-            this.filterTextures(text);
+        this.searchBar.ontext = () => {
+            this.newTexturesDebouncer.trigger();
         };
         this.searchBar.setIcon(SEARCH_ICON);
         this.searchBar.setPlaceholder('Search...');
@@ -1338,6 +1338,7 @@ export class TextureViewer extends Panel {
         this.extraRack.appendChild(this.fullSurfaceView);
 
         this.newTexturesDebouncer.callback = () => {
+            this.filterTextures();
             if (this.textureList !== null)
                 this.scrollList.setStrings(this.filteredTextureNames);
             else
@@ -1346,11 +1347,11 @@ export class TextureViewer extends Panel {
         this.setTextureList(null);
     }
 
-    private filterTextures(search: string) {
+    private filterTextures() {
+        const search = this.searchBar.textfield.getValue();
         this.filteredTextureNames = this.textureList!.textureNames.filter(name => {
             return name.toLowerCase().includes(search.toLowerCase());
         });
-        this.newTexturesDebouncer.trigger();
     }
 
     private showInSurfaceView(surface: HTMLCanvasElement) {

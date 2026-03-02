@@ -326,7 +326,7 @@ class SubdirTextureFiles {
 
 class TextureListHolder implements UI.TextureListHolder {
     public viewerTextures: Viewer.Texture[] = [];
-    public onnewtextures: (() => void) | null = null;
+    public onnewtextures: (() => void) = (() => {});
 
     public get textureNames(): string[] {
         return this.viewerTextures.map((texture) => texture.gfxTexture.ResourceName!);

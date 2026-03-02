@@ -857,7 +857,7 @@ function getLayerDirName(index: LayerId) {
 
 class TextureListHolder implements UI.TextureListHolder {
     private viewerTextures: Viewer.Texture[] = [];
-    public onnewtextures: (() => void) | null = null;
+    public onnewtextures: (() => void) = (() => {});
 
     public get textureNames(): string[] {
         return this.viewerTextures.map((texture) => texture.gfxTexture.ResourceName!);
@@ -876,7 +876,7 @@ class TextureListHolder implements UI.TextureListHolder {
             }
         }
 
-        if (changed && this.onnewtextures !== null)
+        if (changed)
             this.onnewtextures();
     }
 }

@@ -271,7 +271,7 @@ interface TextureOverride {
 
 export class GXTextureHolder implements TextureListHolder {
     private textureOverrides = new Map<string, TextureOverride>();
-    public onnewtextures: (() => void) | null = null;
+    public onnewtextures: (() => void) = (() => {});
     public textureEntries: GX_Texture.TextureInputGX[] = [];
     public gfxTextures: GfxTexture[] = [];
     public viewerTextures: Viewer.Texture[] = [];
@@ -310,8 +310,7 @@ export class GXTextureHolder implements TextureListHolder {
         this.viewerTextures.push(viewerTexture);
         this.gfxTextures.push(gfxTexture);
         this.textureEntries.push(texture);
-        if (this.onnewtextures !== null)
-            this.onnewtextures();
+        this.onnewtextures();
     }
 
     public fillTextureMapping(dst: GXTextureMapping, name: string): boolean {
