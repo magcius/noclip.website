@@ -91,6 +91,7 @@ export class TextureCanvas {
             sampleCount: 1,
             topology: GfxPrimitiveTopology.Triangles,
         })
+        device.pipelineForceReady(renderPipeline);
         renderPass.setPipeline(renderPipeline);
         const bindings = device.createBindings({
             bindingLayout: bindingLayouts[0],
