@@ -42,7 +42,7 @@ export class Texture {
             name,
             width: texture.width(),
             height: texture.height(),
-            mipCount: 1, // ???
+            mipCount: texture.num_mips() + 1,
             format: texture.format(),
             data,
         };

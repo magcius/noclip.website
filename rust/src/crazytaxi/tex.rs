@@ -12,7 +12,7 @@ pub struct TexHeader {
     pub format: u32,
     _unk_0x10: u32,
     _unk_0x14: u32,
-    _unk_0x18: u32,
+    pub num_mips: u32,
     _unk_0x1c: u32,
     _unk_0x20: u32,
 }
@@ -41,12 +41,16 @@ impl Texture {
         self.header.format
     }
 
+    pub fn num_mips(&self) -> u32 {
+        self.header.num_mips
+    }
+
     pub fn dbg_unks(&self) -> Vec<u32> {
         vec![
             self.header._unk_0x08,
             self.header._unk_0x10,
             self.header._unk_0x14,
-            self.header._unk_0x18,
+            // self.header._unk_0x18,
             self.header._unk_0x1c,
             self.header._unk_0x20,
         ]

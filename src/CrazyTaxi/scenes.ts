@@ -1,18 +1,17 @@
-import * as Viewer from '../viewer.js';
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { SceneContext } from '../SceneBase.js';
-import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render.js';
-import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { vec3 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
-import { Color, colorNewFromRGBA } from '../Color.js';
+import { NamedArrayBufferSlice } from '../DataFetcher.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render.js';
+import { SceneContext } from '../SceneBase.js';
+import { FakeTextureHolder } from '../TextureHolder.js';
+import * as Viewer from '../viewer.js';
 import { MaterialCache, Texture, TextureCache } from './material.js';
 import { Shape } from './shape.js';
 import { FileManager } from './util.js';
-import { NamedArrayBufferSlice } from '../DataFetcher.js';
 
 export class Scene implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
@@ -21,6 +20,7 @@ export class Scene implements Viewer.SceneGfx {
 
     private materials: MaterialCache;
     private skyboxMaterials: MaterialCache;
+    public textureHolder = new FakeTextureHolder([]);
 
     constructor(device: GfxDevice, private manager: FileManager, public textureCache: TextureCache, public shapes: Shape[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -36,6 +36,9 @@ export class Scene implements Viewer.SceneGfx {
         }
         this.materials.finish();
         this.skyboxMaterials.finish();
+
+        for (const tex of this.textureCache.textureMap.values())
+            this.textureHolder.viewerTextures.push(tex);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
