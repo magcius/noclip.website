@@ -985,6 +985,9 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(await fetchArchive(`zelda_haka_objects.zar`), `model/m_Hship_model.cmb`, 0.1);
         } else if (actor.actorId === ActorId.En_Kusa) {
             buildModel(await fetchArchive(`zelda_field_keep.zar`), `model/grass05_model.cmb`, 0.4);
+        } else if (actor.actorId === ActorId.Obj_Bean) {
+            const zar = await fetchArchive(`zelda_mamenoki.zar`);
+            buildModel(zar, `model/c_mame_place_model.cmb`, 0.1);
         } else if (actor.actorId === ActorId.En_Kanban) {
             const zar = await fetchArchive(`zelda_keep.zar`);
             const b = buildModel(zar, `objects/model/kanban1_model.cmb`);
@@ -995,6 +998,12 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(await fetchArchive(`zelda_tsubo.zar`), `model/tubo2_model.cmb`, 0.15);
         } else if (actor.actorId === ActorId.Obj_Kibako2) {
             buildModel(await fetchArchive(`zelda_kibako2.zar`), `model/CIkibako_model.cmb`, 0.1);
+        } else if (actor.actorId === ActorId.En_Dnt_Nomal) {
+            const zar = await fetchArchive(`zelda_hintnuts.zar`);
+            const b = buildModel(zar, `model/dekunuts.cmb`);
+            b.bindCSAB(parseCSAB(zar, 'anim/dnh_wait.csab'));
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+            buildModel(zar, `model/dekunuts_plant.cmb`);
         } else if (actor.actorId === ActorId.En_Box) {
             const zar = await fetchArchive(`zelda_box.zar`);
 
@@ -1115,6 +1124,27 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("Starschulz");
             }
+        } else if (actor.actorId === ActorId.En_Xc) {
+            const zar = await fetchArchive(`zelda_xc.zar`);
+            const b = buildModel(zar, `model/sheik.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/xechu_daiza_wait.csab`));
+            
+            b.shapeInstances[8].visible = false; // harp body
+            b.shapeInstances[9].visible = false; // harp strings
+        } else if (actor.actorId === ActorId.Bg_Spot00_Hanebasi) {
+            console.log(id);
+            const zar = await fetchArchive(`zelda_spot00_objects.zar`);
+            buildModel(zar, `model/hanebashi01_ita_model.cmb`, 1);
+            
+            const leftChain = buildModel(zar, `model/hanebashi01_chain_model.cmb`, 1);
+            const rightChain = buildModel(zar, `model/hanebashi01_chain_model.cmb`, 1);
+            // Positioning based off of Link's Nightmare
+            leftChain.modelMatrix[12] += 161;
+            leftChain.modelMatrix[13] += 10;
+            leftChain.modelMatrix[14] += 406;
+            rightChain.modelMatrix[12] -= 162;
+            rightChain.modelMatrix[13] += 10;
+            rightChain.modelMatrix[14] += 406;
         } else if (actor.actorId === ActorId.En_Bombf) {
             const zar = await fetchArchive(`zelda_bombf.zar`);
             const b = buildModel(zar, `model/bm_flower_model.cmb`, 0.01);
@@ -1164,6 +1194,10 @@ class SceneDesc implements Viewer.SceneDesc {
     //   I believe this is the right match of actor and model, but it doesn't really fit right. wrong size, missing something that
     //   would cause it to warp / animate right, not quite the right position either?
 
+        } else if (actor.actorId === ActorId.En_Rr) {
+            const zar = await fetchArchive(`zelda_rr.zar`);
+            const b = buildModel(zar, `model/likelike.cmb`, 0.014);
+            b.bindCMAB(parseCMAB(zar, `misc/likelike.cmab`));
         } else if (actor.actorId === ActorId.Bg_Po_Syokudai) {
             buildModel(await fetchArchive(`zelda_syokudai.zar`), `model/syokudai_model.cmb`, 1);
         } else if (actor.actorId === ActorId.Obj_Hsblock) {
@@ -1248,6 +1282,13 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(await fetchArchive(`zelda_door_gerudo.zar`), `model/gerudoway_shutter_model.cmb`, 1);
         } else if (actor.actorId === ActorId.En_Fz) {
             buildModel(await fetchArchive(`zelda_fz.zar`), `model/frezad.cmb`, 0.01);
+        } else if (actor.actorId === ActorId.En_Po_Relay) {
+            const zar = await fetchArchive(`zelda_tk.zar`);
+            const b = buildModel(zar, `model/danpei.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/tk_yuurei.csab`));
+
+            b.shapeInstances[6].visible = false; // shovel handle
+            b.shapeInstances[7].visible = false; // shovel blade
         } else if (actor.actorId === ActorId.Obj_Bombiwa) {
             buildModel(await fetchArchive(`zelda_bombiwa.zar`), `model/obj_18b_stone_model.cmb`, 0.1);
         } else if (actor.actorId === ActorId.Bg_Zg) {
@@ -1477,13 +1518,12 @@ class SceneDesc implements Viewer.SceneDesc {
             // TODO(jstpierre): Why don't these tree models display correctly?
             if (whichModel === 0x00) { // "Large Tree"
                 const b = buildModel(zar, `model/tree01_model.cmb`, 1.5);
-
             } else if (whichModel === 0x01) { // "Medium Tree"
                 const b = buildModel(zar, `model/tree01_model.cmb`, 1);
-
             } else if (whichModel === 0x02) { // "Small Tree"
-                const b = buildModel(zar, `model/tree03_model.cmb`, 0.5);
-
+                const b = buildModel(zar, `model/tree03_model.cmb`, 0.6);
+            } else if (whichModel === 0x05) {
+                const b = buildModel(zar, `model/tree05_model.cmb`, 1);
             } else {
                 console.warn(`Unknown En_Wood02 model ${whichModel}`);
             }
@@ -1500,6 +1540,10 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("whoops");
             }
+        } else if (actor.actorId === ActorId.Bg_Toki_Swd) {
+            const zar = await fetchArchive(`zelda_toki_objects.zar`);
+            const b = buildModel(zar, `model/master_sword_model.cmb`, 0.025);
+            b.modelMatrix[13] += 8;
         } else if (actor.actorId === ActorId.Bg_Haka) {
             const zar = await fetchArchive(`zelda_haka.zar`);
             buildModel(zar, `model/obj_haka_model.cmb`, 0.1);
@@ -1741,7 +1785,11 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_cs.zar`);
             const b = buildModel(zar, `model/childstalker.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/cs_matsu03.csab`));
-
+        
+        } else if (actor.actorId === ActorId.En_Md) {
+            const zar = await fetchArchive(`zelda_md.zar`);
+            const b = buildModel(zar, `model/mido.cmb`, 0.01);
+            b.bindCSAB(parseCSAB(zar, `anim/mido_okoru_wait.csab`))
         } else if (actor.actorId === ActorId.En_Cow) {
             const zar = await fetchArchive('zelda_cow.zar');
             const b = buildModel(zar, `model/cow.cmb`);
@@ -1812,6 +1860,12 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/strawman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
 
+        } else if (actor.actorId == ActorId.En_Goma) { 
+            const zar = await fetchArchive(`zelda_kogoma.zar`);
+            const b = buildModel(zar, `model/childgoma.cmb`, 0.01);
+            b.bindCSAB(parseCSAB(zar, `anim/gol_wait.csab`));
+
+            b.shapeInstances[4].visible = false; // egg
         } else if (actor.actorId === ActorId.En_Bubble) {
             const zar = await fetchArchive(`zelda_bubble.zar`);
             const b = buildModel(zar, `model/syabom.cmb`, 1);
@@ -2144,6 +2198,9 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/ts_matsu.csab`));
 
             b.modelMatrix[13] += 10;
+        } else if (actor.actorId === ActorId.Obj_Makeoshihiki) {
+            const zar = await fetchArchive(`zelda_dangeon_keep.zar`);
+            buildModel(zar, `model/brick_15_deku_sa_model.cmb`, 0.1);
         } else if (actor.actorId === ActorId.Grezzo_Hintstone) {
             const zar = await fetchArchive(`zelda_hintstone.zar`);
             const b = buildModel(zar, `model/hintstone.cmb`);
@@ -2220,7 +2277,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         } else if (actor.actorId === ActorId.En_Firefly) {
             const zar = await fetchArchive('zelda_ff.zar');
-            const b = buildModel(zar, `model/keith.cmb`);
+            const b = buildModel(zar, `model/keith.cmb`, 0.005);
             b.bindCSAB(parseCSAB(zar, `anim/firefly_foot_at.csab`));
 
         } else if (actor.actorId === ActorId.En_Fr) {
