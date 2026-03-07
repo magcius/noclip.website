@@ -96,6 +96,7 @@ export function parse(buffer: ArrayBufferSlice): BNTX {
     const version = view.getUint32(0x08, littleEndian);
     const supportedVersions: number[] = [
         0x00040000, // Super Mario Odyssey
+        0x00040100, // Paper Mario: The Origami King
     ];
     assert(supportedVersions.includes(version));
 

@@ -109,6 +109,7 @@ import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js'
 import * as Scenes_Spyro1 from './Spyro1/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
+import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -137,7 +138,7 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
     Scenes_Example.sceneGroup,
-
+    Scenes_PaperMarioTheOrigamiKing.sceneGroup,
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,

@@ -582,8 +582,28 @@ function parseFMAT(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         srcParamSize = view.getUint16(offs + 0xAE, littleEndian);
         rawParamSize = view.getUint16(offs + 0xB0, littleEndian);
         userDataCount = view.getUint16(offs + 0xB2, littleEndian);
-    }
-    else {
+    } else if (fresVersion.major === 9 && fresVersion.minor === 0 && fresVersion.micro === 0) {
+        name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
+        renderInfoArrayOffs = view.getUint32(offs + 0x10, littleEndian);
+        shaderAssignOffs = view.getUint32(offs + 0x20, littleEndian);
+        textureArrayOffs = view.getUint32(offs + 0x28, littleEndian);
+        textureNameArrayOffs = view.getUint32(offs + 0x30, littleEndian);
+        samplerInfoArrayOffs = view.getUint32(offs + 0x40, littleEndian);
+        samplerInfoDicOffs = view.getUint32(offs + 0x48, littleEndian);
+        shaderParamArrayOffs = view.getUint32(offs + 0x50, littleEndian);
+        srcParamOffs = view.getUint32(offs + 0x60, littleEndian);
+        userDataArrayOffs = view.getUint32(offs + 0x68, littleEndian);
+        index = view.getUint16(offs + 0x98, littleEndian);
+        renderInfoCount = view.getUint16(offs + 0x9A, littleEndian);
+        samplerCount = view.getUint8(offs + 0x9C);
+        textureCount = view.getUint8(offs + 0x9D);
+        shaderParamCount = view.getUint16(offs + 0x9E, littleEndian);
+        shaderParamVolatileCount = view.getUint16(offs + 0xA0, littleEndian);
+        srcParamSize = view.getUint16(offs + 0xA2, littleEndian);
+        rawParamSize = view.getUint16(offs + 0xA4, littleEndian);
+        userDataCount = view.getUint16(offs + 0xA6, littleEndian);
+    } else {
+        // same as 9.0.0 except the shaderParamArray offset
         name = readBinStr(buffer, view.getUint32(offs + 0x8, littleEndian), littleEndian);
         renderInfoArrayOffs = view.getUint32(offs + 0x10, littleEndian);
         shaderAssignOffs = view.getUint32(offs + 0x20, littleEndian);

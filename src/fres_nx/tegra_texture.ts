@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "./nngfx_enum.js";
 import { BRTI } from "./bntx.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
+import { decodeASTC_8x8 } from "../Common/astc_texture.js";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture.js";
 import { assert } from "../util.js";
 import { rust } from "../rustlib.js";
@@ -86,6 +87,8 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
     case ChannelFormat.Bc3:
     case ChannelFormat.Bc4:
     case ChannelFormat.Bc5:
+    case ChannelFormat.Bc6:
+    case ChannelFormat.Astc_8x8:
         return true;
     default:
         return false;
@@ -105,6 +108,8 @@ export function getFormatBytesPerBlock(channelFormat: ChannelFormat): number {
     case ChannelFormat.Bc2:
     case ChannelFormat.Bc3:
     case ChannelFormat.Bc5:
+    case ChannelFormat.Bc6:
+    case ChannelFormat.Astc_8x8:
         return 16;
     default:
         throw "whoops";
@@ -130,7 +135,6 @@ export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8
 export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     const channelFormat = getChannelFormat(textureEntry.imageFormat);
     const typeFormat = getTypeFormat(textureEntry.imageFormat);
-
     switch (channelFormat) {
     case ChannelFormat.Bc1:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
@@ -144,6 +148,12 @@ export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>):
     case ChannelFormat.Bc5:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
         return decompressBC({ ...textureEntry, type: 'BC5', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SNORM', pixels } as DecodedSurfaceBC);
+    case ChannelFormat.Bc6:
+        assert(typeFormat === TypeFormat.Ufloat);
+        return decompressBC({ ...textureEntry, type: 'BC6H', flag: 'UNORM', pixels } as DecodedSurfaceBC);
+    case ChannelFormat.Astc_8x8:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+        return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels: decodeASTC_8x8(pixels, textureEntry.width, textureEntry.height) };
     case ChannelFormat.R8_G8_B8_A8:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
         return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
@@ -230,6 +240,10 @@ function getChannelFormatString(channelFormat: ChannelFormat): string {
         return 'BC4';
     case ChannelFormat.Bc5:
         return 'BC5';
+    case ChannelFormat.Bc6:
+        return 'BC6H';
+    case ChannelFormat.Astc_8x8:
+        return 'ASTC_8x8';
     case ChannelFormat.R8_G8_B8_A8:
         return 'R8_G8_B8_A8';
     case ChannelFormat.R11_G11_B10:
@@ -249,6 +263,8 @@ function getTypeFormatString(typeFormat: TypeFormat): string {
         return 'SNORM';
     case TypeFormat.Float:
         return 'FLOAT';
+    case TypeFormat.Ufloat:
+        return 'UFLOAT';
     case TypeFormat.UnormSrgb:
         return 'SRGB';
     default:
