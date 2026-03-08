@@ -109,6 +109,7 @@ import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js'
 import * as Scenes_Spyro1 from './Spyro1/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
+import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -219,6 +220,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Elebits.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
+    Scenes_CasperSD.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
