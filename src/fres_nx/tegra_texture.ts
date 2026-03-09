@@ -3,7 +3,6 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "./nngfx_enum.js";
 import { BRTI } from "./bntx.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
-import { decodeASTC_8x8 } from "../Common/astc_texture.js";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture.js";
 import { assert } from "../util.js";
 import { rust } from "../rustlib.js";
@@ -150,9 +149,6 @@ export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>):
     case ChannelFormat.Bc5:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
         return decompressBC({ ...textureEntry, type: 'BC5', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SNORM', pixels } as DecodedSurfaceBC);
-    case ChannelFormat.Astc_8x8:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
-        return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels: decodeASTC_8x8(pixels, textureEntry.width, textureEntry.height) };
     case ChannelFormat.R8_G8_B8_A8:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
         return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };

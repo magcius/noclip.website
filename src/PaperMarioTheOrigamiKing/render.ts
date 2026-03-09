@@ -1,11 +1,12 @@
 import * as Viewer from '../viewer.js';
 import * as BNTX from "../fres_nx/bntx.js";
+import * as Decoder from "tex-decoder";
 import { mat4, vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
 import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMDL, FSHP, FSHP_Mesh, FSKL_Bone, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Float4, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
-import { AttributeFormat, ChannelFormat, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode, TypeFormat } from '../fres_nx/nngfx_enum.js';
+import { AttributeFormat, ChannelFormat, ChannelSource, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode, TypeFormat } from '../fres_nx/nngfx_enum.js';
 import { decompress, deswizzle, getImageFormatString } from '../fres_nx/tegra_texture.js';
 import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
@@ -21,78 +22,114 @@ import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
 
 function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeFormat): GfxFormat {
-    if (channelFormat === ChannelFormat.Bc7) {
-        switch (typeFormat) {
-            case TypeFormat.Unorm:
-                switch (channelFormat) {
-                    // case ChannelFormat.Bc1:
-                    //     return GfxFormat.BC1;
-                    // case ChannelFormat.Bc2:
-                    //     return GfxFormat.BC2;
-                    // case ChannelFormat.Bc3:
-                    //     return GfxFormat.BC3;
-                    // case ChannelFormat.Bc4:
-                    //     return GfxFormat.BC4_UNORM;
-                    // case ChannelFormat.Bc5:
-                    //     return GfxFormat.BC5_UNORM;
-                    case ChannelFormat.Bc7:
-                        return GfxFormat.BC7;
-                    default:
-                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-                }
-            case TypeFormat.Snorm:
-                switch (channelFormat) {
-                    // case ChannelFormat.Bc4:
-                    //     return GfxFormat.BC4_SNORM;
-                    // case ChannelFormat.Bc5:
-                    //     return GfxFormat.BC5_SNORM;
-                    default:
-                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-                }
-            case TypeFormat.Float:
-                switch (channelFormat) {
-                    // case ChannelFormat.Bc6: // not tested, could be Snorm instead of Float
-                    //     return GfxFormat.BC6H_SNORM;
-                    default:
-                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-                }
-            case TypeFormat.Ufloat:
-                switch (channelFormat) {
-                    // case ChannelFormat.Bc6:
-                    //     return GfxFormat.BC6H_UNORM;
-                    default:
-                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-                }
-            case TypeFormat.UnormSrgb:
-                switch (channelFormat) {
-                    // case ChannelFormat.Bc1:
-                    //     return GfxFormat.BC1_SRGB;
-                    // case ChannelFormat.Bc2:
-                    //     return GfxFormat.BC2_SRGB;
-                    // case ChannelFormat.Bc3:
-                    //     return GfxFormat.BC3_SRGB;
-                    case ChannelFormat.Bc7:
-                        return GfxFormat.BC7_SRGB;
-                    default:
-                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-                }
-            default:
-                throw `Unknown type format of ${typeFormat}`;
-        }
-    } else {
-        switch (typeFormat) {
-            case TypeFormat.Unorm:
-                return GfxFormat.U8_RGBA_NORM;
-            case TypeFormat.UnormSrgb:
-                return GfxFormat.U8_RGBA_SRGB;
-            case TypeFormat.Snorm:
-                return GfxFormat.S8_RGBA_NORM;
-            case TypeFormat.Float:
-                return GfxFormat.F16_RGBA;
-            default:
-                throw `Unknown type format of ${typeFormat}`;
-        }
+    switch (typeFormat) {
+        case TypeFormat.Unorm:
+            return GfxFormat.U8_RGBA_NORM;
+        case TypeFormat.UnormSrgb:
+            return GfxFormat.U8_RGBA_SRGB;
+        case TypeFormat.Snorm:
+            return GfxFormat.S8_RGBA_NORM;
+        case TypeFormat.Float:
+            return GfxFormat.F16_RGBA;
+        default:
+            throw `Unknown type format of ${typeFormat} (non-BC channel)`;
     }
+    // if (channelFormat <= ChannelFormat.Bc7 && channelFormat >= ChannelFormat.Bc1) {
+    //     switch (typeFormat) {
+    //         case TypeFormat.Unorm:
+    //             switch (channelFormat) {
+    //                 case ChannelFormat.Bc1:
+    //                     return GfxFormat.BC1;
+    //                 case ChannelFormat.Bc2:
+    //                     return GfxFormat.BC2;
+    //                 case ChannelFormat.Bc3:
+    //                     return GfxFormat.BC3;
+    //                 case ChannelFormat.Bc4:
+    //                     return GfxFormat.BC4_UNORM;
+    //                 case ChannelFormat.Bc5:
+    //                     return GfxFormat.BC5_UNORM;
+    //                 case ChannelFormat.Bc7:
+    //                     return GfxFormat.BC7;
+    //                 default:
+    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+    //             }
+    //         case TypeFormat.Snorm:
+    //             switch (channelFormat) {
+    //                 case ChannelFormat.Bc4:
+    //                     return GfxFormat.BC4_SNORM;
+    //                 case ChannelFormat.Bc5:
+    //                     return GfxFormat.BC5_SNORM;
+    //                 default:
+    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+    //             }
+    //         case TypeFormat.Float:
+    //             switch (channelFormat) {
+    //                 case ChannelFormat.Bc6: // not tested, could be Snorm instead of Float
+    //                     return GfxFormat.BC6H_SNORM;
+    //                 default:
+    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+    //             }
+    //         case TypeFormat.Ufloat:
+    //             switch (channelFormat) {
+    //                 case ChannelFormat.Bc6:
+    //                     return GfxFormat.BC6H_UNORM;
+    //                 default:
+    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+    //             }
+    //         case TypeFormat.UnormSrgb:
+    //             switch (channelFormat) {
+    //                 case ChannelFormat.Bc1:
+    //                     return GfxFormat.BC1_SRGB;
+    //                 case ChannelFormat.Bc2:
+    //                     return GfxFormat.BC2_SRGB;
+    //                 case ChannelFormat.Bc3:
+    //                     return GfxFormat.BC3_SRGB;
+    //                 case ChannelFormat.Bc7:
+    //                     return GfxFormat.BC7_SRGB;
+    //                 default:
+    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+    //             }
+    //         default:
+    //             throw `Unknown type format of ${typeFormat} (BC channel)`;
+    //     }
+    // } else {
+    //     switch (typeFormat) {
+    //         case TypeFormat.Unorm:
+    //             return GfxFormat.U8_RGBA_NORM;
+    //         case TypeFormat.UnormSrgb:
+    //             return GfxFormat.U8_RGBA_SRGB;
+    //         case TypeFormat.Snorm:
+    //             return GfxFormat.S8_RGBA_NORM;
+    //         case TypeFormat.Float:
+    //             return GfxFormat.F16_RGBA;
+    //         default:
+    //             throw `Unknown type format of ${typeFormat} (non-BC channel)`;
+    //     }
+    // }
+}
+
+function getChannelSourceString(channelSources: ChannelSource[]): string {
+    let s = "";
+    const keys = ["R", "G", "B", "A"];
+    for (let i = 0; i < channelSources.length; i++) {
+        s += keys[i] + "->";
+        switch (channelSources[i]) {
+            case ChannelSource.Zero:
+                s += "0"; break;
+            case ChannelSource.One:
+                s += "1"; break;
+            case ChannelSource.Red:
+                s += "R"; break;
+            case ChannelSource.Green:
+                s += "G"; break;
+            case ChannelSource.Blue:
+                s += "B"; break;
+            case ChannelSource.Alpha:
+                s += "A"; break;
+        }
+        s += ", ";
+    }
+    return s.slice(0, s.length - 2);
 }
 
 export class BRTITextureHolder extends TextureHolder {
@@ -110,30 +147,51 @@ export class BRTITextureHolder extends TextureHolder {
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
         const typeFormat = getTypeFormat(textureEntry.imageFormat);
+        const gfxFormat = translateImageFormat(channelFormat, typeFormat);
         const mips = textureEntry.textureDataArray[0].mipBuffers.length;
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(channelFormat, typeFormat), textureEntry.width, textureEntry.height, mips));
 
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, textureEntry.width, textureEntry.height, mips));
         for (let mipLevel = 0; mipLevel < mips; mipLevel++) {
             const buffer = textureEntry.textureDataArray[0].mipBuffers[mipLevel];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
             const blockHeightLog2 = textureEntry.blockHeightLog2;
-            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then((deswizzled) => {
-                if (channelFormat !== ChannelFormat.Bc7) {
-                    const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
-                    const rgbaPixels = rgbaTexture.pixels;
-                    device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-                } else {
-                    // let the GPU decompress BC7 textures, mostly works except for tiny sizes
-                    // other BC types don't work as well, need to investigate more
-                    device.uploadTextureData(gfxTexture, mipLevel, [deswizzled.slice(0, width * height)]);
+            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then(async (deswizzled) => {
+                // ideally don't decompress to make loading much less CPU-intensive (i.e. rgbaPixels = deswizzled)
+                // even with a high-spec system it takes at least 10 seconds to decompress, or often up to a minute for bigger scenes
+                // ASTC's GL extension is not available and BC doesn't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
+                let rgbaPixels;
+                switch (channelFormat) {
+                    case ChannelFormat.Bc3:
+                        rgbaPixels = Decoder.decodeBC3(deswizzled, width, height);
+                        break;
+                    case ChannelFormat.Bc6:
+                        if (typeFormat === TypeFormat.Ufloat) {
+                            rgbaPixels = Decoder.decodeBC6H(deswizzled, width, height);
+                        } else if (typeFormat === TypeFormat.Float) {
+                            rgbaPixels = Decoder.decodeBC6S(deswizzled, width, height);
+                        } else {
+                            throw `Unknown type format ${typeFormat} for BC6`;
+                        }
+                        break;
+                    case ChannelFormat.Bc7:
+                        rgbaPixels = Decoder.decodeBC7(deswizzled, width, height);
+                        break;
+                    case ChannelFormat.Astc_8x8: // doesn't exactly match appearance in Switch Toolbox, not sure if this is incorrect or toolbox is wrong
+                        rgbaPixels = Decoder.decodeASTC_8x8(deswizzled, width, height);
+                        break;
+                    default: // BC1/2/4/5 doesn't work for some reason with tex-decoder, default to existing decompression
+                        rgbaPixels = decompress({ ...textureEntry, width, height, depth }, deswizzled).pixels;
+                        break;
                 }
+                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
             });
         }
 
         const extraInfo = new Map<string, string>();
         extraInfo.set("Format", getImageFormatString(textureEntry.imageFormat));
+        extraInfo.set("Channels", getChannelSourceString(textureEntry.channelSource));
 
         const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
         this.gfxTextures.push(gfxTexture);
