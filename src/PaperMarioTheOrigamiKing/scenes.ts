@@ -4,8 +4,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { FMDLData, FMDLRenderer, PMTOKRenderer } from "./render.js";
-import { BRTITextureHolder } from "../fres_nx/render.js";
+import { BRTITextureHolder, FMDLData, FMDLRenderer, PMTOKRenderer } from "./render.js";
 
 class ResourceSystem {
     public textureHolder = new BRTITextureHolder();
@@ -17,9 +16,9 @@ class ResourceSystem {
         this.renderCache = new GfxRenderCache(device);
     }
 
-    public loadFRES(device: GfxDevice, cache: GfxRenderCache, name: string, fres: BFRES.FRES) {
-        this.bfresCache.set(name, fres);
-        const bntxFile = fres.externalFiles.find((f) => f.name === `${name}.bntx`);
+    public loadBFRES(device: GfxDevice, cache: GfxRenderCache, name: string, bfres: BFRES.FRES) {
+        this.bfresCache.set(name, bfres);
+        const bntxFile = bfres.externalFiles.find((f) => f.name === `${name}.bntx`);
         if (bntxFile) {
             const bntx = BNTX.parse(bntxFile.buffer);
             for (const t of bntx.textures) {
@@ -28,7 +27,7 @@ class ResourceSystem {
         } else {
             console.warn("Could not find embedded textures in", name);
         }
-        for (const fmdl of fres.fmdl) {
+        for (const fmdl of bfres.fmdl) {
             this.fmdlDataCache.set(fmdl.name, new FMDLData(cache, fmdl));
         }
     }
@@ -54,17 +53,21 @@ class PMTOKScene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const bfresFile = await context.dataFetcher.fetchData(`${pathBase}/map/${this.bfresPath}`);
-        const fres = BFRES.parse(bfresFile);
+        const commonBntxFile = await context.dataFetcher.fetchData(`${pathBase}/graphics/textures/common/default.bntx`);
+        const bfres = BFRES.parse(bfresFile);
+
         const resourceSystem = new ResourceSystem(device);
         const sceneRenderer = new PMTOKRenderer(device, resourceSystem.textureHolder);
         const cache = sceneRenderer.renderHelper.renderCache;
-        resourceSystem.loadFRES(device, cache, this.id, fres);
+        resourceSystem.loadBFRES(device, cache, this.id, bfres);
+        resourceSystem.textureHolder.addBNTXFile(device, commonBntxFile);
         for (const fmdlData of resourceSystem.fmdlDataCache.values()) {
             if (fmdlData) {
                 const fmdlRenderer = new FMDLRenderer(device, cache, resourceSystem.textureHolder, fmdlData);
                 sceneRenderer.fmdlRenderers.push(fmdlRenderer);
             }   
         }
+
         return sceneRenderer;
     }
 }

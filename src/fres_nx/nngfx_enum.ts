@@ -100,6 +100,8 @@ export enum ImageFormat {
     Bc4_Snorm              = (ChannelFormat.Bc4         << TypeFormat.$Bits) | TypeFormat.Snorm,
     Bc5_Unorm              = (ChannelFormat.Bc5         << TypeFormat.$Bits) | TypeFormat.Unorm,
     Bc5_Snorm              = (ChannelFormat.Bc5         << TypeFormat.$Bits) | TypeFormat.Snorm,
+    Bc7_Unorm              = (ChannelFormat.Bc7         << TypeFormat.$Bits) | TypeFormat.Unorm,
+    Bc7_UnormSrgb          = (ChannelFormat.Bc7         << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
     ASTC_8x8_UnormSrgb     = (ChannelFormat.Astc_8x8    << TypeFormat.$Bits) | TypeFormat.UnormSrgb,
     R8_Unorm               = (ChannelFormat.R8          << TypeFormat.$Bits) | TypeFormat.Unorm,
     R8_G8_B8_A8_Unorm      = (ChannelFormat.R8_G8_B8_A8 << TypeFormat.$Bits) | TypeFormat.Unorm,

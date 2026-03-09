@@ -1,24 +1,146 @@
-import { mat4, quat } from 'gl-matrix';
+import * as Viewer from '../viewer.js';
+import * as BNTX from "../fres_nx/bntx.js";
+import { mat4, vec4 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
-import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMDL, FSHP, FSHP_Mesh, FSKL, FSKL_Bone, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer } from '../fres_nx/bfres.js';
-import { AttributeFormat, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
-import { BRTITextureHolder } from '../fres_nx/render.js';
-import { AABB } from '../Geometry.js';
+import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMDL, FSHP, FSHP_Mesh, FSKL_Bone, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Float4, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
+import { AttributeFormat, ChannelFormat, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode, TypeFormat } from '../fres_nx/nngfx_enum.js';
+import { decompress, deswizzle, getImageFormatString } from '../fres_nx/tegra_texture.js';
 import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { fillMatrix4x4, fillMatrix4x3, fillVec3v } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { GfxRenderInst, GfxRendererLayer, makeSortKey, GfxRenderInstManager, setSortKeyDepth, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { DeviceProgram } from '../Program.js';
-import { TextureMapping } from '../TextureHolder.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
-import * as Viewer from '../viewer.js';
+
+function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeFormat): GfxFormat {
+    if (channelFormat === ChannelFormat.Bc7) {
+        switch (typeFormat) {
+            case TypeFormat.Unorm:
+                switch (channelFormat) {
+                    // case ChannelFormat.Bc1:
+                    //     return GfxFormat.BC1;
+                    // case ChannelFormat.Bc2:
+                    //     return GfxFormat.BC2;
+                    // case ChannelFormat.Bc3:
+                    //     return GfxFormat.BC3;
+                    // case ChannelFormat.Bc4:
+                    //     return GfxFormat.BC4_UNORM;
+                    // case ChannelFormat.Bc5:
+                    //     return GfxFormat.BC5_UNORM;
+                    case ChannelFormat.Bc7:
+                        return GfxFormat.BC7;
+                    default:
+                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+                }
+            case TypeFormat.Snorm:
+                switch (channelFormat) {
+                    // case ChannelFormat.Bc4:
+                    //     return GfxFormat.BC4_SNORM;
+                    // case ChannelFormat.Bc5:
+                    //     return GfxFormat.BC5_SNORM;
+                    default:
+                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+                }
+            case TypeFormat.Float:
+                switch (channelFormat) {
+                    // case ChannelFormat.Bc6: // not tested, could be Snorm instead of Float
+                    //     return GfxFormat.BC6H_SNORM;
+                    default:
+                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+                }
+            case TypeFormat.Ufloat:
+                switch (channelFormat) {
+                    // case ChannelFormat.Bc6:
+                    //     return GfxFormat.BC6H_UNORM;
+                    default:
+                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+                }
+            case TypeFormat.UnormSrgb:
+                switch (channelFormat) {
+                    // case ChannelFormat.Bc1:
+                    //     return GfxFormat.BC1_SRGB;
+                    // case ChannelFormat.Bc2:
+                    //     return GfxFormat.BC2_SRGB;
+                    // case ChannelFormat.Bc3:
+                    //     return GfxFormat.BC3_SRGB;
+                    case ChannelFormat.Bc7:
+                        return GfxFormat.BC7_SRGB;
+                    default:
+                        throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
+                }
+            default:
+                throw `Unknown type format of ${typeFormat}`;
+        }
+    } else {
+        switch (typeFormat) {
+            case TypeFormat.Unorm:
+                return GfxFormat.U8_RGBA_NORM;
+            case TypeFormat.UnormSrgb:
+                return GfxFormat.U8_RGBA_SRGB;
+            case TypeFormat.Snorm:
+                return GfxFormat.S8_RGBA_NORM;
+            case TypeFormat.Float:
+                return GfxFormat.F16_RGBA;
+            default:
+                throw `Unknown type format of ${typeFormat}`;
+        }
+    }
+}
+
+export class BRTITextureHolder extends TextureHolder {
+    public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
+        const bntx = BNTX.parse(buffer);
+        for (let i = 0; i < bntx.textures.length; i++) {
+            this.addTexture(device, bntx.textures[i]);
+        }
+    }
+
+    public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI): void {
+        if (this.textureNames.includes(textureEntry.name)) {
+            return;
+        }
+
+        const channelFormat = getChannelFormat(textureEntry.imageFormat);
+        const typeFormat = getTypeFormat(textureEntry.imageFormat);
+        const mips = textureEntry.textureDataArray[0].mipBuffers.length;
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(channelFormat, typeFormat), textureEntry.width, textureEntry.height, mips));
+
+        for (let mipLevel = 0; mipLevel < mips; mipLevel++) {
+            const buffer = textureEntry.textureDataArray[0].mipBuffers[mipLevel];
+            const width = Math.max(textureEntry.width >>> mipLevel, 1);
+            const height = Math.max(textureEntry.height >>> mipLevel, 1);
+            const depth = 1;
+            const blockHeightLog2 = textureEntry.blockHeightLog2;
+            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then((deswizzled) => {
+                if (channelFormat !== ChannelFormat.Bc7) {
+                    const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
+                    const rgbaPixels = rgbaTexture.pixels;
+                    device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
+                } else {
+                    // let the GPU decompress BC7 textures, mostly works except for tiny sizes
+                    // other BC types don't work as well, need to investigate more
+                    device.uploadTextureData(gfxTexture, mipLevel, [deswizzled.slice(0, width * height)]);
+                }
+            });
+        }
+
+        const extraInfo = new Map<string, string>();
+        extraInfo.set("Format", getImageFormatString(textureEntry.imageFormat));
+
+        const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
+        this.gfxTextures.push(gfxTexture);
+        this.viewerTextures.push(viewerTexture);
+        this.textureNames.push(textureEntry.name);
+    }
+}
 
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
     switch (addrMode) {
@@ -32,7 +154,7 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
         case TextureAddressMode.MirrorClampToEdge:
             return GfxWrapMode.Mirror;
         default:
-            throw "whoops2";
+            throw `Unknown texture address mode ${addrMode}`;
     }
 }
 
@@ -44,7 +166,7 @@ function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
         case FilterMode.Point:
             return GfxMipFilterMode.Nearest;
         default:
-            throw "whoops3";
+            throw `Unknown mip filter mode ${filterMode}`;
     }
 }
 
@@ -55,7 +177,7 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
         case FilterMode.Point:
             return GfxTexFilterMode.Point;
         default:
-            throw "whoops4";
+            throw `Unknown tex filter mode ${filterMode}`;
     }
 }
 
@@ -70,23 +192,12 @@ class AglProgram extends DeviceProgram {
     public static s_Orders = ['_a0', '_d0', '_l0', '_m0', '_n0'];
 
     public static ub_ShapeParams = 0;
-
-    public isTranslucent: boolean = false;
+    public static ub_MaterialParams = 1;
 
     constructor(public fmat: FMAT) {
         super();
-
         this.name = this.fmat.name;
         assert(this.fmat.samplerInfo.length <= 8);
-
-        // let alphaIsTranslucent = false;
-        // try {
-        //     alphaIsTranslucent = this.outputIsTranslucent('o_alpha');
-        // } catch (e) {
-        // }
-
-        this.isTranslucent = false;//alphaIsTranslucent && !this.getShaderOptionBoolean(`enable_alphamask`);
-
         this.frag = this.generateFrag();
     }
 
@@ -101,124 +212,39 @@ layout(std140) uniform ub_ShapeParams {
     Mat3x4 u_ModelView;
 };
 
-uniform sampler2D u_TextureAlbedo0;     // _a0
-uniform sampler2D u_TextureDepth0;      // _d0
-uniform sampler2D u_TextureLight0;      // _l0
-uniform sampler2D u_TextureMetalness0;  // _m0
-uniform sampler2D u_TextureNormal0;     // _n0
+layout(std140) uniform ub_MaterialParams {
+    Mat2x4 u_TexCoordSRT0;
+    Mat2x4 u_TexCoordSRT1;
+    Mat2x4 u_TexCoordSRT2;
+    vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
+    vec4 u_PaperColor;
+};
+
+uniform sampler2D u_TextureAlbedo;     // _a0
+uniform sampler2D u_TextureDepth;      // _d0
+uniform sampler2D u_TextureLight;      // _l0
+uniform sampler2D u_TextureMetalness;  // _m0
+uniform sampler2D u_TextureNormal;     // _n0
 `;
 
     public override both = AglProgram.globalDefinitions;
-
-    public lookupSamplerIndex(shadingModelSamplerBindingName: string) {
-        const samplerName = assertExists(this.fmat.shaderAssign.samplerAssign.get(shadingModelSamplerBindingName));
-        const samplerIndex = this.fmat.samplerInfo.findIndex((sampler) => sampler.name === samplerName);
-        assert(samplerIndex >= 0);
-        return samplerIndex;
-    }
 
     public getShaderOptionNumber(optionName: string): number {
         const optionValue = assertExists(this.fmat.shaderAssign.shaderOption.get(optionName));
         return +optionValue;
     }
 
-    public getShaderOptionBoolean(optionName: string): boolean {
-        const optionValue = assertExists(this.fmat.shaderAssign.shaderOption.get(optionName));
+    public getShaderOptionBoolean(optionName: string, dneValue: boolean = false): boolean {
+        const optionValue = this.fmat.shaderAssign.shaderOption.get(optionName);
+        if (optionValue === undefined) {
+            return dneValue;
+        }
         assert(optionValue === '0' || optionValue === '1');
         return optionValue === '1';
     }
 
     public condShaderOption(optionName: string, branchTrue: () => string, branchFalse: () => string = () => ''): string {
         return this.getShaderOptionBoolean(optionName) ? branchTrue() : branchFalse();
-    }
-
-    public generateComponentMask(componentMask: number): string {
-        if (componentMask === 10)
-            return '.rgba';
-        else if (componentMask === 20)
-            return '.rrrr';
-        else if (componentMask === 30)
-            return '.g';
-        else if (componentMask === 50)
-            return '.rgba';
-        else if (componentMask === 60)
-            return '.a';
-        else
-            throw "whoops5";
-    }
-
-    public genSample(shadingModelSamplerBindingName: string): string {
-        try {
-            const samplerIndex = this.lookupSamplerIndex(shadingModelSamplerBindingName);
-            const uv = 'v_TexCoord0';
-            return `texture(SAMPLER_2D(u_Texture${samplerIndex}), ${uv})`;
-        } catch (e) {
-            console.warn(`${this.name}: No sampler by name ${shadingModelSamplerBindingName}`);
-            return `vec4(1.0)`;
-        }
-    }
-
-    public genBlend(instance: number) {
-        assert(this.getShaderOptionBoolean(`enable_blend${instance}`));
-        const src = `${this.genOutput(`blend${instance}_src`)}${this.genOutputCompMask(`blend${instance}_src_ch`)}`;
-        return src;
-    }
-
-    public genOutputCompMask(optionName: string): string {
-        return this.generateComponentMask(this.getShaderOptionNumber(optionName));
-    }
-
-    public genOutput(optionName: string): string {
-        const n = this.getShaderOptionNumber(optionName);
-
-        if (n === 15)
-            return 'vec4(1.0)';
-
-        const kind = assertExists((n / 10) | 0);
-        const instance = assertExists(n % 10);
-
-        if (kind === 1)
-            return this.genSample(`_a${instance}`);
-        else if (kind === 2 || kind === 3)
-            return this.genSample(`_n${instance}`);
-        else if (kind === 5)
-            return this.genSample(`_u${instance}`);
-        else if (kind === 6)
-            return `vec4(1.0)`;
-        else if (kind === 7)
-            return `vec4(1.0)`;
-        else if (kind === 8)
-            return this.genBlend(instance);
-        else if (kind === 10)
-            return `vec4(1.0)`;
-        else if (kind === 11) {
-            if (instance === 0 || instance === 1 || instance === 2 || instance === 5)
-                return `vec4(0.0)`;
-            else if (instance === 6)
-                return `vec4(1.0)`;
-            else
-                throw "whoops6";
-        } else
-            throw "whoops7";
-    }
-
-    public blendIsTranslucent(instance: number): boolean {
-        assert(this.getShaderOptionBoolean(`enable_blend${instance}`));
-        return this.outputIsTranslucent(`blend${instance}_src`);
-    }
-
-    public outputIsTranslucent(optionName: string): boolean {
-        const n = this.getShaderOptionNumber(optionName);
-
-        const kind = (n / 10) | 0;
-        const instance = (n % 10);
-
-        if (kind === 8)
-            return this.blendIsTranslucent(instance);
-        else if (kind === 11)
-            return instance !== 6;
-        else
-            return true;
     }
 
     public override vert = `
@@ -230,21 +256,25 @@ layout(location = ${AglProgram._u0}) in vec2 _u0;
 layout(location = ${AglProgram._u1}) in vec2 _u1;
 
 out vec3 v_PositionWorld;
-out vec4 v_NormalWorld;
+out vec3 v_NormalWorld;
 out vec4 v_TangentWorld;
 out vec4 v_BitangentWorld;
 out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
+out vec4 v_Floats;
+out vec4 v_PaperColor;
 
 void main() {
     vec3 t_PositionView = UnpackMatrix(u_ModelView) * UnpackMatrix(u_Shift) * vec4(_p0, 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_PositionWorld = _p0;
-    v_NormalWorld = _n0;
+    v_NormalWorld = _n0.xyz;
     v_TangentWorld = _t0;
     v_BitangentWorld = _b0;
-    v_TexCoord0 = _u0;
+    v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(_u0, 1.0, 1.0);
     v_TexCoord1 = _u1;
+    v_Floats = u_Floats;
+    v_PaperColor = u_PaperColor;
 }
 `;
 
@@ -253,15 +283,53 @@ void main() {
 precision highp float;
 
 in vec3 v_PositionWorld;
-in vec4 v_NormalWorld;
+in vec3 v_NormalWorld;
 in vec4 v_TangentWorld;
 in vec4 v_BitangentWorld;
 in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
+in vec4 v_Floats;
+in vec4 v_PaperColor;
 
 void main() {
-    gl_FragColor = texture(SAMPLER_2D(u_TextureAlbedo0), v_TexCoord0);
-    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / 2.2));
+    vec4 albedo = texture(SAMPLER_2D(u_TextureAlbedo), v_TexCoord0);
+    albedo.rgb *= v_PaperColor.rgb;
+
+    float occlusion = 1.0;
+    if (${this.getShaderOptionBoolean('use_occlusion_map')}) {
+        float occSample = texture(SAMPLER_2D(u_TextureLight), v_TexCoord1).r;
+        occlusion = mix(0.5, 1.0, occSample);
+    }
+
+    vec3 finalNormal;
+    if (${this.getShaderOptionBoolean('use_normal_map')}) {
+        vec3 normalSample = texture(SAMPLER_2D(u_TextureNormal), v_TexCoord0).rgb;
+        if (v_Floats.z > 0.5) normalSample.g = 1.0 - normalSample.g; // yFlip
+        vec3 tangentNormal = normalize(normalSample * 2.0 - 1.0);
+        vec3 N = normalize(v_NormalWorld);
+        vec3 T = normalize(v_TangentWorld.xyz);
+        vec3 B = normalize(cross(N, T) * v_TangentWorld.w); 
+        finalNormal = normalize(mat3(T, B, N) * tangentNormal);
+    } else {
+        finalNormal = normalize(v_NormalWorld);
+    }
+
+    vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4)); 
+    vec3 viewDir = normalize(-v_PositionWorld);
+    vec3 halfDir = normalize(lightDir + viewDir);
+
+    float diffuse = dot(finalNormal, lightDir) * 0.5 + 0.5;
+    vec3 ambient = vec3(0.3, 0.3, 0.35) * occlusion;
+
+    float specPower = max(v_Floats.x * 128.0, 1.0);
+    float spec = pow(max(dot(finalNormal, halfDir), 0.0), specPower);
+    vec3 specular = vec3(spec * 0.3) * step(0.0, dot(finalNormal, lightDir));
+
+    vec3 color = albedo.rgb * (diffuse + ambient);
+    color += specular;
+    
+    color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
+    gl_FragColor = vec4(color, albedo.a);
 }
 `;
     }
@@ -272,42 +340,48 @@ function translateRenderInfoSingleString(renderInfo: FMAT_RenderInfo): string {
     return renderInfo.values[0] as string;
 }
 
-function translateRenderInfoBoolean(renderInfo: FMAT_RenderInfo): boolean {
-    const value = translateRenderInfoSingleString(renderInfo);
-    if (value === '1')
-        return true;
-    else if (value === '0')
-        return false;
-    else
-        throw "whoops8";
-}
-
 function translateCullMode(fmat: FMAT): GfxCullMode {
-    const cull_mode = translateRenderInfoSingleString(fmat.renderInfo.get('culling')!);
-    if (cull_mode === 'front')
+    const cullValue = fmat.renderInfo.get('culling');
+    if (!cullValue) {
+        return GfxCullMode.None;
+    }
+    const cullMode = translateRenderInfoSingleString(cullValue);
+    if (cullMode === 'front')
         return GfxCullMode.Front;
-    else if (cull_mode === 'back')
+    else if (cullMode === 'back')
         return GfxCullMode.Back;
-    else if (cull_mode === 'none')
+    else if (cullMode === 'none')
         return GfxCullMode.None;
     else
-        throw "whoops9";
+        throw `Unknown cull mode ${cullMode}`;
 }
 
-function translateDepthWrite(fmat: FMAT): boolean {
-    return true;
-    // return translateRenderInfoBoolean(fmat.renderInfo.get('enable_depth_write')!);
-}
+enum TexSRTMode { Maya, Max, XSI }
+class TexSRT {
+    public mode = TexSRTMode.Maya;
+    public scaleS = 1.0;
+    public scaleT = 1.0;
+    public rotation = 0.0;
+    public translationS = 0.0;
+    public translationT = 0.0;
 
-function translateDepthCompare(fmat: FMAT): GfxCompareMode {
-    // if (fmat.renderInfo.has('depth_test_equal')) {
-    //     if (translateRenderInfoBoolean(fmat.renderInfo.get('depth_test_equal')!)) {
-    //         return GfxCompareMode.GreaterEqual;
-    //     } else {
-    //         return GfxCompareMode.Always;
-    //     }
-    // }
-    return GfxCompareMode.Never;
+    public calc(dst: mat4): void {
+        const theta = this.rotation * MathConstants.DEG_TO_RAD;
+        const sinR = Math.sin(theta);
+        const cosR = Math.cos(theta);
+        mat4.identity(dst);
+        dst[0] = this.scaleS * cosR;
+        dst[4] = this.scaleS * sinR;
+        dst[12] = this.scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - this.translationS);
+        dst[1] = this.scaleT * -sinR;
+        dst[5] = this.scaleT * cosR;
+        dst[13] = this.scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + this.translationT) + 1.0;
+    }
+
+    public fillMatrix(d: Float32Array, offs: number): number {
+        this.calc(scratchMatrix);
+        return fillMatrix4x2(d, offs, scratchMatrix);
+    }
 }
 
 class FMATInstance {
@@ -316,13 +390,18 @@ class FMATInstance {
     private program: AglProgram;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    private texCoordSRT0 = new TexSRT();
+    private texCoordSRT1 = new TexSRT();
+    private texCoordSRT2 = new TexSRT();
+    private glossiness = 0.0;
+    private alphaRef = 1.0;
+    private yFlip = 0.0;
+    private whiteBack = 0.0;
+    private paperColor: vec4 = [1.0, 1.0, 1.0, 1.0];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: BRTITextureHolder, public fmat: FMAT) {
         this.program = new AglProgram(fmat);
 
-        assert(fmat.samplerInfo.length === fmat.textureName.length);
-
-        this.textureMapping = nArray(AglProgram.s_Orders.length, () => new TextureMapping());
         for (let i = 0; i < fmat.samplerInfo.length; i++) {
             const samplerInfo = fmat.samplerInfo[i];
             const gfxSampler = cache.createSampler({
@@ -335,11 +414,20 @@ class FMATInstance {
                 minLOD: samplerInfo.minLOD,
             });
             this.gfxSamplers.push(gfxSampler);
+        }
 
-            const textureName = fmat.textureName[i];
-            textureHolder.fillTextureMapping(this.textureMapping[i], textureName);
-            (this.textureMapping[i] as any).name = textureName;
-            this.textureMapping[i].gfxSampler = gfxSampler;
+        assert(fmat.samplerInfo.length === fmat.textureName.length);
+        this.textureMapping = nArray(AglProgram.s_Orders.length, () => new TextureMapping());
+        for (const [shaderSamplerName, samplerName] of fmat.shaderAssign.samplerAssign.entries()) {
+            const samplerIndex = fmat.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
+            const shaderSamplerIndex = AglProgram.s_Orders.indexOf(shaderSamplerName);
+            if (shaderSamplerIndex < 0) {
+                assert(false);
+            }
+            assert(samplerIndex >= 0 && shaderSamplerIndex >= 0);
+            const shaderMapping = this.textureMapping[shaderSamplerIndex];
+            textureHolder.fillTextureMapping(shaderMapping, fmat.textureName[samplerIndex]);
+            shaderMapping.gfxSampler = this.gfxSamplers[samplerIndex];
         }
 
         this.gfxProgram = cache.createProgram(this.program);
@@ -354,15 +442,40 @@ class FMATInstance {
         //     blendSrcFactor: GfxBlendFactor.One,
         //     blendDstFactor: GfxBlendFactor.Zero,
         // });
+
+        const srt0 = fmat.shaderParam.find((p) => p.name === "texsrt0");
+        const srt1 = fmat.shaderParam.find((p) => p.name === "texsrt1");
+        const srt2 = fmat.shaderParam.find((p) => p.name === "texsrt2");
+        const glossiness = fmat.shaderParam.find((p) => p.name === "glossiness");
+        const alphaRef = fmat.shaderParam.find((p) => p.name === "alpha_ref");
+        const yFlip = fmat.shaderParam.find((p) => p.name === "yflip");
+        const whiteBack = fmat.shaderParam.find((p) => p.name === "white_back");
+        const paperColor = fmat.shaderParam.find((p) => p.name === "paper_color");
+        if (srt0) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
+        if (srt1) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
+        if (srt2) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, srt2);
+        if (glossiness) this.glossiness = parseFMAT_ShaderParam_Float(glossiness);
+        if (alphaRef) this.alphaRef = parseFMAT_ShaderParam_Float(alphaRef);
+        if (yFlip) this.yFlip = parseFMAT_ShaderParam_Float(yFlip);
+        if (whiteBack) this.whiteBack = parseFMAT_ShaderParam_Float(whiteBack);
+        if (paperColor) parseFMAT_ShaderParam_Float4(this.paperColor, paperColor);
     }
 
     public setOnRenderInst(device: GfxDevice, renderInst: GfxRenderInst): void {
-        // const isTranslucent = this.program.isTranslucent;
-        // const materialLayer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        // renderInst.sortKey = makeSortKey(materialLayer, 0);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
+
+        let offs = renderInst.allocateUniformBuffer(AglProgram.ub_MaterialParams, 32);
+        const d = renderInst.mapUniformBufferF32(AglProgram.ub_MaterialParams);
+        offs += this.texCoordSRT0.fillMatrix(d, offs);
+        offs += this.texCoordSRT1.fillMatrix(d, offs);
+        offs += this.texCoordSRT2.fillMatrix(d, offs);
+        d[offs++] = this.glossiness;
+        d[offs++] = this.alphaRef;
+        d[offs++] = this.yFlip;
+        d[offs++] = this.whiteBack;
+        offs += fillVec4v(d, offs, this.paperColor);
     }
 }
 
@@ -394,7 +507,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
             return GfxFormat.F32_RGB;
         default:
             console.error(getChannelFormat(attributeFormat), getTypeFormat(attributeFormat));
-            throw "whoops11";
+            throw `Unknown attribute format ${attributeFormat}`;
     }
 }
 
@@ -416,30 +529,29 @@ class FVTXData {
             const vertexAttribute = fvtx.vertexAttributes[i];
             const bufferIndex = vertexAttribute.bufferIndex;
 
-            if (this.inputBufferDescriptors[bufferIndex] === undefined)
+            if (this.inputBufferDescriptors[bufferIndex] === undefined) {
                 this.inputBufferDescriptors[bufferIndex] = null;
+            }
 
             const attribLocation = AglProgram.a_Orders.indexOf(vertexAttribute.name);
-            if (attribLocation < 0)
+            if (attribLocation < 0) {
                 continue;
+            }
 
             const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
             const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
                 const attribBufferIndex = nextBufferIndex++;
-
                 this.vertexAttributeDescriptors.push({
                     location: attribLocation,
                     format: convertedAttribute.format,
                     bufferIndex: attribBufferIndex,
                     bufferByteOffset: 0,
                 });
-
                 this.inputBufferDescriptors[attribBufferIndex] = {
                     byteStride: convertedAttribute.stride,
                     frequency: GfxVertexBufferFrequency.PerVertex,
                 };
-
                 const gfxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, convertedAttribute.data);
                 this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
             } else {
@@ -449,15 +561,12 @@ class FVTXData {
                     bufferIndex: bufferIndex,
                     bufferByteOffset: vertexAttribute.offset,
                 });
-
                 if (!this.vertexBufferDescriptors[bufferIndex]) {
                     const gfxBuffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexBuffer.data);
-
                     this.inputBufferDescriptors[bufferIndex] = {
                         byteStride: vertexBuffer.stride,
                         frequency: GfxVertexBufferFrequency.PerVertex,
                     };
-
                     this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer };
                 }
             }
@@ -517,7 +626,6 @@ class FSHPMeshData {
             vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
-
         this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
         this.indexBuffer = createBufferFromSlice(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexBufferData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
@@ -532,13 +640,15 @@ class FSHPData {
     public meshData: FSHPMeshData[] = [];
 
     constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: FVTXData, public bone: FSKL_Bone) {
-        for (let i = 0; i < fshp.mesh.length; i++)
-            this.meshData.push(new FSHPMeshData(cache, fshp.mesh[i], fvtxData, this.bone));
+        for (const mesh of fshp.mesh) {
+            this.meshData.push(new FSHPMeshData(cache, mesh, fvtxData, this.bone));
+        }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.meshData.length; i++)
-            this.meshData[i].destroy(device);
+        for (const meshData of this.meshData) {
+            meshData.destroy(device);
+        }
     }
 }
 
@@ -547,28 +657,34 @@ export class FMDLData {
     public fshpData: FSHPData[] = [];
 
     constructor(cache: GfxRenderCache, public fmdl: FMDL) {
-        for (let i = 0; i < fmdl.fvtx.length; i++)
-            this.fvtxData.push(new FVTXData(cache.device, fmdl.fvtx[i]));
-        for (let i = 0; i < fmdl.fshp.length; i++) {
-            const fshp = fmdl.fshp[i];
+        for (const fvtx of fmdl.fvtx) {
+            this.fvtxData.push(new FVTXData(cache.device, fvtx));
+        }
+        for (const fshp of fmdl.fshp) {
             this.fshpData.push(new FSHPData(cache, fshp, this.fvtxData[fshp.vertexIndex], fmdl.fskl.bones[fshp.boneIndex]));
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.fvtxData.length; i++)
-            this.fvtxData[i].destroy(device);
-        for (let i = 0; i < this.fshpData.length; i++)
-            this.fshpData[i].destroy(device);
+        for (const fvtxData of this.fvtxData) {
+            fvtxData.destroy(device);
+        }
+        for (const fshpData of this.fshpData) {
+            fshpData.destroy(device);
+        }
     }
 }
 
 function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
     switch (indexFormat) {
-        case IndexFormat.Uint8: return GfxFormat.U8_R;
-        case IndexFormat.Uint16: return GfxFormat.U16_R;
-        case IndexFormat.Uint32: return GfxFormat.U32_R;
-        default: throw "whoops12";
+        case IndexFormat.Uint8:
+            return GfxFormat.U8_R;
+        case IndexFormat.Uint16:
+            return GfxFormat.U16_R;
+        case IndexFormat.Uint32:
+            return GfxFormat.U32_R;
+        default:
+            throw `Unknown index format ${indexFormat}`;
     }
 }
 
@@ -581,7 +697,6 @@ class FSHPMeshInstance {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(this.meshData.mesh.count);
         renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
-
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
@@ -589,10 +704,8 @@ class FSHPMeshInstance {
 }
 
 const scratchMatrix = mat4.create();
-const bboxScratch = new AABB();
 class FSHPInstance {
     private lodMeshInstances: FSHPMeshInstance[] = [];
-    public visible = true;
 
     constructor(public fshpData: FSHPData, private fmatInstance: FMATInstance) {
         this.lodMeshInstances.push(new FSHPMeshInstance(fshpData.meshData[0]));
@@ -612,9 +725,6 @@ class FSHPInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
-            return;
-
         const template = renderInstManager.pushTemplate();
         let offs = template.allocateUniformBuffer(AglProgram.ub_ShapeParams, 16 + 16 + 12);
         const d = template.mapUniformBufferF32(AglProgram.ub_ShapeParams);
@@ -623,19 +733,18 @@ class FSHPInstance {
         offs += fillMatrix4x3(d, offs, this.computeModelView(modelMatrix, viewerInput));
         this.fmatInstance.setOnRenderInst(device, template);
 
-        for (let i = 0; i < this.lodMeshInstances.length; i++) {
-            bboxScratch.transform(this.lodMeshInstances[i].meshData.mesh.bbox, modelMatrix);
+        for (const lodMeshInstance of this.lodMeshInstances) {
+            // bboxScratch.transform(lodMeshInstance.meshData.mesh.bbox, modelMatrix);
             // if (!viewerInput.camera.frustum.contains(bboxScratch))
             //     continue;
-
-            this.lodMeshInstances[i].prepareToRender(device, renderInstManager, viewerInput);
+            lodMeshInstance.prepareToRender(device, renderInstManager, viewerInput);
         }
 
         renderInstManager.popTemplate();
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 8 }];
+const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 5 }];
 
 export class FMDLRenderer {
     public fmatInst: FMATInstance[] = [];
@@ -646,11 +755,10 @@ export class FMDLRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: BRTITextureHolder, fmdlData: FMDLData) {
         const fmdl = fmdlData.fmdl;
         this.name = fmdl.name;
-        for (let i = 0; i < fmdl.fmat.length; i++)
-            this.fmatInst.push(new FMATInstance(device, cache, textureHolder, fmdl.fmat[i]));
-
-        for (let i = 0; i < fmdlData.fshpData.length; i++) {
-            const fshpData = fmdlData.fshpData[i];
+        for (const fmat of fmdl.fmat) {
+            this.fmatInst.push(new FMATInstance(device, cache, textureHolder, fmat));
+        }
+        for (const fshpData of fmdlData.fshpData) {
             const fmatInstance = this.fmatInst[fshpData.fshp.materialIndex];
             this.fshpInst.push(new FSHPInstance(fshpData, fmatInstance));
         }
@@ -658,11 +766,10 @@ export class FMDLRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplate();
-        template.setBindingLayouts(bindingLayouts);
-
-        for (let i = 0; i < this.fshpInst.length; i++)
-            this.fshpInst[i].prepareToRender(device, renderInstManager, this.modelMatrix, viewerInput);
-
+        template.setBindingLayouts(BINDING_LAYOUTS);
+        for (const fshpInst of this.fshpInst) {
+            fshpInst.prepareToRender(device, renderInstManager, this.modelMatrix, viewerInput);
+        }
         renderInstManager.popTemplate();
     }
 }
@@ -678,23 +785,19 @@ export class PMTOKRenderer {
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
-
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-
         this.renderHelper.pushTemplateRenderInst();
-        for (let i = 0; i < this.fmdlRenderers.length; i++)
+        for (let i = 0; i < this.fmdlRenderers.length; i++) {
             this.fmdlRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        }
         this.renderHelper.renderInstManager.popTemplate();
-
         this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
-
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass((pass) => {
@@ -707,7 +810,6 @@ export class PMTOKRenderer {
         });
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
         this.prepareToRender(device, viewerInput);
         builder.execute();
         this.renderInstListMain.reset();

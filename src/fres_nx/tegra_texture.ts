@@ -88,6 +88,7 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
     case ChannelFormat.Bc4:
     case ChannelFormat.Bc5:
     case ChannelFormat.Bc6:
+    case ChannelFormat.Bc7:
     case ChannelFormat.Astc_8x8:
         return true;
     default:
@@ -109,6 +110,7 @@ export function getFormatBytesPerBlock(channelFormat: ChannelFormat): number {
     case ChannelFormat.Bc3:
     case ChannelFormat.Bc5:
     case ChannelFormat.Bc6:
+    case ChannelFormat.Bc7:
     case ChannelFormat.Astc_8x8:
         return 16;
     default:
@@ -148,9 +150,6 @@ export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>):
     case ChannelFormat.Bc5:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
         return decompressBC({ ...textureEntry, type: 'BC5', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SNORM', pixels } as DecodedSurfaceBC);
-    case ChannelFormat.Bc6:
-        assert(typeFormat === TypeFormat.Ufloat);
-        return decompressBC({ ...textureEntry, type: 'BC6H', flag: 'UNORM', pixels } as DecodedSurfaceBC);
     case ChannelFormat.Astc_8x8:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
         return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels: decodeASTC_8x8(pixels, textureEntry.width, textureEntry.height) };
@@ -242,6 +241,8 @@ function getChannelFormatString(channelFormat: ChannelFormat): string {
         return 'BC5';
     case ChannelFormat.Bc6:
         return 'BC6H';
+    case ChannelFormat.Bc7:
+        return 'BC7';
     case ChannelFormat.Astc_8x8:
         return 'ASTC_8x8';
     case ChannelFormat.R8_G8_B8_A8:
