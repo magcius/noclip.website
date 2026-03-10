@@ -4,19 +4,20 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { BRTITextureHolder, FMDLData, FMDLRenderer, PMTOKRenderer } from "./render.js";
+import { PMTOKTextureHolder, ModelData, ModelRenderer, PMTOKRenderer } from "./render.js";
 
-class ResourceSystem {
-    public textureHolder = new BRTITextureHolder();
+export class ResourceSystem {
+    // Adapated from Odyssey's class of the same name
+    public textureHolder = new PMTOKTextureHolder();
     public bfresCache = new Map<string, BFRES.FRES | null>();
-    public fmdlDataCache = new Map<string, FMDLData | null>();
+    public fmdlDataCache = new Map<string, ModelData | null>();
     private renderCache: GfxRenderCache;
 
     constructor(device: GfxDevice) {
         this.renderCache = new GfxRenderCache(device);
     }
 
-    public loadBFRES(device: GfxDevice, cache: GfxRenderCache, name: string, bfres: BFRES.FRES) {
+    public loadBFRES(device: GfxDevice, name: string, bfres: BFRES.FRES) {
         this.bfresCache.set(name, bfres);
         const bntxFile = bfres.externalFiles.find((f) => f.name === `${name}.bntx`);
         if (bntxFile) {
@@ -28,7 +29,7 @@ class ResourceSystem {
             console.warn("Could not find embedded textures in", name);
         }
         for (const fmdl of bfres.fmdl) {
-            this.fmdlDataCache.set(fmdl.name, new FMDLData(cache, fmdl));
+            this.fmdlDataCache.set(fmdl.name, new ModelData(this.renderCache, fmdl));
         }
     }
 
@@ -57,14 +58,15 @@ class PMTOKScene implements SceneDesc {
         const bfres = BFRES.parse(bfresFile);
 
         const resourceSystem = new ResourceSystem(device);
-        const sceneRenderer = new PMTOKRenderer(device, resourceSystem.textureHolder);
-        const cache = sceneRenderer.renderHelper.renderCache;
-        resourceSystem.loadBFRES(device, cache, this.id, bfres);
+        const sceneRenderer = new PMTOKRenderer(device);
+        resourceSystem.loadBFRES(device, this.id, bfres);
         resourceSystem.textureHolder.addBNTXFile(device, commonBntxFile);
+        sceneRenderer.setResourceSystem(resourceSystem);
         for (const fmdlData of resourceSystem.fmdlDataCache.values()) {
             if (fmdlData) {
-                const fmdlRenderer = new FMDLRenderer(device, cache, resourceSystem.textureHolder, fmdlData);
-                sceneRenderer.fmdlRenderers.push(fmdlRenderer);
+                sceneRenderer.modelRenderers.push(
+                    new ModelRenderer(device, sceneRenderer.renderHelper.renderCache, resourceSystem.textureHolder, fmdlData)
+                );
             }   
         }
 
@@ -72,6 +74,7 @@ class PMTOKScene implements SceneDesc {
     }
 }
 
+// TODO: Go through the game again to get level names right. For now they're either from memory or the literal file name
 const id = "PMTOK";
 const name = "Paper Mario: The Origami King";
 const sceneDescs = [
@@ -81,7 +84,7 @@ const sceneDescs = [
     new PMTOKScene("field/W0C1_EntranceWay.bfres",              "Entrance Way"),
     new PMTOKScene("field/W0C1_FoldRoom.bfres",                 "Fold Room"),
     new PMTOKScene("field/W0C1_HelpOlivia.bfres",               "Help Olivia"),
-    new PMTOKScene("field/W0C1_MainHall.bfres",                 "Main Hall"),
+    new PMTOKScene("field/W0C1_MainHall.bfres",                 "Main Hall (Peach's Castle)"),
     new PMTOKScene("field/W0C1_SpiralStair.bfres",              "Spiral Stair"),
     new PMTOKScene("field/W0C1_WallHole.bfres",                 "Wall Hole"),
     new PMTOKScene("field/W0C2_VolcanoCastle.bfres",            "Volcano Castle"),
