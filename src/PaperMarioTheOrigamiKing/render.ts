@@ -281,7 +281,7 @@ layout(std140) uniform ub_MaterialParams {
 uniform sampler2D u_TextureAlbedo;     // _a0
 uniform sampler2D u_TextureDepth;      // _d0
 uniform sampler2D u_TextureLight;      // _l0
-uniform sampler2D u_TextureMetalness;  // _m0
+uniform sampler2D u_TextureMaterial;   // _m0
 uniform sampler2D u_TextureNormal;     // _n0
 `;
 
@@ -314,7 +314,7 @@ layout(location = ${AglProgram._u0}) in vec2 _u0;
 layout(location = ${AglProgram._u1}) in vec2 _u1;
 
 out vec3 v_PositionWorld;
-out vec3 v_NormalWorld;
+out vec4 v_NormalWorld;
 out vec4 v_TangentWorld;
 out vec4 v_BitangentWorld;
 out vec2 v_TexCoord0;
@@ -326,10 +326,10 @@ void main() {
     vec3 t_PositionView = UnpackMatrix(u_ModelView) * UnpackMatrix(u_Shift) * vec4(_p0, 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_PositionWorld = _p0;
-    v_NormalWorld = _n0.xyz;
+    v_NormalWorld = _n0;
     v_TangentWorld = _t0;
     v_BitangentWorld = _b0;
-    v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(_u0, 1.0, 1.0);
+    v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(_u0, 1.0, 1.0); // srt needed?
     v_TexCoord1 = _u1;
     v_Floats = u_Floats;
     v_PaperColor = u_PaperColor;
@@ -341,7 +341,7 @@ void main() {
 precision highp float;
 
 in vec3 v_PositionWorld;
-in vec3 v_NormalWorld;
+in vec4 v_NormalWorld;
 in vec4 v_TangentWorld;
 in vec4 v_BitangentWorld;
 in vec2 v_TexCoord0;
@@ -351,43 +351,37 @@ in vec4 v_PaperColor;
 
 void main() {
     vec4 albedo = texture(SAMPLER_2D(u_TextureAlbedo), v_TexCoord0);
-    albedo.rgb *= v_PaperColor.rgb;
+    vec4 color = albedo;
 
-    float occlusion = 1.0;
-    if (${this.getShaderOptionBoolean('use_occlusion_map')}) {
-        float occSample = texture(SAMPLER_2D(u_TextureLight), v_TexCoord1).r;
-        occlusion = mix(0.5, 1.0, occSample);
-    }
+    ${this.getShaderOptionBoolean('alpha_test') ? `
+    if (albedo.a < v_Floats.y) {
+        discard;
+    }` : ``}
 
-    vec3 finalNormal;
-    if (${this.getShaderOptionBoolean('use_normal_map')}) {
-        vec3 normalSample = texture(SAMPLER_2D(u_TextureNormal), v_TexCoord0).rgb;
-        if (v_Floats.z > 0.5) normalSample.g = 1.0 - normalSample.g; // yFlip
-        vec3 tangentNormal = normalize(normalSample * 2.0 - 1.0);
-        vec3 N = normalize(v_NormalWorld);
-        vec3 T = normalize(v_TangentWorld.xyz);
-        vec3 B = normalize(cross(N, T) * v_TangentWorld.w); 
-        finalNormal = normalize(mat3(T, B, N) * tangentNormal);
-    } else {
-        finalNormal = normalize(v_NormalWorld);
-    }
+    ${this.getShaderOptionBoolean('use_normal_map') ? `
+    // adapted from Odyssey's shader
+    vec3 t_Normal = v_NormalWorld.xyz;
+    vec3 t_Tangent = normalize(v_TangentWorld.xyz);
+    vec3 t_Bitangent = normalize(v_BitangentWorld.xyz);
+    vec3 t_LocalNormal = vec3(texture(SAMPLER_2D(u_TextureNormal), v_TexCoord0).rg, 0);
+    float t_Len2 = 1.0 - t_LocalNormal.x*t_LocalNormal.x - t_LocalNormal.y*t_LocalNormal.y;
+    t_LocalNormal.z = sqrt(clamp(t_Len2, 0.0, 1.0));
+    vec3 t_NormalDir = (t_LocalNormal.x * t_Tangent + t_LocalNormal.y * t_Bitangent + t_LocalNormal.z * t_Normal);
+    vec3 t_LightDir = normalize(vec3(-0.5, -0.5, -1));
+    float t_LightIntensity = clamp(dot(t_LightDir, -t_NormalDir), 0.0, 1.0);
+    t_LightIntensity = mix(0.6, 1.0, t_LightIntensity);
+    color.rgb *= t_LightIntensity;
+    ` : ''}
 
-    vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4)); 
-    vec3 viewDir = normalize(-v_PositionWorld);
-    vec3 halfDir = normalize(lightDir + viewDir);
+    float finalShadow = 1.0;
+    ${this.getShaderOptionBoolean('use_bakeshadow_map') ? `
+    // this is correct logic but texture quality is awful, the ASTC decompression might be bad
+    vec4 shadowColor = texture(SAMPLER_2D(u_TextureMaterial), v_TexCoord1);
+    finalShadow = mix(1.0, shadowColor.r, 0.7);
+    ` : ''}
 
-    float diffuse = dot(finalNormal, lightDir) * 0.5 + 0.5;
-    vec3 ambient = vec3(0.3, 0.3, 0.35) * occlusion;
-
-    float specPower = max(v_Floats.x * 128.0, 1.0);
-    float spec = pow(max(dot(finalNormal, halfDir), 0.0), specPower);
-    vec3 specular = vec3(spec * 0.3) * step(0.0, dot(finalNormal, lightDir));
-
-    vec3 color = albedo.rgb * (diffuse + ambient);
-    color += specular;
-    
-    color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
-    gl_FragColor = vec4(color, albedo.a);
+    color.rgb = pow(color.rgb, vec3(1.0 / 2.2)); // base gama boost
+    gl_FragColor = vec4(color.rgb * finalShadow, color.a);
 }
 `;
     }
