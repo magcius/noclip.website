@@ -445,16 +445,25 @@ void main() {
     color.rgb *= t_LightIntensity;
     ` : ''}
 
-    float finalShadow = 1.0;
-    ${/* The shader code is correct but texture quality is horrible since ASTC is lossy (and has to be decompressed).
+    ${/* Texture quality is horrible since ASTC is lossy (and has to be decompressed)
     Unsure if there's a workaround for this... ASTC's WebGL extension is not supported on 99% of PCs
     https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_compressed_texture_astc */
-    this.getShaderOptionBoolean('use_bakeshadow_map') ? `
-    finalShadow = mix(1.0, texture(SAMPLER_2D(u_TextureMaterial), v_TexCoord1).r, 0.7); // 0.7 is subjective intensity
+    this.getShaderOptionBoolean('use_occlusion_map') || this.getShaderOptionBoolean('use_bakeshadow_map') ? `
+    vec4 materialColor = texture(SAMPLER_2D(u_TextureMaterial), v_TexCoord1);
+    ` : ''}
+    
+    float ambientOcclusion = 1.0;
+    ${this.getShaderOptionBoolean('use_occlusion_map') ? `
+    ambientOcclusion = mix(1.0, materialColor.r, 0.7); // 0.7 is subjective intensity
     ` : ''}
 
-    color.rgb *= finalShadow;
-    color.rgb = pow(color.rgb, vec3(1.0 / 2.2)); // base gama boost
+    float bakedShadow = 1.0;
+    ${this.getShaderOptionBoolean('use_bakeshadow_map') ? `
+    bakedShadow = mix(1.0, materialColor.g, 0.55); // 0.55 is subjective intensity
+    ` : ''}
+
+    color.rgb *= ambientOcclusion * bakedShadow;
+    color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
     gl_FragColor = vec4(color.rgb, color.a);
 }
 `;
@@ -825,14 +834,16 @@ export class PMTOKRenderer {
     private renderInstListMain = new GfxRenderInstList();
     private resourceSystem: ResourceSystem;
     public renderHelper: GfxRenderHelper;
+    public textureHolder: PMTOKTextureHolder;
     public modelRenderers: ModelRenderer[] = [];
 
-    constructor(device: GfxDevice, ) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
     public setResourceSystem(rs: ResourceSystem) {
         this.resourceSystem = rs;
+        this.textureHolder = rs.textureHolder;
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
