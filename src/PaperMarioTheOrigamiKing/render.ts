@@ -3,7 +3,7 @@ import * as BNTX from "../fres_nx/bntx.js";
 import * as Decoder from "tex-decoder";
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { MathConstants } from '../MathHelpers.js';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
 import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMDL, FSHP, FSHP_Mesh, FSKL_Bone, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
 import { AttributeFormat, ChannelFormat, ChannelSource, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode, TypeFormat } from '../fres_nx/nngfx_enum.js';
@@ -674,7 +674,7 @@ class ShapeMeshData {
     public inputLayout: GfxInputLayout;
     public indexBuffer: GfxBuffer;
 
-    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: VertexData, public bone: FSKL_Bone) {
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: VertexData) {
         const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
         this.inputLayout = cache.createInputLayout({
             indexBufferFormat,
@@ -693,16 +693,36 @@ class ShapeMeshData {
 
 class ShapeData {
     public meshData: ShapeMeshData[] = [];
+    public shiftMatrix: mat4;
 
-    constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: VertexData, public bone: FSKL_Bone) {
+    constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
         for (const mesh of fshp.mesh) {
-            this.meshData.push(new ShapeMeshData(cache, mesh, fvtxData, this.bone));
+            this.meshData.push(new ShapeMeshData(cache, mesh, fvtxData));
         }
+        this.shiftMatrix = this.computeShiftMatrix(skeleton, boneIndex);
     }
 
     public destroy(device: GfxDevice): void {
         for (const meshData of this.meshData) {
             meshData.destroy(device);
+        }
+    }
+
+    private computeShiftMatrix(skeleton: FSKL_Bone[], boneIndex: number): mat4 {
+        // Adapted from TMSSFE's code
+        const bone = skeleton[boneIndex];
+        const boneSRT: mat4 = mat4.create();
+        computeModelMatrixSRT(boneSRT,
+            bone.scale[0], bone.scale[1], bone.scale[2],
+            bone.rotation[0], bone.rotation[1], bone.rotation[2],
+            bone.translation[0], bone.translation[1], bone.translation[2],
+        );
+        if (bone.parentIndex === -1) {
+            return boneSRT;
+        } else {
+            const shift: mat4 = mat4.create();
+            mat4.multiply(shift, this.computeShiftMatrix(skeleton, bone.parentIndex), boneSRT);
+            return shift;
         }
     }
 }
@@ -730,12 +750,6 @@ class ShapeInstance {
         this.meshInstance = new ShapeMeshInstance(fshpData.meshData[0]);
     }
 
-    public computeShiftMatrix(bone: FSKL_Bone): mat4 {
-        const shift = mat4.create();
-        mat4.fromRotationTranslationScale(shift, bone.rotation, bone.translation, bone.scale);
-        return shift;
-    }
-
     public computeModelView(modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): mat4 {
         const viewMatrix = SCRATCH_MATRIX;
         computeViewMatrix(viewMatrix, viewerInput.camera);
@@ -748,7 +762,7 @@ class ShapeInstance {
         let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 44);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x4(d, offs, this.computeShiftMatrix(this.fshpData.bone));
+        offs += fillMatrix4x4(d, offs, this.fshpData.shiftMatrix);
         offs += fillMatrix4x3(d, offs, this.computeModelView(modelMatrix, viewerInput));
 
         this.fmatInstance.setOnRenderInst(device, template);
@@ -767,7 +781,7 @@ export class ModelData {
             this.vertexData.push(new VertexData(cache.device, fvtx));
         }
         for (const fshp of fmdl.fshp) {
-            this.shapeData.push(new ShapeData(cache, fshp, this.vertexData[fshp.vertexIndex], fmdl.fskl.bones[fshp.boneIndex]));
+            this.shapeData.push(new ShapeData(cache, fshp, this.vertexData[fshp.vertexIndex], fmdl.fskl.bones, fshp.boneIndex));
         }
     }
 
