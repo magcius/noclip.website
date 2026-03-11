@@ -35,6 +35,7 @@ function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeForm
         default:
             throw `Unknown type format of ${typeFormat} (non-BC channel)`;
     }
+    // in a perfect world where textures can kept compressed...
     // if (channelFormat <= ChannelFormat.Bc7 && channelFormat >= ChannelFormat.Bc1) {
     //     switch (typeFormat) {
     //         case TypeFormat.Unorm:
@@ -278,9 +279,9 @@ export class PMTOKTextureHolder extends TextureHolder {
             const depth = 1;
             const blockHeightLog2 = textureEntry.blockHeightLog2;
             deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then(async (deswizzled) => {
-                // would love to not decompress so loading is much less CPU-intensive (i.e. rgbaPixels = deswizzled)
+                // would love to keep textures compressed so loading is much less CPU-intensive (i.e. upload deswizzled data directly to GPU)
                 // even with a high-spec system it takes at least 10 seconds to decompress, or up to a minute for bigger levels
-                // ASTC's WebGL extension is not available and BC's doesn't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
+                // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
                 let rgbaPixels;
                 switch (channelFormat) {
                     case ChannelFormat.Bc3:
@@ -290,6 +291,7 @@ export class PMTOKTextureHolder extends TextureHolder {
                         if (typeFormat === TypeFormat.Ufloat) {
                             rgbaPixels = Decoder.decodeBC6H(deswizzled, width, height);
                         } else if (typeFormat === TypeFormat.Float) {
+                            // untested, doesn't seem to be present in the game
                             rgbaPixels = Decoder.decodeBC6S(deswizzled, width, height);
                         } else {
                             throw `Unknown type format ${typeFormat} for BC6`;
@@ -298,7 +300,7 @@ export class PMTOKTextureHolder extends TextureHolder {
                     case ChannelFormat.Bc7:
                         rgbaPixels = Decoder.decodeBC7(deswizzled, width, height);
                         break;
-                    case ChannelFormat.Astc_8x8: // doesn't exactly match appearance in Switch Toolbox, not sure if this is incorrect or toolbox is wrong
+                    case ChannelFormat.Astc_8x8:
                         rgbaPixels = Decoder.decodeASTC_8x8(deswizzled, width, height);
                         break;
                     default: // BC1/2/4/5 doesn't work for some reason with tex-decoder, default to existing decompression
@@ -374,14 +376,13 @@ layout(std140) uniform ub_MaterialParams {
     Mat2x4 u_TexCoordSRT1;
     Mat2x4 u_TexCoordSRT2;
     vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
-    // vec4 u_PaperColor;
 };
 
-uniform sampler2D u_TextureAlbedo;     // _a0
-uniform sampler2D u_TextureDepth;      // _d0
-uniform sampler2D u_TextureLight;      // _l0
-uniform sampler2D u_TextureMaterial;   // _m0
-uniform sampler2D u_TextureNormal;     // _n0
+uniform sampler2D u_TextureAlbedo;   // _a0
+uniform sampler2D u_TextureDepth;    // _d0
+uniform sampler2D u_TextureLight;    // _l0
+uniform sampler2D u_TextureMaterial; // _m0
+uniform sampler2D u_TextureNormal;   // _n0
 `;
 
     public override both = OrigamiProgram.globalDefinitions;
@@ -396,12 +397,10 @@ out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
 out vec4 v_Floats;
-// out vec4 v_PaperColor;
 
 void main() {
     vec3 t_PositionView = UnpackMatrix(u_ModelView) * UnpackMatrix(u_Shift) * vec4(_p0, 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
-    // v_PositionWorld = _p0;
     v_NormalWorld = _n0;
     v_TangentWorld = _t0;
     v_BitangentWorld = _b0;
@@ -410,7 +409,6 @@ void main() {
     v_TexCoord2 = UnpackMatrix(u_TexCoordSRT1) * vec4(_u1, 1.0, 1.0);
     // v_TexCoord3 = UnpackMatrix(u_TexCoordSRT2) * vec4(_u1, 1.0, 1.0);
     v_Floats = u_Floats;
-    // v_PaperColor = u_PaperColor;
 }
 `;
 
@@ -425,7 +423,6 @@ in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
 in vec4 v_Floats;
-// in vec4 v_PaperColor;
 
 void main() {
     vec4 albedo = texture(SAMPLER_2D(u_TextureAlbedo), v_TexCoord0);
@@ -468,7 +465,7 @@ void main() {
 
     color.rgb *= ambientOcclusion * bakedShadow * paperTex;
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
-    gl_FragColor = vec4(color.rgb, color.a);
+    gl_FragColor = color;
 }
 `;
     }
@@ -514,7 +511,6 @@ class MaterialInstance {
     private alphaRef = 1.0;
     private yFlip = 0.0;
     private whiteBack = 0.0;
-    // private paperColor: vec4 = [1.0, 1.0, 1.0, 1.0];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, public fmat: FMAT) {
         this.program = new OrigamiProgram(fmat);
@@ -567,7 +563,7 @@ class MaterialInstance {
         const alphaRef = fmat.shaderParam.find((p) => p.name === "alpha_ref");
         const yFlip = fmat.shaderParam.find((p) => p.name === "yflip");
         const whiteBack = fmat.shaderParam.find((p) => p.name === "white_back");
-        // const paperColor = fmat.shaderParam.find((p) => p.name === "paper_color");
+
         if (srt0) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
         if (srt1) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
         if (srt2) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, srt2);
@@ -575,7 +571,6 @@ class MaterialInstance {
         if (alphaRef) this.alphaRef = parseFMAT_ShaderParam_Float(alphaRef);
         if (yFlip) this.yFlip = parseFMAT_ShaderParam_Float(yFlip);
         if (whiteBack) this.whiteBack = parseFMAT_ShaderParam_Float(whiteBack);
-        // if (paperColor) parseFMAT_ShaderParam_Float4(this.paperColor, paperColor);
     }
 
     public setOnRenderInst(device: GfxDevice, renderInst: GfxRenderInst): void {
@@ -589,7 +584,6 @@ class MaterialInstance {
         offs += this.texCoordSRT1.fillMatrix(d, offs);
         offs += this.texCoordSRT2.fillMatrix(d, offs);
         offs += fillVec4(d, offs, this.glossiness, this.alphaRef, this.yFlip, this.whiteBack);
-        // offs += fillVec4v(d, offs, this.paperColor);
     }
 }
 
@@ -806,7 +800,7 @@ export class ModelData {
 }
 
 export class ModelRenderer {
-    public fmatInstances: MaterialInstance[] = [];
+    public fmatInstances: (MaterialInstance | null)[] = [];
     public fshpInstances: ShapeInstance[] = [];
     public modelMatrix = mat4.create();
     public name: string;
@@ -814,10 +808,29 @@ export class ModelRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, fmdlData: ModelData) {
         this.name = fmdlData.fmdl.name;
         for (const fmat of fmdlData.fmdl.fmat) {
-            this.fmatInstances.push(new MaterialInstance(device, cache, textureHolder, fmat));
+            const shaderAssignExec = fmat.userData.get("__ShaderAssignExec");
+            let visible = true;
+            if (shaderAssignExec) {
+                for (const s of shaderAssignExec as string[]) {
+                    if (s.includes("SetAttribute('visibility', 'false')")) {
+                        visible = false;
+                        break;
+                    }
+                }
+            }
+            if (visible) {
+                this.fmatInstances.push(new MaterialInstance(device, cache, textureHolder, fmat));
+            } else {
+                // append null for consistent indexing
+                this.fmatInstances.push(null);
+            }
         }
         for (const fshpData of fmdlData.shapeData) {
-            this.fshpInstances.push(new ShapeInstance(fshpData, this.fmatInstances[fshpData.fshp.materialIndex]));
+            const matInst = this.fmatInstances[fshpData.fshp.materialIndex];
+            if (matInst !== null) {
+                // don't render shapes with invalid/invisible materials (usually *_GrassDispos or something similar)
+                this.fshpInstances.push(new ShapeInstance(fshpData, matInst));
+            }
         }
     }
 
