@@ -11,7 +11,7 @@ import { decompress, deswizzle, getImageFormatString } from '../fres_nx/tegra_te
 import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -371,8 +371,8 @@ layout(std140) uniform ub_ShapeParams {
 
 layout(std140) uniform ub_MaterialParams {
     Mat2x4 u_TexCoordSRT0;
-    // Mat2x4 u_TexCoordSRT1;
-    // Mat2x4 u_TexCoordSRT2;
+    Mat2x4 u_TexCoordSRT1;
+    Mat2x4 u_TexCoordSRT2;
     vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
     // vec4 u_PaperColor;
 };
@@ -389,24 +389,26 @@ uniform sampler2D u_TextureNormal;     // _n0
     public override vert = `
 ${this.getVertLayoutDefs()}
 
-out vec3 v_PositionWorld;
 out vec4 v_NormalWorld;
 out vec4 v_TangentWorld;
 out vec4 v_BitangentWorld;
 out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
+out vec2 v_TexCoord2;
 out vec4 v_Floats;
 // out vec4 v_PaperColor;
 
 void main() {
     vec3 t_PositionView = UnpackMatrix(u_ModelView) * UnpackMatrix(u_Shift) * vec4(_p0, 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
-    v_PositionWorld = _p0;
+    // v_PositionWorld = _p0;
     v_NormalWorld = _n0;
     v_TangentWorld = _t0;
     v_BitangentWorld = _b0;
-    v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(_u0, 1.0, 1.0); // srt needed?
+    v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(_u0, 1.0, 1.0);
     v_TexCoord1 = _u1;
+    v_TexCoord2 = UnpackMatrix(u_TexCoordSRT1) * vec4(_u1, 1.0, 1.0);
+    // v_TexCoord3 = UnpackMatrix(u_TexCoordSRT2) * vec4(_u1, 1.0, 1.0);
     v_Floats = u_Floats;
     // v_PaperColor = u_PaperColor;
 }
@@ -416,14 +418,14 @@ void main() {
         return `
 precision highp float;
 
-in vec3 v_PositionWorld;
 in vec4 v_NormalWorld;
 in vec4 v_TangentWorld;
 in vec4 v_BitangentWorld;
 in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
+in vec2 v_TexCoord2;
 in vec4 v_Floats;
-in vec4 v_PaperColor;
+// in vec4 v_PaperColor;
 
 void main() {
     vec4 albedo = texture(SAMPLER_2D(u_TextureAlbedo), v_TexCoord0);
@@ -462,7 +464,9 @@ void main() {
     bakedShadow = mix(1.0, materialColor.g, 0.55); // 0.55 is subjective intensity
     ` : ''}
 
-    color.rgb *= ambientOcclusion * bakedShadow;
+    float paperTex = mix(1.0, texture(SAMPLER_2D(u_TextureDepth), v_TexCoord2).b, 0.55); // 0.55 is subjective intensity
+
+    color.rgb *= ambientOcclusion * bakedShadow * paperTex;
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
     gl_FragColor = vec4(color.rgb, color.a);
 }
@@ -504,8 +508,8 @@ class MaterialInstance {
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private texCoordSRT0 = new TexSRT();
-    // private texCoordSRT1 = new TexSRT();
-    // private texCoordSRT2 = new TexSRT();
+    private texCoordSRT1 = new TexSRT();
+    private texCoordSRT2 = new TexSRT();
     private glossiness = 0.0;
     private alphaRef = 1.0;
     private yFlip = 0.0;
@@ -557,16 +561,16 @@ class MaterialInstance {
         // });
 
         const srt0 = fmat.shaderParam.find((p) => p.name === "texsrt0");
-        // const srt1 = fmat.shaderParam.find((p) => p.name === "texsrt1");
-        // const srt2 = fmat.shaderParam.find((p) => p.name === "texsrt2");
+        const srt1 = fmat.shaderParam.find((p) => p.name === "texsrt1");
+        const srt2 = fmat.shaderParam.find((p) => p.name === "texsrt2");
         const glossiness = fmat.shaderParam.find((p) => p.name === "glossiness");
         const alphaRef = fmat.shaderParam.find((p) => p.name === "alpha_ref");
         const yFlip = fmat.shaderParam.find((p) => p.name === "yflip");
         const whiteBack = fmat.shaderParam.find((p) => p.name === "white_back");
         // const paperColor = fmat.shaderParam.find((p) => p.name === "paper_color");
         if (srt0) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
-        // if (srt1) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
-        // if (srt2) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, srt2);
+        if (srt1) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
+        if (srt2) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, srt2);
         if (glossiness) this.glossiness = parseFMAT_ShaderParam_Float(glossiness);
         if (alphaRef) this.alphaRef = parseFMAT_ShaderParam_Float(alphaRef);
         if (yFlip) this.yFlip = parseFMAT_ShaderParam_Float(yFlip);
@@ -579,15 +583,12 @@ class MaterialInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 12);
+        let offs = renderInst.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 28);
         const d = renderInst.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
         offs += this.texCoordSRT0.fillMatrix(d, offs);
-        // offs += this.texCoordSRT1.fillMatrix(d, offs);
-        // offs += this.texCoordSRT2.fillMatrix(d, offs);
-        d[offs++] = this.glossiness;
-        d[offs++] = this.alphaRef;
-        d[offs++] = this.yFlip;
-        d[offs++] = this.whiteBack;
+        offs += this.texCoordSRT1.fillMatrix(d, offs);
+        offs += this.texCoordSRT2.fillMatrix(d, offs);
+        offs += fillVec4(d, offs, this.glossiness, this.alphaRef, this.yFlip, this.whiteBack);
         // offs += fillVec4v(d, offs, this.paperColor);
     }
 }
