@@ -1,7 +1,7 @@
 import * as Viewer from '../viewer.js';
 import * as BNTX from "../fres_nx/bntx.js";
 import * as Decoder from "tex-decoder";
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
@@ -22,6 +22,7 @@ import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
 import { ResourceSystem } from './scenes.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { MObjInstance } from './bin_elf.js';
 
 function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeFormat): GfxFormat {
     switch (typeFormat) {
@@ -769,7 +770,6 @@ class ShapeInstance {
     private meshInstance: ShapeMeshInstance;
 
     constructor(public fshpData: ShapeData, private fmatInstance: MaterialInstance) {
-        // hardcode to first/highest LOD for now
         this.meshInstance = new ShapeMeshInstance(fshpData.meshData[0]);
     }
 
@@ -849,8 +849,7 @@ export class ModelRenderer {
         }
         for (const fshpData of fmdlData.shapeData) {
             const matInst = this.fmatInstances[fshpData.fshp.materialIndex];
-            if (matInst !== null) {
-                // don't render shapes with invalid/invisible materials (usually Mt_GrassDispos* or Mt_Shadow)
+            if (matInst) {
                 this.fshpInstances.push(new ShapeInstance(fshpData, matInst));
             }
         }
