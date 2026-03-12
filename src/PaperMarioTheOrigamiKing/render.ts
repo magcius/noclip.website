@@ -12,15 +12,16 @@ import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/Buff
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRenderInstList, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { DeviceProgram } from '../Program.js';
 import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
 import { ResourceSystem } from './scenes.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 
 function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeFormat): GfxFormat {
     switch (typeFormat) {
@@ -155,19 +156,27 @@ function translateRenderInfoSingleString(renderInfo: FMAT_RenderInfo): string {
 }
 
 function translateCullMode(material: FMAT): GfxCullMode {
-    const cullValue = material.renderInfo.get('culling');
+    const cullValue = material.renderInfo.get("culling");
     if (!cullValue) {
         return GfxCullMode.None;
     }
     const cullMode = translateRenderInfoSingleString(cullValue);
-    if (cullMode === 'front') {
+    if (cullMode === "front") {
         return GfxCullMode.Front;
-    } else if (cullMode === 'back') {
+    } else if (cullMode === "back") {
         return GfxCullMode.Back;
-    } else if (cullMode === 'none') {
+    } else if (cullMode === "none") {
         return GfxCullMode.None;
     } else {
         throw `Unknown cull mode ${cullMode}`;
+    }
+}
+
+function translateBlendMode(blendMode: string): GfxBlendMode {
+    if (blendMode === "transadd" || blendMode === "trans") {
+        return GfxBlendMode.Add;
+    } else {
+        throw `Unknown blend mode ${blendMode}`;
     }
 }
 
@@ -503,6 +512,7 @@ class MaterialInstance {
     public textureMapping: TextureMapping[] = [];
     private program: OrigamiProgram;
     private gfxProgram: GfxProgram;
+    private isTranslucent: boolean;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private texCoordSRT0 = new TexSRT();
     private texCoordSRT1 = new TexSRT();
@@ -545,16 +555,23 @@ class MaterialInstance {
 
         this.gfxProgram = cache.createProgram(this.program);
 
+        const blend = fmat.renderInfo.get("blend");
+        const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
+        const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
+        this.isTranslucent = blendMode !== null;
+
         this.megaStateFlags = {
             cullMode: translateCullMode(fmat),
             // depthCompare: translateDepthCompare(fmat),
-            // depthWrite: true,
+            depthWrite: !this.isTranslucent,
         };
-        // setAttachmentStateSimple(this.megaStateFlags, {
-        //     blendMode: GfxBlendMode.Add,
-        //     blendSrcFactor: GfxBlendFactor.One,
-        //     blendDstFactor: GfxBlendFactor.Zero,
-        // });
+        if (this.isTranslucent) {
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha
+            });
+        }
 
         const srt0 = fmat.shaderParam.find((p) => p.name === "texsrt0");
         const srt1 = fmat.shaderParam.find((p) => p.name === "texsrt1");
@@ -574,6 +591,8 @@ class MaterialInstance {
     }
 
     public setOnRenderInst(device: GfxDevice, renderInst: GfxRenderInst): void {
+        const materialLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        renderInst.sortKey = makeSortKey(materialLayer, 0);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -817,6 +836,9 @@ export class ModelRenderer {
                         break;
                     }
                 }
+            } else if (fmat.name === "Mt_Shadow") {
+                // don't know what this does, hide it for now
+                visible = false;
             }
             if (visible) {
                 this.fmatInstances.push(new MaterialInstance(device, cache, textureHolder, fmat));
@@ -828,7 +850,7 @@ export class ModelRenderer {
         for (const fshpData of fmdlData.shapeData) {
             const matInst = this.fmatInstances[fshpData.fshp.materialIndex];
             if (matInst !== null) {
-                // don't render shapes with invalid/invisible materials (usually *_GrassDispos or something similar)
+                // don't render shapes with invalid/invisible materials (usually Mt_GrassDispos* or Mt_Shadow)
                 this.fshpInstances.push(new ShapeInstance(fshpData, matInst));
             }
         }
