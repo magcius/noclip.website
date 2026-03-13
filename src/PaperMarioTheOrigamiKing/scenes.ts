@@ -6,7 +6,7 @@ import { SceneGfx } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { PMTOKTextureHolder, ModelData, ModelRenderer, PMTOKRenderer } from "./render.js";
-import { parseELF_Mobj } from "./bin_elf.js";
+import { ELFType, MObjInstance, MObjModel, MObjType, parseELF } from "./bin_elf.js";
 import { computeModelMatrixSRT } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
@@ -55,37 +55,6 @@ function decompressZST(file: ArrayBufferSlice): ArrayBufferSlice {
     return ArrayBufferSlice.fromView(d);
 }
 
-const COMMON_MOBJS = ["BarrelA", "BenchA", "BenchB", "BindRopeKNP", "BirdFootingB", "BirdStatueA", "BirdStatueB",
-    "BlockHatena", "BlockHatenaOrigami", "BlockKakureHatena", "BlockPow", "BlockRenga", "BlockSave", "BlockTomeiHatena",
-    "BlockTomeiHatenaMarkA", "BlockTomeiHatenaMarkC", "BoatA", "BoatAOar", "BoatWaveA", "Bone", "BookA", "BootsCar",
-    "BottleB", "BtlIceAgeA", "BtlIceBlockA", "BtlIceChunkBallA", "BtlIceFireA", "BtlIceFloorA", "BtlIceFrostA",
-    "BtlIceGodA", "BtlIceGuardA", "BtlIceLivelyA", "BtlIceMazeAAA", "BtlIceMazeAAB", "BtlIceMazeAAC", "BtlIceMazeABA",
-    "BtlIceMazeABB", "BtlIceMazeABC", "BtlIceMazeACA", "BtlIceMazeACB", "BtlIceMazeACC", "BtlIceMazeADA", "BtlIceMazeADB",
-    "BtlIceMazeADC", "BtlIceMazeAEA", "BtlIceMazeAEB", "BtlIceMazeAEC", "BtlIceMissileA", "BtlIceSCSA", "BtlIceSoilA",
-    "BtlLetterA", "BtlRealSoilA", "BtlRealSoilB", "BtlRealSoilC", "BtlRealSoilD", "BtlRealSoilE", "BtlRealSoilF",
-    "BtlWaterTsunamiPillarA", "BtlWaterTsunamiWaveA", "CashRegisterA", "CastleDoorA", "CastleDoorB", "CastleDoorC",
-    "CastleDoorD", "CastleDoorE", "CastleFlagA", "CastleVaseA", "CastleVaseFlowerA", "CDPlayer", "CenterPartsA",
-    "CenterPartsB", "ChairA", "ChairB", "CoconutA", "CostumeDON", "CostumeDON", "CostumeKUR", "CostumeKUR", "CostumeSAM",
-    "CostumeSAM", "CupA", "CutlerySpoonA", "DeckChairA", "DishB", "DishC", "DishD", "DJTableA", "FallWallA", "FallWallB",
-    "FenceA", "FishingRod", "FishingRodFloat", "FishingRodStand", "FlowerPotB", "FlowerPotC", "GondolaA", "GondolaPartsA",
-    "GondolaTopA", "GrassA", "GrassC", "GrassH", "HouseChairA", "HouseDoorA", "IndoorPlantB", "IndoorPlantD", "IronBallB",
-    "IvyA", "KingSealA1", "KingSealA2", "KingSealB1", "KingSealB11", "KingSealB12", "KingSealB2", "KingSealB3",
-    "KingSealB4", "KingSealB5", "KingSealB6", "KingSealB7", "KingSealB8", "KingSealB9", "KingSealC1", "KingSealC10",
-    "KingSealC11", "KingSealC2", "KingSealC3", "KingSealC4", "KingSealC5", "KingSealC6", "KingSealC7", "KingSealC8",
-    "KingSealC9", "KingSealD", "KingSealE", "KingSealF1", "KingSealF2", "KingSealF3", "KingSealG", "KingSealH", "KingSealI",
-    "KingSealJ", "KitchenScaleA", "KoopaShip", "LampC", "LetterB", "LockerA", "LuigiKart", "LuigiKartLight", "LuigiKartLight",
-    "MomijiDoorB", "OarWhitecapsA", "OrigamiCastle", "OrigamiCastle", "OrigamiIronBall", "OrigamiRockBall", "OrigamiSnowBall",
-    "O_DSN", "O_KNP_Egg", "PaperTapeRoll", "PaperTapeRollPile", "ParasolA", "PeachCastle", "PeachCastle", "PeachCastleB",
-    "PeachCastleB", "PhantomA", "PhantomBattleA", "PhantomHoleA", "PhantomKNP", "PhantomKNPHead", "PhantomKPACrown",
-    "PhantomKPAO", "PhantomMagicCircle", "PhantomMagicCircleSlip", "PhantomNPC", "PhantomPoo", "PitfallA", "PoleStandA",
-    "PotA", "PotB", "RadarKNPAntenna", "RadarKNPStand", "RadioCassette", "RealIceblockE", "RealWaterPillarA", "RealWaterPillarB",
-    "RingParts", "RockA", "RockB", "RockC", "RockPushA", "RockPushB", "RubbleA", "SecretCafeDoorA", "SecretKinokoDoorA",
-    "ShellfishBig", "SignBallStand", "SignboardA", "SignboardB", "SignboardRopewayA", "SmallShipA", "SmallShipArmA",
-    "SmallShipWhitecapsA", "StatueA", "StatueB", "SubmarineA", "SwitchGrass", "TableA", "TableB", "TreasureBoxA", "TreasureBoxB",
-    "TreeCoconutA", "TreeCoconutB", "TreeCoconutC", "TreeCoconutD", "TreeCoconutE", "TreeConiferA", "TreeConiferC",
-    "TreeConiferD", "TunnelBrokenWallB", "TurtleFootingA", "TurtleFootingB", "TurtleFootingC", "WaterCaveBoxA",
-    "WaterSurfaceCastleA", "WhiteFlag", "WoodBoxA", "WoodBoxB"];
-
 const pathBase = "PMTOK";
 class PMTOKScene implements SceneDesc {
     public id: string;
@@ -103,24 +72,39 @@ class PMTOKScene implements SceneDesc {
         const resourceSystem = new ResourceSystem(device);
         const sceneRenderer = new PMTOKRenderer(device);
         resourceSystem.loadBFRES(device, this.id, bfres);
-        let mobjElf;
+
+        let mobjInstances;
         if (!isBattle) {
-            const mobjElfFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/map/${this.id}/dispos_Mobj.elf.zst`));
-            mobjElf = parseELF_Mobj(mobjElfFile);
+            const mobjTypes: MObjType[] = [];
+            for (const s of ["data_mobj_Cmn", `data_mobj_${this.id.substring(0, 2)}_Cmn`, `data_mobj_${this.id.substring(0, 4)}`]) {
+                // global common, world-specific common, level group specific
+                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/mobj/${s}.elf.zst`));
+                mobjTypes.push(...parseELF(file, ELFType.DataMobj) as MObjType[]);
+            }
+            const mobjModels: MObjModel[] = [];
+            for (const s of ["data_mobj_model_Cmn", `data_mobj_model_${this.id.substring(0, 2)}_Cmn`, `data_mobj_model_${this.id.substring(0, 4)}`]) {
+                // global common, world-specific common, level group specific
+                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/mobj_model/${s}.elf.zst`));
+                mobjModels.push(...parseELF(file, ELFType.DataMobjModel) as MObjModel[]);
+            }
+            const disposMobjFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/map/${this.id}/dispos_Mobj.elf.zst`));
+            mobjInstances = parseELF(disposMobjFile, ELFType.DisposMobj) as MObjInstance[];
             const types: string[] = [];
-            for (const instance of mobjElf.instances) {
-                if (!types.includes(instance.type)) {
-                    types.push(instance.type);
+            for (const instance of mobjInstances) {
+                if (!types.includes(instance.typeId)) {
+                    types.push(instance.typeId);
                 }
             }
-            for (const type of types) {
-                const dir = COMMON_MOBJS.includes(type) ? "Common" : this.id.substring(0, 2);
-                const name = `Mobj_${type}`;
-                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/mobj/${dir}/${name}.bfres.zst`));
+            for (const typeId of types) {
+                // get location of each type's model file by traversing data ELF files (absurdly obtuse)
+                const type = mobjTypes.find(m => m.id === typeId)!;
+                const modelAG = mobjModels.find(m => m.id === type.modelId)!.assetGroups[0];
+                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${modelAG.directory}/${modelAG.file}.bfres.zst`));
                 const mobjBFRES = BFRES.parse(file);
-                resourceSystem.loadBFRES(device, name, mobjBFRES);
+                resourceSystem.loadBFRES(device, modelAG.file, mobjBFRES);
             }
         }
+
         resourceSystem.textureHolder.addBNTXFile(device, commonBntxFile);
         sceneRenderer.setResourceSystem(resourceSystem);
         for (const fmdlData of resourceSystem.fmdlDataCache.values()) {
@@ -128,9 +112,9 @@ class PMTOKScene implements SceneDesc {
                 const mobj = fmdlData.fmdl.name.startsWith("Mobj_");
                 if (!mobj) {
                     sceneRenderer.modelRenderers.push(new ModelRenderer(device, sceneRenderer.renderHelper.renderCache, resourceSystem.textureHolder, fmdlData));
-                } else if (mobjElf !== undefined) {
-                    for (const instance of mobjElf.instances) {
-                        if (instance.type === fmdlData.fmdl.name.substring(5)) {
+                } else if (mobjInstances !== undefined) {
+                    for (const instance of mobjInstances) {
+                        if (instance.typeId === fmdlData.fmdl.name.substring(5)) {
                             const r = new ModelRenderer(device, sceneRenderer.renderHelper.renderCache, resourceSystem.textureHolder, fmdlData);
                             computeModelMatrixSRT(r.modelMatrix, 1, 1, 1,
                                 instance.rotation[0] * Math.PI / 180, instance.rotation[1] * Math.PI / 180, instance.rotation[2] * Math.PI / 180,

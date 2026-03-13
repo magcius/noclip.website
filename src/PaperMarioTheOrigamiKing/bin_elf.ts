@@ -5,13 +5,32 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export interface MObjInstance {
     id: string;
-    type: string;
+    typeId: string;
     position: vec3;
     rotation: vec3;
 }
 
-export interface ELF_Mobj {
-    instances: MObjInstance[];
+export interface MObjType {
+    id: string;
+    modelId: string;
+}
+
+interface ModelAssetGroup {
+    directory: string;
+    file: string;
+}
+
+export interface MObjModel {
+    id: string;
+    assetGroups: ModelAssetGroup[];
+    assetGroupOffset: number;
+    assetGroupCount: number;
+}
+
+export enum ELFType {
+    DisposMobj,
+    DataMobj,
+    DataMobjModel
 }
 
 class Section {
@@ -45,7 +64,30 @@ class Relocation {
     }
 }
 
+class Symbol {
+    public static size: number = 24;
+    name: string;
+    info: number;
+    visibility: number;
+    sectionHeaderIndex: number;
+    location: number;
+    byteLength: number;
+
+    constructor(view: DataView, offset: number, stringSectionOffset: number) {
+        const nameOffset = view.getInt32(offset, true);
+        this.name = getStringAt(view, stringSectionOffset + nameOffset);
+        this.info = view.getUint8(offset + 4);
+        this.visibility = view.getUint8(offset + 5);
+        this.sectionHeaderIndex = view.getInt16(offset + 6, true);
+        this.location = view.getInt32(offset + 8, true);
+        this.byteLength = view.getInt32(offset + 16, true);
+    }
+}
+
+const MODEL_ASSET_GROUP_SIZE = 40;
 const MOBJ_INSTANCE_SIZE = 376;
+const MOBJ_TYPE_SIZE = 144;
+const MOBJ_MODEL_SIZE = 144;
 const TEXT_DECODER = new TextDecoder("utf-8");
 
 function getStringAt(view: DataView, offset: number): string {
@@ -63,34 +105,70 @@ function getStringAt(view: DataView, offset: number): string {
     return TEXT_DECODER.decode(new Uint8Array(c));
 }
 
-function parseDataSection_MObjInstance(view: DataView, section: Section, count: number): MObjInstance[] {
-    const data: MObjInstance[] = [];
+function parseDataSection_MObjInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): MObjInstance[] {
+    const instances: MObjInstance[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
+        const relocation2 = relocations.get(8 + MOBJ_INSTANCE_SIZE * i)!;
+        const relocation3 = relocations.get(16 + MOBJ_INSTANCE_SIZE * i)!;
+        const id = getStringAt(view, dataStringOffset + relocation2.targetOffset);
+        const typeId = getStringAt(view, dataStringOffset + relocation3.targetOffset);
         const x = view.getFloat32(pointer + 24, true);
         const y = view.getFloat32(pointer + 28, true);
         const z = view.getFloat32(pointer + 32, true);
         const rx = view.getFloat32(pointer + 36, true);
         const ry = view.getFloat32(pointer + 40, true);
         const rz = view.getFloat32(pointer + 44, true);
-        data.push({ id: "", type: "", position: [x, y, z], rotation: [rx, ry, rz] });
+        instances.push({ id, typeId, position: [x, y, z], rotation: [rx, ry, rz] });
         pointer += MOBJ_INSTANCE_SIZE;
     }
-    return data;
+    return instances;
 }
 
-function resolveStrings_MObjInstance(view: DataView, stringSection: Section, relocations: Map<number, Relocation>, mobjInstances: MObjInstance[]) {
-    for (let i = 0; i < mobjInstances.length; i++) {
-        const instance = mobjInstances[i];
-        // starts with unused "stage" string, already know what level it is
-        const relocation2 = relocations.get(8 + MOBJ_INSTANCE_SIZE * i)!;
-        const relocation3 = relocations.get(16 + MOBJ_INSTANCE_SIZE * i)!;
-        instance.id = getStringAt(view, stringSection.offset + relocation2.targetOffset);
-        instance.type = getStringAt(view, stringSection.offset + relocation3.targetOffset);
+function parseDataSection_MObjTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): MObjType[] {
+    const types: MObjType[] = [];
+    let pointer = section.offset;
+    for (let i = 0; i < count; i++) {
+        const relocation1 = relocations.get(MOBJ_TYPE_SIZE * i)!;
+        const relocation3 = relocations.get(16 + MOBJ_TYPE_SIZE * i)!;
+        const id = getStringAt(view, dataStringOffset + relocation1.targetOffset);
+        const modelId = getStringAt(view, dataStringOffset + relocation3.targetOffset);
+        types.push({ id, modelId });
+        pointer += MOBJ_TYPE_SIZE;
     }
+    return types;
 }
 
-export function parseELF_Mobj(buffer: ArrayBufferSlice): ELF_Mobj {
+function parseDataSection_MObjModels(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): MObjModel[] {
+    const models: MObjModel[] = [];
+    let pointer = section.offset;
+    for (let i = 0; i < count; i++) {
+        const relocation1 = relocations.get(MOBJ_MODEL_SIZE * i)!;
+        const relocationX = relocations.get(112 + MOBJ_MODEL_SIZE * i)!;
+        const id = getStringAt(view, dataStringOffset + relocation1.targetOffset);
+        const assetGroupOffset = relocationX.targetOffset; // relocated value for some reason, not directly at 112
+        const assetGroupCount = view.getInt32(pointer + 120, true);
+        models.push({ id, assetGroups: [], assetGroupOffset, assetGroupCount });
+        pointer += MOBJ_MODEL_SIZE;
+    }
+    return models;
+}
+
+function parseDataSection_ModelAssetGroup(view: DataView, section: Section, count: number, offset: number, dataStringOffset: number, relocations: Map<number, Relocation>): ModelAssetGroup[] {
+    const groups: ModelAssetGroup[] = [];
+    let pointer = section.offset;
+    for (let i = 0; i < count; i++) {
+        const relocation1 = relocations.get(offset + MODEL_ASSET_GROUP_SIZE * i)!;
+        const relocation2 = relocations.get(offset + 8 + MODEL_ASSET_GROUP_SIZE * i)!;
+        const directory = getStringAt(view, dataStringOffset + relocation1.targetOffset);
+        const file = getStringAt(view, dataStringOffset + relocation2.targetOffset);
+        groups.push({ directory, file });
+        pointer += MODEL_ASSET_GROUP_SIZE;
+    }
+    return groups;
+}
+
+export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
     const view = buffer.createDataView();
     const sectionHeaderTableOffset = view.getInt32(0x28, true);
     const sectionCount = view.getInt16(0x3C, true);
@@ -121,12 +199,44 @@ export function parseELF_Mobj(buffer: ArrayBufferSlice): ELF_Mobj {
     }
 
     const dataSection = sections.find(s => s.name == ".data")!;
-    const dataStringSection = sections.find(s => s.name == ".rodata.str1.1")!;
     const rodataSection = sections.find(s => s.name == ".rodata")!;
-    const dataCount = view.getInt32(rodataSection.offset, true);
+    const rodataStringSection = sections.find(s => s.name == ".rodata.str1.1")!;
+    const rodataCount = view.getInt32(rodataSection.offset, true);
 
-    const instances: MObjInstance[] = parseDataSection_MObjInstance(view, dataSection, dataCount);
-    resolveStrings_MObjInstance(view, dataStringSection, relocations.get(".data")!, instances);
+    let symbolTable: Symbol[] = [];
+    if (type === ELFType.DataMobjModel) {
+        const symbolSection = sections.find(s => s.name == ".symtab")!;
+        const start = symbolSection.offset;
+        pointer = symbolSection.offset;
+        while (pointer < start + symbolSection.byteLength) {
+            symbolTable.push(new Symbol(view, pointer, stringSection.offset));
+            pointer += Symbol.size;
+        }
+    }
 
-    return { instances };
+    let data;
+    switch (type) {
+        case ELFType.DisposMobj:
+            data = parseDataSection_MObjInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
+            break;
+        case ELFType.DataMobj:
+            data = parseDataSection_MObjTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
+            break;
+        case ELFType.DataMobjModel:
+            const countSymbol = symbolTable.find(s => s.name == "_ZN3wld3fld4data13modelMobj_numE")!;
+            const dataCount = view.getInt32(rodataSection.offset + countSymbol.location, true);
+            const rawModels = parseDataSection_MObjModels(view, dataSection, dataCount, rodataStringSection.offset, relocations.get(".data")!);
+            for (const model of rawModels) {
+                // patch asset groups
+                const d = parseDataSection_ModelAssetGroup(view, rodataSection, model.assetGroupCount, model.assetGroupOffset, rodataStringSection.offset, relocations.get(".rodata")!);
+                model.assetGroups = d;
+            }
+            data = rawModels;
+            break;
+        default:
+            data = null;
+            break;
+    }
+
+    return data;
 }
