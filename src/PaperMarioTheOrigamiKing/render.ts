@@ -342,7 +342,6 @@ class OrigamiProgram extends DeviceProgram {
     constructor(public fmat: FMAT) {
         super();
         this.name = this.fmat.name;
-        assert(this.fmat.samplerInfo.length <= 8);
         this.frag = this.generateFrag();
     }
 
@@ -821,7 +820,7 @@ export class ModelData {
 export class ModelRenderer {
     public fmatInstances: (MaterialInstance | null)[] = [];
     public fshpInstances: ShapeInstance[] = [];
-    public modelMatrix = mat4.create();
+    public modelMatrices: mat4[] = [mat4.create()];
     public name: string;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, fmdlData: ModelData) {
@@ -858,8 +857,10 @@ export class ModelRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(BINDING_LAYOUTS);
-        for (const fshpInstance of this.fshpInstances) {
-            fshpInstance.prepareToRender(device, renderInstManager, this.modelMatrix, viewerInput);
+        for (const modelMatrix of this.modelMatrices) {
+            for (const fshpInstance of this.fshpInstances) {
+                fshpInstance.prepareToRender(device, renderInstManager, modelMatrix, viewerInput);
+            }
         }
         renderInstManager.popTemplate();
     }

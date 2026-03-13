@@ -6,6 +6,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 export interface MObjInstance {
     id: string;
     typeId: string;
+    resolvedModelName: string;
     position: vec3;
     rotation: vec3;
 }
@@ -119,7 +120,7 @@ function parseDataSection_MObjInstances(view: DataView, section: Section, count:
         const rx = view.getFloat32(pointer + 36, true);
         const ry = view.getFloat32(pointer + 40, true);
         const rz = view.getFloat32(pointer + 44, true);
-        instances.push({ id, typeId, position: [x, y, z], rotation: [rx, ry, rz] });
+        instances.push({ id, typeId, resolvedModelName: "", position: [x, y, z], rotation: [rx, ry, rz] });
         pointer += MOBJ_INSTANCE_SIZE;
     }
     return instances;
