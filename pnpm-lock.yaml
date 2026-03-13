@@ -11,6 +11,9 @@ importers:
       crc-32:
         specifier: ^1.2.2
         version: 1.2.2
+      fzstd:
+        specifier: ^0.1.1
+        version: 0.1.1
       gl-matrix:
         specifier: 3.4.3
         version: 3.4.3
@@ -780,6 +783,9 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
+
+  fzstd@0.1.1:
+    resolution: {integrity: sha512-dkuVSOKKwh3eas5VkJy1AW1vFpet8TA/fGmVA5krThl8YcOVE/8ZIoEA1+U1vEn5ckxxhLirSdY837azmbaNHA==}
 
   generator-function@2.0.1:
     resolution: {integrity: sha512-SFdFmIJi+ybC0vjlHN0ZGVGHc3lgE0DxPAT0djjVg+kjOnSqclqmj0KQ7ykTOLP6YxoqOvuAODGdcHJn+43q3g==}
@@ -2019,6 +2025,8 @@ snapshots:
     optional: true
 
   function-bind@1.1.2: {}
+
+  fzstd@0.1.1: {}
 
   generator-function@2.0.1: {}
 

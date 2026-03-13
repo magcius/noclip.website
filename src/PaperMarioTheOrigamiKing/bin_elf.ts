@@ -49,11 +49,18 @@ const MOBJ_INSTANCE_SIZE = 376;
 const TEXT_DECODER = new TextDecoder("utf-8");
 
 function getStringAt(view: DataView, offset: number): string {
-    let endPos = offset;
-    while (view.getUint8(endPos) !== 0) {
-        endPos++;
+    const c: number[] = [];
+    let end = false;
+    while (!end) {
+        const n = view.getUint8(offset);
+        if (n !== 0) {
+            c.push(n);
+            offset++;
+        } else {
+            end = true;
+        }
     }
-    return TEXT_DECODER.decode(view.buffer.slice(offset, endPos));
+    return TEXT_DECODER.decode(new Uint8Array(c));
 }
 
 function parseDataSection_MObjInstance(view: DataView, section: Section, count: number): MObjInstance[] {
