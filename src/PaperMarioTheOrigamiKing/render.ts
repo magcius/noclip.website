@@ -1,7 +1,6 @@
 import * as Viewer from '../viewer.js';
 import * as BNTX from "../fres_nx/bntx.js";
-import * as Decoder from "tex-decoder";
-import { pmtok_deswizzle } from 'noclip-rust-support';
+import { pmtok_deswizzle, pmtok_decode_texture, PMTOKCompressedTextureFormat } from 'noclip-rust-support';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
@@ -274,9 +273,9 @@ export class PMTOKTextureHolder extends TextureHolder {
         }
     }
 
+    // tegra_texture.deswizzle does not work with ASTC sizes other than 8x8 and PMTOK has others like 8x5 and 8x6
     private async deswizzle(buffer: ArrayBufferSlice, channelFormat: ChannelFormat, width: number, height: number): Promise<Uint8Array<ArrayBuffer>> {
-        return pmtok_deswizzle(buffer.createTypedArray(Uint8Array),
-            width, height, getFormatBlockWidth(channelFormat), getFormatBlockHeight(channelFormat), getFormatBytesPerBlock(channelFormat), 1) as Uint8Array<ArrayBuffer>;
+        return pmtok_deswizzle(buffer.createTypedArray(Uint8Array), width, height, getFormatBlockWidth(channelFormat), getFormatBlockHeight(channelFormat), getFormatBytesPerBlock(channelFormat), 1) as Uint8Array<ArrayBuffer>;
     }
 
     public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI) {
@@ -294,39 +293,51 @@ export class PMTOKTextureHolder extends TextureHolder {
             const buffer = textureEntry.textureDataArray[0].mipBuffers[mipLevel];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
-            // the tegra_texture.deswizzle function for existing Switch games does not work with ASTC sizes other than 8x8 and PMTOK has others like 8x5 and 8x6
             this.deswizzle(buffer, channelFormat, width, height).then(async (deswizzled) => {
                 // would love to keep textures compressed so loading is much less CPU-intensive (i.e. upload deswizzled data directly to GPU)
                 // even with a high-spec system it takes at least 10 seconds to decompress, or up to a minute for bigger levels
                 // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
                 let rgbaPixels;
                 switch (channelFormat) {
-                    case ChannelFormat.Bc3:
-                        rgbaPixels = Decoder.decodeBC3(deswizzled, width, height);
+                    case ChannelFormat.Bc1:
+                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC1, width, height);
                         break;
+                    case ChannelFormat.Bc3:
+                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC3, width, height);
+                        break;
+                    // case ChannelFormat.Bc4:
+                    //     rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC4, width, height);
+                    //     break;
+                    // case ChannelFormat.Bc5:
+                    //     if (typeFormat === TypeFormat.Snorm) {
+                    //         rgbaPixels = pmtok_decode_texture_signed(deswizzled, PMTOKCompressedTextureFormat.BC5, width, height);
+                    //     } else {
+                    //         rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC5, width, height, false);
+                    //     }
+                    //     break;
                     case ChannelFormat.Bc6:
                         if (typeFormat === TypeFormat.Ufloat) {
-                            rgbaPixels = Decoder.decodeBC6H(deswizzled, width, height);
+                            rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC6H, width, height);
                         } else if (typeFormat === TypeFormat.Float) {
                             // untested, doesn't seem to be present in the game
-                            rgbaPixels = Decoder.decodeBC6S(deswizzled, width, height);
+                            rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC6S, width, height);
                         } else {
                             throw `Unknown type format ${typeFormat} for BC6`;
                         }
                         break;
                     case ChannelFormat.Bc7:
-                        rgbaPixels = Decoder.decodeBC7(deswizzled, width, height);
+                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC7, width, height);
                         break;
                     case ChannelFormat.Astc_8x5:
-                        rgbaPixels = Decoder.decodeASTC_8x5(deswizzled, width, height);
+                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x5, width, height);
                         break;
                     case ChannelFormat.Astc_8x6:
-                        rgbaPixels = Decoder.decodeASTC_8x6(deswizzled, width, height);
+                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x6, width, height);
                         break;
                     case ChannelFormat.Astc_8x8:
-                        rgbaPixels = Decoder.decodeASTC_8x8(deswizzled, width, height);
+                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x8, width, height);
                         break;
-                    default: // BC1/2/4/5 doesn't work for some reason with tex-decoder, default to existing decompression
+                    default:
                         rgbaPixels = decompress({ ...textureEntry, width, height, depth: 1 }, deswizzled).pixels;
                         break;
                 }
@@ -573,8 +584,7 @@ class MaterialInstance {
         const blend = fmat.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
-        const pasteType = fmat.shaderAssign.shaderOption.get("paste_type") ? fmat.shaderAssign.shaderOption.get("paste_type")! === "0" : false;
-        this.isTranslucent = blendMode !== null || pasteType;
+        this.isTranslucent = blendMode !== null;
 
         this.megaStateFlags = {
             cullMode: translateCullMode(fmat),

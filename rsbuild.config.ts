@@ -1,6 +1,5 @@
 import { defineConfig, type RequestHandler } from '@rsbuild/core';
 import { pluginTypeCheck } from '@rsbuild/plugin-type-check';
-import { pluginNodePolyfill } from '@rsbuild/plugin-node-polyfill';
 import { execSync } from 'node:child_process';
 import { readdir } from 'node:fs';
 import type { ServerResponse } from 'node:http';
@@ -46,7 +45,7 @@ export default defineConfig({
     ],
   },
   // Enable async TypeScript type checking.
-  plugins: [pluginTypeCheck(), pluginNodePolyfill()],
+  plugins: [pluginTypeCheck()],
   tools: {
     rspack(_config) {
     },

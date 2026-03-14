@@ -458,7 +458,7 @@ const sceneDescs = [
     new PMTOKScene("field/W5C3_ShootingDemoAfter", "Shooting Gallery Demo 1 (Bowser's Castle)"),
     new PMTOKScene("field/W5C3_ShootingDemoBefore", "Shooting Gallery Demo 2 (Bowser's Castle)"),
     new PMTOKScene("field/W5C3_ThroneRoom", "Throne Room (Bowser's Castle)"),
-    new PMTOKScene("field/W5G1_DokanRoom", "Dokan Room"),
+    new PMTOKScene("field/W5G1_DokanRoom", "Pipe Room"),
     new PMTOKScene("field/W5G1_SkySpa", "Shangri-Spa"),
     new PMTOKScene("field/W5G1_SpaEntrance", "Spa Entrance"),
     new PMTOKScene("field/W5G1_SpaRoom", "Spa Room"),
