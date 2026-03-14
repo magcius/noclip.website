@@ -60,8 +60,12 @@ function isValidMobjDataWorldId(worldId: string): boolean {
     return worldId !== "W0";
 }
 
-const INVALID_MOBJS_LEVELS = ["W1G1_KinopioHouse", "W1G1_DokanRoom", "W1G3_GondolaLift"];
-const INVALID_MOBJS_LEVELGROUPS = ["W0C2"];
+const NO_MOBJS_LEVELS = ["W0C1_BasementWay", "W1G1_KinopioHouse", "W1G1_DokanRoom", "W1G3_GondolaLift"];
+const NO_MOBJS_LEVELGROUPS = ["W0C2"];
+const ALT_DISPOS_MOBJS = new Map<string, string[]>([
+    // some levels have either no dispos_Mobj file or multiple. Unknown how to dynamically detect this
+    ["W1C4_SecondFloor", ["dispos_Mobj_A", "dispos_Mobj_B"]]
+]);
 
 const pathBase = "PMTOK";
 class PMTOKScene implements SceneDesc {
@@ -82,15 +86,15 @@ class PMTOKScene implements SceneDesc {
         resourceSystem.loadBFRES(device, this.id, bfres);
 
         // prepare map objects (mobj) for non-battle levels
-        let mobjInstances;
-        if (!isBattle && !INVALID_MOBJS_LEVELS.includes(this.id)) {
+        let mobjInstances = [];
+        if (!isBattle && !NO_MOBJS_LEVELS.includes(this.id)) {
             const worldId = this.id.substring(0, 2);
             const levelGroupId = this.id.substring(0, 4);
             // get type data
             const mobjTypes: MObjType[] = [];
             for (const s of ["data_mobj_Cmn",
                 isValidMobjDataWorldId(worldId) ? `data_mobj_${worldId}_Cmn` : "",
-                !INVALID_MOBJS_LEVELGROUPS.includes(levelGroupId) ? `data_mobj_${levelGroupId}` : ""]) {
+                !NO_MOBJS_LEVELGROUPS.includes(levelGroupId) ? `data_mobj_${levelGroupId}` : ""]) {
                 if (s.length === 0) {
                     continue;
                 }
@@ -101,7 +105,7 @@ class PMTOKScene implements SceneDesc {
             const mobjModels: MObjModel[] = [];
             for (const s of ["data_mobj_model_Cmn",
                 isValidMobjDataWorldId(worldId) ? `data_mobj_model_${worldId}_Cmn` : "",
-                !INVALID_MOBJS_LEVELGROUPS.includes(levelGroupId) ? `data_mobj_model_${levelGroupId}` : ""]) {
+                !NO_MOBJS_LEVELGROUPS.includes(levelGroupId) ? `data_mobj_model_${levelGroupId}` : ""]) {
                 if (s.length === 0) {
                     continue;
                 }
@@ -109,8 +113,10 @@ class PMTOKScene implements SceneDesc {
                 mobjModels.push(...parseELF(file, ELFType.DataMobjModel) as MObjModel[]);
             }
             // get location data
-            const disposMobjFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/map/${this.id}/dispos_Mobj.elf.zst`));
-            mobjInstances = parseELF(disposMobjFile, ELFType.DisposMobj) as MObjInstance[];
+            for (const disposName of ALT_DISPOS_MOBJS.has(this.id) ? ALT_DISPOS_MOBJS.get(this.id)! : ["dispos_Mobj"]) {
+                const disposMobjFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/map/${this.id}/${disposName}.elf.zst`));
+                mobjInstances.push(...parseELF(disposMobjFile, ELFType.DisposMobj) as MObjInstance[]);
+            }
             // get unique mobj types so each model is only loaded once
             const types: string[] = [];
             for (const instance of mobjInstances) {
@@ -124,7 +130,7 @@ class PMTOKScene implements SceneDesc {
                 const modelAG = mobjModels.find(m => m.id === type.modelId)!.assetGroups[0];
                 for (const instance of mobjInstances) {
                     if (instance.typeId === typeId) {
-                        // store model name for later when patching its modelrenderer with instance matrices
+                        // store model's name for later when patching its renderer with instance matrices
                         instance.resolvedModelName = modelAG.file;
                     }
                 }
@@ -157,6 +163,7 @@ class PMTOKScene implements SceneDesc {
                 }
                 renderer.modelMatrices = [];
                 for (const instance of instances) {
+                    // one-to-one model to renderer, but a renderer could have more than one instance of a model with different SRT
                     const m = mat4.create();
                     computeModelMatrixSRT(m, 1, 1, 1,
                         instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
@@ -208,7 +215,7 @@ const sceneDescs = [
     new PMTOKScene("field/W1G1_HouseE", "House E"),
     new PMTOKScene("field/W1G1_HouseF", "House F"),
     new PMTOKScene("field/W1G1_HouseG", "House G"),
-    new PMTOKScene("field/W1G1_KartRoad", "Kart Road"), // no clue what this is
+    new PMTOKScene("field/W1G1_KartRoad", "Kart Road"),
     new PMTOKScene("field/W1G1_KinopioHouse", "Toad House"),
     new PMTOKScene("field/W1G1_DokanRoom", "Pipe Room"),
     new PMTOKScene("field/W1G1_Shop", "Item Shop"),
@@ -216,22 +223,30 @@ const sceneDescs = [
     new PMTOKScene("field/W1G1_StoreRoom", "Storage (Main Room)"),
     new PMTOKScene("field/W1G1_BackRoom", "Storage (Back Room)"),
     new PMTOKScene("field/W1G1_CastleGate", "Peach's Castle Rubble"),
-    new PMTOKScene("field/W1G3_GondolaLift", "Gondola Lift"),
     new PMTOKScene("battle/Btl_W1G1_KinokoTownA", "Battle - Toad Town"),
-    new PMTOKScene("battle/Btl_W1G1_KinokoTownB", "Battle - Toad Town (Underground)"),
-    "Red Streamer",
-    new PMTOKScene("field/W1C2_BasementFirst", "Basement First"),
-    new PMTOKScene("field/W1C2_BasementSecond", "Basement Second"),
-    new PMTOKScene("field/W1C2_BasementThird", "Basement Third"),
-    new PMTOKScene("field/W1C2_HelpKinopio", "Help Toad"),
-    new PMTOKScene("field/W1C2_TurnValve", "Turn Valve"),
+    new PMTOKScene("battle/Btl_W1G1_KinokoTownB", "Battle - Toad Town Underground"),
+    "Graffiti Underground",
+    new PMTOKScene("field/W1C2_BasementFirst", "1st Floor"),
+    new PMTOKScene("field/W1C2_BasementSecond", "2nd Floor"),
+    new PMTOKScene("field/W1C2_BasementThird", "3rd Floor"),
+    new PMTOKScene("field/W1C2_TurnValve", "Main Room"),
+    new PMTOKScene("field/W1C2_HelpKinopio", "Side Room"),
+    new PMTOKScene("battle/Btl_W1C2_WaterwayA", "Battle - Graffiti Underground"),
+    "Picnic Road",
+    new PMTOKScene("field/W1G2_Hill", "Picnic Road"),
+    new PMTOKScene("battle/Btl_W1G2_HillA", "Battle - Picnic Road"),
+    "Overlook Moutain",
+    new PMTOKScene("field/W1G3_Observatory", "Overlook Mountain"),
+    new PMTOKScene("field/W1G3_GondolaLift", "Gondola Lift"),
+    new PMTOKScene("battle/Btl_W1G3_ObservatoryA", "Battle - Overlook Mountain"),
+    "Earth Vellumental Temple",
     new PMTOKScene("field/W1C3_BigTurtle", "Big Turtle"),
     new PMTOKScene("field/W1C3_BossArea", "Boss Area"),
     new PMTOKScene("field/W1C3_PushRock", "Push Rock"),
     new PMTOKScene("field/W1C3_RollingTurtle", "Rolling Turtle"),
     new PMTOKScene("field/W1C3_UpDownRock", "Up Down Rock"),
-    new PMTOKScene("field/W1G2_Hill", "Overlook Mountain"),
-    new PMTOKScene("field/W1G3_Observatory", "Overlook Tower"),
+    new PMTOKScene("battle/Btl_W1C3_CaveA", "Battle - Earth Vellumental Temple"),
+    new PMTOKScene("battle/Btl_W1C3_CaveBossA", "Battle - Earth Vellumental Temple (Boss)"),
     "Overlook Tower",
     new PMTOKScene("field/W1C4_FirstFloor", "1st Floor"),
     new PMTOKScene("field/W1C4_SecondFloor", "2nd Floor"),
@@ -239,13 +254,8 @@ const sceneDescs = [
     new PMTOKScene("field/W1C4_FourthFloor", "4th Floor"),
     new PMTOKScene("field/W1C4_Elevator", "Elevator"),
     new PMTOKScene("field/W1C4_BossArea", "Boss Area"),
-    new PMTOKScene("battle/Btl_W1C2_WaterwayA", "Battle - Waterway"),
-    new PMTOKScene("battle/Btl_W1C3_CaveA", "Battle - Earth Vellumental Temple"),
-    new PMTOKScene("battle/Btl_W1C3_CaveBossA", "Battle - Earth Vellumental Temple (Boss)"),
-    new PMTOKScene("battle/Btl_W1G2_HillA", "Battle - Overlook Mountain"),
     new PMTOKScene("battle/Btl_W1C4_TenbouTowerA", "Battle - Overlook Tower"),
     new PMTOKScene("battle/Btl_W1C4_TenbouTowerBossA", "Battle - Overlook Tower (Boss)"),
-    new PMTOKScene("battle/Btl_W1G3_ObservatoryA", "Battle - Observatory"),
     "Blue Streamer",
     new PMTOKScene("field/W2C1_IgaguriValley", "Chestnut Valley"),
     new PMTOKScene("field/W2C2_BossArea", "Boss Area 1"),

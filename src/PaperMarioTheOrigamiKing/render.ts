@@ -1,7 +1,7 @@
 import * as Viewer from '../viewer.js';
 import * as BNTX from "../fres_nx/bntx.js";
 import * as Decoder from "tex-decoder";
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
@@ -22,7 +22,6 @@ import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
 import { ResourceSystem } from './scenes.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { MObjInstance } from './bin_elf.js';
 
 function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeFormat): GfxFormat {
     switch (typeFormat) {
@@ -152,7 +151,10 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
 }
 
 function translateRenderInfoSingleString(renderInfo: FMAT_RenderInfo): string {
-    assert(renderInfo.type === FMAT_RenderInfoType.String && renderInfo.values.length === 1);
+    assert(renderInfo.type === FMAT_RenderInfoType.String);
+    if (renderInfo.values.length === 0) {
+        return "opaque"; // sometimes blend can be empty???
+    }
     return renderInfo.values[0] as string;
 }
 
@@ -286,9 +288,7 @@ export class PMTOKTextureHolder extends TextureHolder {
             const buffer = textureEntry.textureDataArray[0].mipBuffers[mipLevel];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
-            const depth = 1;
-            const blockHeightLog2 = textureEntry.blockHeightLog2;
-            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then(async (deswizzled) => {
+            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2: textureEntry.blockHeightLog2 }).then(async (deswizzled) => {
                 // would love to keep textures compressed so loading is much less CPU-intensive (i.e. upload deswizzled data directly to GPU)
                 // even with a high-spec system it takes at least 10 seconds to decompress, or up to a minute for bigger levels
                 // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
@@ -314,7 +314,7 @@ export class PMTOKTextureHolder extends TextureHolder {
                         rgbaPixels = Decoder.decodeASTC_8x8(deswizzled, width, height);
                         break;
                     default: // BC1/2/4/5 doesn't work for some reason with tex-decoder, default to existing decompression
-                        rgbaPixels = decompress({ ...textureEntry, width, height, depth }, deswizzled).pixels;
+                        rgbaPixels = decompress({ ...textureEntry, width, height, depth: 1 }, deswizzled).pixels;
                         break;
                 }
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
@@ -835,8 +835,7 @@ export class ModelRenderer {
                         break;
                     }
                 }
-            } else if (fmat.name === "Mt_Shadow") {
-                // don't know what this does, hide it for now
+            } else if (fmat.name.includes("Mt_Shadow") || fmat.samplerInfo.length === 0) {
                 visible = false;
             }
             if (visible) {
