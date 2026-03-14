@@ -681,6 +681,7 @@ dependencies = [
  "noclip-macros",
  "polymorph",
  "rand",
+ "tegra_swizzle",
  "texture2ddecoder",
  "wasm-bindgen",
  "web-sys",
@@ -994,6 +995,12 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
+name = "tegra_swizzle"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a99e82f512a8f5baabe0d9e5ba86b4e827840635e7628a5216a34e03b06a6f01"
 
 [[package]]
 name = "termcolor"

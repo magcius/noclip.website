@@ -1,13 +1,14 @@
 import * as Viewer from '../viewer.js';
 import * as BNTX from "../fres_nx/bntx.js";
 import * as Decoder from "tex-decoder";
+import { pmtok_deswizzle } from 'noclip-rust-support';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
 import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMDL, FSHP, FSHP_Mesh, FSKL_Bone, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
 import { AttributeFormat, ChannelFormat, ChannelSource, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode, TypeFormat } from '../fres_nx/nngfx_enum.js';
-import { decompress, deswizzle, getImageFormatString } from '../fres_nx/tegra_texture.js';
+import { decompress, getFormatBlockHeight, getFormatBlockWidth, getFormatBytesPerBlock, getImageFormatString } from '../fres_nx/tegra_texture.js';
 import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -266,14 +267,19 @@ const SCRATCH_MATRIX = mat4.create();
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 5 }];
 
 export class PMTOKTextureHolder extends TextureHolder {
-    public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
+    public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice) {
         const bntx = BNTX.parse(buffer);
         for (let i = 0; i < bntx.textures.length; i++) {
             this.addTexture(device, bntx.textures[i]);
         }
     }
 
-    public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI): void {
+    private async deswizzle(buffer: ArrayBufferSlice, channelFormat: ChannelFormat, width: number, height: number): Promise<Uint8Array<ArrayBuffer>> {
+        return pmtok_deswizzle(buffer.createTypedArray(Uint8Array),
+            width, height, getFormatBlockWidth(channelFormat), getFormatBlockHeight(channelFormat), getFormatBytesPerBlock(channelFormat), 1) as Uint8Array<ArrayBuffer>;
+    }
+
+    public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI) {
         if (this.textureNames.includes(textureEntry.name)) {
             return;
         }
@@ -288,7 +294,8 @@ export class PMTOKTextureHolder extends TextureHolder {
             const buffer = textureEntry.textureDataArray[0].mipBuffers[mipLevel];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
-            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2: textureEntry.blockHeightLog2 }).then(async (deswizzled) => {
+            // the tegra_texture.deswizzle function for existing Switch games does not work with ASTC sizes other than 8x8 and PMTOK has others like 8x5 and 8x6
+            this.deswizzle(buffer, channelFormat, width, height).then(async (deswizzled) => {
                 // would love to keep textures compressed so loading is much less CPU-intensive (i.e. upload deswizzled data directly to GPU)
                 // even with a high-spec system it takes at least 10 seconds to decompress, or up to a minute for bigger levels
                 // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
@@ -309,6 +316,12 @@ export class PMTOKTextureHolder extends TextureHolder {
                         break;
                     case ChannelFormat.Bc7:
                         rgbaPixels = Decoder.decodeBC7(deswizzled, width, height);
+                        break;
+                    case ChannelFormat.Astc_8x5:
+                        rgbaPixels = Decoder.decodeASTC_8x5(deswizzled, width, height);
+                        break;
+                    case ChannelFormat.Astc_8x6:
+                        rgbaPixels = Decoder.decodeASTC_8x6(deswizzled, width, height);
                         break;
                     case ChannelFormat.Astc_8x8:
                         rgbaPixels = Decoder.decodeASTC_8x8(deswizzled, width, height);
@@ -336,6 +349,7 @@ class OrigamiProgram extends DeviceProgram {
     private a_Sizes = [3, 4, 4, 4, 2, 2];
     public static a_Orders = ["_p0", "_n0", "_t0", "_b0", "_u0", "_u1"];
     public static s_Orders = ["_a0", "_d0", "_l0", "_m0", "_n0"];
+    public static s_Orders2 = ["_a0", "_d0", "_n1", "_m0", "_n0"];
     public static ub_ShapeParams = 0;
     public static ub_MaterialParams = 1;
 
@@ -543,9 +557,10 @@ class MaterialInstance {
         this.textureMapping = nArray(OrigamiProgram.s_Orders.length, () => new TextureMapping());
         for (const [shaderSamplerName, samplerName] of fmat.shaderAssign.samplerAssign.entries()) {
             const samplerIndex = fmat.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
-            const shaderSamplerIndex = OrigamiProgram.s_Orders.indexOf(shaderSamplerName);
+            let shaderSamplerIndex = OrigamiProgram.s_Orders.indexOf(shaderSamplerName);
             if (shaderSamplerIndex < 0) {
-                assert(false);
+                shaderSamplerIndex = OrigamiProgram.s_Orders2.indexOf(shaderSamplerName);
+                if (shaderSamplerIndex < 0) assert(false);
             }
             assert(samplerIndex >= 0 && shaderSamplerIndex >= 0);
             const shaderMapping = this.textureMapping[shaderSamplerIndex];
@@ -558,7 +573,8 @@ class MaterialInstance {
         const blend = fmat.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
-        this.isTranslucent = blendMode !== null;
+        const pasteType = fmat.shaderAssign.shaderOption.get("paste_type") ? fmat.shaderAssign.shaderOption.get("paste_type")! === "0" : false;
+        this.isTranslucent = blendMode !== null || pasteType;
 
         this.megaStateFlags = {
             cullMode: translateCullMode(fmat),
