@@ -23,7 +23,7 @@ import { assert, assertExists, nArray } from '../util.js';
 import { ResourceSystem } from './scenes.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 
-function translateImageFormat(channelFormat: ChannelFormat, typeFormat: TypeFormat): GfxFormat {
+function translateImageFormat(typeFormat: TypeFormat): GfxFormat {
     switch (typeFormat) {
         case TypeFormat.Unorm:
             return GfxFormat.U8_RGBA_NORM;
@@ -285,7 +285,7 @@ export class PMTOKTextureHolder extends TextureHolder {
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
         const typeFormat = getTypeFormat(textureEntry.imageFormat);
-        const gfxFormat = translateImageFormat(channelFormat, typeFormat);
+        const gfxFormat = translateImageFormat(typeFormat);
         const mips = textureEntry.textureDataArray[0].mipBuffers.length;
 
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, textureEntry.width, textureEntry.height, mips));
@@ -299,22 +299,6 @@ export class PMTOKTextureHolder extends TextureHolder {
                 // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
                 let rgbaPixels;
                 switch (channelFormat) {
-                    case ChannelFormat.Bc1:
-                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC1, width, height);
-                        break;
-                    case ChannelFormat.Bc3:
-                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC3, width, height);
-                        break;
-                    // case ChannelFormat.Bc4:
-                    //     rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC4, width, height);
-                    //     break;
-                    // case ChannelFormat.Bc5:
-                    //     if (typeFormat === TypeFormat.Snorm) {
-                    //         rgbaPixels = pmtok_decode_texture_signed(deswizzled, PMTOKCompressedTextureFormat.BC5, width, height);
-                    //     } else {
-                    //         rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC5, width, height, false);
-                    //     }
-                    //     break;
                     case ChannelFormat.Bc6:
                         if (typeFormat === TypeFormat.Ufloat) {
                             rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC6H, width, height);
@@ -337,7 +321,7 @@ export class PMTOKTextureHolder extends TextureHolder {
                     case ChannelFormat.Astc_8x8:
                         rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x8, width, height);
                         break;
-                    default:
+                    default: // BC1-5 don't seem to decode alpha correctly in the rust lib
                         rgbaPixels = decompress({ ...textureEntry, width, height, depth: 1 }, deswizzled).pixels;
                         break;
                 }
