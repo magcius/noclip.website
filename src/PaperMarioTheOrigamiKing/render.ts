@@ -36,79 +36,6 @@ function translateImageFormat(typeFormat: TypeFormat): GfxFormat {
         default:
             throw `Unknown type format of ${typeFormat} (non-BC channel)`;
     }
-    // in a perfect world where textures can kept compressed...
-    // if (channelFormat <= ChannelFormat.Bc7 && channelFormat >= ChannelFormat.Bc1) {
-    //     switch (typeFormat) {
-    //         case TypeFormat.Unorm:
-    //             switch (channelFormat) {
-    //                 case ChannelFormat.Bc1:
-    //                     return GfxFormat.BC1;
-    //                 case ChannelFormat.Bc2:
-    //                     return GfxFormat.BC2;
-    //                 case ChannelFormat.Bc3:
-    //                     return GfxFormat.BC3;
-    //                 case ChannelFormat.Bc4:
-    //                     return GfxFormat.BC4_UNORM;
-    //                 case ChannelFormat.Bc5:
-    //                     return GfxFormat.BC5_UNORM;
-    //                 case ChannelFormat.Bc7:
-    //                     return GfxFormat.BC7;
-    //                 default:
-    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-    //             }
-    //         case TypeFormat.Snorm:
-    //             switch (channelFormat) {
-    //                 case ChannelFormat.Bc4:
-    //                     return GfxFormat.BC4_SNORM;
-    //                 case ChannelFormat.Bc5:
-    //                     return GfxFormat.BC5_SNORM;
-    //                 default:
-    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-    //             }
-    //         case TypeFormat.Float:
-    //             switch (channelFormat) {
-    //                 case ChannelFormat.Bc6: // not tested, could be Snorm instead of Float
-    //                     return GfxFormat.BC6H_SNORM;
-    //                 default:
-    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-    //             }
-    //         case TypeFormat.Ufloat:
-    //             switch (channelFormat) {
-    //                 case ChannelFormat.Bc6:
-    //                     return GfxFormat.BC6H_UNORM;
-    //                 default:
-    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-    //             }
-    //         case TypeFormat.UnormSrgb:
-    //             switch (channelFormat) {
-    //                 case ChannelFormat.Bc1:
-    //                     return GfxFormat.BC1_SRGB;
-    //                 case ChannelFormat.Bc2:
-    //                     return GfxFormat.BC2_SRGB;
-    //                 case ChannelFormat.Bc3:
-    //                     return GfxFormat.BC3_SRGB;
-    //                 case ChannelFormat.Bc7:
-    //                     return GfxFormat.BC7_SRGB;
-    //                 default:
-    //                     throw `Unknown channel/type formats of ${channelFormat} & ${typeFormat}`;
-    //             }
-    //         default:
-    //             throw `Unknown type format of ${typeFormat} (BC channel)`;
-    //     }
-    // } else {
-    //     switch (typeFormat) {
-    //         case TypeFormat.Unorm:
-    //             return GfxFormat.U8_RGBA_NORM;
-    //         case TypeFormat.UnormSrgb:
-    //             return GfxFormat.U8_RGBA_SRGB;
-    //         case TypeFormat.Snorm:
-    //             return GfxFormat.S8_RGBA_NORM;
-    //         case TypeFormat.Float:
-    //             return GfxFormat.F16_RGBA;
-    //         default:
-    //             throw `Unknown type format of ${typeFormat} (non-BC channel)`;
-    //     }
-    // }
 }
 
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
@@ -266,36 +193,31 @@ const SCRATCH_MATRIX = mat4.create();
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 5 }];
 
 export class PMTOKTextureHolder extends TextureHolder {
-    public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice) {
-        const bntx = BNTX.parse(buffer);
-        for (let i = 0; i < bntx.textures.length; i++) {
-            this.addTexture(device, bntx.textures[i]);
-        }
-    }
-
     // tegra_texture.deswizzle does not work with ASTC sizes other than 8x8 and PMTOK has others like 8x5 and 8x6
     private async deswizzle(buffer: ArrayBufferSlice, channelFormat: ChannelFormat, width: number, height: number): Promise<Uint8Array<ArrayBuffer>> {
-        return pmtok_deswizzle(buffer.createTypedArray(Uint8Array), width, height, getFormatBlockWidth(channelFormat), getFormatBlockHeight(channelFormat), getFormatBytesPerBlock(channelFormat), 1) as Uint8Array<ArrayBuffer>;
+        return pmtok_deswizzle(
+            buffer.createTypedArray(Uint8Array), width, height,
+            getFormatBlockWidth(channelFormat), getFormatBlockHeight(channelFormat),
+            getFormatBytesPerBlock(channelFormat), 1) as Uint8Array<ArrayBuffer>;
     }
 
-    public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI) {
-        if (this.textureNames.includes(textureEntry.name)) {
+    public addTexture(device: GfxDevice, texture: BNTX.BRTI) {
+        if (this.textureNames.includes(texture.name)) {
             return;
         }
 
-        const channelFormat = getChannelFormat(textureEntry.imageFormat);
-        const typeFormat = getTypeFormat(textureEntry.imageFormat);
+        const channelFormat = getChannelFormat(texture.imageFormat);
+        const typeFormat = getTypeFormat(texture.imageFormat);
         const gfxFormat = translateImageFormat(typeFormat);
-        const mips = textureEntry.textureDataArray[0].mipBuffers.length;
-
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, textureEntry.width, textureEntry.height, mips));
+        const mips = texture.textureDataArray[0].mipBuffers.length;
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mips));
         for (let mipLevel = 0; mipLevel < mips; mipLevel++) {
-            const buffer = textureEntry.textureDataArray[0].mipBuffers[mipLevel];
-            const width = Math.max(textureEntry.width >>> mipLevel, 1);
-            const height = Math.max(textureEntry.height >>> mipLevel, 1);
+            const buffer = texture.textureDataArray[0].mipBuffers[mipLevel];
+            const width = Math.max(texture.width >>> mipLevel, 1);
+            const height = Math.max(texture.height >>> mipLevel, 1);
             this.deswizzle(buffer, channelFormat, width, height).then(async (deswizzled) => {
                 // would love to keep textures compressed so loading is much less CPU-intensive (i.e. upload deswizzled data directly to GPU)
-                // even with a high-spec system it takes at least 10 seconds to decompress, or up to a minute for bigger levels
+                // even with a high-spec system it takes at 5-20 seconds to decompress, or upwards of 2 whole minutes for bigger levels
                 // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
                 let rgbaPixels;
                 switch (channelFormat) {
@@ -322,7 +244,7 @@ export class PMTOKTextureHolder extends TextureHolder {
                         rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x8, width, height);
                         break;
                     default: // BC1-5 don't seem to decode alpha correctly in the rust lib
-                        rgbaPixels = decompress({ ...textureEntry, width, height, depth: 1 }, deswizzled).pixels;
+                        rgbaPixels = decompress({ ...texture, width, height, depth: 1 }, deswizzled).pixels;
                         break;
                 }
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
@@ -330,13 +252,13 @@ export class PMTOKTextureHolder extends TextureHolder {
         }
 
         const extraInfo = new Map<string, string>();
-        extraInfo.set("Format", getImageFormatString(textureEntry.imageFormat));
-        extraInfo.set("Channels", getChannelSourceString(textureEntry.channelSource));
+        extraInfo.set("Format", getImageFormatString(texture.imageFormat));
+        extraInfo.set("Channels", getChannelSourceString(texture.channelSource));
 
         const viewerTexture: Viewer.Texture = { gfxTexture, extraInfo };
         this.gfxTextures.push(gfxTexture);
         this.viewerTextures.push(viewerTexture);
-        this.textureNames.push(textureEntry.name);
+        this.textureNames.push(texture.name);
     }
 }
 
@@ -531,7 +453,7 @@ class MaterialInstance {
     private yFlip = 0.0;
     private whiteBack = 0.0;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, public fmat: FMAT) {
+    constructor(cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, public fmat: FMAT) {
         this.program = new OrigamiProgram(fmat);
 
         for (let i = 0; i < fmat.samplerInfo.length; i++) {
@@ -833,7 +755,7 @@ export class ModelRenderer {
     public modelMatrices: mat4[] = [mat4.create()];
     public name: string;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, fmdlData: ModelData) {
+    constructor(cache: GfxRenderCache, textureHolder: PMTOKTextureHolder, fmdlData: ModelData) {
         this.name = fmdlData.fmdl.name;
         for (const fmat of fmdlData.fmdl.fmat) {
             const shaderAssignExec = fmat.userData.get("__ShaderAssignExec");
@@ -849,7 +771,11 @@ export class ModelRenderer {
                 visible = false;
             }
             if (visible) {
-                this.fmatInstances.push(new MaterialInstance(device, cache, textureHolder, fmat));
+                // patch texture names
+                for (let i = 0; i < fmat.textureName.length; i++) {
+                    if (!fmat.textureName[i].startsWith("Cmn_")) fmat.textureName[i] = `${this.name}_${fmat.textureName[i]}`;
+                }
+                this.fmatInstances.push(new MaterialInstance(cache, textureHolder, fmat));
             } else {
                 // append null for consistent indexing
                 this.fmatInstances.push(null);
