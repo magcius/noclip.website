@@ -97,6 +97,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.textureHolder.destroy(device);
         this.renderHelper.destroy();
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
