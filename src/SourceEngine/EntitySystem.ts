@@ -4470,10 +4470,7 @@ export class EntitySystem {
         this.flushCreateQueue();
 
         const spawnStateAction = this.getSpawnStateAction();
-        if (spawnStateAction === SpawnState.FetchingResources) {
-            // Still fetching; nothing to do.
-            return;
-        } else if (spawnStateAction === SpawnState.ReadyForSpawn) {
+        if (spawnStateAction === SpawnState.ReadyForSpawn) {
             // Set all parent relationships so that the origin relationships are correct
             // before calling the spawn method on anything.
             for (let i = 0; i < this.entities.length; i++) {
@@ -4493,6 +4490,9 @@ export class EntitySystem {
         this.debugger.movement(renderContext);
 
         for (let i = 0; i < this.entities.length; i++) {
+            if (this.entities[i].spawnState !== SpawnState.Spawned)
+                continue;
+
             if (!this.entities[i].alive) {
                 this.entities.splice(i--, 1);
                 continue;
