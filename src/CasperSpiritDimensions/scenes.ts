@@ -12,7 +12,8 @@ import { DataFetcher } from "../DataFetcher.js";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 
-const CLEAR_COLORS: number[][] = [ // hardcode to approx fog colors for now
+// hardcode to approximate fog colors for now
+const CLEAR_COLORS: number[][] = [
     [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
     [90, 79, 54], [5, 5, 5],     [5, 5, 5],    [5, 5, 5],
     [5, 5, 5],    [5, 5, 5],     [5, 5, 5],    [77, 50, 52],
@@ -24,11 +25,12 @@ Game uses the RenderWare engine. Some files have their extensions changed (such 
 
 TODO
 
-Handle different kinds of transparency better
-Dynamic objects
+More efficient rendering & data structures for level objects
+Handle different kinds of transparency better (proper draw order)
+Level objects
+    Add different kinds, fix the ones currently ignored or hardcoded
     Idle animations would be nice, but not needed
-    Even better, figure out AI pathing and have certain enemies/NPCs follow a default path
-Implement mipmapping? Textures are present for it, at least for 32-bit ones
+    Even better, figure out AI pathing and have certain enemies/NPCs follow a default path (should be doable, it's all in plain text in the files)
 */
 
 class CasperRenderer implements SceneGfx {
@@ -43,7 +45,7 @@ class CasperRenderer implements SceneGfx {
         for (const texture of textures.values()) {
             const extraInfo = new Map<string, string>();
             extraInfo.set("Has Alpha", `${texture.hasAlpha}`);
-            extraInfo.set("Bit Depth", texture.bitDepth.toString());
+            extraInfo.set("Bit Depth", `${texture.bitDepth}`);
             viewerTextures.push({ gfxTexture: texture.gfxTexture, extraInfo });
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);

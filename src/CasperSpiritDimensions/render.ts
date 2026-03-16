@@ -10,6 +10,7 @@ import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { Mesh, Texture, ObjectInstance, Level, LevelSector } from "./bin";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { MathConstants } from "../MathHelpers";
 
 interface MeshBatch {
     textureName: string;
@@ -35,7 +36,7 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     Mat4x4 u_ShiftMatrix;
-    vec4 u_Options; // x = show textures (0, 1)
+    float u_ShowTextures;
 };
 
 uniform sampler2D u_Texture;
@@ -58,7 +59,7 @@ void main() {
 
 #ifdef FRAG
 void main() {
-    if (u_Options.x > 0.1) {
+    if (u_ShowTextures > 0.1) {
         vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
         vec3 ambient = vec3(0.075); // close approx to PS2 appearance
         vec3 lightColor = v_Color + ambient;
@@ -128,6 +129,9 @@ export class LevelRenderer {
             ],
             indexBufferFormat: GfxFormat.U32_R
         });
+        for (const instance of this.objInstances) {
+            instance.shiftMatrix = this.buildShiftMatrix(instance);
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
@@ -146,48 +150,41 @@ export class LevelRenderer {
             { buffer: this.indexBuffer, byteOffset: 0 }
         );
 
-        let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 36);
+        let offset = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 33);
         const buffer = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
         // u_ProjectionView (16)
         offset += fillMatrix4x4(buffer, offset, viewerInput.camera.clipFromWorldMatrix);
         // u_ShiftMatrix (16)
         offset += fillMatrix4x4(buffer, offset, NOSHIFT_MATRIX);
-        // u_Options (4)
+        // u_ShowTextures (1)
         buffer[offset++] = this.showTextures ? 1.0 : 0.0;
-        buffer[offset++] = 0.0;
-        buffer[offset++] = 0.0;
-        buffer[offset++] = 0.0;
 
         // static level geometry
         this.submitBatches(renderInstManager, this.batches, renderHelper);
 
         // render objects
         if (this.showObjects) {
-            for (const obj of this.objInstances) {
-                const mesh = this.objMeshes.get(obj.name);
-                const buffers = this.objBuffers.get(obj.name);
+            for (const instance of this.objInstances) {
+                const mesh = this.objMeshes.get(instance.name);
+                const buffers = this.objBuffers.get(instance.name);
                 if (!mesh || !buffers) {
                     continue;
                 }
-                const shiftMatrix = this.buildShiftMatrix(obj);
                 const instanceTemplate = renderInstManager.pushTemplate();
-                let instanceOffset = instanceTemplate.allocateUniformBuffer(LevelProgram.ub_SceneParams, 36);
+                let instanceOffset = instanceTemplate.allocateUniformBuffer(LevelProgram.ub_SceneParams, 33);
                 const instanceBuffer = instanceTemplate.mapUniformBufferF32(LevelProgram.ub_SceneParams);
                 // u_ProjectionView (16)
                 instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, viewerInput.camera.clipFromWorldMatrix);
                 // u_ShiftMatrix (16)
-                instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, shiftMatrix);
-                // u_Options (4)
+                instanceOffset += fillMatrix4x4(instanceBuffer, instanceOffset, instance.shiftMatrix);
+                // u_ShowTextures (1)
                 instanceBuffer[instanceOffset++] = this.showTextures ? 1.0 : 0.0;
-                instanceBuffer[instanceOffset++] = 0.0;
-                instanceBuffer[instanceOffset++] = 0.0;
-                instanceBuffer[instanceOffset++] = 0.0;
                 instanceTemplate.setVertexInput(this.inputLayout, [
                     { buffer: buffers[0], byteOffset: 0 },
                     { buffer: buffers[2], byteOffset: 0 },
                     { buffer: buffers[3], byteOffset: 0 }
                 ], { buffer: buffers[1], byteOffset: 0 });
-                this.submitBatches(renderInstManager, this.objBatches.get(obj.name)!, renderHelper, false);
+                this.submitBatches(renderInstManager, this.objBatches.get(instance.name)!, renderHelper, false);
                 renderInstManager.popTemplate();
             }
         }
@@ -359,7 +356,7 @@ export class LevelRenderer {
         const posX = obj.position.x * WORLD_SCALE;
         const posY = obj.position.y * WORLD_SCALE;
         const posZ = -obj.position.z * WORLD_SCALE;
-        quat.rotateY(q, q, (obj.rotation.y * Math.PI / 180));
+        quat.rotateY(q, q, (obj.rotation.y * MathConstants.DEG_TO_RAD));
         // quat.rotateX(q, q, (obj.rotation.x * Math.PI / 180));
         // quat.rotateZ(q, q, (obj.rotation.y * Math.PI / 180));
         mat4.fromRotationTranslationScale(out, q, [posX, posY, posZ], [obj.scale.x, obj.scale.y, obj.scale.z]);

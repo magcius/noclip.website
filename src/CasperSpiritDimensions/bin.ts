@@ -1,3 +1,4 @@
+import { mat4 } from "gl-matrix";
 import { GfxCullMode, GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 
 // Credit to the "RW Analyze" tool by Steve M. for helping to parse the RenderWare files
@@ -21,9 +22,6 @@ interface NodeHeader {
     size: number;
 }
 
-/**
- * List of indices for a material
- */
 interface IndexSplit {
     materialIndex: number;
     indices: number[];
@@ -51,9 +49,6 @@ export interface ObjectDefintion {
     thirdValue: string;
 }
 
-/**
- * Mesh from either DFF or BSP file
- */
 export interface Mesh {
     vertexCount: number;
     vertices: number[];
@@ -72,6 +67,7 @@ export class ObjectInstance {
     rotation: { x: number; y: number; z: number };
     scale: { x: number; y: number; z: number };
     properties: string[];
+    shiftMatrix: mat4;
 }
 
 /**
@@ -79,21 +75,22 @@ export class ObjectInstance {
  */
 export class Texture {
     public gfxTexture: GfxTexture;
-    constructor(device: GfxDevice, name: string, public rgba: Uint8Array, public width: number, public height: number, public bitDepth: number, public hasAlpha: boolean = false, public cullModeOverride: number) {
+    constructor(device: GfxDevice, name: string, public rgba: Uint8Array[], public width: number, public height: number, public bitDepth: number, public hasAlpha: boolean = false, public cullModeOverride: number) {
         const gfxTexture = device.createTexture({
             width, height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
             usage: GfxTextureUsage.Sampled,
             dimension: GfxTextureDimension.n2D,
             depthOrArrayLayers: 1,
-            numLevels: 1
+            numLevels: rgba.length
         });
         device.setResourceName(gfxTexture, name);
-        device.uploadTextureData(gfxTexture, 0, [rgba]);
+        device.uploadTextureData(gfxTexture, 0, rgba);
         this.gfxTexture = gfxTexture;
     }
 }
 
+// temp workarounds for level objects
 const TRANSPARENT_TEXTURES_MAP: Map<string, number[]> = new Map<string, number[]>([
     ["skin1", [140, GfxCullMode.Back]],
     ["kibosh", [200, GfxCullMode.Back]],
@@ -166,12 +163,8 @@ export class RWParser {
         const txdEnd = this.offset + txdHeader.size;
         const txdMetaStructHeader = this.readHeader(); 
         this.offset += 4;
-        // let index = -1;
-        // let debugWidth = 0;
-        // let debugHeight = 0;
         const textures: Map<string, Texture> = new Map();
         while (this.offset < txdEnd) {
-            // index += 1;
             const nativeHeader = this.readHeader();
             const nativeEnd = this.offset + nativeHeader.size;
             if (this.offset >= txdEnd) {
@@ -185,10 +178,10 @@ export class RWParser {
             // only parse materials with known name
             if (materials.indexOf(textureName) === -1) {
                 this.offset = nativeEnd;
-                // console.log("Skipping texture", textureName);
                 continue;
             }
             // not sure what exactly this is, but any texture that has transparency in the game has this set to something
+            // could be an alpha mask but there's not any matching texture with the name it gives
             const alphaHeader = this.readHeader();
             const alphaName = this.readString(alphaHeader.size);
 
@@ -202,6 +195,7 @@ export class RWParser {
 
             const pixelCount = width * height;
             let rgba: Uint8Array = new Uint8Array(pixelCount * 4);
+            let rgba2 = null;
 
             const transparencyOverride = TRANSPARENT_TEXTURES_MAP.get(textureName);
 
@@ -219,8 +213,7 @@ export class RWParser {
                     }
                 }
 
-                // unswizzle 8-bit textures
-                // https://ps2linux.no-ip.info/playstation2-linux.com/docs/howto/display_docef7c.html?docid=75
+                // Credit: https://ps2linux.no-ip.info/playstation2-linux.com/docs/howto/display_docef7c.html?docid=75
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++) {
                         const blockLocation = (y & -16) * width + (x & -16) * 2;
@@ -238,17 +231,9 @@ export class RWParser {
                         rgba[index + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
                     }
                 }
-                // this.debugRenderToCanvas(rgba, width, height, textureName, debugWidth, debugHeight);
-                // debugWidth += width + 32;
-                // if (debugWidth > 2000) {
-                //     debugWidth = 0;
-                //     debugHeight += 150;
-                // }
             } else if (bitDepth === 32) {
-                const clut = new Uint8Array(this.data.buffer, this.offset + 80, pixelCount * 4);
-                // there's also a copy of the texture at half resolution after another 80-byte offset
-
-                rgba = new Uint8Array(pixelCount * 4);
+                // mip 0
+                let clut = new Uint8Array(this.data.buffer, this.offset + 80, rgba.length);
                 for (let i = 0; i < rgba.length; i += 4) {
                     rgba[i] = clut[i];
                     rgba[i + 1] = clut[i + 1];
@@ -256,8 +241,28 @@ export class RWParser {
                     const a = Math.min(clut[i + 3] * 2, 255);
                     rgba[i + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
                 }
+                // mip 1
+                const mip1Offset = this.offset + 80 + (pixelCount * 4) + 80;
+                const mip1Length = pixelCount * 2; // half resolution
+                if (mip1Offset + mip1Length <= this.data.buffer.byteLength) {
+                    // check if there's actually another mip level, sometimes there's not
+                    clut = new Uint8Array(this.data.buffer, mip1Offset, mip1Length);
+                    rgba2 = new Uint8Array(mip1Length);
+                    for (let i = 0; i < rgba2.length; i += 4) {
+                        rgba2[i] = clut[i];
+                        rgba2[i + 1] = clut[i + 1];
+                        rgba2[i + 2] = clut[i + 2];
+                        const a = Math.min(clut[i + 3] * 2, 255);
+                        rgba2[i + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
+                    }
+                }
             }
-            textures.set(textureName, new Texture(device, textureName, rgba, width, height, bitDepth, alphaName.length > 0 || TRANSPARENT_TEXTURES_MAP.has(textureName), transparencyOverride ? transparencyOverride[1] : 0));
+            const t = new Texture(device, textureName,
+                rgba2 !== null ? [rgba, rgba2] : [rgba],
+                width, height, bitDepth,
+                alphaName.length > 0 || TRANSPARENT_TEXTURES_MAP.has(textureName),
+                transparencyOverride ? transparencyOverride[1] : 0);
+            textures.set(textureName, t);
             this.offset = nativeEnd;
         }
 
@@ -301,7 +306,6 @@ export class RWParser {
                     const parts = line.split(/\s+/);
                     const key = parts[0].replace(":", "");
                     const values = parts.slice(1).map(Number);
-                    // y and z might be flipped (???)
                     if (key === "POS") {
                         instance.position = { x: values[0], y: values[2], z: values[1] };
                     } else if (key === "ROTATE") {
@@ -337,7 +341,7 @@ export class RWParser {
         }
 
         for (let line of lines) {
-            line = line.trim().split("//")[0]; // ignore any comments
+            line = line.trim().split("//")[0]; // ignore any comments (somtimes after actual data)
             if (!line) {
                 continue;
             }
@@ -382,7 +386,8 @@ export class RWParser {
             this.offset = geometryStructEnd;
             const materialListHeader = this.readHeader();
             const materials = this.parseMaterialList(materialListHeader.size);
-            if (materials[0].length > 0) { // temp don't build meshes without textures
+            if (materials[0].length > 0) {
+                // temp don't build meshes without textures
                 const extensionHeader = this.readHeader();
                 const splits: IndexSplit[] = [];
                 if (extensionHeader.id === ChunkID.EXTENSION) {
@@ -484,7 +489,7 @@ export class RWParser {
             pointer += 12;
         }
 
-        pointer += vertexCount * 4; // skip block, don't know what these colors are. They appear rainbow-like when rendered
+        pointer += vertexCount * 4; // skip block, don't know what this data is. When used as colors, it appears rainbow-like
 
         const colors: number[] = [];
         for (let i = 0; i < vertexCount; i++) {
@@ -637,23 +642,5 @@ export class RWParser {
         const str = new TextDecoder().decode(new Uint8Array(this.data.buffer, this.data.byteOffset + this.offset, size));
         this.offset += size;
         return str.replace(/\0/g, '').toLowerCase().replace(/[^a-zA-Z0-9_,]/g, "");
-    }
-
-    private debugRenderToCanvas(rgba: Uint8Array, width: number, height: number, name: string, dw: number, dh: number) {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        const imgData = ctx.createImageData(width, height);
-        imgData.data.set(rgba);
-        ctx.putImageData(imgData, 0, 0);
-        canvas.style.position = 'fixed';
-        canvas.style.top = `${300 + dh}px`;
-        canvas.style.left = `${10 + dw}px`;
-        canvas.style.zIndex = '9999';
-        canvas.style.border = '1px solid red';
-        canvas.style.background = 'black';
-        canvas.title = name;
-        document.body.appendChild(canvas);
     }
 }
