@@ -1,0 +1,228 @@
+import { mat4 } from "gl-matrix";
+import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FMDL } from "../fres_nx/bfres";
+import { AttributeFormat, getChannelFormat, getTypeFormat, IndexFormat } from "../fres_nx/nngfx_enum";
+import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers";
+import { GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxDevice, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
+import { GfxInputLayout, GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { computeModelMatrixSRT } from "../MathHelpers";
+import { OrigamiProgram } from "./render";
+
+interface ConvertedVertexAttribute {
+    format: GfxFormat;
+    data: ArrayBufferLike;
+    stride: number;
+}
+
+function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
+    switch (attributeFormat) {
+        case AttributeFormat._8_8_Unorm:
+            return GfxFormat.U8_RG_NORM;
+        case AttributeFormat._8_8_Snorm:
+            return GfxFormat.S8_RG_NORM;
+        case AttributeFormat._8_8_Uint:
+            return GfxFormat.U32_RG;
+        case AttributeFormat._8_8_8_8_Unorm:
+            return GfxFormat.U8_RGBA_NORM;
+        case AttributeFormat._8_8_8_8_Snorm:
+            return GfxFormat.S8_RGBA_NORM;
+        case AttributeFormat._10_10_10_2_Snorm:
+            return GfxFormat.S8_RGBA_NORM;
+        case AttributeFormat._16_16_Unorm:
+            return GfxFormat.U16_RG_NORM;
+        case AttributeFormat._16_16_Snorm:
+            return GfxFormat.S16_RG_NORM;
+        case AttributeFormat._16_16_Float:
+            return GfxFormat.F16_RG;
+        case AttributeFormat._16_16_16_16_Float:
+            return GfxFormat.F16_RGBA;
+        case AttributeFormat._32_32_Float:
+            return GfxFormat.F32_RG;
+        case AttributeFormat._32_32_32_Float:
+            return GfxFormat.F32_RGB;
+        default:
+            console.error(getChannelFormat(attributeFormat), getTypeFormat(attributeFormat));
+            throw `Unknown attribute format ${attributeFormat}`;
+    }
+}
+
+function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
+    switch (indexFormat) {
+        case IndexFormat.Uint8:
+            return GfxFormat.U8_R;
+        case IndexFormat.Uint16:
+            return GfxFormat.U16_R;
+        case IndexFormat.Uint32:
+            return GfxFormat.U32_R;
+        default:
+            throw `Unknown index format ${indexFormat}`;
+    }
+}
+
+export class VertexData {
+    public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+    public inputBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [];
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+
+    constructor(device: GfxDevice, public fvtx: FVTX) {
+        let nextBufferIndex = fvtx.vertexBuffers.length;
+        for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
+            const vertexAttribute = fvtx.vertexAttributes[i];
+            const bufferIndex = vertexAttribute.bufferIndex;
+            if (this.inputBufferDescriptors[bufferIndex] === undefined) {
+                this.inputBufferDescriptors[bufferIndex] = null;
+            }
+            const attributeLocation = OrigamiProgram.a_Orders.indexOf(vertexAttribute.name);
+            if (attributeLocation < 0) {
+                continue;
+            }
+            const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
+            const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
+            if (convertedAttribute !== null) {
+                const attribBufferIndex = nextBufferIndex++;
+                this.vertexAttributeDescriptors.push({
+                    location: attributeLocation,
+                    format: convertedAttribute.format,
+                    bufferIndex: attribBufferIndex,
+                    bufferByteOffset: 0
+                });
+                this.inputBufferDescriptors[attribBufferIndex] = { byteStride: convertedAttribute.stride, frequency: GfxVertexBufferFrequency.PerVertex };
+                const gfxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, convertedAttribute.data);
+                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
+            } else {
+                this.vertexAttributeDescriptors.push({
+                    location: attributeLocation,
+                    format: translateAttributeFormat(vertexAttribute.format),
+                    bufferIndex: bufferIndex,
+                    bufferByteOffset: vertexAttribute.offset
+                });
+                if (!this.vertexBufferDescriptors[bufferIndex]) {
+                    const gfxBuffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexBuffer.data);
+                    this.inputBufferDescriptors[bufferIndex] = { byteStride: vertexBuffer.stride, frequency: GfxVertexBufferFrequency.PerVertex };
+                    this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer };
+                }
+            }
+        }
+    }
+
+    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute | null {
+        switch (vertexAttribute.format) {
+            case AttributeFormat._10_10_10_2_Snorm:
+                return this.convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute, vertexBuffer);
+            default:
+                return null;
+        }
+    }
+
+    public convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute {
+        function signExtend10(n: number): number {
+            return (n << 22) >> 22;
+        }
+        const numElements = vertexBuffer.data.byteLength / vertexBuffer.stride;
+        const out = new Int16Array(numElements * 4);
+        const stride = out.BYTES_PER_ELEMENT * 4;
+        let dst = 0;
+        let offs = vertexAttribute.offset;
+        const view = vertexBuffer.data.createDataView();
+        for (let i = 0; i < numElements; i++) {
+            const n = view.getUint32(offs, true);
+            out[dst++] = signExtend10((n >>> 0) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 10) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 20) & 0x3FF) << 4;
+            out[dst++] = ((n >>> 30) & 0x03) << 14;
+            offs += vertexBuffer.stride;
+        }
+        return { format: GfxFormat.S16_RGBA_NORM, data: out.buffer, stride };
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.vertexBufferDescriptors.length; i++) {
+            if (this.vertexBufferDescriptors[i]) {
+                device.destroyBuffer(this.vertexBufferDescriptors[i].buffer);
+            }
+        }
+    }
+}
+
+export class ShapeMeshData {
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
+    public inputLayout: GfxInputLayout;
+    public indexBuffer: GfxBuffer;
+
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: VertexData) {
+        const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
+        this.inputLayout = cache.createInputLayout({
+            indexBufferFormat,
+            vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
+            vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
+        });
+        this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
+        this.indexBuffer = createBufferFromSlice(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexBufferData);
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.indexBuffer);
+    }
+}
+
+export class ShapeData {
+    public meshData: ShapeMeshData[] = [];
+    public shiftMatrix: mat4;
+
+    constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
+        for (const mesh of fshp.mesh) {
+            this.meshData.push(new ShapeMeshData(cache, mesh, fvtxData));
+        }
+        this.shiftMatrix = this.computeShiftMatrix(skeleton, boneIndex);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const meshData of this.meshData) {
+            meshData.destroy(device);
+        }
+    }
+
+    private computeShiftMatrix(skeleton: FSKL_Bone[], boneIndex: number): mat4 {
+        // Adapted from TMSSFE's code
+        const bone = skeleton[boneIndex];
+        const boneSRT: mat4 = mat4.create();
+        computeModelMatrixSRT(boneSRT,
+            bone.scale[0], bone.scale[1], bone.scale[2],
+            bone.rotation[0], bone.rotation[1], bone.rotation[2],
+            bone.translation[0], bone.translation[1], bone.translation[2],
+        );
+        if (bone.parentIndex === -1) {
+            return boneSRT;
+        } else {
+            const shift: mat4 = mat4.create();
+            mat4.multiply(shift, this.computeShiftMatrix(skeleton, bone.parentIndex), boneSRT);
+            return shift;
+        }
+    }
+}
+
+export class ModelData {
+    public vertexData: VertexData[] = [];
+    public shapeData: ShapeData[] = [];
+
+    constructor(cache: GfxRenderCache, public fmdl: FMDL) {
+        for (const fvtx of fmdl.fvtx) {
+            this.vertexData.push(new VertexData(cache.device, fvtx));
+        }
+        for (const fshp of fmdl.fshp) {
+            this.shapeData.push(new ShapeData(cache, fshp, this.vertexData[fshp.vertexIndex], fmdl.fskl.bones, fshp.boneIndex));
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const fvtxData of this.vertexData) {
+            fvtxData.destroy(device);
+        }
+        for (const fshpData of this.shapeData) {
+            fshpData.destroy(device);
+        }
+    }
+}

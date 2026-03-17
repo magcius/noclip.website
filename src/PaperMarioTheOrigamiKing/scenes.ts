@@ -2,21 +2,26 @@ import * as BNTX from "../fres_nx/bntx.js";
 import * as BFRES from "../fres_nx/bfres.js";
 import { decompress } from "fzstd";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
-import { SceneGfx } from "../viewer.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { PMTOKTextureHolder, ModelData, ModelRenderer, PMTOKRenderer } from "./render.js";
+import { ModelData } from "./render_data.js";
+import { OrigamiTextureHolder, OrigamiModelRenderer } from "./render.js";
 import { ELFType, MObjInstance, MObjModel, MObjType, parseELF } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
-export class ResourceSystem {
+export class OrigamiResources {
     // Adapated from Odyssey's ResourceSystem class
-    public textureHolder = new PMTOKTextureHolder();
-    public bfresCache = new Map<string, BFRES.FRES | null>();
-    public fmdlDataCache = new Map<string, ModelData | null>();
+    public textureHolder = new OrigamiTextureHolder();
+    public modelDataCache = new Map<string, ModelData>();
     private renderCache: GfxRenderCache;
+    private loadedBFRESNames: string[] = [];
     private requestedCommonTextures: string[] = [];
 
     constructor(device: GfxDevice) {
@@ -24,19 +29,19 @@ export class ResourceSystem {
     }
 
     public loadBFRES(device: GfxDevice, name: string, bfres: BFRES.FRES) {
-        if (!this.bfresCache.has(name)) {
-            this.bfresCache.set(name, bfres);
-            const bntxFile = bfres.externalFiles.find((f) => f.name === `${name}.bntx`);
-            if (bntxFile) {
-                const bntx = BNTX.parse(bntxFile.buffer);
+        if (!this.loadedBFRESNames.includes(name)) {
+            this.loadedBFRESNames.push(name);
+            const embeddedTextureFile = bfres.externalFiles.find((f) => f.name === `${name}.bntx`);
+            if (embeddedTextureFile) {
+                const bntx = BNTX.parse(embeddedTextureFile.buffer);
                 for (const t of bntx.textures) {
                     t.name = `${name}_${t.name}`;
                     this.textureHolder.addTexture(device, t);
                 }
-                for (const fmdl of bfres.fmdl) {
-                    this.fmdlDataCache.set(fmdl.name, new ModelData(this.renderCache, fmdl));
-                    for (const fmat of fmdl.fmat) {
-                        for (const t of fmat.textureName) {
+                for (const model of bfres.fmdl) {
+                    this.modelDataCache.set(model.name, new ModelData(this.renderCache, model));
+                    for (const material of model.fmat) {
+                        for (const t of material.textureName) {
                             if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) this.requestedCommonTextures.push(t);
                         }
                     }
@@ -62,11 +67,61 @@ export class ResourceSystem {
     public destroy(device: GfxDevice): void {
         this.renderCache.destroy();
         this.textureHolder.destroy(device);
-        this.fmdlDataCache.forEach((value) => {
-            if (value !== null) {
-                value.destroy(device);
-            }
+        this.modelDataCache.forEach((value) => { value.destroy(device) });
+    }
+}
+
+class OrigamiRenderer implements SceneGfx {
+    private renderInstListMain = new GfxRenderInstList();
+    private resources: OrigamiResources;
+    public renderHelper: GfxRenderHelper;
+    public textureHolder: OrigamiTextureHolder;
+    public modelRenderers: OrigamiModelRenderer[] = [];
+
+    constructor(device: GfxDevice) {
+        this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public setResources(rs: OrigamiResources) {
+        this.resources = rs;
+        this.textureHolder = rs.textureHolder;
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
         });
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+        this.prepareToRender(device, viewerInput);
+        builder.execute();
+        this.renderInstListMain.reset();
+    }
+
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+        this.renderHelper.pushTemplateRenderInst();
+        for (let i = 0; i < this.modelRenderers.length; i++) {
+            this.modelRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        }
+        this.renderHelper.renderInstManager.popTemplate();
+        this.renderHelper.prepareToRender();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy();
+        this.resources.destroy(device);
     }
 }
 
@@ -101,9 +156,9 @@ class PMTOKScene implements SceneDesc {
         const commonBntxFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/graphics/textures/common/default.bntx.zst`));
         const bfres = BFRES.parse(bfresFile);
 
-        const resourceSystem = new ResourceSystem(device);
-        const sceneRenderer = new PMTOKRenderer(device);
-        resourceSystem.loadBFRES(device, this.id, bfres);
+        const resources = new OrigamiResources(device);
+        const renderer = new OrigamiRenderer(device);
+        resources.loadBFRES(device, this.id, bfres);
 
         // prepare map objects (mobj) for non-battle levels
         const mobjInstances = [];
@@ -156,46 +211,44 @@ class PMTOKScene implements SceneDesc {
                 }
                 const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${modelAG.directory}/${modelAG.file}.bfres.zst`));
                 const mobjBFRES = BFRES.parse(file);
-                resourceSystem.loadBFRES(device, modelAG.file, mobjBFRES);
+                resources.loadBFRES(device, modelAG.file, mobjBFRES);
             }
         }
 
-        resourceSystem.loadRequestedCommonTextures(device, commonBntxFile);
-        sceneRenderer.setResourceSystem(resourceSystem);
+        resources.loadRequestedCommonTextures(device, commonBntxFile);
+        renderer.setResources(resources);
 
-        for (const fmdlData of resourceSystem.fmdlDataCache.values()) {
-            if (fmdlData) {
-                sceneRenderer.modelRenderers.push(new ModelRenderer(sceneRenderer.renderHelper.renderCache, resourceSystem.textureHolder, fmdlData));
-            }
+        for (const modelData of resources.modelDataCache.values()) {
+            renderer.modelRenderers.push(new OrigamiModelRenderer(renderer.renderHelper.renderCache, resources.textureHolder, modelData));
         }
 
         // patch each mobj renderer with instance matrices
-        for (const renderer of sceneRenderer.modelRenderers) {
-            if (renderer.name.startsWith("Mobj_") && mobjInstances.length > 0) {
+        for (const modelRenderer of renderer.modelRenderers) {
+            if (modelRenderer.name.startsWith("Mobj_") && mobjInstances.length > 0) {
                 // get all instances that use this model
                 const instances = [];
                 for (const instance of mobjInstances) {
-                    if (instance.resolvedModelName === renderer.name) {
+                    if (instance.resolvedModelName === modelRenderer.name) {
                         instances.push(instance);
                     }
                 }
                 if (instances.length === 0) {
-                    console.warn("Could not find any instances of", renderer.name);
+                    console.warn("Could not find any instances of", modelRenderer.name);
                     continue;
                 }
-                renderer.modelMatrices = [];
+                modelRenderer.modelMatrices = [];
                 for (const instance of instances) {
                     // one-to-one model to renderer, but a renderer could have more than one instance of a model with different SRT
                     const m = mat4.create();
                     computeModelMatrixSRT(m, 1, 1, 1,
                         instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
                         instance.position[0], instance.position[1], instance.position[2]);
-                    renderer.modelMatrices.push(m);
+                    modelRenderer.modelMatrices.push(m);
                 }
             }
         }
 
-        return sceneRenderer;
+        return renderer;
     }
 }
 
