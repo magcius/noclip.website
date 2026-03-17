@@ -103,7 +103,7 @@ function translateCullMode(material: FMAT): GfxCullMode {
 }
 
 function translateBlendMode(blendMode: string): GfxBlendMode {
-    if (blendMode === "transadd" || blendMode === "trans") {
+    if (blendMode === "transadd" || blendMode === "trans" || blendMode === "blend") {
         return GfxBlendMode.Add;
     } else {
         throw `Unknown blend mode ${blendMode}`;
@@ -177,10 +177,6 @@ function getChannelSourceString(channelSources: ChannelSource[]): string {
         s += ", ";
     }
     return s.slice(0, s.length - 2);
-}
-
-enum TexSRTMode {
-    Maya, Max, XSI
 }
 
 interface ConvertedVertexAttribute {
@@ -270,7 +266,7 @@ class OrigamiProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
     public static ub_MaterialParams = 1;
 
-    constructor(public fmat: FMAT) {
+    constructor(private fmat: FMAT) {
         super();
         this.name = this.fmat.name;
         this.frag = this.generateFrag();
@@ -412,7 +408,7 @@ void main() {
 }
 
 class TexSRT {
-    public mode = TexSRTMode.Maya; // seems to always be Maya
+    public mode = 1; // unused for now
     public scaleS = 1.0;
     public scaleT = 1.0;
     public rotation = 0.0;
