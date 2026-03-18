@@ -6,7 +6,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { ModelData } from "./render_data.js";
-import { OrigamiTextureHolder, OrigamiModelRenderer } from "./render.js";
+import { OrigamiModelRenderer } from "./render.js";
 import { ELFType, MObjInstance, MObjModel, MObjType, parseELF } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -15,6 +15,7 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
+import { OrigamiTextureHolder } from "./texture.js";
 
 export class OrigamiResources {
     // Adapated from Odyssey's ResourceSystem class
@@ -236,14 +237,14 @@ class PMTOKScene implements SceneDesc {
                     console.warn("Could not find any instances of", modelRenderer.name);
                     continue;
                 }
-                modelRenderer.modelMatrices = [];
+                modelRenderer.shiftMatrices = [];
                 for (const instance of instances) {
                     // one-to-one model to renderer, but a renderer could have more than one instance of a model with different SRT
                     const m = mat4.create();
                     computeModelMatrixSRT(m, 1, 1, 1,
                         instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
                         instance.position[0], instance.position[1], instance.position[2]);
-                    modelRenderer.modelMatrices.push(m);
+                    modelRenderer.shiftMatrices.push(m);
                 }
             }
         }

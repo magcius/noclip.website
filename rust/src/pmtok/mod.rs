@@ -36,9 +36,10 @@ pub enum CompressedTextureFormat {
 #[wasm_bindgen(js_name = "pmtok_decode_texture")]
 pub fn decode_texture(src: &[u8], format: CompressedTextureFormat, width: usize, height: usize) -> Vec<u8> {
     let mut bgra32: Vec<u32> = vec![0u32; width * height];
+    // ASTC formats work fine, some of the BC ones don't handle alpha correctly
     let _r: Result<(), &str> = match format {
         CompressedTextureFormat::BC1 => decode_bc1(src, width, height, &mut bgra32),
-        CompressedTextureFormat::BC3 => decode_bc3(src, width, height, &mut bgra32), // some problem with alpha channel or RGBA8 conversion
+        CompressedTextureFormat::BC3 => decode_bc3(src, width, height, &mut bgra32),
         CompressedTextureFormat::BC4 => decode_bc4(src, width, height, &mut bgra32),
         CompressedTextureFormat::BC5 => decode_bc5(src, width, height, &mut bgra32),
         CompressedTextureFormat::BC6H => decode_bc6_unsigned(src, width, height, &mut bgra32),

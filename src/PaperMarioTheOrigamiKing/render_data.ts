@@ -65,10 +65,10 @@ export class VertexData {
     public inputBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
-    constructor(device: GfxDevice, public fvtx: FVTX) {
-        let nextBufferIndex = fvtx.vertexBuffers.length;
-        for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
-            const vertexAttribute = fvtx.vertexAttributes[i];
+    constructor(device: GfxDevice, public vertices: FVTX) {
+        let nextBufferIndex = vertices.vertexBuffers.length;
+        for (let i = 0; i < vertices.vertexAttributes.length; i++) {
+            const vertexAttribute = vertices.vertexAttributes[i];
             const bufferIndex = vertexAttribute.bufferIndex;
             if (this.inputBufferDescriptors[bufferIndex] === undefined) {
                 this.inputBufferDescriptors[bufferIndex] = null;
@@ -77,7 +77,7 @@ export class VertexData {
             if (attributeLocation < 0) {
                 continue;
             }
-            const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
+            const vertexBuffer = vertices.vertexBuffers[bufferIndex];
             const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
                 const attribBufferIndex = nextBufferIndex++;
@@ -151,14 +151,14 @@ export class ShapeMeshData {
     public inputLayout: GfxInputLayout;
     public indexBuffer: GfxBuffer;
 
-    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: VertexData) {
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, vertexData: VertexData) {
         const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
         this.inputLayout = cache.createInputLayout({
             indexBufferFormat,
-            vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
-            vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
+            vertexAttributeDescriptors: vertexData.vertexAttributeDescriptors,
+            vertexBufferDescriptors: vertexData.inputBufferDescriptors,
         });
-        this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
+        this.vertexBufferDescriptors = vertexData.vertexBufferDescriptors;
         this.indexBuffer = createBufferFromSlice(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexBufferData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
@@ -172,9 +172,9 @@ export class ShapeData {
     public meshData: ShapeMeshData[] = [];
     public shiftMatrix: mat4;
 
-    constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
-        for (const mesh of fshp.mesh) {
-            this.meshData.push(new ShapeMeshData(cache, mesh, fvtxData));
+    constructor(cache: GfxRenderCache, public shape: FSHP, vertexData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
+        for (const mesh of shape.mesh) {
+            this.meshData.push(new ShapeMeshData(cache, mesh, vertexData));
         }
         this.shiftMatrix = this.computeShiftMatrix(skeleton, boneIndex);
     }
@@ -208,21 +208,21 @@ export class ModelData {
     public vertexData: VertexData[] = [];
     public shapeData: ShapeData[] = [];
 
-    constructor(cache: GfxRenderCache, public fmdl: FMDL) {
-        for (const fvtx of fmdl.fvtx) {
-            this.vertexData.push(new VertexData(cache.device, fvtx));
+    constructor(cache: GfxRenderCache, public model: FMDL) {
+        for (const vertices of model.fvtx) {
+            this.vertexData.push(new VertexData(cache.device, vertices));
         }
-        for (const fshp of fmdl.fshp) {
-            this.shapeData.push(new ShapeData(cache, fshp, this.vertexData[fshp.vertexIndex], fmdl.fskl.bones, fshp.boneIndex));
+        for (const shape of model.fshp) {
+            this.shapeData.push(new ShapeData(cache, shape, this.vertexData[shape.vertexIndex], model.fskl.bones, shape.boneIndex));
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (const fvtxData of this.vertexData) {
-            fvtxData.destroy(device);
+        for (const vd of this.vertexData) {
+            vd.destroy(device);
         }
-        for (const fshpData of this.shapeData) {
-            fshpData.destroy(device);
+        for (const sd of this.shapeData) {
+            sd.destroy(device);
         }
     }
 }

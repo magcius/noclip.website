@@ -1,38 +1,20 @@
-import * as BNTX from "../fres_nx/bntx.js";
-import { pmtok_deswizzle, pmtok_decode_texture, PMTOKCompressedTextureFormat } from 'noclip-rust-support';
 import { mat4 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { MathConstants } from '../MathHelpers.js';
 import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
 import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
-import { ChannelFormat, ChannelSource, FilterMode, getChannelFormat, getTypeFormat, TextureAddressMode, TypeFormat } from '../fres_nx/nngfx_enum.js';
-import { decompress, getFormatBlockHeight, getFormatBlockWidth, getFormatBytesPerBlock, getImageFormatString } from '../fres_nx/tegra_texture.js';
+import { ChannelSource, FilterMode, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { DeviceProgram } from '../Program.js';
-import { TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { ModelData, ShapeData, ShapeMeshData } from './render_data.js';
-import { Texture, ViewerRenderInput } from "../viewer.js";
-
-function translateImageFormat(typeFormat: TypeFormat): GfxFormat {
-    switch (typeFormat) {
-        case TypeFormat.Unorm:
-            return GfxFormat.U8_RGBA_NORM;
-        case TypeFormat.UnormSrgb:
-            return GfxFormat.U8_RGBA_SRGB;
-        case TypeFormat.Snorm:
-            return GfxFormat.S8_RGBA_NORM;
-        case TypeFormat.Float:
-            return GfxFormat.F16_RGBA;
-        default:
-            throw `Unknown type format of ${typeFormat} (non-BC channel)`;
-    }
-}
+import { ViewerRenderInput } from "../viewer.js";
+import { OrigamiTextureHolder } from './texture.js';
 
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
     switch (addrMode) {
@@ -106,102 +88,8 @@ function translateBlendMode(blendMode: string): GfxBlendMode {
     }
 }
 
-function getChannelSourceString(channelSources: ChannelSource[]): string {
-    let s = "";
-    const keys = ["R", "G", "B", "A"];
-    for (let i = 0; i < channelSources.length; i++) {
-        s += keys[i] + "->";
-        switch (channelSources[i]) {
-            case ChannelSource.Zero:
-                s += "0"; break;
-            case ChannelSource.One:
-                s += "1"; break;
-            case ChannelSource.Red:
-                s += "R"; break;
-            case ChannelSource.Green:
-                s += "G"; break;
-            case ChannelSource.Blue:
-                s += "B"; break;
-            case ChannelSource.Alpha:
-                s += "A"; break;
-        }
-        s += ", ";
-    }
-    return s.slice(0, s.length - 2);
-}
-
 const SCRATCH_MATRIX = mat4.create();
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 5 }];
-
-export class OrigamiTextureHolder extends TextureHolder {
-    // tegra_texture.deswizzle does not work with ASTC sizes other than 8x8 and PMTOK has others like 8x5 and 8x6
-    private async deswizzle(buffer: ArrayBufferSlice, channelFormat: ChannelFormat, width: number, height: number): Promise<Uint8Array<ArrayBuffer>> {
-        return pmtok_deswizzle(
-            buffer.createTypedArray(Uint8Array), width, height,
-            getFormatBlockWidth(channelFormat), getFormatBlockHeight(channelFormat),
-            getFormatBytesPerBlock(channelFormat), 1) as Uint8Array<ArrayBuffer>;
-    }
-
-    public addTexture(device: GfxDevice, texture: BNTX.BRTI) {
-        if (this.textureNames.includes(texture.name)) {
-            return;
-        }
-
-        const channelFormat = getChannelFormat(texture.imageFormat);
-        const typeFormat = getTypeFormat(texture.imageFormat);
-        const gfxFormat = translateImageFormat(typeFormat);
-        const mips = texture.textureDataArray[0].mipBuffers.length;
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mips));
-        for (let mipLevel = 0; mipLevel < mips; mipLevel++) {
-            const buffer = texture.textureDataArray[0].mipBuffers[mipLevel];
-            const width = Math.max(texture.width >>> mipLevel, 1);
-            const height = Math.max(texture.height >>> mipLevel, 1);
-            this.deswizzle(buffer, channelFormat, width, height).then(async (deswizzled) => {
-                // would love to keep textures compressed so loading is much less CPU-intensive (i.e. upload deswizzled data directly to GPU)
-                // even with a high-spec system it takes at 5-20 seconds to decompress, or upwards of 2 whole minutes for bigger levels
-                // ASTC's WebGL extension is not available on almost any computer and compressed BCs don't work consistently (the deswizzled length is sometimes incorrect, don't know how to handle this)
-                let rgbaPixels;
-                switch (channelFormat) {
-                    case ChannelFormat.Bc6:
-                        if (typeFormat === TypeFormat.Ufloat) {
-                            rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC6H, width, height);
-                        } else if (typeFormat === TypeFormat.Float) {
-                            // untested, doesn't seem to be present in the game
-                            rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC6S, width, height);
-                        } else {
-                            throw `Unknown type format ${typeFormat} for BC6`;
-                        }
-                        break;
-                    case ChannelFormat.Bc7:
-                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.BC7, width, height);
-                        break;
-                    case ChannelFormat.Astc_8x5:
-                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x5, width, height);
-                        break;
-                    case ChannelFormat.Astc_8x6:
-                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x6, width, height);
-                        break;
-                    case ChannelFormat.Astc_8x8:
-                        rgbaPixels = pmtok_decode_texture(deswizzled, PMTOKCompressedTextureFormat.ASTC8x8, width, height);
-                        break;
-                    default: // BC1-5 don't seem to decode alpha correctly in the rust lib
-                        rgbaPixels = decompress({ ...texture, width, height, depth: 1 }, deswizzled).pixels;
-                        break;
-                }
-                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-            });
-        }
-
-        const extraInfo = new Map<string, string>();
-        extraInfo.set("Format", getImageFormatString(texture.imageFormat));
-        extraInfo.set("Channels", getChannelSourceString(texture.channelSource));
-
-        const viewerTexture: Texture = { gfxTexture, extraInfo };
-        this.gfxTextures.push(gfxTexture);
-        this.viewerTextures.push(viewerTexture);
-        this.textureNames.push(texture.name);
-    }
-}
 
 export class OrigamiProgram extends DeviceProgram {
     private a_Sizes = [3, 4, 4, 4, 2, 2];
@@ -211,7 +99,7 @@ export class OrigamiProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
     public static ub_MaterialParams = 1;
 
-    constructor(private fmat: FMAT) {
+    constructor(private fmat: FMAT, private samplerChannels: ChannelSource[][]) {
         super();
         this.name = this.fmat.name;
         this.frag = this.generateFrag();
@@ -225,6 +113,51 @@ export class OrigamiProgram extends DeviceProgram {
             s += `layout(location = ${i}) in vec${this.a_Sizes[i]} ${a};\n`;
         }
         return s;
+    }
+
+    private translateChannelSource(cs: ChannelSource, name: string): string {
+        switch (cs) {
+            case ChannelSource.Red:
+                return name + ".r";
+            case ChannelSource.Green:
+                return name + ".g";
+            case ChannelSource.Blue:
+                return name + ".b";
+            case ChannelSource.Alpha:
+                return name + ".a";
+            case ChannelSource.One:
+                return "1.0";
+            case ChannelSource.Zero:
+                return "0.0";
+            default:
+                console.warn("Unknown channel source:", cs);
+                return "0.0";
+        }
+    }
+
+    private remapTextureChannels(samplerIndex: number, name: string, channels: ChannelSource[]): string {
+        let s = "vec4(";
+        for (const cs of channels) {
+            s += this.translateChannelSource(cs, name) + ", ";
+        }
+        return s.substring(0, s.length - 2) + ")";
+    }
+
+    private getTextureColor(index: number, outName: string, name: string, uv: string): string {
+        let s = "texture(SAMPLER_2D(" + name + "), " + uv + ")";
+        const channels = this.samplerChannels[index];
+        if (!channels) {
+            console.warn("Could not find texture", index, "for", this.fmat.name);
+            return "vec4(0.0, 0.0, 0.0, 1.0)";
+        }
+        assert(channels.length === 4);
+        if (channels[0] === ChannelSource.Red && channels[1] === ChannelSource.Green && channels[2] === ChannelSource.Blue && channels[3] === ChannelSource.Alpha) {
+            // don't waste frame time remapping most textures that are already RGBA
+            return "vec4 " + outName + " = " + s;
+        } else {
+            const remap = this.remapTextureChannels(index, "t" + index.toString(), channels);
+            return "vec4 t" + index.toString() + " = " + s + ";\nvec4 " + outName + " = " + remap;
+        }
     }
 
     public getShaderOptionNumber(optionName: string): number {
@@ -306,17 +239,17 @@ in vec2 v_TexCoord2;
 in vec4 v_Floats;
 
 void main() {
-    vec4 albedo = texture(SAMPLER_2D(u_TextureAlbedo), v_TexCoord0);
-    vec4 color = albedo;
+    ${this.getTextureColor(0, 'color', 'u_TextureAlbedo', 'v_TexCoord0')};
 
     ${this.getShaderOptionBoolean('alpha_test') ? `
-    if (albedo.a < v_Floats.y) {
+    if (color.a < v_Floats.y) {
         discard;
     }` : ``}
 
-    ${this.getShaderOptionBoolean('use_normal_map') ? `
-    // adapted from Odyssey's shader
-    vec3 t_LocalNormal = vec3(texture(SAMPLER_2D(u_TextureNormal), v_TexCoord0).rg, 0);
+    ${/*Adapted from Odyssey's shader*/
+    this.getShaderOptionBoolean('use_normal_map') ? `
+    ${this.getTextureColor(4, 'normalTex', 'u_TextureNormal', 'v_TexCoord0')};
+    vec3 t_LocalNormal = vec3(normalTex.rg, 0);
     t_LocalNormal.z = sqrt(clamp(1.0 - t_LocalNormal.x*t_LocalNormal.x - t_LocalNormal.y*t_LocalNormal.y, 0.0, 1.0));
     vec3 t_NormalDir = (t_LocalNormal.x * normalize(v_TangentWorld.xyz) + t_LocalNormal.y * normalize(v_BitangentWorld.xyz) + t_LocalNormal.z * v_NormalWorld.xyz);
     vec3 t_LightDir = normalize(vec3(-0.5, -0.5, -1));
@@ -325,26 +258,23 @@ void main() {
     color.rgb *= t_LightIntensity;
     ` : ''}
 
-    ${/* Texture quality is horrible since ASTC is lossy (and has to be decompressed)
-    Unsure if there's a workaround for this... ASTC's WebGL extension is not supported on 99% of PCs
-    https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_compressed_texture_astc */
-    this.getShaderOptionBoolean('use_occlusion_map') || this.getShaderOptionBoolean('use_bakeshadow_map') ? `
-    vec4 materialColor = texture(SAMPLER_2D(u_TextureMaterial), v_TexCoord1);
+    ${this.getShaderOptionBoolean('use_occlusion_map') || this.getShaderOptionBoolean('use_bakeshadow_map') ? `
+    ${this.getTextureColor(3, 'materialColor', 'u_TextureMaterial', 'v_TexCoord1')};
     ` : ''}
     
     float ambientOcclusion = 1.0;
     ${this.getShaderOptionBoolean('use_occlusion_map') ? `
-    ambientOcclusion = mix(1.0, materialColor.r, 0.7); // 0.7 is subjective intensity
+    ambientOcclusion = mix(1.0, materialColor.r, 0.7);
     ` : ''}
 
     float bakedShadow = 1.0;
     ${this.getShaderOptionBoolean('use_bakeshadow_map') ? `
-    bakedShadow = mix(1.0, materialColor.g, 0.55); // 0.55 is subjective intensity
+    bakedShadow = mix(1.0, materialColor.g, 0.55);
     ` : ''}
 
-    float paperTex = mix(1.0, texture(SAMPLER_2D(u_TextureDepth), v_TexCoord2).b, 0.55); // 0.55 is subjective intensity
+    ${this.getTextureColor(1, 'depthColor', 'u_TextureDepth', 'v_TexCoord2')};
 
-    color.rgb *= ambientOcclusion * bakedShadow * paperTex;
+    color.rgb *= ambientOcclusion * bakedShadow * mix(1.0, depthColor.b, 0.55);
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
     gl_FragColor = color;
 }
@@ -353,15 +283,15 @@ void main() {
 }
 
 export class OrigamiModelRenderer {
-    public fmatInstances: (MaterialInstance | null)[] = [];
-    public fshpInstances: ShapeInstance[] = [];
-    public modelMatrices: mat4[] = [mat4.create()];
+    public materials: (MaterialInstance | null)[] = [];
+    public shapes: ShapeInstance[] = [];
+    public shiftMatrices: mat4[] = [mat4.create()];
     public name: string;
 
-    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, fmdlData: ModelData) {
-        this.name = fmdlData.fmdl.name;
-        for (const fmat of fmdlData.fmdl.fmat) {
-            const shaderAssignExec = fmat.userData.get("__ShaderAssignExec");
+    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, modelData: ModelData) {
+        this.name = modelData.model.name;
+        for (const material of modelData.model.fmat) {
+            const shaderAssignExec = material.userData.get("__ShaderAssignExec");
             let visible = true;
             if (shaderAssignExec) {
                 for (const s of shaderAssignExec as string[]) {
@@ -370,24 +300,24 @@ export class OrigamiModelRenderer {
                         break;
                     }
                 }
-            } else if (fmat.name.includes("Mt_Shadow") || fmat.samplerInfo.length === 0) {
+            } else if (material.name.includes("Mt_Shadow") || material.samplerInfo.length !== 5) {
                 visible = false;
             }
             if (visible) {
                 // patch texture names
-                for (let i = 0; i < fmat.textureName.length; i++) {
-                    if (!fmat.textureName[i].startsWith("Cmn_")) fmat.textureName[i] = `${this.name}_${fmat.textureName[i]}`;
+                for (let i = 0; i < material.textureName.length; i++) {
+                    if (!material.textureName[i].startsWith("Cmn_")) material.textureName[i] = `${this.name}_${material.textureName[i]}`;
                 }
-                this.fmatInstances.push(new MaterialInstance(cache, textureHolder, fmat));
+                this.materials.push(new MaterialInstance(cache, textureHolder, material));
             } else {
                 // append null for consistent indexing
-                this.fmatInstances.push(null);
+                this.materials.push(null);
             }
         }
-        for (const fshpData of fmdlData.shapeData) {
-            const matInst = this.fmatInstances[fshpData.fshp.materialIndex];
-            if (matInst) {
-                this.fshpInstances.push(new ShapeInstance(fshpData, matInst));
+        for (const shapeData of modelData.shapeData) {
+            const material = this.materials[shapeData.shape.materialIndex];
+            if (material) {
+                this.shapes.push(new ShapeInstance(shapeData, material));
             }
         }
     }
@@ -395,9 +325,9 @@ export class OrigamiModelRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(BINDING_LAYOUTS);
-        for (const modelMatrix of this.modelMatrices) {
-            for (const fshpInstance of this.fshpInstances) {
-                fshpInstance.prepareToRender(device, renderInstManager, modelMatrix, viewerInput);
+        for (const matrix of this.shiftMatrices) {
+            for (const shape of this.shapes) {
+                shape.prepareToRender(device, renderInstManager, matrix, viewerInput);
             }
         }
         renderInstManager.popTemplate();
@@ -446,11 +376,15 @@ class MaterialInstance {
     private yFlip = 0.0;
     private whiteBack = 0.0;
 
-    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, public fmat: FMAT) {
-        this.program = new OrigamiProgram(fmat);
+    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, public material: FMAT) {
+        const channelSources: ChannelSource[][] = [];
+        for (const name of material.textureName) {
+            channelSources.push(textureHolder.channelSources.get(name)!);
+        }
+        this.program = new OrigamiProgram(material, channelSources);
 
-        for (let i = 0; i < fmat.samplerInfo.length; i++) {
-            const samplerInfo = fmat.samplerInfo[i];
+        for (let i = 0; i < material.samplerInfo.length; i++) {
+            const samplerInfo = material.samplerInfo[i];
             const gfxSampler = cache.createSampler({
                 wrapS: translateAddressMode(samplerInfo.addrModeU),
                 wrapT: translateAddressMode(samplerInfo.addrModeV),
@@ -463,10 +397,10 @@ class MaterialInstance {
             this.gfxSamplers.push(gfxSampler);
         }
 
-        assert(fmat.samplerInfo.length === fmat.textureName.length);
+        assert(material.samplerInfo.length === material.textureName.length);
         this.textureMapping = nArray(OrigamiProgram.s_Orders.length, () => new TextureMapping());
-        for (const [shaderSamplerName, samplerName] of fmat.shaderAssign.samplerAssign.entries()) {
-            const samplerIndex = fmat.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
+        for (const [shaderSamplerName, samplerName] of material.shaderAssign.samplerAssign.entries()) {
+            const samplerIndex = material.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
             let shaderSamplerIndex = OrigamiProgram.s_Orders.indexOf(shaderSamplerName);
             if (shaderSamplerIndex < 0) {
                 shaderSamplerIndex = OrigamiProgram.s_Orders2.indexOf(shaderSamplerName);
@@ -474,19 +408,19 @@ class MaterialInstance {
             }
             assert(samplerIndex >= 0 && shaderSamplerIndex >= 0);
             const shaderMapping = this.textureMapping[shaderSamplerIndex];
-            textureHolder.fillTextureMapping(shaderMapping, fmat.textureName[samplerIndex]);
+            textureHolder.fillTextureMapping(shaderMapping, material.textureName[samplerIndex]);
             shaderMapping.gfxSampler = this.gfxSamplers[samplerIndex];
         }
 
         this.gfxProgram = cache.createProgram(this.program);
 
-        const blend = fmat.renderInfo.get("blend");
+        const blend = material.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
         this.isTranslucent = blendMode !== null;
 
         this.megaStateFlags = {
-            cullMode: translateCullMode(fmat),
+            cullMode: translateCullMode(material),
             // depthCompare: translateDepthCompare(fmat),
             depthWrite: !this.isTranslucent,
         };
@@ -498,13 +432,13 @@ class MaterialInstance {
             });
         }
 
-        const srt0 = fmat.shaderParam.find((p) => p.name === "texsrt0");
-        const srt1 = fmat.shaderParam.find((p) => p.name === "texsrt1");
-        const srt2 = fmat.shaderParam.find((p) => p.name === "texsrt2");
-        const glossiness = fmat.shaderParam.find((p) => p.name === "glossiness");
-        const alphaRef = fmat.shaderParam.find((p) => p.name === "alpha_ref");
-        const yFlip = fmat.shaderParam.find((p) => p.name === "yflip");
-        const whiteBack = fmat.shaderParam.find((p) => p.name === "white_back");
+        const srt0 = material.shaderParam.find((p) => p.name === "texsrt0");
+        const srt1 = material.shaderParam.find((p) => p.name === "texsrt1");
+        const srt2 = material.shaderParam.find((p) => p.name === "texsrt2");
+        const glossiness = material.shaderParam.find((p) => p.name === "glossiness");
+        const alphaRef = material.shaderParam.find((p) => p.name === "alpha_ref");
+        const yFlip = material.shaderParam.find((p) => p.name === "yflip");
+        const whiteBack = material.shaderParam.find((p) => p.name === "white_back");
 
         if (srt0) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
         if (srt1) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
@@ -515,7 +449,7 @@ class MaterialInstance {
         if (whiteBack) this.whiteBack = parseFMAT_ShaderParam_Float(whiteBack);
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInst: GfxRenderInst): void {
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
         const materialLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         renderInst.sortKey = makeSortKey(materialLayer, 0);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -534,7 +468,7 @@ class MaterialInstance {
 class ShapeInstance {
     private meshData: ShapeMeshData;
 
-    constructor(public fshpData: ShapeData, private fmatInstance: MaterialInstance) {
+    constructor(public fshpData: ShapeData, private material: MaterialInstance) {
         this.meshData = fshpData.meshData[0];
     }
 
@@ -553,7 +487,7 @@ class ShapeInstance {
         offs += fillMatrix4x4(d, offs, this.fshpData.shiftMatrix);
         offs += fillMatrix4x3(d, offs, this.computeModelView(modelMatrix, viewerInput));
 
-        this.fmatInstance.setOnRenderInst(device, template);
+        this.material.setOnRenderInst(template);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(this.meshData.mesh.count);
