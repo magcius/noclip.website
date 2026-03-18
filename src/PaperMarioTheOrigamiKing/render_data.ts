@@ -39,7 +39,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         case AttributeFormat._16_16_Float:
             return GfxFormat.F16_RG;
         case AttributeFormat._16_16_16_16_Uint:
-            return GfxFormat.U16_RGBA_NORM; // confirm if right, might need to make U16_RGBA
+            return GfxFormat.U16_RGBA_NORM; // causes webgl errors, confirm if right
         case AttributeFormat._16_16_16_16_Float:
             return GfxFormat.F16_RGBA;
         case AttributeFormat._32_32_Float:

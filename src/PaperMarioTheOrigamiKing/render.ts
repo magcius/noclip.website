@@ -89,26 +89,23 @@ function translateBlendMode(blendMode: string): GfxBlendMode {
 }
 
 const SCRATCH_MATRIX = mat4.create();
-const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 5 }];
+const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
+    ["_p0", "vec3"],
+    ["_n0", "vec4"],
+    ["_c0", "vec4"], // this is always black (???), just use albedo instead
+    ["_t0", "vec4"],
+    ["_b0", "vec4"],
+    ["_u0", "vec2"],
+    ["_u1", "vec2"],
+    ["_i0", "vec4"],
+    ["_w0", "vec4"]
+]);
 
 export class OrigamiProgram extends DeviceProgram {
-    private ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
-        ["_p0", "vec3"],
-        ["_n0", "vec4"],
-        ["_c0", "vec4"], // this is always black (???), just use albedo instead
-        ["_t0", "vec4"],
-        ["_b0", "vec4"],
-        ["_u0", "vec2"],
-        ["_u1", "vec2"],
-        ["_i0", "vec4"],
-        ["_w0", "vec4"]
-    ]);
-    public static samplers = ["_a0", "_d0", "_l0", "_m0", "_n0"];
-    public static samplers2 = ["_a0", "_d0", "_n1", "_m0", "_n0"];
     public static ub_ShapeParams = 0;
     public static ub_MaterialParams = 1;
 
-    constructor(private fmat: FMAT, private samplerChannels: ChannelSource[][], private vertexAttributes: FVTX_VertexAttribute[]) {
+    constructor(private fmat: FMAT, private samplers: Map<string, ChannelSource[]>, private vertexAttributes: FVTX_VertexAttribute[]) {
         super();
         this.name = this.fmat.name;
         this.frag = this.generateFrag();
@@ -118,12 +115,20 @@ export class OrigamiProgram extends DeviceProgram {
         let s = "";
         for (let i = 0; i < this.vertexAttributes.length; i++) {
             const a = this.vertexAttributes[i].name;
-            const type = this.ATTRIBUTE_MAP.get(a);
+            const type = ATTRIBUTE_MAP.get(a);
             if (!type) {
                 console.warn("Unknown attribute", a, "for", this.fmat.name);
             } else {
                 s += `layout(location = ${i}) in ${type} ${a};\n`;
             }
+        }
+        return s;
+    }
+
+    private getSamplerDefs(): string {
+        let s = "";
+        for (const sampler of this.samplers.keys()) {
+            s += `uniform sampler2D u${sampler};\n`;
         }
         return s;
     }
@@ -156,11 +161,11 @@ export class OrigamiProgram extends DeviceProgram {
         return s.substring(0, s.length - 2) + ")";
     }
 
-    private getTextureColor(index: number, outName: string, name: string, uv: string): string {
-        let s = "texture(SAMPLER_2D(" + name + "), " + uv + ")";
-        const channels = this.samplerChannels[index];
+    private getTextureColor(samplerName: string, outName: string, uv: string): string {
+        let s = "texture(SAMPLER_2D(u" + samplerName + "), " + uv + ")";
+        const channels = this.samplers.get(samplerName);
         if (!channels) {
-            console.warn("Could not find texture", index, "for", this.fmat.name);
+            console.warn("Could not find texture", samplerName, "for", this.fmat.name);
             return "vec4 " + outName + " = vec4(0.0, 0.0, 0.0, 1.0)";
         }
         assert(channels.length === 4);
@@ -168,8 +173,8 @@ export class OrigamiProgram extends DeviceProgram {
             // don't waste frame time remapping most textures that are already RGBA
             return "vec4 " + outName + " = " + s;
         } else {
-            const remap = this.remapTextureChannels("t" + index.toString(), channels);
-            return "vec4 t" + index.toString() + " = " + s + ";\nvec4 " + outName + " = " + remap;
+            const remap = this.remapTextureChannels("t" + samplerName, channels);
+            return "vec4 t" + samplerName + " = " + s + ";\nvec4 " + outName + " = " + remap;
         }
     }
 
@@ -191,7 +196,7 @@ export class OrigamiProgram extends DeviceProgram {
         return dneValue;
     }
 
-    public static globalDefinitions = `
+    public globalDefinitions = `
 precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
@@ -209,14 +214,10 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
 };
 
-uniform sampler2D u_TextureAlbedo;   // _a0
-uniform sampler2D u_TextureDepth;    // _d0
-uniform sampler2D u_TextureLight;    // _l0
-uniform sampler2D u_TextureMaterial; // _m0
-uniform sampler2D u_TextureNormal;   // _n0
+${this.getSamplerDefs()}
 `;
 
-    public override both = OrigamiProgram.globalDefinitions;
+    public override both = this.globalDefinitions;
 
     public override vert = `
 ${this.getVertAttributeDefs()}
@@ -256,7 +257,7 @@ in vec2 v_TexCoord2;
 in vec4 v_Floats;
 
 void main() {
-    ${this.getTextureColor(0, 'color', 'u_TextureAlbedo', 'v_TexCoord0')};
+    ${this.getTextureColor('_a0', 'color', 'v_TexCoord0')};
 
     ${this.getShaderOptionBoolean('alpha_test') ? `
     if (color.a < v_Floats.y) {
@@ -265,8 +266,8 @@ void main() {
 
     ${/*Adapted from Odyssey's shader*/
     this.getShaderOptionBoolean('use_normal_map') ? `
-    ${this.getTextureColor(4, 'normalTex', 'u_TextureNormal', 'v_TexCoord0')};
-    vec3 t_LocalNormal = vec3(normalTex.rg, 0);
+    ${this.getTextureColor('_n0', 'normalColor', 'v_TexCoord0')};
+    vec3 t_LocalNormal = vec3(normalColor.rg, 0);
     t_LocalNormal.z = sqrt(clamp(1.0 - t_LocalNormal.x*t_LocalNormal.x - t_LocalNormal.y*t_LocalNormal.y, 0.0, 1.0));
     vec3 t_NormalDir = (t_LocalNormal.x * normalize(v_TangentWorld.xyz) + t_LocalNormal.y * normalize(v_BitangentWorld.xyz) + t_LocalNormal.z * v_NormalWorld.xyz);
     vec3 t_LightDir = normalize(vec3(-0.5, -0.5, -1));
@@ -276,7 +277,7 @@ void main() {
     ` : ''}
 
     ${this.getShaderOptionBoolean('use_occlusion_map') || this.getShaderOptionBoolean('use_bakeshadow_map') ? `
-    ${this.getTextureColor(3, 'materialColor', 'u_TextureMaterial', 'v_TexCoord1')};
+    ${this.getTextureColor('_m0', 'materialColor', 'v_TexCoord1')};
     ` : ''}
     
     float ambientOcclusion = 1.0;
@@ -289,7 +290,7 @@ void main() {
     bakedShadow = mix(1.0, materialColor.g, 0.55);
     ` : ''}
 
-    ${this.getTextureColor(1, 'depthColor', 'u_TextureDepth', 'v_TexCoord2')};
+    ${this.getTextureColor('_d0', 'depthColor', 'v_TexCoord2')};
 
     color.rgb *= ambientOcclusion * bakedShadow * mix(1.0, depthColor.b, 0.55);
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
@@ -318,7 +319,8 @@ export class OrigamiModelRenderer {
                         break;
                     }
                 }
-            } else if (material.name.toLowerCase().includes("mt_shadow") || material.samplerInfo.length !== 5) {
+            } else if (material.name.toLowerCase().includes("mt_shadow") || material.name.toLowerCase().endsWith("_sm") || material.samplerInfo.length !== 5) {
+                // sometimes the casing is inconsistent for materials (whoops!)
                 visible = false;
             }
             if (visible) {
@@ -353,14 +355,11 @@ export class OrigamiModelRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplate();
-        template.setBindingLayouts(BINDING_LAYOUTS);
         for (const matrix of this.shiftMatrices) {
             for (const shape of this.shapes) {
                 shape.prepareToRender(device, renderInstManager, matrix, viewerInput);
             }
         }
-        renderInstManager.popTemplate();
     }
 }
 
@@ -394,7 +393,6 @@ class TexSRT {
 class MaterialInstance {
     public gfxSamplers: GfxSampler[] = [];
     public textureMapping: TextureMapping[] = [];
-    private program: OrigamiProgram;
     private gfxProgram: GfxProgram;
     private isTranslucent: boolean;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -407,12 +405,6 @@ class MaterialInstance {
     private whiteBack = 0.0;
 
     constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, public material: FMAT, vertexAttributes: FVTX_VertexAttribute[]) {
-        const channelSources: ChannelSource[][] = [];
-        for (const name of material.textureName) {
-            channelSources.push(textureHolder.channelSources.get(name)!);
-        }
-        this.program = new OrigamiProgram(material, channelSources, vertexAttributes);
-
         for (let i = 0; i < material.samplerInfo.length; i++) {
             const samplerInfo = material.samplerInfo[i];
             const gfxSampler = cache.createSampler({
@@ -428,22 +420,24 @@ class MaterialInstance {
         }
 
         assert(material.samplerInfo.length === material.textureName.length);
-        this.textureMapping = nArray(OrigamiProgram.samplers.length, () => new TextureMapping());
-        for (const [shaderSamplerName, samplerName] of material.shaderAssign.samplerAssign.entries()) {
+        const samplers: Map<string, ChannelSource[]> = new Map();
+        this.textureMapping = nArray(material.shaderAssign.samplerAssign.size, () => new TextureMapping());
+        let i = 0;
+        for (const samplerName of material.shaderAssign.samplerAssign.values()) {
             const samplerIndex = material.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
-            let shaderSamplerIndex = OrigamiProgram.samplers.indexOf(shaderSamplerName);
-            if (shaderSamplerIndex < 0) {
-                // lazy way to handle different sampler configs for now, should be dynamic like attributes
-                shaderSamplerIndex = OrigamiProgram.samplers2.indexOf(shaderSamplerName);
-                if (shaderSamplerIndex < 0) assert(false);
+            if (samplerIndex < 0) {
+                assert(false);
             }
-            assert(samplerIndex >= 0 && shaderSamplerIndex >= 0);
-            const shaderMapping = this.textureMapping[shaderSamplerIndex];
+            const shaderMapping = this.textureMapping[i++];
             textureHolder.fillTextureMapping(shaderMapping, material.textureName[samplerIndex]);
             shaderMapping.gfxSampler = this.gfxSamplers[samplerIndex];
+
+            const cs = textureHolder.channelSources.get(material.textureName[samplerIndex])!;
+            samplers.set(samplerName, cs);
         }
 
-        this.gfxProgram = cache.createProgram(this.program);
+        const program = new OrigamiProgram(material, samplers, vertexAttributes);
+        this.gfxProgram = cache.createProgram(program);
 
         const blend = material.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
@@ -480,15 +474,15 @@ class MaterialInstance {
         if (whiteBack) this.whiteBack = parseFMAT_ShaderParam_Float(whiteBack);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
+    public fillTemplate(template: GfxRenderInst): void {
         const materialLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        renderInst.sortKey = makeSortKey(materialLayer, 0);
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setMegaStateFlags(this.megaStateFlags);
+        template.sortKey = makeSortKey(materialLayer, 0);
+        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        template.setGfxProgram(this.gfxProgram);
+        template.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 28);
-        const d = renderInst.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
+        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 28);
+        const d = template.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
         offs += this.texCoordSRT0.fillMatrix(d, offs);
         offs += this.texCoordSRT1.fillMatrix(d, offs);
         offs += this.texCoordSRT2.fillMatrix(d, offs);
@@ -512,23 +506,20 @@ class ShapeInstance {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: this.material.gfxSamplers.length }]);
         let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 44);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(d, offs, this.fshpData.shiftMatrix);
         offs += fillMatrix4x3(d, offs, this.computeModelView(modelMatrix, viewerInput));
 
-        this.material.setOnRenderInst(template);
+        this.material.fillTemplate(template);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(this.meshData.mesh.count);
         renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
-        renderInst.sortKey = setSortKeyDepth(
-            renderInst.sortKey,
-            computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox)
-        );
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
         renderInstManager.submitRenderInst(renderInst);
-
         renderInstManager.popTemplate();
     }
 }
