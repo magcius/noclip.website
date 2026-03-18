@@ -7,7 +7,6 @@ import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxInputLayout, GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { computeModelMatrixSRT } from "../MathHelpers";
-import { OrigamiProgram } from "./render";
 
 interface ConvertedVertexAttribute {
     format: GfxFormat;
@@ -17,6 +16,8 @@ interface ConvertedVertexAttribute {
 
 function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     switch (attributeFormat) {
+        case AttributeFormat._8_Uint:
+            return GfxFormat.U8_R;
         case AttributeFormat._8_8_Unorm:
             return GfxFormat.U8_RG_NORM;
         case AttributeFormat._8_8_Snorm:
@@ -27,6 +28,8 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
             return GfxFormat.U8_RGBA_NORM;
         case AttributeFormat._8_8_8_8_Snorm:
             return GfxFormat.S8_RGBA_NORM;
+        case AttributeFormat._8_8_8_8_Uint:
+            return GfxFormat.U8_RGBA;
         case AttributeFormat._10_10_10_2_Snorm:
             return GfxFormat.S8_RGBA_NORM;
         case AttributeFormat._16_16_Unorm:
@@ -35,6 +38,8 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
             return GfxFormat.S16_RG_NORM;
         case AttributeFormat._16_16_Float:
             return GfxFormat.F16_RG;
+        case AttributeFormat._16_16_16_16_Uint:
+            return GfxFormat.U16_RGBA_NORM; // confirm if right, might need to make U16_RGBA
         case AttributeFormat._16_16_16_16_Float:
             return GfxFormat.F16_RGBA;
         case AttributeFormat._32_32_Float:
@@ -64,8 +69,10 @@ export class VertexData {
     public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     public inputBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    public rawAttributes: FVTX_VertexAttribute[] = [];
 
     constructor(device: GfxDevice, public vertices: FVTX) {
+        this.rawAttributes = vertices.vertexAttributes;
         let nextBufferIndex = vertices.vertexBuffers.length;
         for (let i = 0; i < vertices.vertexAttributes.length; i++) {
             const vertexAttribute = vertices.vertexAttributes[i];
@@ -73,16 +80,12 @@ export class VertexData {
             if (this.inputBufferDescriptors[bufferIndex] === undefined) {
                 this.inputBufferDescriptors[bufferIndex] = null;
             }
-            const attributeLocation = OrigamiProgram.a_Orders.indexOf(vertexAttribute.name);
-            if (attributeLocation < 0) {
-                continue;
-            }
             const vertexBuffer = vertices.vertexBuffers[bufferIndex];
             const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
                 const attribBufferIndex = nextBufferIndex++;
                 this.vertexAttributeDescriptors.push({
-                    location: attributeLocation,
+                    location: i,
                     format: convertedAttribute.format,
                     bufferIndex: attribBufferIndex,
                     bufferByteOffset: 0
@@ -92,7 +95,7 @@ export class VertexData {
                 this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
             } else {
                 this.vertexAttributeDescriptors.push({
-                    location: attributeLocation,
+                    location: i,
                     format: translateAttributeFormat(vertexAttribute.format),
                     bufferIndex: bufferIndex,
                     bufferByteOffset: vertexAttribute.offset
