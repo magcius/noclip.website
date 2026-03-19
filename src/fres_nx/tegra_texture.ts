@@ -151,6 +151,7 @@ export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8
 export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     const channelFormat = getChannelFormat(textureEntry.imageFormat);
     const typeFormat = getTypeFormat(textureEntry.imageFormat);
+
     switch (channelFormat) {
     case ChannelFormat.Bc1:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);

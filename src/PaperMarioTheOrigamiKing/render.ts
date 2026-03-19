@@ -108,7 +108,6 @@ export class OrigamiProgram extends DeviceProgram {
     constructor(private fmat: FMAT, private samplers: Map<string, ChannelSource[]>, private vertexAttributes: FVTX_VertexAttribute[]) {
         super();
         this.name = this.fmat.name;
-        this.frag = this.generateFrag();
     }
 
     private getVertAttributeDefs(): string {
@@ -133,30 +132,29 @@ export class OrigamiProgram extends DeviceProgram {
         return s;
     }
 
-    private translateChannelSource(cs: ChannelSource, name: string): string {
-        switch (cs) {
-            case ChannelSource.Red:
-                return name + ".r";
-            case ChannelSource.Green:
-                return name + ".g";
-            case ChannelSource.Blue:
-                return name + ".b";
-            case ChannelSource.Alpha:
-                return name + ".a";
-            case ChannelSource.One:
-                return "1.0";
-            case ChannelSource.Zero:
-                return "0.0";
-            default:
-                console.warn("Unknown channel source:", cs);
-                return "0.0";
-        }
-    }
-
-    private remapTextureChannels(name: string, channels: ChannelSource[]): string {
+    private getRemappedColor(name: string, channels: ChannelSource[]): string {
         let s = "vec4(";
         for (const cs of channels) {
-            s += this.translateChannelSource(cs, name) + ", ";
+            switch (cs) {
+                case ChannelSource.Red:
+                    s += name + ".r" + ", ";
+                    break;
+                case ChannelSource.Green:
+                    s += name + ".g" + ", ";
+                    break;
+                case ChannelSource.Blue:
+                    s += name + ".b" + ", ";
+                    break;
+                case ChannelSource.Alpha:
+                    s += name + ".a" + ", ";
+                    break;
+                case ChannelSource.One:
+                    s += "1.0, ";
+                    break;
+                default:
+                    s += "0.0, ";
+                    break;
+            }
         }
         return s.substring(0, s.length - 2) + ")";
     }
@@ -165,7 +163,7 @@ export class OrigamiProgram extends DeviceProgram {
         let s = "texture(SAMPLER_2D(u" + samplerName + "), " + uv + ")";
         const channels = this.samplers.get(samplerName);
         if (!channels) {
-            console.warn("Could not find texture", samplerName, "for", this.fmat.name);
+            console.warn("Could not find sampler", samplerName, "for", this.fmat.name);
             return "vec4 " + outName + " = vec4(0.0, 0.0, 0.0, 1.0)";
         }
         assert(channels.length === 4);
@@ -173,12 +171,12 @@ export class OrigamiProgram extends DeviceProgram {
             // don't waste frame time remapping most textures that are already RGBA
             return "vec4 " + outName + " = " + s;
         } else {
-            const remap = this.remapTextureChannels("t" + samplerName, channels);
+            const remap = this.getRemappedColor("t" + samplerName, channels);
             return "vec4 t" + samplerName + " = " + s + ";\nvec4 " + outName + " = " + remap;
         }
     }
 
-    private getShaderOptionBoolean(optionName: string, dneValue: boolean = false): boolean {
+    private getOptionBoolean(optionName: string, dneValue: boolean = false): boolean {
         const optionValue = this.fmat.shaderAssign.shaderOption.get(optionName);
         if (optionValue === undefined) {
             return dneValue;
@@ -196,7 +194,7 @@ export class OrigamiProgram extends DeviceProgram {
         return dneValue;
     }
 
-    public globalDefinitions = `
+    public override both = `
 precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
@@ -215,11 +213,8 @@ layout(std140) uniform ub_MaterialParams {
 };
 
 ${this.getSamplerDefs()}
-`;
 
-    public override both = this.globalDefinitions;
-
-    public override vert = `
+#ifdef VERT
 ${this.getVertAttributeDefs()}
 
 out vec4 v_NormalWorld;
@@ -239,15 +234,11 @@ void main() {
     v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(${this.getAttribute('_u0', 'vec2(0.0)')}, 1.0, 1.0);
     v_TexCoord1 = ${this.getAttribute('_u1', this.getAttribute('_u0', 'vec2(0.0)'))};
     v_TexCoord2 = UnpackMatrix(u_TexCoordSRT1) * vec4(v_TexCoord1, 1.0, 1.0);
-    // v_TexCoord3 = UnpackMatrix(u_TexCoordSRT2) * vec4(v_TexCoord1, 1.0, 1.0);
     v_Floats = u_Floats;
 }
-`;
+#endif
 
-    public generateFrag() {
-        return `
-precision highp float;
-
+#ifdef FRAG
 in vec4 v_NormalWorld;
 in vec4 v_TangentWorld;
 in vec4 v_BitangentWorld;
@@ -259,34 +250,40 @@ in vec4 v_Floats;
 void main() {
     ${this.getTextureColor('_a0', 'color', 'v_TexCoord0')};
 
-    ${this.getShaderOptionBoolean('alpha_test') ? `
+    ${this.getOptionBoolean('alpha_test') ? `
     if (color.a < v_Floats.y) {
         discard;
     }` : ``}
 
-    ${/*Adapted from Odyssey's shader*/
-    this.getShaderOptionBoolean('use_normal_map') ? `
+    ${this.getOptionBoolean('use_normal_map') ? `
+    vec3 t_LightDir = vec3(-0.5, -0.5, -1);
+    ${this.getOptionBoolean('metal_mask') ? /* Crude attempt at foil effect, fine for now */`
+    ${this.getTextureColor('_n0', 'normalColor', 'v_TexCoord1')};
+    vec3 normal = normalize(vec3(normalColor.rg * 2.0 - 1.0, normalColor.b));
+    float diffuse = max(dot(normal, normalize(t_LightDir)), 0.0);
+    float spec = pow(max(dot(normal, normalize(t_LightDir + vec3(0.0, 0.0, 1.0))), 0.0), 64.0);
+    color.rgb *= (diffuse + 0.3) + (spec * 0.8);
+    `: /* Adapted from Odyssey's shader */`
     ${this.getTextureColor('_n0', 'normalColor', 'v_TexCoord0')};
     vec3 t_LocalNormal = vec3(normalColor.rg, 0);
     t_LocalNormal.z = sqrt(clamp(1.0 - t_LocalNormal.x*t_LocalNormal.x - t_LocalNormal.y*t_LocalNormal.y, 0.0, 1.0));
     vec3 t_NormalDir = (t_LocalNormal.x * normalize(v_TangentWorld.xyz) + t_LocalNormal.y * normalize(v_BitangentWorld.xyz) + t_LocalNormal.z * v_NormalWorld.xyz);
-    vec3 t_LightDir = normalize(vec3(-0.5, -0.5, -1));
-    float t_LightIntensity = clamp(dot(t_LightDir, -t_NormalDir), 0.0, 1.0);
+    float t_LightIntensity = clamp(dot(normalize(t_LightDir), -t_NormalDir), 0.0, 1.0);
     t_LightIntensity = mix(0.6, 1.0, t_LightIntensity);
-    color.rgb *= t_LightIntensity;
+    color.rgb *= t_LightIntensity;`}
     ` : ''}
 
-    ${this.getShaderOptionBoolean('use_occlusion_map') || this.getShaderOptionBoolean('use_bakeshadow_map') ? `
+    ${this.getOptionBoolean('use_occlusion_map') || this.getOptionBoolean('use_bakeshadow_map') ? `
     ${this.getTextureColor('_m0', 'materialColor', 'v_TexCoord1')};
     ` : ''}
     
     float ambientOcclusion = 1.0;
-    ${this.getShaderOptionBoolean('use_occlusion_map') ? `
+    ${this.getOptionBoolean('use_occlusion_map') ? `
     ambientOcclusion = mix(1.0, materialColor.r, 0.7);
     ` : ''}
 
     float bakedShadow = 1.0;
-    ${this.getShaderOptionBoolean('use_bakeshadow_map') ? `
+    ${this.getOptionBoolean('use_bakeshadow_map') ? `
     bakedShadow = mix(1.0, materialColor.g, 0.55);
     ` : ''}
 
@@ -296,8 +293,8 @@ void main() {
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
     gl_FragColor = color;
 }
+#endif
 `;
-    }
 }
 
 export class OrigamiModelRenderer {
@@ -329,18 +326,19 @@ export class OrigamiModelRenderer {
                     if (!material.textureName[i].startsWith("Cmn_")) material.textureName[i] = `${this.name}_${material.textureName[i]}`;
                 }
                 // there's probably a better way to do this...
-                let vd = null;
+                let attrs = null;
                 for (const shapeData of modelData.shapeData) {
                     if (shapeData.shape.materialIndex === matIndex) {
                         // seems like each shape that shares a material will always have the same vertex attributes (don't care about other data here)
-                        vd = modelData.vertexData[shapeData.shape.vertexIndex];
+                        attrs = modelData.vertexData[shapeData.shape.vertexIndex].rawAttributes;
                         break;
                     }
                 }
-                if (!vd) {
-                    console.warn("Could not find vertex data for", this.name, material.name);
+                if (!attrs) {
+                    console.warn("Could not find associated vertex data for", material.name, "of", this.name);
+                } else {
+                    this.materials.push(new MaterialInstance(cache, textureHolder, material, attrs));
                 }
-                this.materials.push(new MaterialInstance(cache, textureHolder, material, vd!.rawAttributes));
             } else {
                 // append null for consistent indices
                 this.materials.push(null);
@@ -364,7 +362,7 @@ export class OrigamiModelRenderer {
 }
 
 class TexSRT {
-    public mode = 1; // unused for now
+    public mode = 1; // unused for now, seems to always be "Maya"
     public scaleS = 1.0;
     public scaleT = 1.0;
     public rotation = 0.0;

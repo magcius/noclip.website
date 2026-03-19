@@ -24,6 +24,8 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
             return GfxFormat.S8_RG_NORM;
         case AttributeFormat._8_8_Uint:
             return GfxFormat.U32_RG;
+        case AttributeFormat._16_Uint:
+            return GfxFormat.U16_R;
         case AttributeFormat._8_8_8_8_Unorm:
             return GfxFormat.U8_RGBA_NORM;
         case AttributeFormat._8_8_8_8_Snorm:

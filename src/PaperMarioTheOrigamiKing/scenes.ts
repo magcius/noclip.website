@@ -20,7 +20,7 @@ import { OrigamiTextureHolder } from "./texture.js";
 export class OrigamiResources {
     // Adapated from Odyssey's ResourceSystem class
     public textureHolder = new OrigamiTextureHolder();
-    public modelDataCache = new Map<string, ModelData>();
+    public modelData = new Map<string, ModelData>();
     private renderCache: GfxRenderCache;
     private loadedBFRESNames: string[] = [];
     private requestedCommonTextures: string[] = [];
@@ -40,7 +40,7 @@ export class OrigamiResources {
                     this.textureHolder.addTexture(device, t);
                 }
                 for (const model of bfres.fmdl) {
-                    this.modelDataCache.set(model.name, new ModelData(this.renderCache, model));
+                    this.modelData.set(model.name, new ModelData(this.renderCache, model));
                     for (const material of model.fmat) {
                         for (const t of material.textureName) {
                             if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) this.requestedCommonTextures.push(t);
@@ -54,7 +54,7 @@ export class OrigamiResources {
     }
 
     /**
-     * Call after loading all BFRES so only the needed common textures are decoded (much better performance)
+     * Call after loading all BFRES
      */
     public loadRequestedCommonTextures(device: GfxDevice, file: ArrayBufferSlice) {
         const bntx = BNTX.parse(file);
@@ -68,7 +68,7 @@ export class OrigamiResources {
     public destroy(device: GfxDevice): void {
         this.renderCache.destroy();
         this.textureHolder.destroy(device);
-        this.modelDataCache.forEach((value) => { value.destroy(device) });
+        this.modelData.forEach((value) => { value.destroy(device) });
     }
 }
 
@@ -113,8 +113,8 @@ class OrigamiRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.renderHelper.pushTemplateRenderInst();
-        for (let i = 0; i < this.modelRenderers.length; i++) {
-            this.modelRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        for (const renderer of this.modelRenderers) {
+            renderer.prepareToRender(device, renderInstManager, viewerInput);
         }
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -135,9 +135,9 @@ function isValidMobjDataWorldId(worldId: string): boolean {
     return worldId !== "W0";
 }
 
-const NO_MOBJS_LEVELS = [
+const NO_MOBJS_LEVELS = [ // some of these have mobjs but need to fix errors when reading their dispos file (or the file is there but empty)
     "W0C1_BasementWay", "W1G1_KinopioHouse", "W1G1_DokanRoom", "W1G3_GondolaLift", "W2C2_BoxMaze", "W7C1_RadarTutorialA",
-    "W3G2_KinopioTop", "W3G2_KinopioTopRe", "W4C2_IceSlide"];
+    "W3G2_KinopioTop", "W3G2_KinopioTopRe", "W4C2_IceSlide", "W5C1_RaceQuiz", "W6C2_LastBossArea", "W6C2_LateralLift"];
 const NO_MOBJS_LEVELGROUPS = ["W0C2"];
 const ALT_DISPOS_MOBJS = new Map<string, string[]>([
     ["W1C4_SecondFloor", ["dispos_Mobj_A", "dispos_Mobj_B"]]
@@ -219,14 +219,13 @@ class PMTOKScene implements SceneDesc {
         resources.loadRequestedCommonTextures(device, commonBntxFile);
         renderer.setResources(resources);
 
-        for (const modelData of resources.modelDataCache.values()) {
+        for (const modelData of resources.modelData.values()) {
             renderer.modelRenderers.push(new OrigamiModelRenderer(renderer.renderHelper.renderCache, resources.textureHolder, modelData));
         }
 
         // patch each mobj renderer with instance matrices
         for (const modelRenderer of renderer.modelRenderers) {
             if (modelRenderer.name.startsWith("Mobj_") && mobjInstances.length > 0) {
-                // get all instances that use this model
                 const instances = [];
                 for (const instance of mobjInstances) {
                     if (instance.resolvedModelName === modelRenderer.name) {
@@ -239,7 +238,6 @@ class PMTOKScene implements SceneDesc {
                 }
                 modelRenderer.shiftMatrices = [];
                 for (const instance of instances) {
-                    // one-to-one model to renderer, but a renderer could have more than one instance of a model with different SRT
                     const m = mat4.create();
                     computeModelMatrixSRT(m, 1, 1, 1,
                         instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,

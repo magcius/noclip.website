@@ -169,26 +169,8 @@ export class OrigamiTextureHolder extends TextureHolder {
             let rgba;
             switch (channelFormat) {
                 case ChannelFormat.Bc1:
-                    if (keepCompressed) {
-                        rgba = data;
-                    } else {
-                        rgba = decompress({ ...texture, width, height, depth: 1 }, data).pixels;
-                    }
-                    break;
                 case ChannelFormat.Bc3:
-                    if (keepCompressed) {
-                        rgba = data;
-                    } else {
-                        rgba = decompress({ ...texture, width, height, depth: 1 }, data).pixels;
-                    }
-                    break;
                 case ChannelFormat.Bc4:
-                    if (keepCompressed) {
-                        rgba = data;
-                    } else {
-                        rgba = decompress({ ...texture, width, height, depth: 1 }, data).pixels;
-                    }
-                    break;
                 case ChannelFormat.Bc5:
                     if (keepCompressed) {
                         rgba = data;
