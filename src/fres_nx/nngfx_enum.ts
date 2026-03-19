@@ -123,6 +123,7 @@ export enum AttributeFormat {
     _10_10_10_2_Snorm  = ((ChannelFormat.R10_G10_B10_A2  << TypeFormat.$Bits) | TypeFormat.Snorm),
     _16_16_Unorm       = ((ChannelFormat.R16_G16         << TypeFormat.$Bits) | TypeFormat.Unorm),
     _16_16_Snorm       = ((ChannelFormat.R16_G16         << TypeFormat.$Bits) | TypeFormat.Snorm),
+    _16_16_Uint        = ((ChannelFormat.R16_G16         << TypeFormat.$Bits) | TypeFormat.Uint),
     _16_16_Float       = ((ChannelFormat.R16_G16         << TypeFormat.$Bits) | TypeFormat.Float),
     _16_16_16_16_Uint  = ((ChannelFormat.R16_G16_B16_A16 << TypeFormat.$Bits) | TypeFormat.Uint),
     _16_16_16_16_Float = ((ChannelFormat.R16_G16_B16_A16 << TypeFormat.$Bits) | TypeFormat.Float),

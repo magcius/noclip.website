@@ -11,6 +11,15 @@ export interface MObjInstance {
     rotation: vec3;
 }
 
+export interface SObjInstance {
+    id: string;
+    position: vec3;
+    rotation: vec3;
+    scale: vec3;
+    modelPath: string;
+    modelName: string;
+}
+
 export interface MObjType {
     id: string;
     modelId: string;
@@ -30,6 +39,7 @@ export interface MObjModel {
 
 export enum ELFType {
     DisposMobj,
+    DisposSobj,
     DataMobj,
     DataMobjModel
 }
@@ -76,6 +86,7 @@ class Symbol {
 
     constructor(view: DataView, offset: number, stringSectionOffset: number) {
         const nameOffset = view.getInt32(offset, true);
+        // not going to bother deobfuscating the name but it's easy
         this.name = getStringAt(view, stringSectionOffset + nameOffset);
         this.info = view.getUint8(offset + 4);
         this.visibility = view.getUint8(offset + 5);
@@ -87,11 +98,13 @@ class Symbol {
 
 const MODEL_ASSET_GROUP_SIZE = 40;
 const MOBJ_INSTANCE_SIZE = 376;
+const SOBJ_INSTANCE_SIZE = 184;
 const MOBJ_TYPE_SIZE = 144;
 const MOBJ_MODEL_SIZE = 144;
 const TEXT_DECODER = new TextDecoder("utf-8");
 
 function getStringAt(view: DataView, offset: number): string {
+    // strings aren't preceded by their length, just read until 0
     const c: number[] = [];
     let end = false;
     while (!end) {
@@ -122,6 +135,31 @@ function parseDataSection_MObjInstances(view: DataView, section: Section, count:
         const rz = view.getFloat32(pointer + 44, true);
         instances.push({ id, typeId, resolvedModelName: "", position: [x, y, z], rotation: [rx, ry, rz] });
         pointer += MOBJ_INSTANCE_SIZE;
+    }
+    return instances;
+}
+
+function parseDataSection_SObjInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): SObjInstance[] {
+    const instances: SObjInstance[] = [];
+    let pointer = section.offset;
+    for (let i = 0; i < count; i++) {
+        const relocation2 = relocations.get(8 + SOBJ_INSTANCE_SIZE * i)!;
+        const relocation3 = relocations.get(64 + SOBJ_INSTANCE_SIZE * i)!;
+        const relocation4 = relocations.get(72 + SOBJ_INSTANCE_SIZE * i)!;
+        const id = getStringAt(view, dataStringOffset + relocation2.targetOffset);
+        const modelPath = getStringAt(view, dataStringOffset + relocation3.targetOffset);
+        const modelName = getStringAt(view, dataStringOffset + relocation4.targetOffset);
+        const x = view.getFloat32(pointer + 16, true);
+        const y = view.getFloat32(pointer + 20, true);
+        const z = view.getFloat32(pointer + 24, true);
+        const rx = view.getFloat32(pointer + 28, true);
+        const ry = view.getFloat32(pointer + 32, true);
+        const rz = view.getFloat32(pointer + 36, true);
+        const sx = view.getFloat32(pointer + 40, true);
+        const sy = view.getFloat32(pointer + 44, true);
+        const sz = view.getFloat32(pointer + 48, true);
+        instances.push({ id, position: [x, y, z], rotation: [rx, ry, rz], scale: [sx, sy, sz], modelPath, modelName });
+        pointer += SOBJ_INSTANCE_SIZE;
     }
     return instances;
 }
@@ -219,6 +257,9 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
     switch (type) {
         case ELFType.DisposMobj:
             data = parseDataSection_MObjInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
+            break;
+        case ELFType.DisposSobj:
+            data = parseDataSection_SObjInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
         case ELFType.DataMobj:
             data = parseDataSection_MObjTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);

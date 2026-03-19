@@ -15,6 +15,7 @@ import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorH
 import { ModelData, ShapeData, ShapeMeshData } from './render_data.js';
 import { ViewerRenderInput } from "../viewer.js";
 import { OrigamiTextureHolder } from './texture.js';
+import { AABB } from '../Geometry.js';
 
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
     switch (addrMode) {
@@ -90,15 +91,15 @@ function translateBlendMode(blendMode: string): GfxBlendMode {
 
 const SCRATCH_MATRIX = mat4.create();
 const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
-    ["_p0", "vec3"],
-    ["_n0", "vec4"],
-    ["_c0", "vec4"], // this is always black (???), just use albedo instead
-    ["_t0", "vec4"],
-    ["_b0", "vec4"],
-    ["_u0", "vec2"],
-    ["_u1", "vec2"],
-    ["_i0", "vec4"],
-    ["_w0", "vec4"]
+    ["_p0", "vec3"], // position
+    ["_n0", "vec4"], // normal
+    ["_c0", "vec4"], // color, this is always black (???) and extremely rare, just use albedo instead
+    ["_t0", "vec4"], // tangent
+    ["_b0", "vec4"], // bitangent
+    ["_u0", "vec2"], // uv 1
+    ["_u1", "vec2"], // uv 2
+    ["_i0", "vec4"], // index, varying sizes, assume vec4
+    ["_w0", "vec4"] // weight, varying sizes, assume vec4
 ]);
 
 export class OrigamiProgram extends DeviceProgram {
@@ -300,7 +301,7 @@ void main() {
 export class OrigamiModelRenderer {
     public materials: (MaterialInstance | null)[] = [];
     public shapes: ShapeInstance[] = [];
-    public shiftMatrices: mat4[] = [mat4.create()];
+    public shiftMatrices: mat4[] = [];
     public name: string;
 
     constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, modelData: ModelData) {
@@ -488,6 +489,7 @@ class MaterialInstance {
     }
 }
 
+const bboxScratch = new AABB();
 class ShapeInstance {
     private meshData: ShapeMeshData;
 
@@ -513,11 +515,16 @@ class ShapeInstance {
 
         this.material.fillTemplate(template);
 
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setDrawCount(this.meshData.mesh.count);
-        renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
-        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
-        renderInstManager.submitRenderInst(renderInst);
+        // bounding box cull logic is buggy, doesn't work well with PMTOK can't get close to anything
+        bboxScratch.transform(this.meshData.mesh.bbox, modelMatrix);
+        if (viewerInput.camera.frustum.contains(bboxScratch)) {
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.setDrawCount(this.meshData.mesh.count);
+            renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
+            renderInstManager.submitRenderInst(renderInst);
+        }
+        
         renderInstManager.popTemplate();
     }
 }

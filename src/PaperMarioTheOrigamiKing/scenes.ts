@@ -7,7 +7,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { ModelData } from "./render_data.js";
 import { OrigamiModelRenderer } from "./render.js";
-import { ELFType, MObjInstance, MObjModel, MObjType, parseELF } from "./bin_elf.js";
+import { ELFType, MObjInstance, MObjModel, MObjType, parseELF, SObjInstance } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
@@ -143,6 +143,15 @@ const ALT_DISPOS_MOBJS = new Map<string, string[]>([
     ["W1C4_SecondFloor", ["dispos_Mobj_A", "dispos_Mobj_B"]]
 ]);
 
+/*
+TODO
+
+Fix UVs that are sometimes messed up, WallPartA in the lobby of Shroom City's hotel for example
+Fix some objects with only albedo showing
+Level configs 
+
+*/
+
 const pathBase = "PMTOK";
 class PMTOKScene implements SceneDesc {
     public id: string;
@@ -216,6 +225,24 @@ class PMTOKScene implements SceneDesc {
             }
         }
 
+        // prepare scene objects (sobj) for non-battle levels
+        const sobjInstances = [];
+        if (!isBattle) {
+            const disposSobjFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/map/${this.id}/dispos_Sobj.elf.zst`));
+            sobjInstances.push(...parseELF(disposSobjFile, ELFType.DisposSobj) as SObjInstance[]);
+            const uniqueModels: Map<string, string> = new Map();
+            for (const instance of sobjInstances) {
+                if (!uniqueModels.has(instance.modelName)) {
+                    uniqueModels.set(instance.modelName, instance.modelPath);
+                }
+            }
+            for (const [modelName, modelPath] of uniqueModels.entries()) {
+                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${modelPath}/${modelName}.bfres.zst`));
+                const sobjBFRES = BFRES.parse(file);
+                resources.loadBFRES(device, modelName, sobjBFRES);
+            }
+        }
+
         resources.loadRequestedCommonTextures(device, commonBntxFile);
         renderer.setResources(resources);
 
@@ -224,26 +251,36 @@ class PMTOKScene implements SceneDesc {
         }
 
         // patch each mobj renderer with instance matrices
+        for (const instance of mobjInstances) {
+            const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.resolvedModelName)!;
+            if (!modelRenderer) {
+                continue;
+            }
+            const m = mat4.create();
+            computeModelMatrixSRT(m, 1, 1, 1, // mobj instances don't have scales
+                instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
+                instance.position[0], instance.position[1], instance.position[2]);
+            modelRenderer.shiftMatrices.push(m);
+        }
+
+        // patch each sobj renderer with instance matrices
+        for (const instance of sobjInstances) {
+            const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.modelName)!;
+            if (!modelRenderer) {
+                continue;
+            }
+            const m = mat4.create();
+            computeModelMatrixSRT(m, instance.scale[0], instance.scale[1], instance.scale[2],
+                instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
+                instance.position[0], instance.position[1], instance.position[2]);
+            modelRenderer.shiftMatrices.push(m);
+        }
+
+        // patch level's base model renderer with identity shift matrix
         for (const modelRenderer of renderer.modelRenderers) {
-            if (modelRenderer.name.startsWith("Mobj_") && mobjInstances.length > 0) {
-                const instances = [];
-                for (const instance of mobjInstances) {
-                    if (instance.resolvedModelName === modelRenderer.name) {
-                        instances.push(instance);
-                    }
-                }
-                if (instances.length === 0) {
-                    console.warn("Could not find any instances of", modelRenderer.name);
-                    continue;
-                }
-                modelRenderer.shiftMatrices = [];
-                for (const instance of instances) {
-                    const m = mat4.create();
-                    computeModelMatrixSRT(m, 1, 1, 1,
-                        instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
-                        instance.position[0], instance.position[1], instance.position[2]);
-                    modelRenderer.shiftMatrices.push(m);
-                }
+            if (modelRenderer.name.startsWith("Btl_") || modelRenderer.name.startsWith("W")) {
+                modelRenderer.shiftMatrices = [mat4.create()];
+                break; // should only be one, usually the first one anyway
             }
         }
 
