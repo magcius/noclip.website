@@ -489,7 +489,7 @@ class MaterialInstance {
     }
 }
 
-const bboxScratch = new AABB();
+// const bboxScratch = new AABB();
 class ShapeInstance {
     private meshData: ShapeMeshData;
 
@@ -497,7 +497,7 @@ class ShapeInstance {
         this.meshData = fshpData.meshData[0];
     }
 
-    public computeModelView(modelMatrix: mat4, viewerInput: ViewerRenderInput): mat4 {
+    private computeModelView(modelMatrix: mat4, viewerInput: ViewerRenderInput): mat4 {
         const viewMatrix = SCRATCH_MATRIX;
         computeViewMatrix(viewMatrix, viewerInput.camera);
         mat4.mul(viewMatrix, viewMatrix, modelMatrix);
@@ -516,14 +516,14 @@ class ShapeInstance {
         this.material.fillTemplate(template);
 
         // bounding box cull logic is buggy, doesn't work well with PMTOK can't get close to anything
-        bboxScratch.transform(this.meshData.mesh.bbox, modelMatrix);
-        if (viewerInput.camera.frustum.contains(bboxScratch)) {
-            const renderInst = renderInstManager.newRenderInst();
-            renderInst.setDrawCount(this.meshData.mesh.count);
-            renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
-            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
-            renderInstManager.submitRenderInst(renderInst);
-        }
+        // bboxScratch.transform(this.meshData.mesh.bbox, modelMatrix);
+        // if (viewerInput.camera.frustum.contains(bboxScratch)) {
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setDrawCount(this.meshData.mesh.count);
+        renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
+        renderInstManager.submitRenderInst(renderInst);
+        // }
         
         renderInstManager.popTemplate();
     }

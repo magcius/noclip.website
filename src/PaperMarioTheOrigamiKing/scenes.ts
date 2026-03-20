@@ -7,7 +7,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { ModelData } from "./render_data.js";
 import { OrigamiModelRenderer } from "./render.js";
-import { ELFType, MObjInstance, MObjModel, MObjType, parseELF, SObjInstance } from "./bin_elf.js";
+import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
@@ -83,9 +83,9 @@ class OrigamiRenderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public setResources(rs: OrigamiResources) {
-        this.resources = rs;
-        this.textureHolder = rs.textureHolder;
+    public setResources(res: OrigamiResources) {
+        this.resources = res;
+        this.textureHolder = res.textureHolder;
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -184,10 +184,10 @@ class PMTOKScene implements SceneDesc {
                     continue;
                 }
                 const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/mobj/${s}.elf.zst`));
-                mobjTypes.push(...parseELF(file, ELFType.DataMobj) as MObjType[]);
+                mobjTypes.push(...parseELF(file, ELFType.MobjType) as MObjType[]);
             }
             // get model data
-            const mobjModels: MObjModel[] = [];
+            const mobjModels: ModelDef[] = [];
             for (const s of ["data_mobj_model_Cmn",
                 isValidMobjDataWorldId(worldId) ? `data_mobj_model_${worldId}_Cmn` : "",
                 !NO_MOBJS_LEVELGROUPS.includes(levelGroupId) ? `data_mobj_model_${levelGroupId}` : ""]) {
@@ -195,7 +195,7 @@ class PMTOKScene implements SceneDesc {
                     continue;
                 }
                 const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/mobj_model/${s}.elf.zst`));
-                mobjModels.push(...parseELF(file, ELFType.DataMobjModel) as MObjModel[]);
+                mobjModels.push(...parseELF(file, ELFType.MobjModel) as ModelDef[]);
             }
             // get location data
             for (const disposName of ALT_DISPOS_MOBJS.has(this.id) ? ALT_DISPOS_MOBJS.get(this.id)! : ["dispos_Mobj"]) {
@@ -205,23 +205,23 @@ class PMTOKScene implements SceneDesc {
             // get unique mobj types so each model is only loaded once
             const types: string[] = [];
             for (const instance of mobjInstances) {
-                if (!types.includes(instance.typeId)) {
-                    types.push(instance.typeId);
+                if (!types.includes(instance.type)) {
+                    types.push(instance.type);
                 }
             }
             // get location of each type's model file by traversing data ELF files (absurdly obtuse)
-            for (const typeId of types) {
-                const type = mobjTypes.find(m => m.id === typeId)!;
-                const modelAG = mobjModels.find(m => m.id === type.modelId)!.assetGroups[0];
+            for (const type of types) {
+                const mobjType = mobjTypes.find(m => m.id === type)!;
+                const assetGroup = mobjModels.find(m => m.id === mobjType.modelId)!.assetGroups[0];
                 for (const instance of mobjInstances) {
-                    if (instance.typeId === typeId) {
+                    if (instance.type === type) {
                         // store model's name for later when patching its renderer with instance matrices
-                        instance.resolvedModelName = modelAG.file;
+                        instance.resolvedModelName = assetGroup.file;
                     }
                 }
-                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${modelAG.directory}/${modelAG.file}.bfres.zst`));
+                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`));
                 const mobjBFRES = BFRES.parse(file);
-                resources.loadBFRES(device, modelAG.file, mobjBFRES);
+                resources.loadBFRES(device, assetGroup.file, mobjBFRES);
             }
         }
 
@@ -240,6 +240,39 @@ class PMTOKScene implements SceneDesc {
                 const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${modelPath}/${modelName}.bfres.zst`));
                 const sobjBFRES = BFRES.parse(file);
                 resources.loadBFRES(device, modelName, sobjBFRES);
+            }
+        }
+
+        // prepare item objects for non-battle levels
+        const itemInstances = [];
+        if (!isBattle) {
+            const itemTypesFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/data_item.elf.zst`));
+            const itemModelsFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/data_item_model.elf.zst`));
+            const disposItemFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/data/map/${this.id}/dispos_Item.elf.zst`));
+            const itemTypes = parseELF(itemTypesFile, ELFType.ItemType) as ItemType[];
+            const itemModels = parseELF(itemModelsFile, ELFType.ItemModel) as ModelDef[];
+            itemInstances.push(...parseELF(disposItemFile, ELFType.DisposItem) as ItemInstance[]);
+
+            const types: string[] = [];
+            for (const instance of itemInstances) {
+                if (!types.includes(instance.type)) {
+                    types.push(instance.type);
+                }
+            }
+
+            // get location of each type's model file by traversing data ELF files (absurdly obtuse)
+            for (const type of types) {
+                const itemType = itemTypes.find(i => i.id === type)!;
+                const assetGroup = itemModels.find(i => i.id === itemType.modelId)!.assetGroups[0];
+                for (const instance of itemInstances) {
+                    if (instance.type === type) {
+                        // store model's name for later when patching its renderer with instance matrices
+                        instance.resolvedModelName = assetGroup.file;
+                    }
+                }
+                const file = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`));
+                const itemBFRES = BFRES.parse(file);
+                resources.loadBFRES(device, assetGroup.file, itemBFRES);
             }
         }
 
@@ -273,6 +306,17 @@ class PMTOKScene implements SceneDesc {
             computeModelMatrixSRT(m, instance.scale[0], instance.scale[1], instance.scale[2],
                 instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
                 instance.position[0], instance.position[1], instance.position[2]);
+            modelRenderer.shiftMatrices.push(m);
+        }
+
+        // patch each item renderer with instance matrices
+        for (const instance of itemInstances) {
+            const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.resolvedModelName)!;
+            if (!modelRenderer) {
+                continue;
+            }
+            const m = mat4.create();
+            computeModelMatrixSRT(m, 1, 1, 1, 0, 0, 0, instance.position[0], instance.position[1], instance.position[2]);
             modelRenderer.shiftMatrices.push(m);
         }
 

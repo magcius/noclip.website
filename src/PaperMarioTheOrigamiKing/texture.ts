@@ -145,6 +145,9 @@ export class OrigamiTextureHolder extends TextureHolder {
         for (let m = 0; m < texture.textureDataArray[0].mipBuffers.length; m++) {
             mips += device.queryTextureFormatSupported(gfxFormat, Math.max(texture.width >>> m, 1), Math.max(texture.height >>> m, 1)) ? 1 : 0;
         }
+        // lowest mip level is always empty/black, don't waste time processing it
+        // somtimes the second lowest is also nothing but no way to detect this
+        mips = Math.max(1, mips - 1);
         if (mips === 0) {
             console.warn("No valid mips for", texture.name);
             return;
@@ -152,7 +155,7 @@ export class OrigamiTextureHolder extends TextureHolder {
 
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mips));
 
-        const deswizzled = this.deswizzle(texture.textureDataArray[0].mipBuffers, texture.width, texture.height, blockWidth, blockHeight, blockBytes, mips);
+        const deswizzled = this.deswizzle(texture.textureDataArray[0].mipBuffers.slice(0, mips), texture.width, texture.height, blockWidth, blockHeight, blockBytes, mips);
         let offset = 0;
         const ends: number[] = [];
         for (let m = 0; m < mips; m++) {
@@ -175,6 +178,7 @@ export class OrigamiTextureHolder extends TextureHolder {
                     if (keepCompressed) {
                         rgba = data;
                     } else {
+                        // rust decoding for BC1-5 doesn't handle alpha correctly, default to existing BC decoding 
                         rgba = decompress({ ...texture, width, height, depth: 1 }, data).pixels;
                     }
                     break;

@@ -39,7 +39,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         case AttributeFormat._16_16_Snorm:
             return GfxFormat.S16_RG_NORM;
         case AttributeFormat._16_16_Uint:
-            return GfxFormat.U16_RG_NORM; // right gfxformat?
+            return GfxFormat.U32_RG; // right gfxformat?
         case AttributeFormat._16_16_Float:
             return GfxFormat.F16_RG;
         case AttributeFormat._16_16_16_16_Uint:
@@ -113,7 +113,7 @@ export class VertexData {
         }
     }
 
-    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute | null {
+    private convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute | null {
         switch (vertexAttribute.format) {
             case AttributeFormat._10_10_10_2_Snorm:
                 return this.convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute, vertexBuffer);
@@ -122,7 +122,7 @@ export class VertexData {
         }
     }
 
-    public convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute {
+    private convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute {
         function signExtend10(n: number): number {
             return (n << 22) >> 22;
         }
@@ -186,12 +186,6 @@ export class ShapeData {
         this.shiftMatrix = this.computeShiftMatrix(skeleton, boneIndex);
     }
 
-    public destroy(device: GfxDevice): void {
-        for (const meshData of this.meshData) {
-            meshData.destroy(device);
-        }
-    }
-
     private computeShiftMatrix(skeleton: FSKL_Bone[], boneIndex: number): mat4 {
         // Adapted from TMSSFE's code
         const bone = skeleton[boneIndex];
@@ -207,6 +201,12 @@ export class ShapeData {
             const shift: mat4 = mat4.create();
             mat4.multiply(shift, this.computeShiftMatrix(skeleton, bone.parentIndex), boneSRT);
             return shift;
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const meshData of this.meshData) {
+            meshData.destroy(device);
         }
     }
 }
