@@ -202,7 +202,6 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
-    Mat4x4 u_Shift;
     Mat3x4 u_ModelView;
 };
 
@@ -227,7 +226,7 @@ out vec2 v_TexCoord2;
 out vec4 v_Floats;
 
 void main() {
-    vec3 t_PositionView = UnpackMatrix(u_ModelView) * UnpackMatrix(u_Shift) * vec4(_p0, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_ModelView) * vec4(_p0, 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_NormalWorld = _n0;
     v_TangentWorld = ${this.getAttribute('_t0', 'vec4(0.0)')};
@@ -489,7 +488,8 @@ class MaterialInstance {
     }
 }
 
-// const bboxScratch = new AABB();
+const shiftScratch = mat4.create();
+const bboxScratch = new AABB();
 class ShapeInstance {
     private meshData: ShapeMeshData;
 
@@ -505,26 +505,26 @@ class ShapeInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplate();
-        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: this.material.gfxSamplers.length }]);
-        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 44);
-        const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x4(d, offs, this.fshpData.shiftMatrix);
-        offs += fillMatrix4x3(d, offs, this.computeModelView(modelMatrix, viewerInput));
+        mat4.mul(shiftScratch, modelMatrix, this.fshpData.shiftMatrix);
+        bboxScratch.transform(this.meshData.mesh.bbox, shiftScratch);
+        if (viewerInput.camera.frustum.contains(bboxScratch)) {
+            const template = renderInstManager.pushTemplate();
 
-        this.material.fillTemplate(template);
+            template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: this.material.gfxSamplers.length }]);
+            let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 28);
+            const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x3(d, offs, this.computeModelView(shiftScratch, viewerInput));
 
-        // bounding box cull logic is buggy, doesn't work well with PMTOK can't get close to anything
-        // bboxScratch.transform(this.meshData.mesh.bbox, modelMatrix);
-        // if (viewerInput.camera.frustum.contains(bboxScratch)) {
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setDrawCount(this.meshData.mesh.count);
-        renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
-        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
-        renderInstManager.submitRenderInst(renderInst);
-        // }
-        
-        renderInstManager.popTemplate();
+            this.material.fillTemplate(template);
+
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.setDrawCount(this.meshData.mesh.count);
+            renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
+            renderInstManager.submitRenderInst(renderInst);
+
+            renderInstManager.popTemplate();
+        }        
     }
 }

@@ -7,7 +7,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { ModelData } from "./render_data.js";
 import { OrigamiModelRenderer } from "./render.js";
-import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF } from "./bin_elf.js";
+import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF, NPCType, NPCInstance } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
@@ -23,6 +23,7 @@ interface OrigamiLevelObjects {
     mobjInstances: MObjInstance[];
     sobjInstances: SObjInstance[];
     itemInstances: ItemInstance[];
+    npcInstances: NPCInstance[];
 }
 
 export class OrigamiResources {
@@ -40,23 +41,25 @@ export class OrigamiResources {
     public loadBFRES(device: GfxDevice, name: string, bfres: BFRES.FRES) {
         if (!this.loadedBFRESNames.includes(name)) {
             this.loadedBFRESNames.push(name);
-            const embeddedTextureFile = bfres.externalFiles.find((f) => f.name === `${name}.bntx`);
+            const embeddedTextureFile = bfres.externalFiles.find((f) => f.name.endsWith(".bntx"));
             if (embeddedTextureFile) {
                 const bntx = BNTX.parse(embeddedTextureFile.buffer);
                 for (const t of bntx.textures) {
                     t.name = `${name}_${t.name}`;
                     this.textureHolder.addTexture(device, t);
                 }
-                for (const model of bfres.fmdl) {
-                    this.modelData.set(model.name, new ModelData(this.renderCache, model));
-                    for (const material of model.fmat) {
-                        for (const t of material.textureName) {
-                            if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) this.requestedCommonTextures.push(t);
+            } else {
+                console.warn("Could not find embedded textures in", name);
+            }
+            for (const model of bfres.fmdl) {
+                this.modelData.set(model.name, new ModelData(this.renderCache, model));
+                for (const material of model.fmat) {
+                    for (const t of material.textureName) {
+                        if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) {
+                            this.requestedCommonTextures.push(t);
                         }
                     }
                 }
-            } else {
-                console.warn("Could not find embedded textures in", name);
             }
         }
     }
@@ -135,8 +138,7 @@ class OrigamiRenderer implements SceneGfx {
 }
 
 function decompressZST(file: ArrayBufferSlice): ArrayBufferSlice {
-    const d = decompress(file.createTypedArray(Uint8Array));
-    return ArrayBufferSlice.fromView(d);
+    return ArrayBufferSlice.fromView(decompress(file.createTypedArray(Uint8Array)));
 }
 
 async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<OrigamiLevelObjects> {
@@ -147,19 +149,22 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
 
         const mobjTypes: MObjType[] = [];
         for (const s of ["data_mobj_Cmn", `data_mobj_${worldId}_Cmn`, `data_mobj_${levelGroupId}`]) {
-            const file = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/mobj/${s}.elf.zst`));
-            mobjTypes.push(...parseELF(file, ELFType.MobjType) as MObjType[]);
+            mobjTypes.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/mobj/${s}.elf.zst`)), ELFType.MobjType) as MObjType[]);
+        }
+        if (config.aobj) {
+            mobjTypes.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/mobj/data_aobj.elf.zst`)), ELFType.MobjType) as MObjType[]);
         }
 
         const mobjModels: ModelDef[] = [];
         for (const s of ["data_mobj_model_Cmn", `data_mobj_model_${worldId}_Cmn`, `data_mobj_model_${levelGroupId}`]) {
-            const file = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/mobj_model/${s}.elf.zst`));
-            mobjModels.push(...parseELF(file, ELFType.MobjModel) as ModelDef[]);
+            mobjModels.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/mobj_model/${s}.elf.zst`)), ELFType.MobjModel) as ModelDef[]);
         }
 
         for (const mobj of config.altMobj !== undefined ? config.altMobj : ["Mobj"]) {
-            const disposMobjFile = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_${mobj}.elf.zst`));
-            mobjInstances.push(...parseELF(disposMobjFile, ELFType.DisposMobj) as MObjInstance[]);
+            mobjInstances.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_${mobj}.elf.zst`)), ELFType.DisposMobj) as MObjInstance[]);
+        }
+        if (config.aobj) {
+            mobjInstances.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Aobj.elf.zst`)), ELFType.DisposAobj) as MObjInstance[]);
         }
 
         const types: string[] = [];
@@ -179,37 +184,31 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
                     instance.resolvedModelName = assetGroup.file;
                 }
             }
-            const file = decompressZST(await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`));
-            const mobjBFRES = BFRES.parse(file);
-            resources.loadBFRES(device, assetGroup.file, mobjBFRES);
+            resources.loadBFRES(device, assetGroup.file, BFRES.parse(decompressZST(await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`))));
         }
     }
 
     const sobjInstances = [];
     if (config.sobj) {
-        const disposSobjFile = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Sobj.elf.zst`));
-        sobjInstances.push(...parseELF(disposSobjFile, ELFType.DisposSobj) as SObjInstance[]);
+        sobjInstances.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Sobj.elf.zst`)), ELFType.DisposSobj) as SObjInstance[]);
+
         const uniqueModels: Map<string, string> = new Map();
         for (const instance of sobjInstances) {
             if (!uniqueModels.has(instance.modelName)) {
                 uniqueModels.set(instance.modelName, instance.modelPath);
             }
         }
+
         for (const [modelName, modelPath] of uniqueModels.entries()) {
-            const file = decompressZST(await dataFetcher.fetchData(`${pathBase}/${modelPath}/${modelName}.bfres.zst`));
-            const sobjBFRES = BFRES.parse(file);
-            resources.loadBFRES(device, modelName, sobjBFRES);
+            resources.loadBFRES(device, modelName, BFRES.parse(decompressZST(await dataFetcher.fetchData(`${pathBase}/${modelPath}/${modelName}.bfres.zst`))));
         }
     }
 
     const itemInstances = [];
     if (config.item) {
-        const itemTypesFile = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/data_item.elf.zst`));
-        const itemModelsFile = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/data_item_model.elf.zst`));
-        const disposItemFile = decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Item.elf.zst`));
-        const itemTypes = parseELF(itemTypesFile, ELFType.ItemType) as ItemType[];
-        const itemModels = parseELF(itemModelsFile, ELFType.ItemModel) as ModelDef[];
-        itemInstances.push(...parseELF(disposItemFile, ELFType.DisposItem) as ItemInstance[]);
+        const itemTypes = parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/data_item.elf.zst`)), ELFType.ItemType) as ItemType[];
+        const itemModels = parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/data_item_model.elf.zst`)), ELFType.ItemModel) as ModelDef[];
+        itemInstances.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Item.elf.zst`)), ELFType.DisposItem) as ItemInstance[]);
 
         const types: string[] = [];
         for (const instance of itemInstances) {
@@ -228,13 +227,41 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
                     instance.resolvedModelName = assetGroup.file;
                 }
             }
-            const file = decompressZST(await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`));
-            const itemBFRES = BFRES.parse(file);
-            resources.loadBFRES(device, assetGroup.file, itemBFRES);
+            resources.loadBFRES(device, assetGroup.file, BFRES.parse(decompressZST(await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`))));
         }
     }
 
-    return { mobjInstances, sobjInstances, itemInstances };
+    const npcInstances = [];
+    if (config.npc) {
+        const npcTypes = parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/data_npc.elf.zst`)), ELFType.NPCType) as NPCType[];
+        const npcModels = parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/data_npc_model.elf.zst`)), ELFType.NPCModel) as ModelDef[];
+        npcInstances.push(...parseELF(decompressZST(await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Npc.elf.zst`)), ELFType.DisposNPC) as NPCInstance[]);
+
+        const types: string[] = [];
+        for (const instance of npcInstances) {
+            if (!types.includes(instance.type)) {
+                types.push(instance.type);
+            }
+        }
+
+        // get location of each type's model file by traversing data ELF files (absurdly obtuse)
+        for (const type of types) {
+            const npcType = npcTypes.find(i => i.id === type)!;
+            const assetGroup = npcModels.find(i => i.id === npcType.modelId)!.assetGroups[0];
+            for (const instance of npcInstances) {
+                if (instance.type === type) {
+                    // store model's name for later when patching its renderer with instance matrices
+                    instance.resolvedModelName = assetGroup.file;
+                }
+            }
+            resources.loadBFRES(device, assetGroup.file, BFRES.parse(decompressZST(await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`))));
+            if (assetGroup.file.startsWith("P_")) {
+                resources.textureHolder.addTexture(device, BNTX.parse(decompressZST(await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.Default.bntx.zst`))).textures[0]);
+            }
+        }
+    }
+
+    return { mobjInstances, sobjInstances, itemInstances, npcInstances };
 }
 
 /*
@@ -244,6 +271,7 @@ Fix UVs that are sometimes messed up, WallPartA in the lobby of Shroom City's ho
 Fix objects with only albedo showing
 Fix some sobjs not being in the right place
 Fix missing textures
+Figure out NPC rotation degree logic
 */
 
 const pathBase = "PMTOK";
@@ -255,25 +283,21 @@ class PMTOKScene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const bfresFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${this.path}.bfres.zst`));
-        const commonBntxFile = decompressZST(await context.dataFetcher.fetchData(`${pathBase}/graphics/textures/common/default.bntx.zst`));
-        const bfres = BFRES.parse(bfresFile);
-
         const resources = new OrigamiResources(device);
         const renderer = new OrigamiRenderer(device);
-        resources.loadBFRES(device, this.id, bfres);
+        resources.loadBFRES(device, this.id, BFRES.parse(decompressZST(await context.dataFetcher.fetchData(`${pathBase}/${this.path}.bfres.zst`))));
 
-        // there's not (an apparent) way to detect if a level has mobj/sobjs etc, so that info is hardcoded as configs
+        // there's not an apparent way to detect if a level has mobj/sobjs etc, so that info is hardcoded as configs
         let config = ORIGAMI_LEVEL_CONFIGS.get(this.id);
         if (!config) {
             // battle levels don't have configs for now
             console.warn("No level config found for", this.id);
-            config = { mobj: false, sobj: false, item: false, npc: false };
+            config = { mobj: false, sobj: false, aobj: false, item: false, npc: false };
         }
 
-        const { mobjInstances, sobjInstances, itemInstances } = await loadLevelObjects(this.id, config, resources, context.dataFetcher, device);
+        const { mobjInstances, sobjInstances, itemInstances, npcInstances } = await loadLevelObjects(this.id, config, resources, context.dataFetcher, device);
 
-        resources.loadRequestedCommonTextures(device, commonBntxFile);
+        resources.loadRequestedCommonTextures(device, decompressZST(await context.dataFetcher.fetchData(`${pathBase}/graphics/textures/common/default.bntx.zst`)));
         renderer.setResources(resources);
 
         for (const modelData of resources.modelData.values()) {
@@ -287,7 +311,7 @@ class PMTOKScene implements SceneDesc {
                 continue;
             }
             const m = mat4.create();
-            computeModelMatrixSRT(m, 1, 1, 1, // mobj instances don't have scales
+            computeModelMatrixSRT(m, 1, 1, 1,
                 instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
                 instance.position[0], instance.position[1], instance.position[2]);
             modelRenderer.shiftMatrices.push(m);
@@ -317,9 +341,20 @@ class PMTOKScene implements SceneDesc {
             modelRenderer.shiftMatrices.push(m);
         }
 
+        // patch each npc renderer with instance matrices
+        for (const instance of npcInstances) {
+            const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.resolvedModelName)!;
+            if (!modelRenderer) {
+                continue;
+            }
+            const m = mat4.create();
+            computeModelMatrixSRT(m, 1, 1, 1, 0, 0, 0, instance.position[0], instance.position[1], instance.position[2]);
+            modelRenderer.shiftMatrices.push(m);
+        }
+
         // patch level's base model renderer with identity shift matrix
         for (const modelRenderer of renderer.modelRenderers) {
-            if (modelRenderer.name.startsWith("Btl_") || modelRenderer.name.startsWith("W")) {
+            if (modelRenderer.name.startsWith(this.id.slice(0, 4))) {
                 modelRenderer.shiftMatrices = [mat4.create()];
                 break; // should only be one, usually the first one anyway
             }

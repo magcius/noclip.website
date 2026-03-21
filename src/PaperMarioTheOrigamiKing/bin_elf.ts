@@ -27,12 +27,25 @@ export interface ItemInstance {
     position: vec3;
 }
 
+export interface NPCInstance {
+    id: string;
+    type: string;
+    resolvedModelName: string;
+    position: vec3;
+    rotationDeg: number;
+}
+
 export interface MObjType {
     id: string;
     modelId: string;
 }
 
 export interface ItemType {
+    id: string;
+    modelId: string;
+}
+
+export interface NPCType {
     id: string;
     modelId: string;
 }
@@ -52,11 +65,15 @@ export interface ModelDef {
 export enum ELFType {
     DisposMobj,
     DisposSobj,
+    DisposAobj,
     DisposItem,
+    DisposNPC,
     MobjType,
     ItemType,
+    NPCType,
     MobjModel,
-    ItemModel
+    ItemModel,
+    NPCModel
 }
 
 class Section {
@@ -114,8 +131,10 @@ class Symbol {
 const MOBJ_INSTANCE_SIZE = 376;
 const SOBJ_INSTANCE_SIZE = 184;
 const ITEM_INSTANCE_SIZE = 128;
+const NPC_INSTANCE_SIZE = 256;
 const MOBJ_TYPE_SIZE = 144;
 const ITEM_TYPE_SIZE = 208;
+const NPC_TYPE_SIZE = 272;
 const MODEL_DEF_SIZE = 144;
 const MODEL_ASSET_GROUP_SIZE = 40;
 const TEXT_DECODER = new TextDecoder("utf-8");
@@ -198,6 +217,24 @@ function parseDataSection_ItemInstances(view: DataView, section: Section, count:
     return instances;
 }
 
+function parseDataSection_NPCInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): NPCInstance[] {
+    const instances: NPCInstance[] = [];
+    let pointer = section.offset;
+    for (let i = 0; i < count; i++) {
+        const relocation2 = relocations.get(8 + NPC_INSTANCE_SIZE * i)!;
+        const relocation3 = relocations.get(16 + NPC_INSTANCE_SIZE * i)!;
+        const id = getStringAt(view, dataStringOffset + relocation2.targetOffset);
+        const type = getStringAt(view, dataStringOffset + relocation3.targetOffset);
+        const x = view.getFloat32(pointer + 24, true);
+        const y = view.getFloat32(pointer + 28, true);
+        const z = view.getFloat32(pointer + 32, true);
+        const r = view.getFloat32(pointer + 36, true);
+        instances.push({ id, type, resolvedModelName: "", position: [x, y, z], rotationDeg: r });
+        pointer += NPC_INSTANCE_SIZE;
+    }
+    return instances;
+}
+
 function parseDataSection_MObjTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): MObjType[] {
     const types: MObjType[] = [];
     let pointer = section.offset;
@@ -222,6 +259,20 @@ function parseDataSection_ItemTypes(view: DataView, section: Section, count: num
         const modelId = relocation3 ? getStringAt(view, dataStringOffset + relocation3.targetOffset) : "";
         types.push({ id, modelId });
         pointer += ITEM_TYPE_SIZE;
+    }
+    return types;
+}
+
+function parseDataSection_NPCTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): NPCType[] {
+    const types: ItemType[] = [];
+    let pointer = section.offset;
+    for (let i = 0; i < count; i++) {
+        const relocation1 = relocations.get(NPC_TYPE_SIZE * i)!;
+        const relocation2 = relocations.get(8 + NPC_TYPE_SIZE * i)!;
+        const id = relocation1 ? getStringAt(view, dataStringOffset + relocation1.targetOffset) : "";
+        const modelId = relocation2 ? getStringAt(view, dataStringOffset + relocation2.targetOffset) : "";
+        types.push({ id, modelId });
+        pointer += NPC_TYPE_SIZE;
     }
     return types;
 }
@@ -285,9 +336,9 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
         }
     }
 
-    const dataSection = sections.find(s => s.name == ".data")!;
-    const rodataSection = sections.find(s => s.name == ".rodata")!;
-    const rodataStringSection = sections.find(s => s.name == ".rodata.str1.1")!;
+    const dataSection = sections.find(s => s.name === ".data")!;
+    const rodataSection = sections.find(s => s.name === ".rodata")!;
+    const rodataStringSection = sections.find(s => s.name === ".rodata.str1.1")!;
     const rodataCount = view.getInt32(rodataSection.offset, true);
 
     if (!dataSection || !rodataStringSection) {
@@ -296,9 +347,9 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
     }
 
     const symbolTable: Symbol[] = [];
-    if (type === ELFType.MobjModel || type === ELFType.ItemModel) {
+    if (type === ELFType.MobjModel || type === ELFType.ItemModel || type === ELFType.NPCModel) {
         // only bother to get symbols for model defs
-        const symbolSection = sections.find(s => s.name == ".symtab")!;
+        const symbolSection = sections.find(s => s.name === ".symtab")!;
         const start = symbolSection.offset;
         pointer = symbolSection.offset;
         while (pointer < start + symbolSection.byteLength) {
@@ -309,6 +360,7 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
 
     let data;
     switch (type) {
+        case ELFType.DisposAobj:
         case ELFType.DisposMobj:
             data = parseDataSection_MObjInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
@@ -318,15 +370,35 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
         case ELFType.DisposItem:
             data = parseDataSection_ItemInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
+        case ELFType.DisposNPC:
+            data = parseDataSection_NPCInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
+            break;
         case ELFType.MobjType:
             data = parseDataSection_MObjTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
         case ELFType.ItemType:
             data = parseDataSection_ItemTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
+        case ELFType.NPCType:
+            data = parseDataSection_NPCTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
+            break;
         case ELFType.MobjModel:
         case ELFType.ItemModel:
-            const countSymbol = symbolTable.find(s => s.name == `_ZN3wld3fld4data13model${type === ELFType.MobjModel ? "Mobj" : "Item"}_numE`)!;
+        case ELFType.NPCModel:
+            let symbolName;
+            switch (type) {
+                case ELFType.MobjModel:
+                    symbolName = "_ZN3wld3fld4data13modelMobj_numE";
+                    break;
+                case ELFType.ItemModel:
+                    symbolName = "_ZN3wld3fld4data13modelItem_numE";
+                    break;
+                case ELFType.NPCModel:
+                default:
+                    symbolName = "_ZN3wld3fld4data12modelNpc_numE";
+                    break;
+            }
+            const countSymbol = symbolTable.find(s => s.name === symbolName)!;
             const dataCount = view.getInt32(rodataSection.offset + countSymbol.location, true);
             const rawModels = parseDataSection_ModelDefs(view, dataSection, dataCount, rodataStringSection.offset, relocations.get(".data")!);
             // patch asset groups
