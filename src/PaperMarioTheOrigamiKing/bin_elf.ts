@@ -290,6 +290,11 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
     const rodataStringSection = sections.find(s => s.name == ".rodata.str1.1")!;
     const rodataCount = view.getInt32(rodataSection.offset, true);
 
+    if (!dataSection || !rodataStringSection) {
+        // some files are "empty" but still exist
+        return [];
+    }
+
     const symbolTable: Symbol[] = [];
     if (type === ELFType.MobjModel || type === ELFType.ItemModel) {
         // only bother to get symbols for model defs
