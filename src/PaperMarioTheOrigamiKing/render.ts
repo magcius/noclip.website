@@ -5,7 +5,7 @@ import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX_VertexAttribute, parse
 import { ChannelSource, FilterMode, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { DeviceProgram } from '../Program.js';
@@ -89,7 +89,6 @@ function translateBlendMode(blendMode: string): GfxBlendMode {
     }
 }
 
-const SCRATCH_MATRIX = mat4.create();
 const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
     ["_p0", "vec3"], // position
     ["_n0", "vec4"], // normal
@@ -99,7 +98,10 @@ const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
     ["_u0", "vec2"], // uv 1
     ["_u1", "vec2"], // uv 2
     ["_i0", "vec4"], // index, varying sizes, assume vec4
-    ["_w0", "vec4"] // weight, varying sizes, assume vec4
+    ["_w0", "vec4"], // weight, varying sizes, assume vec4
+    ["albedo", ""], // Same format as UVs but doesn't have any data (???)
+    ["detail", ""], // Same format as UVs but doesn't have any data (???)
+    ["lightmap", ""] // Same format as UVs but doesn't have any data (???)
 ]);
 
 export class OrigamiProgram extends DeviceProgram {
@@ -116,9 +118,9 @@ export class OrigamiProgram extends DeviceProgram {
         for (let i = 0; i < this.vertexAttributes.length; i++) {
             const a = this.vertexAttributes[i].name;
             const type = ATTRIBUTE_MAP.get(a);
-            if (!type) {
+            if (type === undefined) {
                 console.warn("Unknown attribute", a, "for", this.fmat.name);
-            } else {
+            } else if (type.length > 0) {
                 s += `layout(location = ${i}) in ${type} ${a};\n`;
             }
         }
@@ -208,7 +210,6 @@ layout(std140) uniform ub_ShapeParams {
 layout(std140) uniform ub_MaterialParams {
     Mat2x4 u_TexCoordSRT0;
     Mat2x4 u_TexCoordSRT1;
-    Mat2x4 u_TexCoordSRT2;
     vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
 };
 
@@ -257,7 +258,7 @@ void main() {
 
     ${this.getOptionBoolean('use_normal_map') ? `
     vec3 t_LightDir = vec3(-0.5, -0.5, -1);
-    ${this.getOptionBoolean('metal_mask') ? /* Crude attempt at foil effect, fine for now */`
+    ${this.getOptionBoolean('metal_mask') ? /* Crude attempt at foil effect, fine for now but a little too bright */`
     ${this.getTextureColor('_n0', 'normalColor', 'v_TexCoord1')};
     vec3 normal = normalize(vec3(normalColor.rg * 2.0 - 1.0, normalColor.b));
     float diffuse = max(dot(normal, normalize(t_LightDir)), 0.0);
@@ -287,9 +288,9 @@ void main() {
     bakedShadow = mix(1.0, materialColor.g, 0.55);
     ` : ''}
 
-    ${this.getTextureColor('_d0', 'depthColor', 'v_TexCoord2')};
+    ${this.getTextureColor('_d0', 'detailColor', 'v_TexCoord2')};
 
-    color.rgb *= ambientOcclusion * bakedShadow * mix(1.0, depthColor.b, 0.55);
+    color.rgb *= ambientOcclusion * bakedShadow * mix(1.0, detailColor.b, 0.55);
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
     gl_FragColor = color;
 }
@@ -320,6 +321,14 @@ export class OrigamiModelRenderer {
                 // sometimes the casing is inconsistent for materials (whoops!)
                 visible = false;
             }
+            if (visible && modelData.config) {
+                if (modelData.config.materialWhitelist && !modelData.config.materialWhitelist.includes(material.name)) {
+                    visible = false;
+                }
+                if (modelData.config.materialBlacklist && modelData.config.materialBlacklist.includes(material.name)) {
+                    visible = false;
+                }
+            }
             if (visible) {
                 // patch texture names
                 for (let i = 0; i < material.textureName.length; i++) {
@@ -330,7 +339,7 @@ export class OrigamiModelRenderer {
                 for (const shapeData of modelData.shapeData) {
                     if (shapeData.shape.materialIndex === matIndex) {
                         // seems like each shape that shares a material will always have the same vertex attributes (don't care about other data here)
-                        attrs = modelData.vertexData[shapeData.shape.vertexIndex].rawAttributes;
+                        attrs = shapeData.vertexData.rawAttributes;
                         break;
                     }
                 }
@@ -362,29 +371,32 @@ export class OrigamiModelRenderer {
 }
 
 class TexSRT {
-    public mode = 1; // unused for now, seems to always be "Maya"
+    public mode = 1;
     public scaleS = 1.0;
     public scaleT = 1.0;
     public rotation = 0.0;
     public translationS = 0.0;
     public translationT = 0.0;
+    private matrix: mat4 = mat4.create();
 
-    public calc(dst: mat4): void {
+    /**
+     * Call this *once* to pre-compute the matrix (rather than calculating the same one each frame)
+     */
+    public compute(): void {
         const theta = this.rotation * MathConstants.DEG_TO_RAD;
         const sinR = Math.sin(theta);
         const cosR = Math.cos(theta);
-        mat4.identity(dst);
-        dst[0] = this.scaleS * cosR;
-        dst[4] = this.scaleS * sinR;
-        dst[12] = this.scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - this.translationS);
-        dst[1] = this.scaleT * -sinR;
-        dst[5] = this.scaleT * cosR;
-        dst[13] = this.scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + this.translationT) + 1.0;
+        // hardcoded to Maya calcs for now, can't find any other SRT modes in the files
+        this.matrix[0] = this.scaleS * cosR;
+        this.matrix[4] = this.scaleS * sinR;
+        this.matrix[12] = this.scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - this.translationS);
+        this.matrix[1] = this.scaleT * -sinR;
+        this.matrix[5] = this.scaleT * cosR;
+        this.matrix[13] = this.scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + this.translationT) + 1.0;
     }
 
     public fillMatrix(d: Float32Array, offs: number): number {
-        this.calc(SCRATCH_MATRIX);
-        return fillMatrix4x2(d, offs, SCRATCH_MATRIX);
+        return fillMatrix4x2(d, offs, this.matrix);
     }
 }
 
@@ -396,7 +408,7 @@ class MaterialInstance {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private texCoordSRT0 = new TexSRT();
     private texCoordSRT1 = new TexSRT();
-    private texCoordSRT2 = new TexSRT();
+    // private texCoordSRT2 = new TexSRT();
     private glossiness = 0.0;
     private alphaRef = 1.0;
     private yFlip = 0.0;
@@ -408,9 +420,9 @@ class MaterialInstance {
             const gfxSampler = cache.createSampler({
                 wrapS: translateAddressMode(samplerInfo.addrModeU),
                 wrapT: translateAddressMode(samplerInfo.addrModeV),
-                mipFilter: translateMipFilterMode((samplerInfo.filterMode >>> FilterMode.MipShift) & 0x03),
-                minFilter: translateTexFilterMode((samplerInfo.filterMode >>> FilterMode.MinShift) & 0x03),
-                magFilter: translateTexFilterMode((samplerInfo.filterMode >>> FilterMode.MagShift) & 0x03),
+                mipFilter: translateMipFilterMode((samplerInfo.filterMode >>> FilterMode.MipShift) & 3),
+                minFilter: translateTexFilterMode((samplerInfo.filterMode >>> FilterMode.MinShift) & 3),
+                magFilter: translateTexFilterMode((samplerInfo.filterMode >>> FilterMode.MagShift) & 3),
                 maxLOD: samplerInfo.maxLOD,
                 minLOD: samplerInfo.minLOD,
             });
@@ -444,7 +456,6 @@ class MaterialInstance {
 
         this.megaStateFlags = {
             cullMode: translateCullMode(material),
-            // depthCompare: translateDepthCompare(fmat),
             depthWrite: !this.isTranslucent,
         };
         if (this.isTranslucent) {
@@ -457,15 +468,24 @@ class MaterialInstance {
 
         const srt0 = material.shaderParam.find((p) => p.name === "texsrt0");
         const srt1 = material.shaderParam.find((p) => p.name === "texsrt1");
-        const srt2 = material.shaderParam.find((p) => p.name === "texsrt2");
+        // const srt2 = material.shaderParam.find((p) => p.name === "texsrt2");
         const glossiness = material.shaderParam.find((p) => p.name === "glossiness");
         const alphaRef = material.shaderParam.find((p) => p.name === "alpha_ref");
         const yFlip = material.shaderParam.find((p) => p.name === "yflip");
         const whiteBack = material.shaderParam.find((p) => p.name === "white_back");
 
-        if (srt0) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
-        if (srt1) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
-        if (srt2) parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, srt2);
+        if (srt0) {
+            parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
+            this.texCoordSRT0.compute();
+        }
+        if (srt1) {
+            parseFMAT_ShaderParam_Texsrt(this.texCoordSRT1, srt1);
+            this.texCoordSRT1.compute();
+        }
+        // if (srt2) {
+        //     parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, srt2);
+        //     this.texCoordSRT2.compute();
+        // }
         if (glossiness) this.glossiness = parseFMAT_ShaderParam_Float(glossiness);
         if (alphaRef) this.alphaRef = parseFMAT_ShaderParam_Float(alphaRef);
         if (yFlip) this.yFlip = parseFMAT_ShaderParam_Float(yFlip);
@@ -479,15 +499,16 @@ class MaterialInstance {
         template.setGfxProgram(this.gfxProgram);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 28);
+        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 20);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
         offs += this.texCoordSRT0.fillMatrix(d, offs);
         offs += this.texCoordSRT1.fillMatrix(d, offs);
-        offs += this.texCoordSRT2.fillMatrix(d, offs);
+        // offs += this.texCoordSRT2.fillMatrix(d, offs);
         offs += fillVec4(d, offs, this.glossiness, this.alphaRef, this.yFlip, this.whiteBack);
     }
 }
 
+const viewScratch = mat4.create();
 const shiftScratch = mat4.create();
 const bboxScratch = new AABB();
 class ShapeInstance {
@@ -498,7 +519,7 @@ class ShapeInstance {
     }
 
     private computeModelView(modelMatrix: mat4, viewerInput: ViewerRenderInput): mat4 {
-        const viewMatrix = SCRATCH_MATRIX;
+        const viewMatrix = viewScratch;
         computeViewMatrix(viewMatrix, viewerInput.camera);
         mat4.mul(viewMatrix, viewMatrix, modelMatrix);
         return viewMatrix;

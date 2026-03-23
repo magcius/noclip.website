@@ -7,6 +7,7 @@ import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxInputLayout, GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { computeModelMatrixSRT } from "../MathHelpers";
+import { OrigamiModelConfig } from "./model_config";
 
 interface ConvertedVertexAttribute {
     format: GfxFormat;
@@ -179,7 +180,7 @@ export class ShapeData {
     public meshData: ShapeMeshData[] = [];
     public shiftMatrix: mat4;
 
-    constructor(cache: GfxRenderCache, public shape: FSHP, vertexData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
+    constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
         for (const mesh of shape.mesh) {
             this.meshData.push(new ShapeMeshData(cache, mesh, vertexData));
         }
@@ -187,7 +188,7 @@ export class ShapeData {
     }
 
     private computeShiftMatrix(skeleton: FSKL_Bone[], boneIndex: number): mat4 {
-        // Adapted from TMSSFE's code
+        // Adapted from TMSFE's code
         const bone = skeleton[boneIndex];
         const boneSRT: mat4 = mat4.create();
         computeModelMatrixSRT(boneSRT,
@@ -212,23 +213,26 @@ export class ShapeData {
 }
 
 export class ModelData {
-    public vertexData: VertexData[] = [];
     public shapeData: ShapeData[] = [];
 
-    constructor(cache: GfxRenderCache, public model: FMDL) {
-        for (const vertices of model.fvtx) {
-            this.vertexData.push(new VertexData(cache.device, vertices));
-        }
+    constructor(cache: GfxRenderCache, public model: FMDL, public config: OrigamiModelConfig | undefined) {
         for (const shape of model.fshp) {
-            this.shapeData.push(new ShapeData(cache, shape, this.vertexData[shape.vertexIndex], model.fskl.bones, shape.boneIndex));
+            if (config) {
+                if (config.shapeWhitelist && !config.shapeWhitelist.includes(shape.name)) {
+                    continue;
+                }
+                if (config.shapeBlacklist && config.shapeBlacklist.includes(shape.name)) {
+                    continue;
+                }
+            }
+            const vd = new VertexData(cache.device, model.fvtx[shape.vertexIndex]);
+            this.shapeData.push(new ShapeData(cache, shape, vd, model.fskl.bones, shape.boneIndex));
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (const vd of this.vertexData) {
-            vd.destroy(device);
-        }
         for (const sd of this.shapeData) {
+            sd.vertexData.destroy(device);
             sd.destroy(device);
         }
     }
