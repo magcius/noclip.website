@@ -35,7 +35,7 @@ class CubeProgram extends DeviceProgram {
     // Define our vertex input data ("attributes"). By convention, we tend to use an "a_" prefix for
     // vertex attributes.
     public static a_Position = 0;
-    public static a_UV = 1;
+    public static a_TexCoord = 1;
 
     // Define the slot index for our uniform parameters. noclip's framework just assigns sequential indices to
     // uniform blocks seen in the shader, in-order, starting with 0.
@@ -51,20 +51,26 @@ ${CubeProgram.Common}
 
 // Here are our input vertex attributes. I use an "a_" prefix for vertex attributes.
 layout(location = ${CubeProgram.a_Position}) in vec3 a_Position;
-layout(location = ${CubeProgram.a_UV}) in vec2 a_UV;
+layout(location = ${CubeProgram.a_TexCoord}) in vec2 a_TexCoord;
 
 // Here are the outputs from our vertex shader; these will be interpolated across the triangle and passed into the fragment shader.
 // Position is a system output and doesn't require us to declare it.
 // I use a "v_" prefix for vertex shader outputs / pixel shader inputs (so-called "varying"s).
-out vec2 v_UV;
+out vec2 v_TexCoord;
 
 void main() {
     // Compute our world-space position from the position vertex attribute, and our uniform data.
     // I use a "t_" prefix to mean "temporary variable".
+    // The UnpackMatrix call here comes from the MatrixLibrary (see the Common declarations below).
     vec3 t_PositionWorld = (UnpackMatrix(u_WorldFromLocal) * vec4(a_Position.xyz, 1.0f)).xyz;
-    // Compute our output clip-space position from the, and our uniform matrix.
+
+    // Compute our output clip-space position from the world-space position.
+    // I like to name matrices with the format "SpaceFromSpace". That way, you can snap them together like:
+    //   u_ClipFromWorld * u_WorldFromView * u_ViewFromLocal * t_PositionView.
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0f);
-    v_UV = a_UV.xy;
+
+    // Output our texture coordinates for sampling to the fragment shader below.
+    v_TexCoord = a_TexCoord.xy;
 }
 `;
 
@@ -75,17 +81,17 @@ void main() {
 ${CubeProgram.Common}
 
 // This will be filled in by the output of our vertex shader.
-in vec2 v_UV;
+in vec2 v_TexCoord;
 
 void main() {
     // Use the UV coordinates output by the vertex shader to sample our texture.
-    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_UV.xy);
+    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
 }
 `;
 
     // Common declarations in both the vertex and fragment shader. This includes uniform data and textures.
     public static Common = `
-// Import our helper code. In this case, we use a special matrix library as a workaround for some computers
+// Import some helper code. In this case, we use a special matrix library as a workaround for some computers
 // with incomplete WebGL implementations.
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -97,7 +103,8 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
 };
 
-// Define a second matrix for our cube's transform.
+// Define a second matrix for our cube's transform. This could be in the uniform buffer above, however
+// I'm declaring two of them just to show how that works.
 layout(std140) uniform ub_CubeParams {
     Mat3x4 u_WorldFromLocal;
 };
@@ -124,9 +131,7 @@ layout(std140) uniform ub_PostProcessingParams {
 
 layout(location = 0) uniform sampler2D u_TextureColor;
 
-// Aberration Strength
 #define u_AberrationStrength (u_Misc[0].x)
-
 `;
 
     public override vert = `
@@ -260,7 +265,7 @@ class CubeGeometry {
                 },
                 {
                     // Now declare our UV attribute.
-                    location: CubeProgram.a_UV,
+                    location: CubeProgram.a_TexCoord,
                     format: GfxFormat.F32_RG,
                     bufferByteOffset: 3 * 4,
                     bufferIndex: 0,

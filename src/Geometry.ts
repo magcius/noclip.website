@@ -70,7 +70,7 @@ export class Plane {
     }
 
     public intersectLine(dst: vec3, p0: ReadonlyVec3, dir: ReadonlyVec3): void {
-        const t = -(vec3.dot(this.n, p0) + this.d) / vec3.dot(this.n, dir);
+        const t = -this.distanceVec3(p0) / vec3.dot(this.n, dir);
         vec3.scaleAndAdd(dst, p0, dir, t);
     }
 
