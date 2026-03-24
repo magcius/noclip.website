@@ -12,7 +12,7 @@ import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, nArray } from '../util.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { ModelData, ShapeData, ShapeMeshData } from './render_data.js';
+import { ModelData, ShapeData, MeshData } from './render_data.js';
 import { ViewerRenderInput } from "../viewer.js";
 import { OrigamiTextureHolder } from './texture.js';
 import { AABB } from '../Geometry.js';
@@ -299,13 +299,13 @@ void main() {
 }
 
 export class OrigamiModelRenderer {
-    public materials: (MaterialInstance | null)[] = [];
     public shapes: ShapeInstance[] = [];
     public shiftMatrices: mat4[] = [];
     public name: string;
 
     constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, modelData: ModelData) {
         this.name = modelData.model.name;
+        const materials: (MaterialInstance | null)[] = [];
         for (let matIndex = 0; matIndex < modelData.model.fmat.length; matIndex++) {
             const material = modelData.model.fmat[matIndex];
             const shaderAssignExec = material.userData.get("__ShaderAssignExec");
@@ -334,37 +334,24 @@ export class OrigamiModelRenderer {
                 for (let i = 0; i < material.textureName.length; i++) {
                     if (!material.textureName[i].startsWith("Cmn_")) material.textureName[i] = `${this.name}_${material.textureName[i]}`;
                 }
-                // there's probably a better way to do this...
-                let attrs = null;
-                for (const shapeData of modelData.shapeData) {
-                    if (shapeData.shape.materialIndex === matIndex) {
-                        // seems like each shape that shares a material will always have the same vertex attributes (don't care about other data here)
-                        attrs = shapeData.vertexData.rawAttributes;
-                        break;
-                    }
-                }
-                if (!attrs) {
-                    console.warn("Could not find associated vertex data for", material.name, "of", this.name);
-                } else {
-                    this.materials.push(new MaterialInstance(cache, textureHolder, material, attrs));
-                }
+                materials.push(new MaterialInstance(cache, textureHolder, material));
             } else {
                 // append null for consistent indices
-                this.materials.push(null);
+                materials.push(null);
             }
         }
         for (const shapeData of modelData.shapeData) {
-            const material = this.materials[shapeData.shape.materialIndex];
+            const material = materials[shapeData.shape.materialIndex];
             if (material) {
-                this.shapes.push(new ShapeInstance(shapeData, material));
+                this.shapes.push(new ShapeInstance(cache, shapeData, material));
             }
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        for (const matrix of this.shiftMatrices) {
+        for (const shiftMatrix of this.shiftMatrices) {
             for (const shape of this.shapes) {
-                shape.prepareToRender(device, renderInstManager, matrix, viewerInput);
+                shape.prepareToRender(device, renderInstManager, shiftMatrix, viewerInput);
             }
         }
     }
@@ -403,9 +390,10 @@ class TexSRT {
 class MaterialInstance {
     public gfxSamplers: GfxSampler[] = [];
     public textureMapping: TextureMapping[] = [];
-    private gfxProgram: GfxProgram;
-    private isTranslucent: boolean;
-    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    public samplerChannels: Map<string, ChannelSource[]> = new Map();
+    public isTranslucent: boolean;
+    public sortKey: number;
+    public megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private texCoordSRT0 = new TexSRT();
     private texCoordSRT1 = new TexSRT();
     // private texCoordSRT2 = new TexSRT();
@@ -414,9 +402,9 @@ class MaterialInstance {
     private yFlip = 0.0;
     private whiteBack = 0.0;
 
-    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, public material: FMAT, vertexAttributes: FVTX_VertexAttribute[]) {
-        for (let i = 0; i < material.samplerInfo.length; i++) {
-            const samplerInfo = material.samplerInfo[i];
+    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, public fmat: FMAT) {
+        for (let i = 0; i < fmat.samplerInfo.length; i++) {
+            const samplerInfo = fmat.samplerInfo[i];
             const gfxSampler = cache.createSampler({
                 wrapS: translateAddressMode(samplerInfo.addrModeU),
                 wrapT: translateAddressMode(samplerInfo.addrModeV),
@@ -429,33 +417,33 @@ class MaterialInstance {
             this.gfxSamplers.push(gfxSampler);
         }
 
-        assert(material.samplerInfo.length === material.textureName.length);
-        const samplers: Map<string, ChannelSource[]> = new Map();
-        this.textureMapping = nArray(material.shaderAssign.samplerAssign.size, () => new TextureMapping());
+        assert(fmat.samplerInfo.length === fmat.textureName.length);
+        this.textureMapping = nArray(fmat.shaderAssign.samplerAssign.size, () => new TextureMapping());
         let i = 0;
-        for (const samplerName of material.shaderAssign.samplerAssign.values()) {
-            const samplerIndex = material.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
+        for (const samplerName of fmat.shaderAssign.samplerAssign.values()) {
+            const samplerIndex = fmat.samplerInfo.findIndex((samplerInfo) => samplerInfo.name === samplerName);
             if (samplerIndex < 0) {
                 assert(false);
             }
             const shaderMapping = this.textureMapping[i++];
-            textureHolder.fillTextureMapping(shaderMapping, material.textureName[samplerIndex]);
+            textureHolder.fillTextureMapping(shaderMapping, fmat.textureName[samplerIndex]);
             shaderMapping.gfxSampler = this.gfxSamplers[samplerIndex];
 
-            const cs = textureHolder.channelSources.get(material.textureName[samplerIndex])!;
-            samplers.set(samplerName, cs);
+            const cs = textureHolder.channelSources.get(fmat.textureName[samplerIndex])!;
+            this.samplerChannels.set(samplerName, cs);
         }
 
-        const program = new OrigamiProgram(material, samplers, vertexAttributes);
-        this.gfxProgram = cache.createProgram(program);
+        // const program = new OrigamiProgram(material, this.samplerChannels, vertexAttributes);
+        // this.gfxProgram = cache.createProgram(program);
 
-        const blend = material.renderInfo.get("blend");
+        const blend = fmat.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
         this.isTranslucent = blendMode !== null;
+        this.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
 
         this.megaStateFlags = {
-            cullMode: translateCullMode(material),
+            cullMode: translateCullMode(fmat),
             depthWrite: !this.isTranslucent,
         };
         if (this.isTranslucent) {
@@ -466,13 +454,13 @@ class MaterialInstance {
             });
         }
 
-        const srt0 = material.shaderParam.find((p) => p.name === "texsrt0");
-        const srt1 = material.shaderParam.find((p) => p.name === "texsrt1");
+        const srt0 = fmat.shaderParam.find((p) => p.name === "texsrt0");
+        const srt1 = fmat.shaderParam.find((p) => p.name === "texsrt1");
         // const srt2 = material.shaderParam.find((p) => p.name === "texsrt2");
-        const glossiness = material.shaderParam.find((p) => p.name === "glossiness");
-        const alphaRef = material.shaderParam.find((p) => p.name === "alpha_ref");
-        const yFlip = material.shaderParam.find((p) => p.name === "yflip");
-        const whiteBack = material.shaderParam.find((p) => p.name === "white_back");
+        const glossiness = fmat.shaderParam.find((p) => p.name === "glossiness");
+        const alphaRef = fmat.shaderParam.find((p) => p.name === "alpha_ref");
+        const yFlip = fmat.shaderParam.find((p) => p.name === "yflip");
+        const whiteBack = fmat.shaderParam.find((p) => p.name === "white_back");
 
         if (srt0) {
             parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, srt0);
@@ -493,12 +481,6 @@ class MaterialInstance {
     }
 
     public fillTemplate(template: GfxRenderInst): void {
-        const materialLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        template.sortKey = makeSortKey(materialLayer, 0);
-        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        template.setGfxProgram(this.gfxProgram);
-        template.setMegaStateFlags(this.megaStateFlags);
-
         let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 20);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
         offs += this.texCoordSRT0.fillMatrix(d, offs);
@@ -512,10 +494,13 @@ const viewScratch = mat4.create();
 const shiftScratch = mat4.create();
 const bboxScratch = new AABB();
 class ShapeInstance {
-    private meshData: ShapeMeshData;
+    private gfxProgram: GfxProgram;
+    private meshData: MeshData;
 
-    constructor(public fshpData: ShapeData, private material: MaterialInstance) {
-        this.meshData = fshpData.meshData[0];
+    constructor(cache: GfxRenderCache, public shape: ShapeData, private material: MaterialInstance) {
+        this.meshData = shape.meshData[0];
+        const program = new OrigamiProgram(this.material.fmat, material.samplerChannels, shape.vertexData.rawAttributes);
+        this.gfxProgram = cache.createProgram(program);
     }
 
     private computeModelView(modelMatrix: mat4, viewerInput: ViewerRenderInput): mat4 {
@@ -526,7 +511,7 @@ class ShapeInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
-        mat4.mul(shiftScratch, modelMatrix, this.fshpData.shiftMatrix);
+        mat4.mul(shiftScratch, modelMatrix, this.shape.shiftMatrix);
         bboxScratch.transform(this.meshData.mesh.bbox, shiftScratch);
         if (viewerInput.camera.frustum.contains(bboxScratch)) {
             const template = renderInstManager.pushTemplate();
@@ -537,6 +522,10 @@ class ShapeInstance {
             offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
             offs += fillMatrix4x3(d, offs, this.computeModelView(shiftScratch, viewerInput));
 
+            template.sortKey = this.material.sortKey;
+            template.setSamplerBindingsFromTextureMappings(this.material.textureMapping);
+            template.setGfxProgram(this.gfxProgram);
+            template.setMegaStateFlags(this.material.megaStateFlags);
             this.material.fillTemplate(template);
 
             const renderInst = renderInstManager.newRenderInst();
