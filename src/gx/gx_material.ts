@@ -506,7 +506,7 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateColorChannel(chan: ColorChannelControl, outputName: string, i: number) {
+    private generateColorChannel(chan: ColorChannelControl, i: number) {
         const matSource = this.generateMaterialSource(chan, i);
         const ambSource = this.generateAmbientSource(chan, i);
 
@@ -520,52 +520,27 @@ export class GX_Program extends DeviceProgram {
             const amb = `u_ColorAmbReg[${i}]`;
             const mat = `u_ColorMatReg[${i}]`;
             const fudged = this.hacks.lightingFudge({ vtx, amb, mat, ambSource, matSource });
-            return `${outputName} = vec4(${fudged}); // Fudge!`;
+            return `vec4(${fudged}); // Fudge!`;
         }
 
-        let generateLightAccum = ``;
         if (lightingEnabled) {
-            generateLightAccum = `
-    t_LightAccum = ${ambSource};`;
-
             if (chan.litMask !== 0)
                 assert(materialHasLightsBlock(this.material));
-
-            for (let j = 0; j < 8; j++) {
-                if (!(chan.litMask & (1 << j)))
-                    continue;
-
-                const lightName = `u_LightParams[${j}]`;
-                generateLightAccum += `
-    t_LightDelta = ${lightName}.Position.xyz - v_Position.xyz;
-    t_LightDeltaDist2 = dot(t_LightDelta, t_LightDelta);
-    t_LightDeltaDist = sqrt(t_LightDeltaDist2);
-    t_LightDeltaDir = t_LightDelta / t_LightDeltaDist;
-${this.generateLightAttnFn(chan, lightName)}
-    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * t_Attenuation * ${lightName}.Color;
-`;
-            }
+            return `${matSource} * clamp(${ambSource} + ApplyLightChannel(${chan.litMask}, LightingParams(${chan.attenuationFunction}, ${chan.diffuseFunction}, t_Position.xyz, t_Normal.xyz)), 0.0, 1.0)`;
         } else {
-            // Without lighting, everything is full-bright.
-            generateLightAccum += `
-    t_LightAccum = vec4(1.0);`;
+            return matSource;
         }
-
-        return `${generateLightAccum}
-    ${outputName} = ${matSource} * clamp(t_LightAccum, 0.0, 1.0);`.trim();
     }
 
     private generateLightChannel(lightChannel: LightChannelControl, outputName: string, i: number) {
         if (colorChannelsEqual(lightChannel.colorChannel, lightChannel.alphaChannel)) {
             return `
-    ${this.generateColorChannel(lightChannel.colorChannel, outputName, i)}`;
+    ${outputName} = ${this.generateColorChannel(lightChannel.colorChannel, i)};`;
         } else {
             return `
-    ${this.generateColorChannel(lightChannel.colorChannel, `t_ColorChanTemp`, i)}
-    ${outputName}.rgb = t_ColorChanTemp.rgb;
-
-    ${this.generateColorChannel(lightChannel.alphaChannel, `t_ColorChanTemp`, i)}
-    ${outputName}.a = t_ColorChanTemp.a;`;
+    
+    ${outputName}.rgb = (${this.generateColorChannel(lightChannel.colorChannel, i)}).rgb;
+    ${outputName}.a = (${this.generateColorChannel(lightChannel.alphaChannel, i)}).a;`;
         }
     }
 
@@ -1442,6 +1417,60 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
     return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
 }
 
+struct LightingParams {
+    int AttnFn;
+    int DiffFn;
+    vec3 Position;
+    vec3 Normal;
+};
+
+vec4 ApplyLight(in Light t_Light, in LightingParams t_LightingParams) {
+    vec3 t_LightDelta = t_Light.Position.xyz - t_LightingParams.Position.xyz;
+    float t_LightDeltaDist2 = dot(t_LightDelta, t_LightDelta);
+    float t_LightDeltaDist = sqrt(t_LightDeltaDist2);
+    vec3 t_LightDeltaDir = t_LightDelta / t_LightDeltaDist;
+
+    float t_Attenuation = 1.0;
+    if (t_LightingParams.AttnFn == ${GX.AttenuationFunction.SPOT}) {
+        float t_Attenuation = max(0.0, dot(t_LightDeltaDir, t_Light.Direction.xyz));
+        float t_CosAtten = max(0.0, ApplyAttenuation(t_Light.CosAtten.xyz, t_Attenuation));
+        float t_DistAtten = dot(t_Light.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2));
+        t_Attenuation = max(0.0, t_CosAtten / t_DistAtten);
+    } else if (t_LightingParams.AttnFn == ${GX.AttenuationFunction.SPEC}) {
+        float t_Attn = (dot(t_LightingParams.Normal.xyz, t_LightDeltaDir) >= 0.0) ? max(0.0, dot(t_LightingParams.Normal.xyz, t_Light.Direction.xyz)) : 0.0;
+        float t_CosAtten = ApplyAttenuation(t_Light.CosAtten.xyz, t_Attenuation);
+        vec3 t_DistAttenV = t_Light.DistAtten.xyz;
+        if (t_LightingParams.DiffFn != ${GX.DiffuseFunction.NONE})
+            t_DistAttenV = normalize(t_DistAttenV);
+        float t_DistAtten = max(0.0, ApplyAttenuation(t_DistAttenV, t_Attenuation));
+        t_Attenuation = max(0.0, t_CosAtten / t_DistAtten);
+    }
+
+    float t_Diffuse = 1.0;
+    if (t_LightingParams.AttnFn != ${GX.AttenuationFunction.SPEC}) {
+        if (t_LightingParams.DiffFn == ${GX.DiffuseFunction.SIGN})
+            t_Diffuse = dot(t_LightingParams.Normal.xyz, t_LightDeltaDir);
+        else if (t_LightingParams.DiffFn == ${GX.DiffuseFunction.CLAMP})
+            t_Diffuse = max(dot(t_LightingParams.Normal.xyz, t_LightDeltaDir), 0.0);
+    }
+
+    return t_Diffuse * t_Attenuation * t_Light.Color;
+}
+
+vec4 ApplyLightChannel(in int t_LightMask, in LightingParams t_LightingParams) {
+${materialHasLightsBlock(this.material) ? `
+    vec4 t_LightAccum = vec4(0.0);
+    for (int i = 0; i < 8; i++) {
+        if ((t_LightMask & (1 << i)) != 0) {
+            t_LightAccum += ApplyLight(u_LightParams[i], t_LightingParams);
+        }
+    }
+` : `
+    vec4 t_LightAccum = vec4(0.0);
+`}
+    return t_LightAccum;
+}
+
 ${this.generateExtraVertexGlobal()}
 
 void main() {
@@ -1449,10 +1478,6 @@ void main() {
     v_Position = t_Position;
     vec3 t_Normal = ${this.usesNormal() ? this.generateMul(`a_Normal`, false, true) : `vec3(0.0)`};
 
-    vec4 t_LightAccum;
-    vec3 t_LightDelta, t_LightDeltaDir;
-    float t_LightDeltaDist2, t_LightDeltaDist, t_Attenuation;
-    vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_Position, 1.0);
