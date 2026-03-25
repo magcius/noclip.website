@@ -59,14 +59,13 @@ export class OrigamiResources {
             if (name.startsWith("Mobj_KingSeal")) {
                 this.loadBFRESTextures(device, name, bfres, ".en-US.bntx");
             }
-            for (const model of bfres.fmdl) {
-                const config = getOrigamiModelConfig(model.name);
-                this.modelData.set(model.name, new ModelData(this.renderCache, model, config));
-                for (const material of model.fmat) {
-                    for (const t of material.textureName) {
-                        if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) {
-                            this.requestedCommonTextures.push(t);
-                        }
+            const model = bfres.fmdl[0];
+            const config = getOrigamiModelConfig(model.name);
+            this.modelData.set(model.name, new ModelData(this.renderCache, bfres, config));
+            for (const material of model.fmat) {
+                for (const t of material.textureName) {
+                    if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) {
+                        this.requestedCommonTextures.push(t);
                     }
                 }
             }
@@ -315,11 +314,17 @@ Fix missing textures
 Figure out NPC rotation degree logic (probably just one axis)
 Add level variants that share the same base BFRES file (e.g. sensor lab offices and desert, seems to use .probe files)
 Add level states (i.e. post-game, before or after story events, etc)
+Add ability to hide specific objects from level (rather than blindly rendering all of them)
 Add toggleable render layers by model name
 Decide how to handle different mobj dispos files
 Investigate eddy river webgl error
 Add back sobjs and npcs
 Fix transparency on certain textures
+Figure out how water works (bone user data for mask, have to hardcode the color?)
+Add bone visiblity animations
+Add material/texture animations
+Add configurable animation speed (seems to vary, hardcoding to 60 FPS makes some too fast)
+Add save states
 */
 
 const pathBase = "PMTOK";
@@ -341,7 +346,9 @@ class PMTOKScene implements SceneDesc {
         let config = getOrigamiLevelConfig(this.id);
         if (!config) {
             // battle levels don't have configs for now
-            console.warn("No level config found for", this.id);
+            if (this.id.startsWith("W")) {
+                console.warn("No level config found for", this.id);
+            }
             config = { mobj: false, sobj: false, aobj: false, item: false, npc: false };
         }
 

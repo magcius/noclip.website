@@ -1,13 +1,15 @@
 import { mat4 } from "gl-matrix";
-import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FMDL } from "../fres_nx/bfres";
+import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA } from "../fres_nx/bfres";
 import { AttributeFormat, getChannelFormat, getTypeFormat, IndexFormat } from "../fres_nx/nngfx_enum";
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxDevice, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxInputLayout, GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { computeModelMatrixSRT } from "../MathHelpers";
 import { OrigamiModelConfig } from "./model_config";
+import { computeModelMatrixSRT } from "../MathHelpers";
+
+// Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
 interface ConvertedVertexAttribute {
     format: GfxFormat;
@@ -19,12 +21,12 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     switch (attributeFormat) {
         case AttributeFormat._8_Uint:
             return GfxFormat.U8_R;
+        case AttributeFormat._8_8_Uint:
+            return GfxFormat.U8_RG;
         case AttributeFormat._8_8_Unorm:
             return GfxFormat.U8_RG_NORM;
         case AttributeFormat._8_8_Snorm:
             return GfxFormat.S8_RG_NORM;
-        case AttributeFormat._8_8_Uint:
-            return GfxFormat.U32_RG;
         case AttributeFormat._16_Uint:
             return GfxFormat.U16_R;
         case AttributeFormat._8_8_8_8_Unorm:
@@ -40,11 +42,13 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         case AttributeFormat._16_16_Snorm:
             return GfxFormat.S16_RG_NORM;
         case AttributeFormat._16_16_Uint:
-            return GfxFormat.U32_RG; // right gfxformat?
+            console.warn("CHECK ATTR FORMAT GFXFORMAT");
+            return GfxFormat.U16_RG; // right gfxformat?
         case AttributeFormat._16_16_Float:
             return GfxFormat.F16_RG;
         case AttributeFormat._16_16_16_16_Uint:
-            return GfxFormat.U16_RGBA_NORM; // causes webgl errors, confirm if right
+            console.warn("CHECK ATTR FORMAT GFXFORMAT");
+            return GfxFormat.U16_RGBA; // causes webgl errors, confirm if right
         case AttributeFormat._16_16_16_16_Float:
             return GfxFormat.F16_RGBA;
         case AttributeFormat._32_32_Float:
@@ -153,7 +157,7 @@ export class VertexData {
     }
 }
 
-export class ShapeMeshData {
+export class MeshData {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
@@ -177,32 +181,19 @@ export class ShapeMeshData {
 }
 
 export class ShapeData {
-    public meshData: ShapeMeshData[] = [];
-    public shiftMatrix: mat4;
+    public meshData: MeshData[] = [];
+    public boneMatrixLength: number;
+    public vertexSkinWeightCount;
 
-    constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: VertexData, skeleton: FSKL_Bone[], boneIndex: number) {
+    constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: VertexData, skeleton: FSKL) {
         for (const mesh of shape.mesh) {
-            this.meshData.push(new ShapeMeshData(cache, mesh, vertexData));
+            this.meshData.push(new MeshData(cache, mesh, vertexData));
         }
-        this.shiftMatrix = this.computeShiftMatrix(skeleton, boneIndex);
-    }
-
-    private computeShiftMatrix(skeleton: FSKL_Bone[], boneIndex: number): mat4 {
-        // Adapted from TMSFE's code
-        const bone = skeleton[boneIndex];
-        const boneSRT: mat4 = mat4.create();
-        computeModelMatrixSRT(boneSRT,
-            bone.scale[0], bone.scale[1], bone.scale[2],
-            bone.rotation[0], bone.rotation[1], bone.rotation[2],
-            bone.translation[0], bone.translation[1], bone.translation[2],
-        );
-        if (bone.parentIndex === -1) {
-            return boneSRT;
-        } else {
-            const shift: mat4 = mat4.create();
-            mat4.multiply(shift, this.computeShiftMatrix(skeleton, bone.parentIndex), boneSRT);
-            return shift;
+        this.boneMatrixLength = 1;
+        if (shape.vertexSkinWeightCount > 0) {
+            this.boneMatrixLength = skeleton.smoothRigidIndices.length;
         }
+        this.vertexSkinWeightCount = shape.vertexSkinWeightCount;
     }
 
     public destroy(device: GfxDevice): void {
@@ -213,10 +204,44 @@ export class ShapeData {
 }
 
 export class ModelData {
+    public model: FMDL;
+    public skeletonAnimation: FSKA | undefined;
     public shapeData: ShapeData[] = [];
+    public bones: FSKL_Bone[];
+    public currentSkeletonAnimationFrame: number = 0;
+    public skeletonAnimationBoneIndices: number[] = [];
+    public smoothRigidMatrices: mat4[] = [];
 
-    constructor(cache: GfxRenderCache, public model: FMDL, public config: OrigamiModelConfig | undefined) {
-        for (const shape of model.fshp) {
+    constructor(cache: GfxRenderCache, public bfres: FRES, public config: OrigamiModelConfig | undefined) {
+        this.model = bfres.fmdl[0];
+        if (config && config.skeletonAnimation) {
+            let animation = undefined;
+            for (const ska of bfres.fska) {
+                if (ska.name === config.skeletonAnimation) {
+                    animation = ska;
+                    break;
+                }
+            }
+            if (!animation) {
+                console.warn("Could not find skeleton animation", config.skeletonAnimation, "in", this.model.name);
+            }
+            this.skeletonAnimation = animation;
+        }
+
+        this.bones = this.model.fskl.bones;
+        if (this.skeletonAnimation) {
+            for (let i = 0; i < this.bones.length; i++) {
+                let index = -1;
+                const animation = this.skeletonAnimation.boneAnimations.find((f) => f.name === this.bones[i].name);
+                if (animation) {
+                    index = this.skeletonAnimation.boneAnimations.indexOf(animation);
+                }
+                this.skeletonAnimationBoneIndices.push(index);
+            }
+        }
+        this.computeSmoothRigidMatrices();
+
+        for (const shape of this.model.fshp) {
             if (config) {
                 if (config.shapeWhitelist && !config.shapeWhitelist.includes(shape.name)) {
                     continue;
@@ -225,8 +250,22 @@ export class ModelData {
                     continue;
                 }
             }
-            const vd = new VertexData(cache.device, model.fvtx[shape.vertexIndex]);
-            this.shapeData.push(new ShapeData(cache, shape, vd, model.fskl.bones, shape.boneIndex));
+            const vd = new VertexData(cache.device, this.model.fvtx[shape.vertexIndex]);
+            this.shapeData.push(new ShapeData(cache, shape, vd, this.model.fskl));
+        }
+    }
+
+    public computeSmoothRigidMatrices(): void {
+        this.smoothRigidMatrices = [];
+        for (let i = 0; i < this.model.fskl.smoothRigidIndices.length; i++) {
+            const shiftMatrix = this.computeShiftMatrix(this.bones, this.model.fskl.smoothRigidIndices[i]);
+            if (i < this.model.fskl.boneLocalFromBindPoseMatrices.length) {
+                const scratch: mat4 = mat4.create();
+                mat4.multiply(scratch, shiftMatrix, this.model.fskl.boneLocalFromBindPoseMatrices[i])
+                this.smoothRigidMatrices.push(scratch);
+            } else {
+                this.smoothRigidMatrices.push(shiftMatrix);
+            }
         }
     }
 
@@ -234,6 +273,23 @@ export class ModelData {
         for (const sd of this.shapeData) {
             sd.vertexData.destroy(device);
             sd.destroy(device);
+        }
+    }
+
+    private computeShiftMatrix(bones: FSKL_Bone[], boneIndex: number): mat4 {
+        const bone = bones[boneIndex];
+        const srt: mat4 = mat4.create();
+        computeModelMatrixSRT(srt,
+            bone.scale[0], bone.scale[1], bone.scale[2],
+            bone.rotation[0], bone.rotation[1], bone.rotation[2],
+            bone.translation[0], bone.translation[1], bone.translation[2],
+        );
+        if (bone.parentIndex === -1) {
+            return srt;
+        } else {
+            const shift: mat4 = mat4.create();
+            mat4.multiply(shift, this.computeShiftMatrix(bones, bone.parentIndex), srt);
+            return shift;
         }
     }
 }

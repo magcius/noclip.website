@@ -1,14 +1,12 @@
-import { mat4 } from 'gl-matrix';
-import { MathConstants } from '../MathHelpers.js';
-import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix } from '../Camera.js';
-import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX_VertexAttribute, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
+import { mat4, vec3, vec4 } from 'gl-matrix';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
+import { Curve, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FSKL_Bone, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
 import { ChannelSource, FilterMode, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, nArray } from '../util.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
@@ -16,6 +14,10 @@ import { ModelData, ShapeData, MeshData } from './render_data.js';
 import { ViewerRenderInput } from "../viewer.js";
 import { OrigamiTextureHolder } from './texture.js';
 import { AABB } from '../Geometry.js';
+import { getPointCubic } from '../Spline.js';
+import { OrigamiProgram } from './shader.js';
+
+// Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
     switch (addrMode) {
@@ -83,231 +85,25 @@ function translateCullMode(material: FMAT): GfxCullMode {
 
 function translateBlendMode(blendMode: string): GfxBlendMode {
     if (blendMode === "transadd" || blendMode === "trans" || blendMode === "blend") {
+        // simplify to just "add" for anything semi-transparent
         return GfxBlendMode.Add;
     } else {
         throw `Unknown blend mode ${blendMode}`;
     }
 }
 
-const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
-    ["_p0", "vec3"], // position
-    ["_n0", "vec4"], // normal
-    ["_c0", "vec4"], // color, this is always black (???) and extremely rare, just use albedo instead
-    ["_t0", "vec4"], // tangent
-    ["_b0", "vec4"], // bitangent
-    ["_u0", "vec2"], // uv 1
-    ["_u1", "vec2"], // uv 2
-    ["_i0", "vec4"], // index, varying sizes, assume vec4
-    ["_w0", "vec4"], // weight, varying sizes, assume vec4
-    ["albedo", ""], // Same format as UVs but doesn't have any data (???)
-    ["detail", ""], // Same format as UVs but doesn't have any data (???)
-    ["lightmap", ""] // Same format as UVs but doesn't have any data (???)
-]);
-
-export class OrigamiProgram extends DeviceProgram {
-    public static ub_ShapeParams = 0;
-    public static ub_MaterialParams = 1;
-
-    constructor(private fmat: FMAT, private samplers: Map<string, ChannelSource[]>, private vertexAttributes: FVTX_VertexAttribute[]) {
-        super();
-        this.name = this.fmat.name;
-    }
-
-    private getVertAttributeDefs(): string {
-        let s = "";
-        for (let i = 0; i < this.vertexAttributes.length; i++) {
-            const a = this.vertexAttributes[i].name;
-            const type = ATTRIBUTE_MAP.get(a);
-            if (type === undefined) {
-                console.warn("Unknown attribute", a, "for", this.fmat.name);
-            } else if (type.length > 0) {
-                s += `layout(location = ${i}) in ${type} ${a};\n`;
-            }
-        }
-        return s;
-    }
-
-    private getSamplerDefs(): string {
-        let s = "";
-        for (const sampler of this.samplers.keys()) {
-            s += `uniform sampler2D u${sampler};\n`;
-        }
-        return s;
-    }
-
-    private getRemappedColor(name: string, channels: ChannelSource[]): string {
-        let s = "vec4(";
-        for (const cs of channels) {
-            switch (cs) {
-                case ChannelSource.Red:
-                    s += name + ".r" + ", ";
-                    break;
-                case ChannelSource.Green:
-                    s += name + ".g" + ", ";
-                    break;
-                case ChannelSource.Blue:
-                    s += name + ".b" + ", ";
-                    break;
-                case ChannelSource.Alpha:
-                    s += name + ".a" + ", ";
-                    break;
-                case ChannelSource.One:
-                    s += "1.0, ";
-                    break;
-                default:
-                    s += "0.0, ";
-                    break;
-            }
-        }
-        return s.substring(0, s.length - 2) + ")";
-    }
-
-    private getTextureColor(samplerName: string, outName: string, uv: string): string {
-        let s = "texture(SAMPLER_2D(u" + samplerName + "), " + uv + ")";
-        const channels = this.samplers.get(samplerName);
-        if (!channels) {
-            console.warn("Could not find sampler", samplerName, "for", this.fmat.name);
-            return "vec4 " + outName + " = vec4(0.0, 0.0, 0.0, 1.0)";
-        }
-        assert(channels.length === 4);
-        if (channels[0] === ChannelSource.Red && channels[1] === ChannelSource.Green && channels[2] === ChannelSource.Blue && channels[3] === ChannelSource.Alpha) {
-            // don't waste frame time remapping most textures that are already RGBA
-            return "vec4 " + outName + " = " + s;
-        } else {
-            const remap = this.getRemappedColor("t" + samplerName, channels);
-            return "vec4 t" + samplerName + " = " + s + ";\nvec4 " + outName + " = " + remap;
-        }
-    }
-
-    private getOptionBoolean(optionName: string, dneValue: boolean = false): boolean {
-        const optionValue = this.fmat.shaderAssign.shaderOption.get(optionName);
-        if (optionValue === undefined) {
-            return dneValue;
-        }
-        assert(optionValue === "0" || optionValue === "1");
-        return optionValue === "1";
-    }
-
-    public getAttribute(name: string, dneValue: string): string {
-        for (const a of this.vertexAttributes) {
-            if (a.name === name) {
-                return name;
-            }
-        }
-        return dneValue;
-    }
-
-    public override both = `
-precision highp float;
-
-${GfxShaderLibrary.MatrixLibrary}
-
-layout(std140) uniform ub_ShapeParams {
-    Mat4x4 u_Projection;
-    Mat3x4 u_ModelView;
-};
-
-layout(std140) uniform ub_MaterialParams {
-    Mat2x4 u_TexCoordSRT0;
-    Mat2x4 u_TexCoordSRT1;
-    vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
-};
-
-${this.getSamplerDefs()}
-
-#ifdef VERT
-${this.getVertAttributeDefs()}
-
-out vec4 v_NormalWorld;
-out vec4 v_TangentWorld;
-out vec4 v_BitangentWorld;
-out vec2 v_TexCoord0;
-out vec2 v_TexCoord1;
-out vec2 v_TexCoord2;
-out vec4 v_Floats;
-
-void main() {
-    vec3 t_PositionView = UnpackMatrix(u_ModelView) * vec4(_p0, 1.0);
-    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
-    v_NormalWorld = _n0;
-    v_TangentWorld = ${this.getAttribute('_t0', 'vec4(0.0)')};
-    v_BitangentWorld = ${this.getAttribute('_b0', 'vec4(0.0)')};
-    v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(${this.getAttribute('_u0', 'vec2(0.0)')}, 1.0, 1.0);
-    v_TexCoord1 = ${this.getAttribute('_u1', this.getAttribute('_u0', 'vec2(0.0)'))};
-    v_TexCoord2 = UnpackMatrix(u_TexCoordSRT1) * vec4(v_TexCoord1, 1.0, 1.0);
-    v_Floats = u_Floats;
-}
-#endif
-
-#ifdef FRAG
-in vec4 v_NormalWorld;
-in vec4 v_TangentWorld;
-in vec4 v_BitangentWorld;
-in vec2 v_TexCoord0;
-in vec2 v_TexCoord1;
-in vec2 v_TexCoord2;
-in vec4 v_Floats;
-
-void main() {
-    ${this.getTextureColor('_a0', 'color', 'v_TexCoord0')};
-
-    ${this.getOptionBoolean('alpha_test') ? `
-    if (color.a < v_Floats.y) {
-        discard;
-    }` : ``}
-
-    ${this.getOptionBoolean('use_normal_map') ? `
-    vec3 t_LightDir = vec3(-0.5, -0.5, -1);
-    ${this.getOptionBoolean('metal_mask') ? /* Crude attempt at foil effect, fine for now but a little too bright */`
-    ${this.getTextureColor('_n0', 'normalColor', 'v_TexCoord1')};
-    vec3 normal = normalize(vec3(normalColor.rg * 2.0 - 1.0, normalColor.b));
-    float diffuse = max(dot(normal, normalize(t_LightDir)), 0.0);
-    float spec = pow(max(dot(normal, normalize(t_LightDir + vec3(0.0, 0.0, 1.0))), 0.0), 64.0);
-    color.rgb *= (diffuse + 0.3) + (spec * 0.8);
-    `: /* Adapted from Odyssey's shader */`
-    ${this.getTextureColor('_n0', 'normalColor', 'v_TexCoord0')};
-    vec3 t_LocalNormal = vec3(normalColor.rg, 0);
-    t_LocalNormal.z = sqrt(clamp(1.0 - t_LocalNormal.x*t_LocalNormal.x - t_LocalNormal.y*t_LocalNormal.y, 0.0, 1.0));
-    vec3 t_NormalDir = (t_LocalNormal.x * normalize(v_TangentWorld.xyz) + t_LocalNormal.y * normalize(v_BitangentWorld.xyz) + t_LocalNormal.z * v_NormalWorld.xyz);
-    float t_LightIntensity = clamp(dot(normalize(t_LightDir), -t_NormalDir), 0.0, 1.0);
-    t_LightIntensity = mix(0.6, 1.0, t_LightIntensity);
-    color.rgb *= t_LightIntensity;`}
-    ` : ''}
-
-    ${this.getOptionBoolean('use_occlusion_map') || this.getOptionBoolean('use_bakeshadow_map') ? `
-    ${this.getTextureColor('_m0', 'materialColor', 'v_TexCoord1')};
-    ` : ''}
-    
-    float ambientOcclusion = 1.0;
-    ${this.getOptionBoolean('use_occlusion_map') ? `
-    ambientOcclusion = mix(1.0, materialColor.r, 0.7);
-    ` : ''}
-
-    float bakedShadow = 1.0;
-    ${this.getOptionBoolean('use_bakeshadow_map') ? `
-    bakedShadow = mix(1.0, materialColor.g, 0.55);
-    ` : ''}
-
-    ${this.getTextureColor('_d0', 'detailColor', 'v_TexCoord2')};
-
-    color.rgb *= ambientOcclusion * bakedShadow * mix(1.0, detailColor.b, 0.55);
-    color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
-    gl_FragColor = color;
-}
-#endif
-`;
-}
-
 export class OrigamiModelRenderer {
-    public shapes: ShapeInstance[] = [];
-    public shiftMatrices: mat4[] = [];
     public name: string;
+    public shapeRenderers: ShapeRenderer[] = [];
+    public shiftMatrices: mat4[] = [];
 
-    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, modelData: ModelData) {
-        this.name = modelData.model.name;
+    constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, private modelData: ModelData) {
+        this.name = this.modelData.model.name;
+
+        // build materials, filter by config and name (mainly shadows/lighting are ignored)
         const materials: (MaterialInstance | null)[] = [];
-        for (let matIndex = 0; matIndex < modelData.model.fmat.length; matIndex++) {
-            const material = modelData.model.fmat[matIndex];
+        for (let matIndex = 0; matIndex < this.modelData.model.fmat.length; matIndex++) {
+            const material = this.modelData.model.fmat[matIndex];
             const shaderAssignExec = material.userData.get("__ShaderAssignExec");
             let visible = true;
             if (shaderAssignExec) {
@@ -321,16 +117,16 @@ export class OrigamiModelRenderer {
                 // sometimes the casing is inconsistent for materials (whoops!)
                 visible = false;
             }
-            if (visible && modelData.config) {
-                if (modelData.config.materialWhitelist && !modelData.config.materialWhitelist.includes(material.name)) {
+            if (visible && this.modelData.config) {
+                if (this.modelData.config.materialWhitelist && !this.modelData.config.materialWhitelist.includes(material.name)) {
                     visible = false;
                 }
-                if (modelData.config.materialBlacklist && modelData.config.materialBlacklist.includes(material.name)) {
+                if (this.modelData.config.materialBlacklist && this.modelData.config.materialBlacklist.includes(material.name)) {
                     visible = false;
                 }
             }
             if (visible) {
-                // patch texture names
+                // patch texture names with model name (since some models have different textures under the same internal name)
                 for (let i = 0; i < material.textureName.length; i++) {
                     if (!material.textureName[i].startsWith("Cmn_")) material.textureName[i] = `${this.name}_${material.textureName[i]}`;
                 }
@@ -340,20 +136,147 @@ export class OrigamiModelRenderer {
                 materials.push(null);
             }
         }
-        for (const shapeData of modelData.shapeData) {
+
+        // build shape renderers and pre-compute their static SRT
+        for (const shapeData of this.modelData.shapeData) {
             const material = materials[shapeData.shape.materialIndex];
             if (material) {
-                this.shapes.push(new ShapeInstance(cache, shapeData, material));
+                const sr = new ShapeRenderer(cache, shapeData, material, this.modelData.skeletonAnimation !== undefined);
+                sr.staticBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeData.shape.boneIndex);
+                this.shapeRenderers.push(sr);
             }
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        for (const shiftMatrix of this.shiftMatrices) {
-            for (const shape of this.shapes) {
-                shape.prepareToRender(device, renderInstManager, shiftMatrix, viewerInput);
+        let ranAnimations = false;
+        for (let i = 0; i < this.shiftMatrices.length; i++) {
+            const shiftMatrix = this.shiftMatrices[i];
+            for (const shapeRenderer of this.shapeRenderers) {
+                // patch renderer bbox list on the first frame since length is not known at creation (should be better way to do this)
+                if (shapeRenderer.bboxes.length !== this.shiftMatrices.length) {
+                    shapeRenderer.bboxes = Array(this.shiftMatrices.length).fill(undefined);
+                }
+
+                let boneMatrices = this.modelData.smoothRigidMatrices;
+                if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
+                    if (this.modelData.skeletonAnimation) {
+                        boneMatrices = [this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.boneIndex)];
+                    } else {
+                        // use pre-computed matrix to save CPU time on static models
+                        boneMatrices = [shapeRenderer.staticBoneMatrix];
+                    }
+                }
+
+                // this is very CPU-expensive to call every frame, but have to?
+                const bbox = this.getBoundingBox(i, boneMatrices, shiftMatrix, shapeRenderer);
+
+                if (viewerInput.camera.frustum.contains(bbox)) {
+                    if (!ranAnimations && this.modelData.skeletonAnimation) {
+                        // advance animations for this frame only once
+                        this.runAnimations(viewerInput);
+                        ranAnimations = true;
+                    }
+                    shapeRenderer.prepareToRender(device, renderInstManager, shiftMatrix, boneMatrices, bbox, viewerInput);
+                }
             }
         }
+    }
+    
+    private getBoundingBox(i: number, boneMatrices: mat4[], shiftMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
+        const outBBox = new AABB();
+        const baseBBox = shapeRenderer.shapeData.meshData[0].mesh.bbox;
+        if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
+            if (this.modelData.skeletonAnimation || !shapeRenderer.bboxes[i]) {
+                // called once on the first frame for static or each frame for animated
+                const mat = mat4.create();
+                mat4.multiply(mat, shiftMatrix, boneMatrices[0]);
+                outBBox.transform(baseBBox, mat);
+                shapeRenderer.bboxes[i] = outBBox;
+            }
+            return shapeRenderer.bboxes[i];
+        } else {
+            for (let i = 0; i < shapeRenderer.shapeData.shape.skinBoneIndices.length; i++) {
+                const mat = mat4.create();
+                mat4.multiply(mat, shiftMatrix, this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.skinBoneIndices[i]));
+                const bbox = new AABB();
+                bbox.transform(baseBBox, mat);
+                outBBox.union(outBBox, bbox);
+            }
+            return outBBox;
+        }
+    }
+
+    private computeShiftMatrix(bones: FSKL_Bone[], boneIndex: number): mat4 {
+        const bone = bones[boneIndex];
+        const srt: mat4 = mat4.create();
+        computeModelMatrixSRT(srt,
+            bone.scale[0], bone.scale[1], bone.scale[2],
+            bone.rotation[0], bone.rotation[1], bone.rotation[2],
+            bone.translation[0], bone.translation[1], bone.translation[2],
+        );
+        if (bone.parentIndex === -1) {
+            return srt;
+        } else {
+            const shift: mat4 = mat4.create();
+            mat4.multiply(shift, this.computeShiftMatrix(bones, bone.parentIndex), srt);
+            return shift;
+        }
+    }
+
+    private runAnimations(viewerInput: ViewerRenderInput) {
+        this.modelData.currentSkeletonAnimationFrame += viewerInput.deltaTime * 0.03; // game only runs at 30 FPS... needs a S2E...
+        this.modelData.currentSkeletonAnimationFrame = this.modelData.currentSkeletonAnimationFrame % this.modelData.skeletonAnimation!.frameCount;
+        this.modelData.bones = this.getBones(this.modelData.currentSkeletonAnimationFrame);
+        this.modelData.computeSmoothRigidMatrices();
+    }
+
+    private getBones(frame: number): FSKL_Bone[] {
+        const bones: FSKL_Bone[] = Array(this.modelData.model.fskl.bones.length);
+        for (let boneIndex = 0; boneIndex < this.modelData.model.fskl.bones.length; boneIndex++) {
+            const bone = this.modelData.model.fskl.bones[boneIndex];
+            const animationIndex = this.modelData.skeletonAnimationBoneIndices[boneIndex];
+            if (animationIndex === -1) {
+                bones[boneIndex] = bone;
+                continue;
+            }
+            const srt: number[] = [];
+            const animation = this.modelData.skeletonAnimation!.boneAnimations[animationIndex];
+            let curveIndex = 0;
+            let flags = animation.flags >> 6;
+            for (let i = 0; i < 10; i++) {
+                if (flags & 1) {
+                    srt.push(this.getKeyframe(animation.curves[curveIndex++], frame));
+                } else {
+                    srt.push(animation.initialValues[i]);
+                }
+                flags >>= 1;
+            }
+            bone.scale = vec3.fromValues(srt[0], srt[1], srt[2]);
+            bone.rotation = vec4.fromValues(srt[3], srt[4], srt[5], 1.0);
+            bone.translation = vec3.fromValues(srt[7], srt[8], srt[9]);
+            bones[boneIndex] = bone;
+        }
+        return bones;
+    }
+
+    private getKeyframe(curve: Curve, currentFrame: number): number {
+        for (let i = 0; i < curve.frames.length; i++) {
+            if (currentFrame === curve.frames[i]) {
+                return curve.keys[i][0];
+            } else if (currentFrame < curve.frames[i]) {
+                const previousFrame = curve.frames[i - 1];
+                const keys = curve.keys[i - 1];
+                if (keys) {
+                    return getPointCubic(vec4.fromValues(keys[3], keys[2], keys[1], keys[0]), (currentFrame - previousFrame) / (curve.frames[i] - previousFrame));
+                } else {
+                    // some animations can have undefined keys at the end for whatever reason, but it's rare
+                    return 0;
+                }
+            }
+        }
+        console.warn("Could not find keyframe value for", this.name);
+        return 0;
     }
 }
 
@@ -433,9 +356,6 @@ class MaterialInstance {
             this.samplerChannels.set(samplerName, cs);
         }
 
-        // const program = new OrigamiProgram(material, this.samplerChannels, vertexAttributes);
-        // this.gfxProgram = cache.createProgram(program);
-
         const blend = fmat.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
@@ -490,51 +410,48 @@ class MaterialInstance {
     }
 }
 
-const viewScratch = mat4.create();
-const shiftScratch = mat4.create();
-const bboxScratch = new AABB();
-class ShapeInstance {
+class ShapeRenderer {
+    public bboxes: (AABB | undefined)[] = [];
+    public staticBoneMatrix: mat4;
     private gfxProgram: GfxProgram;
     private meshData: MeshData;
 
-    constructor(cache: GfxRenderCache, public shape: ShapeData, private material: MaterialInstance) {
-        this.meshData = shape.meshData[0];
-        const program = new OrigamiProgram(this.material.fmat, material.samplerChannels, shape.vertexData.rawAttributes);
+    constructor(cache: GfxRenderCache, public shapeData: ShapeData, private material: MaterialInstance, isSkeletonAnimated: boolean = false) {
+        this.meshData = shapeData.meshData[0];
+        const program = new OrigamiProgram(
+            this.material.fmat.name, this.material.fmat.shaderAssign,
+            material.samplerChannels,
+            shapeData.boneMatrixLength, isSkeletonAnimated ? shapeData.vertexSkinWeightCount : -1,
+            shapeData.vertexData.rawAttributes
+        );
         this.gfxProgram = cache.createProgram(program);
     }
 
-    private computeModelView(modelMatrix: mat4, viewerInput: ViewerRenderInput): mat4 {
-        const viewMatrix = viewScratch;
-        computeViewMatrix(viewMatrix, viewerInput.camera);
-        mat4.mul(viewMatrix, viewMatrix, modelMatrix);
-        return viewMatrix;
-    }
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, shiftMatrix: mat4, boneMatrices: mat4[], bbox: AABB, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplate();
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
-        mat4.mul(shiftScratch, modelMatrix, this.shape.shiftMatrix);
-        bboxScratch.transform(this.meshData.mesh.bbox, shiftScratch);
-        if (viewerInput.camera.frustum.contains(bboxScratch)) {
-            const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: this.material.gfxSamplers.length }]);
+        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 40 + (12 * boneMatrices.length));
+        const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(d, offs, viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x3(d, offs, shiftMatrix);
+        for (const bm of boneMatrices) {
+            offs += fillMatrix4x3(d, offs, bm);
+        }
 
-            template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: this.material.gfxSamplers.length }]);
-            let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 28);
-            const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
-            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-            offs += fillMatrix4x3(d, offs, this.computeModelView(shiftScratch, viewerInput));
+        template.sortKey = this.material.sortKey;
+        template.setSamplerBindingsFromTextureMappings(this.material.textureMapping);
+        template.setGfxProgram(this.gfxProgram);
+        template.setMegaStateFlags(this.material.megaStateFlags);
+        this.material.fillTemplate(template);
 
-            template.sortKey = this.material.sortKey;
-            template.setSamplerBindingsFromTextureMappings(this.material.textureMapping);
-            template.setGfxProgram(this.gfxProgram);
-            template.setMegaStateFlags(this.material.megaStateFlags);
-            this.material.fillTemplate(template);
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setDrawCount(this.meshData.mesh.count);
+        renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bbox));
+        renderInstManager.submitRenderInst(renderInst);
 
-            const renderInst = renderInstManager.newRenderInst();
-            renderInst.setDrawCount(this.meshData.mesh.count);
-            renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
-            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox));
-            renderInstManager.submitRenderInst(renderInst);
-
-            renderInstManager.popTemplate();
-        }        
+        renderInstManager.popTemplate();
     }
 }
