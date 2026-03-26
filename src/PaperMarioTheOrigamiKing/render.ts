@@ -85,7 +85,6 @@ function translateCullMode(material: FMAT): GfxCullMode {
 
 function translateBlendMode(blendMode: string): GfxBlendMode {
     if (blendMode === "transadd" || blendMode === "trans" || blendMode === "blend") {
-        // simplify to just "add" for anything semi-transparent
         return GfxBlendMode.Add;
     } else {
         throw `Unknown blend mode ${blendMode}`;
@@ -359,6 +358,7 @@ class MaterialInstance {
         const blend = fmat.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
+        const additiveBlend = blendString === "transadd";
         this.isTranslucent = blendMode !== null;
         this.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
 
@@ -368,9 +368,8 @@ class MaterialInstance {
         };
         if (this.isTranslucent) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha
+                blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: additiveBlend ? GfxBlendFactor.One : GfxBlendFactor.OneMinusSrcAlpha
             });
         }
 

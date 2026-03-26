@@ -107,7 +107,7 @@ export class OrigamiProgram extends DeviceProgram {
         const channels = this.samplers.get(samplerName);
         if (!channels) {
             console.warn("Could not find sampler", samplerName, "for", this.name);
-            return "vec4 " + outName + " = vec4(0.0, 0.0, 0.0, 1.0)";
+            return "vec4 " + outName + " = vec4(1.0, 1.0, 1.0, 1.0)";
         }
         assert(channels.length === 4);
         if (channels[0] === ChannelSource.Red && channels[1] === ChannelSource.Green &&
@@ -268,9 +268,9 @@ void main() {
     bakedShadow = mix(1.0, materialColor.g, 0.55);
     ` : ''}
 
-    ${this.getTextureColor('_d0', 'detailColor', 'v_TexCoord2')};
+    ${this.samplers.get('_d0') ? this.getTextureColor('_d0', 'detailColor', 'v_TexCoord2') : ''};
 
-    color.rgb *= ambientOcclusion * bakedShadow * mix(1.0, detailColor.b, 0.55);
+    color.rgb *= ambientOcclusion * bakedShadow${this.samplers.get('_d0') ? ' * mix(1.0, detailColor.b, 0.55)' : ''};
     color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
     gl_FragColor = color;
 }

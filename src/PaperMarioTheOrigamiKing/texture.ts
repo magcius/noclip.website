@@ -146,7 +146,7 @@ export class OrigamiTextureHolder extends TextureHolder {
             mips += device.queryTextureFormatSupported(gfxFormat, Math.max(texture.width >>> m, 1), Math.max(texture.height >>> m, 1)) ? 1 : 0;
         }
         // lowest mip level is always empty/black, don't waste time processing it
-        // somtimes the second lowest is also nothing but no way to detect this
+        // sometimes the second lowest is also nothing but no way to detect this
         mips = Math.max(1, mips - 1);
         if (mips === 0) {
             console.warn("No valid mips for", texture.name);

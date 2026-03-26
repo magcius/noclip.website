@@ -7,7 +7,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { ModelData } from "./render_data.js";
 import { OrigamiModelRenderer } from "./render.js";
-import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF, NPCType, NPCInstance } from "./bin_elf.js";
+import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF, NPCInstance } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
@@ -56,7 +56,8 @@ export class OrigamiResources {
         if (!this.loadedBFRESNames.includes(name)) {
             this.loadedBFRESNames.push(name);
             this.loadBFRESTextures(device, name, bfres, ".bntx");
-            if (name.startsWith("Mobj_KingSeal")) {
+            if (name.startsWith("Mobj_KingSeal") || name.startsWith("Mobj_SelectionPanelA")) {
+                // should move this to model configs when texture swapping is added
                 this.loadBFRESTextures(device, name, bfres, ".en-US.bntx");
             }
             const model = bfres.fmdl[0];
@@ -307,24 +308,26 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
 /*
 TODO
 
-Fix UVs that are sometimes messed up, WallPartA in Shroom City's hotel pool for example
+Fix UVs that are sometimes the wrong set
 Fix objects with only albedo showing (seems to be different SRTs used)
-Fix some sobjs not being in the right place
-Fix missing textures
+Fix some sobjs not being in the right place (might just be animations)
 Figure out NPC rotation degree logic (probably just one axis)
 Add level variants that share the same base BFRES file (e.g. sensor lab offices and desert, seems to use .probe files)
 Add level states (i.e. post-game, before or after story events, etc)
-Add ability to hide specific objects from level (rather than blindly rendering all of them)
+    Ability to hide specific objects from level (rather than blindly rendering all of them)
+    Ability to change animation/texture set/etc of shown objects
 Add toggleable render layers by model name
 Decide how to handle different mobj dispos files
-Investigate eddy river webgl error
 Add back sobjs and npcs
 Fix transparency on certain textures
 Figure out how water works (bone user data for mask, have to hardcode the color?)
+Figure out how "real" ice and lava works
 Add bone visiblity animations
-Add material/texture animations
+Add material/texture/shader param animations
 Add configurable animation speed (seems to vary, hardcoding to 60 FPS makes some too fast)
 Add save states
+Add particle effects
+Bloom if base renderering can be made more efficient, otherwise not worth the cost
 */
 
 const pathBase = "PMTOK";
@@ -460,7 +463,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W1G1_HouseE", "House 5"),
     new PMTOKScene("map/field/W1G1_HouseF", "House 6"),
     new PMTOKScene("map/field/W1G1_HouseG", "House 7"),
-    new PMTOKScene("map/field/W1G1_KartRoad", "Kart Road"),
+    new PMTOKScene("map/field/W1G1_KartRoad", "Kart Road (Opening Cutscene)"),
     new PMTOKScene("map/field/W1G1_KinopioHouse", "Toad House"),
     new PMTOKScene("map/field/W1G1_DokanRoom", "Pipe Room"),
     new PMTOKScene("map/field/W1G1_Shop", "Item Shop"),
@@ -616,9 +619,9 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W3C3_FirecaveA", "Battle - Fire Vellumental Cave"),
     new PMTOKScene("map/battle/Btl_W3C3_FirecaveBossA", "Battle - Fire Vellumental Cave (Boss)"),
     "Temple of Shrooms",
-    new PMTOKScene("map/field/W3C4_Outside", "Temple of Shrooms (Outside)"),
-    new PMTOKScene("map/field/W3C4_Desert", "Desert"),
-    new PMTOKScene("map/field/W3C4_EntranceWay", "Entrance"),
+    new PMTOKScene("map/field/W3C4_Desert", "Desert Spawn Area"),
+    new PMTOKScene("map/field/W3C4_Outside", "Outside Entrance"),
+    new PMTOKScene("map/field/W3C4_EntranceWay", "Entrance Hallway"),
     new PMTOKScene("map/field/W3C4_TwoKinopio", "Twin Statues Room"),
     new PMTOKScene("map/field/W3C4_HorrorWay", "Horror Hallway"),
     new PMTOKScene("map/field/W3C4_MummyKuriboArea", "Mummy Goomba Room"),
@@ -667,11 +670,11 @@ const sceneDescs = [
     new PMTOKScene("map/field/W4C2_BigJump", "Big Jump"),
     new PMTOKScene("map/field/W4C2_IceSlide", "Ice Slide"),
     new PMTOKScene("map/field/W4C2_JumpStart", "Jump Start"),
-    new PMTOKScene("map/field/W4C2_PuzzleEasy", "Puzzle Easy"),
-    new PMTOKScene("map/field/W4C2_PuzzleHard", "Puzzle Hard"),
-    new PMTOKScene("map/field/W4C2_PuzzleResetA", "Puzzle Reset"),
-    new PMTOKScene("map/field/W4C2_PuzzleTutorial", "Puzzle Tutorial"),
-    new PMTOKScene("map/field/W4C2_SpiralStair", "Spiral Stair"),
+    new PMTOKScene("map/field/W4C2_PuzzleTutorial", "Ice Slide Puzzle Tutorial"),
+    new PMTOKScene("map/field/W4C2_PuzzleEasy", "Ice Slide Puzzle (Easy)"),
+    new PMTOKScene("map/field/W4C2_PuzzleHard", "Ice Slide Puzzle (Hard)"),
+    new PMTOKScene("map/field/W4C2_PuzzleResetA", "Ice Slide Puzzle Reset"),
+    new PMTOKScene("map/field/W4C2_SpiralStair", "Spiral Staircase"),
     new PMTOKScene("map/field/W4C2_BossArea", "Boss Room"),
     new PMTOKScene("map/battle/Btl_W4C2_IceMountainA", "Battle - Ice Vellumental Mountain"),
     new PMTOKScene("map/battle/Btl_W4C2_IceMountainBossA", "Battle - Ice Vellumental Mountain (Boss)"),
@@ -690,10 +693,10 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W4C3_OrbTowerA", "Battle - Sea Tower"),
     new PMTOKScene("map/battle/Btl_W4C3_OrbTowerBossA", "Battle - Sea Tower (Boss)"),
     "Shangri-Spa",
-    new PMTOKScene("map/field/W5G1_DokanRoom", "Pipe Room"),
     new PMTOKScene("map/field/W5G1_SkySpa", "Shangri-Spa"),
     new PMTOKScene("map/field/W5G1_SpaEntrance", "Spa Entrance"),
     new PMTOKScene("map/field/W5G1_SpaRoom", "Spa Room"),
+    new PMTOKScene("map/field/W5G1_DokanRoom", "Pipe Room"),
     new PMTOKScene("map/battle/Btl_W5G1_SkySpaA", "Battle - Shangri-Spa"),
     new PMTOKScene("map/battle/Btl_W5G1_SkySpaBossA", "Battle - Shangri-Spa (Boss)"),
     "Spring of Jungle Mist",
@@ -702,15 +705,15 @@ const sceneDescs = [
     new PMTOKScene("map/field/W5C2_BigTreeFirst", "Big Tree (1st Floor)"),
     new PMTOKScene("map/field/W5C2_BigTreeSecond", "Big Tree (2nd Floor)"),
     new PMTOKScene("map/field/W5C2_BigTreeThird", "Big Tree (3rd Floor)"),
+    new PMTOKScene("map/field/W5C2_DeepJungle", "Deep Jungle"),
     new PMTOKScene("map/field/W5C2_DeadEnd", "Dead End 1"),
     new PMTOKScene("map/field/W5C2_DeadEndB", "Dead End 2"),
-    new PMTOKScene("map/field/W5C2_DeepJungle", "Deep Jungle"),
     new PMTOKScene("map/field/W5C2_LeafMemory", "Leaf Memory Puzzle"),
     new PMTOKScene("map/battle/Btl_W5C2_JungleA", "Battle - Spring of Jungle Mist"),
     "Spring of Rainbows",
     new PMTOKScene("map/field/W5C1_CliffWay", "Cliff Way"),
     new PMTOKScene("map/field/W5C1_QuizRoom", "Quiz Room"),
-    new PMTOKScene("map/field/W5C1_RaceQuiz", "Race Quiz"),
+    new PMTOKScene("map/field/W5C1_RaceQuiz", "Quiz Race"),
     new PMTOKScene("map/field/W5C1_SecretSpa", "Secret Spa"),
     new PMTOKScene("map/field/W5C1_SteamFirst", "Steam First"),
     new PMTOKScene("map/battle/Btl_W5C1_QuizA", "Battle - Spring of Rainbows"),
@@ -724,33 +727,33 @@ const sceneDescs = [
     new PMTOKScene("map/field/W5C3_ResidenceFloor", "Residence Floor"),
     new PMTOKScene("map/field/W5C3_RoomA", "Room"),
     new PMTOKScene("map/field/W5C3_SavePoint", "Save Room"),
-    new PMTOKScene("map/field/W5C3_Shooting", "Shooting Gallery"),
-    new PMTOKScene("map/field/W5C3_ShootingDemoAfter", "Shooting Gallery Demo 1"),
-    new PMTOKScene("map/field/W5C3_ShootingDemoBefore", "Shooting Gallery Demo 2"),
+    new PMTOKScene("map/field/W5C3_Shooting", "Shooting Gallery 1"),
+    new PMTOKScene("map/field/W5C3_ShootingDemoAfter", "Shooting Gallery 2"),
+    new PMTOKScene("map/field/W5C3_ShootingDemoBefore", "Shooting Gallery 3"),
     new PMTOKScene("map/field/W5C3_ThroneRoom", "Throne Room"),
     new PMTOKScene("map/battle/Btl_W5C3_KoopaCastleA", "Battle - Bowser's Castle"),
     new PMTOKScene("map/battle/Btl_W5C3_KoopaCastleBossA", "Battle - Bowser's Castle (Boss 1)"),
     new PMTOKScene("map/battle/Btl_W5C3_KoopaCastleBossB", "Battle - Bowser's Castle (Boss 2)"),
-    "Peach's Castle (Volcano)",
+    "Volcano",
     new PMTOKScene("map/field/W6C1_Volcano", "Inside the Volcano"),
-    new PMTOKScene("map/field/W6C2_CastleGate", "Outside the Castle"),
-    new PMTOKScene("map/field/W6C2_CollapsedWall", "Castle Broken Wall"),
+    new PMTOKScene("map/field/W6C2_CollapsedWall", "Peach's Castle Broken Wall"),
+    new PMTOKScene("map/field/W6C2_CastleGate", "Top of the Volcano (Peach's Castle)"),
+    new PMTOKScene("map/field/W6C2_OrigamiCastle", "Top of the Volcano (Origami Castle)"),
+    new PMTOKScene("map/battle/Btl_W6C2_OrigamiCastleA", "Battle - Top of the Volcano (Origami Castle)"),
     "Origami Castle",
-    new PMTOKScene("map/field/W6C2_EnemyRush", "Enemy Rush"),
+    new PMTOKScene("map/field/W6C2_EnemyRush", "Entrance Hall"),
     new PMTOKScene("map/field/W6C2_FirstFloor", "First Floor"),
-    new PMTOKScene("map/field/W6C2_GrowRoom", "Grow Room"),
-    new PMTOKScene("map/field/W6C2_InsideBox", "Inside Box"),
-    new PMTOKScene("map/field/W6C2_LastBossArea", "Final Boss Area"),
-    new PMTOKScene("map/field/W6C2_LateralLift", "Lateral Lift"),
-    new PMTOKScene("map/field/W6C2_OrigamiCastle", "Origami Castle"),
-    new PMTOKScene("map/field/W6C2_PopUpBox", "Pop-Up Box"),
     new PMTOKScene("map/field/W6C2_SecondFloor", "Second Floor"),
+    new PMTOKScene("map/field/W6C2_ThirdFloor", "Third Floor"),
+    new PMTOKScene("map/field/W6C2_GrowRoom", "Grow Room"),
+    new PMTOKScene("map/field/W6C2_LateralLift", "Lateral Lift"),
+    new PMTOKScene("map/field/W6C2_PopUpBox", "Pop-Up Box Room"),
+    new PMTOKScene("map/field/W6C2_InsideBox", "Pop-Up Box Room (Inside)"),
     new PMTOKScene("map/field/W6C2_StairRoomA", "Stair Room 1"),
     new PMTOKScene("map/field/W6C2_StairRoomC", "Stair Room 2"),
-    new PMTOKScene("map/field/W6C2_ThirdFloor", "Third Floor"),
     new PMTOKScene("map/field/W6C2_ThroneRoom", "Throne Room"),
-    new PMTOKScene("map/battle/Btl_W6C2_OrigamiCastleA", "Battle - Origami Castle 1"),
-    new PMTOKScene("map/battle/Btl_W6C2_OrigamiCastleB", "Battle - Origami Castle 2"),
+    new PMTOKScene("map/field/W6C2_LastBossArea", "Final Boss Arena"),
+    new PMTOKScene("map/battle/Btl_W6C2_OrigamiCastleB", "Battle - Origami Castle"),
     new PMTOKScene("map/battle/Btl_W6C2_OrigamiCastleBossA", "Battle - Origami Castle (Boss)"),
     "Other",
     new PMTOKScene("map/field/W7C1_KinokoRoomA", "Sensor Lab Office"),

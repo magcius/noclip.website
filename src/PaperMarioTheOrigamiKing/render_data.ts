@@ -21,6 +21,8 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     switch (attributeFormat) {
         case AttributeFormat._8_Uint:
             return GfxFormat.U8_R;
+        case AttributeFormat._8_Unorm:
+            return GfxFormat.U8_R_NORM;
         case AttributeFormat._8_8_Uint:
             return GfxFormat.U8_RG;
         case AttributeFormat._8_8_Unorm:
@@ -42,13 +44,11 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         case AttributeFormat._16_16_Snorm:
             return GfxFormat.S16_RG_NORM;
         case AttributeFormat._16_16_Uint:
-            console.warn("CHECK ATTR FORMAT GFXFORMAT");
-            return GfxFormat.U16_RG; // right gfxformat?
+            return GfxFormat.U16_RG;
         case AttributeFormat._16_16_Float:
             return GfxFormat.F16_RG;
         case AttributeFormat._16_16_16_16_Uint:
-            console.warn("CHECK ATTR FORMAT GFXFORMAT");
-            return GfxFormat.U16_RGBA; // causes webgl errors, confirm if right
+            return GfxFormat.U16_RGBA;
         case AttributeFormat._16_16_16_16_Float:
             return GfxFormat.F16_RGBA;
         case AttributeFormat._32_32_Float:
