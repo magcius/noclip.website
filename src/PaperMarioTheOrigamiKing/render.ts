@@ -139,7 +139,8 @@ export class OrigamiModelRenderer {
         // build shape renderers and pre-compute their static SRT
         for (const shapeData of this.modelData.shapeData) {
             const material = materials[shapeData.shape.materialIndex];
-            if (material) {
+            const boneName = this.modelData.bones[shapeData.shape.boneIndex].name;
+            if (material && !this.modelData.hiddenBoneList.includes(boneName)) {
                 const sr = new ShapeRenderer(cache, shapeData, material, this.modelData.skeletonAnimation !== undefined);
                 sr.staticBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeData.shape.boneIndex);
                 this.shapeRenderers.push(sr);

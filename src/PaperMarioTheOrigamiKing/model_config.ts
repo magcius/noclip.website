@@ -4,11 +4,12 @@ export interface OrigamiModelConfig {
     materialWhitelist?: string[];
     materialBlacklist?: string[];
     skeletonAnimation?: string;
+    boneVisibility?: string;
 }
 
 const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, OrigamiModelConfig>([
-    ["Mobj_WoodBoxA", { shapeWhitelist: ["Box__Mt_WoodBoxA", "Wire__Mt_Wire"] }],
-    ["Mobj_WoodBoxB", { shapeWhitelist: ["Box__Mt_WoodBoxB", "Wire__Mt_Wire"] }],
+    ["Mobj_WoodBoxA", { skeletonAnimation: "C1" }],
+    ["Mobj_WoodBoxB", { skeletonAnimation: "C1" }],
     ["Mobj_BlockHatena", {
         materialWhitelist: ["Mt_HatenaBis", "Mt_HatenaBlock"],
         shapeBlacklist: ["HatenaBis2__Mt_HatenaBis", "HatenaBis3__Mt_HatenaBis"]
@@ -17,17 +18,12 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
         materialWhitelist: ["Mt_Hatena", "Mt_HatenaBis", "Mt_HatenaBlock"],
         shapeWhitelist: ["HatenaBlock__Mt_HatenaBlock", "Hatena1__Mt_Hatena", "HatenaBis1__Mt_HatenaBis", "HatenaBlockTop__Mt_HatenaBlock"]
     }],
-    ["Mobj_BlockSave", { shapeWhitelist: ["Box__Mt_Block", "Font_S1_13__Mt_Font", "Rivet1__Mt_Rivet", "BoxTop__Mt_Block"] }],
-    ["Mobj_TreeDeku", {
-        materialBlacklist: ["Mt_TreeDeku2", "Mt_TreeDeku3_scroll"],
-        shapeWhitelist: ["TreeDeku1_Face1_Eye_L__Mt_TreeDeku1", "TreeDeku1_Face1_Eye_R__Mt_TreeDeku1", "TreeDeku1_Face2_Beard_L__Mt_TreeDeku1", "TreeDeku1_Face2_Beard_R__Mt_TreeDeku1",
-            "TreeDeku1_Face2_EyeBrow_L__Mt_TreeDeku1", "TreeDeku1_Face2_EyeBrow_R__Mt_TreeDeku1", "TreeDeku1_Bark__Mt_TreeDeku1", "TreeDeku1_Body__Mt_TreeDeku1", "TreeDeku1_Body2__Mt_TreeDeku1",
-            "TreeDeku1_HandTop__Mt_TreeDeku1", "TreeDeku1_SubTop__Mt_TreeDeku1", "TreeDeku1_Top1__Mt_TreeDeku1"]
-    }],
-    ["Mobj_GrassH", { shapeWhitelist: ["LeafAll__Mt_GrassH"] }],
-    ["Mobj_GrassC", { shapeWhitelist: ["LeafAll__Mt_GrassC"] }],
+    ["Mobj_BlockSave", { boneVisibility: "C2" }],
+    ["Mobj_TreeDeku", { skeletonAnimation: "C2" }],
+    ["Mobj_GrassH", { skeletonAnimation: "C1" }],
+    ["Mobj_GrassC", { skeletonAnimation: "C1" }],
     ["Mobj_IndoorPlantB", { materialBlacklist: ["Mt_Ink"], shapeBlacklist: ["PotInk__Mt_Ink", "LeafAInk__Mt_Ink", "LeafBInk__Mt_Ink", "LeafCInk__Mt_Ink", "LeafDInk__Mt_Ink"] }],
-    ["Mobj_RubbleA", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["Rubble__Mt_Rubble", "Wire__Mt_Wire"] }],
+    ["Mobj_RubbleA", { skeletonAnimation: "C1" }],
     ["Mobj_PotA", { shapeWhitelist: ["Pot__Mt_Pot", "Wire__Mt_Wire"] }],
     ["Mobj_WoodBoxAWaterWay", { materialBlacklist: ["Mt_BG", "lambert1"], shapeWhitelist: ["Box__Mt_WoodBoxA", "Wire__Mt_Wire"] }],
     ["Mobj_RockA", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["PaperAlpha__Mt_RockA", "Wire__Mt_Wire"] }],
@@ -51,12 +47,12 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_IceRockA", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["IceRock__Mt_Main_Albedo_Blue", "WireBase__Mt_Wire"] }],
     ["Mobj_ParasolA", { materialBlacklist: ["Mt_ParasolClose"] }],
     ["Mobj_KinopioStatueA", { shapeBlacklist: ["BaseB__Mt_Statue"] }],
-    ["W3G3_HouseA", { materialBlacklist: ["Mt_Sahdow"] }], // they misspelled shadow, whoops!
-    ["W3G3_HouseB", { materialBlacklist: ["Mt_Sahdow"] }], // they misspelled shadow, whoops!
+    ["W3G3_HouseA", { materialBlacklist: ["Mt_Sahdow"] }],
+    ["W3G3_HouseB", { materialBlacklist: ["Mt_Sahdow"] }],
     ["Mobj_TreeMountainA", { skeletonAnimation: "C1" }],
     ["Mobj_TreeMountainB", { skeletonAnimation: "C1" }],
     ["Mobj_TreeMountainC", { skeletonAnimation: "C1" }],
-    ["Mobj_TreeGirlA", { skeletonAnimation: "NML_Action_3" }],
+    ["Mobj_TreeGirlA", { skeletonAnimation: "N_WaitA1" }],
     ["Mobj_ClockPendulumA", { skeletonAnimation: "C1" }],
     ["Mobj_LabMachineA", { skeletonAnimation: "C2" }],
     ["Mobj_FlowerC", { skeletonAnimation: "C1" }],
@@ -173,9 +169,9 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_WaterSurfaceParkA", { skeletonAnimation: "C1" }],
     ["Mobj_WaterSurfaceParkB", { skeletonAnimation: "C1" }],
     ["Mobj_WaterSurfaceParkC", { skeletonAnimation: "C1" }],
-    ["Mobj_LanternD", { materialBlacklist: ["Mt_Shasow"], skeletonAnimation: "C1" }], // they misspelled shadow, whoops!
+    ["Mobj_LanternD", { materialBlacklist: ["Mt_Shasow"], skeletonAnimation: "C1" }],
     ["Mobj_LanternE", { skeletonAnimation: "C1" }],
-    ["Mobj_BlockHatenaOrigami", { materialBlacklist: ["Mt_HatenaBox_BS"], shapeBlacklist: ["Box1__Mt_HatenaBox"], skeletonAnimation: "C0" }], // still looks weird, need the bone vis animations to be parsed
+    ["Mobj_BlockHatenaOrigami", { skeletonAnimation: "C2" }],
     ["Mobj_OrigamiPakupaku", { skeletonAnimation: "C1" }],
     ["Mobj_AccordionWallA", { materialBlacklist: ["Mt_Shade"] }],
     ["Mobj_WaterSurfaceKoopaCastleA", { skeletonAnimation: "C1" }],
@@ -275,6 +271,8 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_WaterSurfaceTownF", { skeletonAnimation: "C1" }],
     ["Mobj_WaterSplashD", { skeletonAnimation: "C2" }],
     ["Mobj_WaterMillA", { skeletonAnimation: "C1" }],
+    ["Mobj_GearB", { skeletonAnimation: "C1" }],
+    ["Mobj_SetWindmill", { skeletonAnimation: "C1_Rotate" }],
 ]);
 
 export function getOrigamiModelConfig(id: string): OrigamiModelConfig | undefined {

@@ -208,26 +208,35 @@ export class ModelData {
     public skeletonAnimation: FSKA | undefined;
     public shapeData: ShapeData[] = [];
     public bones: FSKL_Bone[];
+    public hiddenBoneList: string[];
     public currentSkeletonAnimationFrame: number = 0;
     public skeletonAnimationBoneIndices: number[] = [];
     public smoothRigidMatrices: mat4[] = [];
 
     constructor(cache: GfxRenderCache, public bfres: FRES, public config: OrigamiModelConfig | undefined) {
         this.model = bfres.fmdl[0];
-        if (config && config.skeletonAnimation) {
+        if (this.config && this.config.skeletonAnimation) {
             let animation = undefined;
             for (const ska of bfres.fska) {
-                if (ska.name === config.skeletonAnimation) {
+                if (ska.name === this.config.skeletonAnimation) {
                     animation = ska;
                     break;
                 }
             }
             if (!animation) {
-                console.warn("Could not find skeleton animation", config.skeletonAnimation, "in", this.model.name);
+                console.warn("Could not find skeleton animation", this.config.skeletonAnimation, "in", this.model.name);
             }
             this.skeletonAnimation = animation;
         }
 
+        this.hiddenBoneList = [];
+        if (bfres.fbvs.length > 0 && ((this.config && this.config.boneVisibility) || this.skeletonAnimation)) {
+            const checkName = this.config ? (this.config.boneVisibility ? this.config.boneVisibility : this.skeletonAnimation!.name) : this.skeletonAnimation!.name;
+            const bvs = bfres.fbvs.find((bvs) => bvs.name === checkName);
+            if (bvs) {
+                this.hiddenBoneList = bvs.boneNames;
+            }
+        }
         this.bones = this.model.fskl.bones;
         if (this.skeletonAnimation) {
             for (let i = 0; i < this.bones.length; i++) {
@@ -242,11 +251,11 @@ export class ModelData {
         this.computeSmoothRigidMatrices();
 
         for (const shape of this.model.fshp) {
-            if (config) {
-                if (config.shapeWhitelist && !config.shapeWhitelist.includes(shape.name)) {
+            if (this.config) {
+                if (this.config.shapeWhitelist && this.config.shapeWhitelist.includes(shape.name)) {
                     continue;
                 }
-                if (config.shapeBlacklist && config.shapeBlacklist.includes(shape.name)) {
+                if (this.config.shapeBlacklist && this.config.shapeBlacklist.includes(shape.name)) {
                     continue;
                 }
             }

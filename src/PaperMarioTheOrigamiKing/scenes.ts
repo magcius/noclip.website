@@ -56,10 +56,8 @@ export class OrigamiResources {
         if (!this.loadedBFRESNames.includes(name)) {
             this.loadedBFRESNames.push(name);
             this.loadBFRESTextures(device, name, bfres, ".bntx");
-            if (name.startsWith("Mobj_KingSeal") || name.startsWith("Mobj_SelectionPanelA")) {
-                // should move this to model configs when texture swapping is added
-                this.loadBFRESTextures(device, name, bfres, ".en-US.bntx");
-            }
+            // load default language texture set if it exists
+            this.loadBFRESTextures(device, name, bfres, ".en-US.bntx");
             const model = bfres.fmdl[0];
             const config = getOrigamiModelConfig(model.name);
             this.modelData.set(model.name, new ModelData(this.renderCache, bfres, config));
@@ -327,7 +325,7 @@ Add material/texture/shader param animations
 Add configurable animation speed (seems to vary, hardcoding to 60 FPS makes some too fast)
 Add save states
 Add particle effects
-Bloom if base renderering can be made more efficient, otherwise not worth the cost
+Add bloom if base renderering can be made more efficient, otherwise not worth the cost
 */
 
 const pathBase = "PMTOK";

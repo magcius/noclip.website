@@ -196,10 +196,19 @@ export interface FMAA {
     userData: Map<string, number[] | string[]>;
 }
 
+export interface FBVS {
+    name: string;
+    frameCount: number;
+    boneNames: string[];
+    curves: Curve[];
+    userData: Map<string, number[] | string[]>;
+}
+
 export interface FRES {
     fmdl: FMDL[];
     fska: FSKA[];
     fmaa: FMAA[];
+    fbvs: FBVS[];
     externalFiles: ExternalFile[];
 }
 
@@ -590,11 +599,7 @@ function parseFMAT(buffer: ArrayBufferSlice, fresVersion: Version, offs: number,
         textureNameArrayOffs = view.getUint32(offs + 0x30, littleEndian);
         samplerInfoArrayOffs = view.getUint32(offs + 0x40, littleEndian);
         samplerInfoDicOffs = view.getUint32(offs + 0x48, littleEndian);
-        if (fresVersion.major === 9 && fresVersion.minor === 0 && fresVersion.micro === 0) {
-            shaderParamArrayOffs = view.getUint32(offs + 0x50, littleEndian);
-        } else {
-            shaderParamArrayOffs = view.getUint32(offs + 0x58, littleEndian);
-        }
+        shaderParamArrayOffs = view.getUint32(offs + 0x50, littleEndian);
         srcParamOffs = view.getUint32(offs + 0x60, littleEndian);
         userDataArrayOffs = view.getUint32(offs + 0x68, littleEndian);
         index = view.getUint16(offs + 0x98, littleEndian);
@@ -960,6 +965,7 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offset: num
                 break;
 
             case CurveType.BakedFloat:
+            case CurveType.StepBoolean:
             case CurveType.StepInteger:
             case CurveType.BakedInteger:
                 valuesPerKey = 1;
@@ -1133,6 +1139,53 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
     return { name, frameCount, materialAnimations, userData };
 }
 
+function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, littleEndian: boolean): FBVS {
+    const view = buffer.createDataView();
+
+    let name;
+    let boneListOffset;
+    let frameCount;
+    let boneCount;
+    let userDataArrayOffset;
+    let userDataCount;
+    let baseValueOffset;
+    let curveArrayOffset;
+    let curveCount;
+
+    if (fresVersion.major < 9) {
+        name = readBinStr(buffer, view.getUint32(offset + 0x10, littleEndian), littleEndian);
+        curveArrayOffset = view.getUint32(offset + 0x30, littleEndian);
+        baseValueOffset = view.getUint32(offset + 0x38, littleEndian);
+        boneListOffset = view.getUint32(offset + 0x40, littleEndian);
+        userDataArrayOffset = view.getUint32(offset + 0x48, littleEndian);
+        userDataCount = view.getUint16(offset + 0x5A, littleEndian);
+        frameCount = view.getInt32(offset + 0x5C, littleEndian);
+        boneCount = view.getUint16(offset + 0x60, littleEndian);
+        curveCount = view.getUint16(offset + 0x62, littleEndian);
+    } else {
+        name = readBinStr(buffer, view.getUint32(offset + 0x08, littleEndian), littleEndian);
+        curveArrayOffset = view.getUint32(offset + 0x28, littleEndian);
+        baseValueOffset = view.getUint32(offset + 0x30, littleEndian);
+        boneListOffset = view.getUint32(offset + 0x38, littleEndian);
+        userDataArrayOffset = view.getUint32(offset + 0x40, littleEndian);
+        frameCount = view.getInt32(offset + 0x50, littleEndian);
+        boneCount = view.getUint16(offset + 0x58, littleEndian);
+        curveCount = view.getUint16(offset + 0x5A, littleEndian);
+        userDataCount = view.getUint16(offset + 0x5C, littleEndian);
+    }
+
+    const boneList: string[] = Array(boneCount);
+    for (let i = 0; i < boneCount; i++) {
+        const name = readBinStr(buffer, view.getUint32(boneListOffset + (8 * i), littleEndian), littleEndian);
+        boneList[i] = name;
+    }
+
+    const curves = parseCurves(buffer, fresVersion, curveArrayOffset, curveCount, littleEndian);
+    const userData = parseUserData(buffer, fresVersion, userDataArrayOffset, userDataCount, littleEndian);
+
+    return { name, frameCount, boneNames: boneList, curves, userData };
+}
+
 export function isMarkerLittleEndian(marker: number): boolean {
     if (marker === 0xFFFE)
         return true;
@@ -1193,12 +1246,16 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     let fskaResDicOffset;
     let fmaaArrayOffset;
     let fmaaResDicOffset;
+    let fbvsArrayOffset;
+    let fbvsResDicOffset;
 
     if (fresVersion.major < 9) {
         fskaArrayOffset = view.getUint32(0x38, littleEndian);
         fskaResDicOffset = view.getUint32(0x40, littleEndian);
         fmaaArrayOffset = view.getUint32(0x48, littleEndian);
         fmaaResDicOffset = view.getUint32(0x50, littleEndian);
+        fbvsArrayOffset = view.getUint32(0x58, littleEndian);
+        fbvsResDicOffset = view.getUint32(0x60, littleEndian);
         memoryPoolInfoOffs = view.getUint32(0x90, littleEndian);
         externalFilesArrayOffset = view.getUint32(0x98, littleEndian);
         externalFilesResDicOffset = view.getUint32(0xA0, littleEndian);
@@ -1208,6 +1265,8 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         fskaResDicOffset = view.getUint32(0x60, littleEndian);
         fmaaArrayOffset = view.getUint32(0x68, littleEndian);
         fmaaResDicOffset = view.getUint32(0x70, littleEndian);
+        fbvsArrayOffset = view.getUint32(0x78, littleEndian);
+        fbvsResDicOffset = view.getUint32(0x80, littleEndian);
         memoryPoolInfoOffs = view.getUint32(0xB0, littleEndian);
         externalFilesArrayOffset = view.getUint32(0xB8, littleEndian);
         externalFilesResDicOffset = view.getUint32(0xC0, littleEndian);
@@ -1260,6 +1319,16 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         }
     }
 
+    const fbvsNames = parseResDic(fbvsResDicOffset);
+    let fbvsTableIdx = fbvsArrayOffset;
+    const fbvs: FBVS[] = [];
+    for (let i = 0; i < fbvsNames.length; i++) {
+        assert(readString(buffer, fbvsTableIdx, 0x04) === "FBVS");
+        const fbvs_ = parseFBVS(buffer, fresVersion, fbvsTableIdx, littleEndian);
+        fbvs.push(fbvs_);
+        fbvsTableIdx += 0x60;
+    }
+
     const externalFileNames = parseResDic(externalFilesResDicOffset);
     const externalFiles: ExternalFile[] = [];
     let externalFilesTableIdx = externalFilesArrayOffset;
@@ -1272,5 +1341,5 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         externalFilesTableIdx += 0x10;
     }
 
-    return { fmdl, fska, fmaa, externalFiles };
+    return { fmdl, fska, fmaa, fbvs, externalFiles };
 }
