@@ -469,43 +469,6 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateLightDiffFn(chan: ColorChannelControl, lightName: string) {
-        const NdotL = `dot(t_Normal, t_LightDeltaDir)`;
-
-        let diffFn = chan.diffuseFunction;
-        if (chan.attenuationFunction === GX.AttenuationFunction.SPEC)
-            diffFn = GX.DiffuseFunction.NONE;
-
-        switch (diffFn) {
-        case GX.DiffuseFunction.NONE: return `1.0`;
-        case GX.DiffuseFunction.SIGN: return `${NdotL}`;
-        case GX.DiffuseFunction.CLAMP: return `max(${NdotL}, 0.0)`;
-        }
-    }
-
-    private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        if (chan.attenuationFunction === GX.AttenuationFunction.NONE) {
-            return `
-    t_Attenuation = 1.0;`;
-        } else if (chan.attenuationFunction === GX.AttenuationFunction.SPOT) {
-            const attn = `max(0.0, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
-            const cosAttn = `max(0.0, ApplyAttenuation(${lightName}.CosAtten.xyz, ${attn}))`;
-            const distAttn = `dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
-            return `
-    t_Attenuation = max(0.0, ${cosAttn} / ${distAttn});`;
-        } else if (chan.attenuationFunction === GX.AttenuationFunction.SPEC) {
-            const attn = `(dot(t_Normal, t_LightDeltaDir) >= 0.0) ? max(0.0, dot(t_Normal, ${lightName}.Direction.xyz)) : 0.0`;
-            const cosAttn = `ApplyAttenuation(${lightName}.CosAtten.xyz, t_Attenuation)`;
-            const normalize = (chan.diffuseFunction !== GX.DiffuseFunction.NONE) ? `normalize` : ``;
-            const distAttn = `max(0.0, ApplyAttenuation(${normalize}(${lightName}.DistAtten.xyz), t_Attenuation))`;
-            return `
-    t_Attenuation = ${attn};
-    t_Attenuation = max(0.0, ${cosAttn} / ${distAttn});`;
-        } else {
-            throw "whoops";
-        }
-    }
-
     private generateColorChannel(chan: ColorChannelControl, i: number) {
         const matSource = this.generateMaterialSource(chan, i);
         const ambSource = this.generateAmbientSource(chan, i);
@@ -1432,8 +1395,8 @@ vec4 ApplyLight(in Light t_Light, in LightingParams t_LightingParams) {
 
     float t_Attenuation = 1.0;
     if (t_LightingParams.AttnFn == ${GX.AttenuationFunction.SPOT}) {
-        float t_Attenuation = max(0.0, dot(t_LightDeltaDir, t_Light.Direction.xyz));
-        float t_CosAtten = max(0.0, ApplyAttenuation(t_Light.CosAtten.xyz, t_Attenuation));
+        float t_CosAttenV = max(0.0, dot(t_LightDeltaDir, t_Light.Direction.xyz));
+        float t_CosAtten = max(0.0, ApplyAttenuation(t_Light.CosAtten.xyz, t_CosAttenV));
         float t_DistAtten = dot(t_Light.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2));
         t_Attenuation = max(0.0, t_CosAtten / t_DistAtten);
     } else if (t_LightingParams.AttnFn == ${GX.AttenuationFunction.SPEC}) {
@@ -1458,16 +1421,14 @@ vec4 ApplyLight(in Light t_Light, in LightingParams t_LightingParams) {
 }
 
 vec4 ApplyLightChannel(in int t_LightMask, in LightingParams t_LightingParams) {
-${materialHasLightsBlock(this.material) ? `
     vec4 t_LightAccum = vec4(0.0);
+${materialHasLightsBlock(this.material) ? `
     for (int i = 0; i < 8; i++) {
         if ((t_LightMask & (1 << i)) != 0) {
             t_LightAccum += ApplyLight(u_LightParams[i], t_LightingParams);
         }
     }
-` : `
-    vec4 t_LightAccum = vec4(0.0);
-`}
+` : ``}
     return t_LightAccum;
 }
 
