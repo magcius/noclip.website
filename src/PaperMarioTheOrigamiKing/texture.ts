@@ -109,9 +109,11 @@ function getGfxFormatDecoded(typeFormat: TypeFormat): GfxFormat {
 }
 
 export class OrigamiTextureHolder extends TextureHolder {
+    // keep track of channel sources so the shader can remap RGBA if needed
     public channelSources: Map<string, ChannelSource[]> = new Map();
 
     private deswizzle(buffers: ArrayBufferSlice[], width: number, height: number, bw: number, bh: number, bb: number, mips: number): Uint8Array<ArrayBuffer> {
+        // combine mipBuffers into one so they're all deswizzled at once instead of seperate calls
         let offset = 0;
         const buffer = new Uint8Array(buffers.reduce((sum, b) => sum + b.byteLength, 0));
         for (const b of buffers) {
@@ -131,12 +133,15 @@ export class OrigamiTextureHolder extends TextureHolder {
         const blockWidth = getFormatBlockWidth(channelFormat);
         const blockHeight = getFormatBlockHeight(channelFormat);
         const blockBytes = getFormatBytesPerBlock(channelFormat);
-        const bc = channelFormat >= ChannelFormat.Bc1 && channelFormat <= ChannelFormat.Bc7;
+        const isBC = channelFormat >= ChannelFormat.Bc1 && channelFormat <= ChannelFormat.Bc7;
 
+        // format translation assumes the device can keep BC textures compressed
         let gfxFormat = getGfxFormat(channelFormat, typeFormat);
+
         const deviceSupportsFormat = device.queryTextureFormatSupported(gfxFormat, texture.width, texture.height);
-        let keepCompressed = bc && deviceSupportsFormat;
-        if (bc && !deviceSupportsFormat) {
+        let keepCompressed = isBC && deviceSupportsFormat;
+        if (isBC && !deviceSupportsFormat) {
+            // device is low spec and doesn't support BC as-is, fall back to decoded format
             gfxFormat = getGfxFormatDecoded(typeFormat);
             keepCompressed = false;
         }
@@ -146,16 +151,16 @@ export class OrigamiTextureHolder extends TextureHolder {
             mips += device.queryTextureFormatSupported(gfxFormat, Math.max(texture.width >>> m, 1), Math.max(texture.height >>> m, 1)) ? 1 : 0;
         }
         // lowest mip level is always empty/black, don't waste time processing it
-        // sometimes the second lowest is also nothing but no way to detect this
+        // sometimes the second lowest is also nothing but (seemingly) no way to detect this
         mips = Math.max(1, mips - 1);
         if (mips === 0) {
             console.warn("No valid mips for", texture.name);
             return;
         }
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mips));
-
         const deswizzled = this.deswizzle(texture.textureDataArray[0].mipBuffers.slice(0, mips), texture.width, texture.height, blockWidth, blockHeight, blockBytes, mips);
+
+        // after deswizzling, compute expected size for each mip level so it can be split back into mips correctly
         let offset = 0;
         const ends: number[] = [];
         for (let m = 0; m < mips; m++) {
@@ -164,7 +169,8 @@ export class OrigamiTextureHolder extends TextureHolder {
             offset += size;
         }
 
-        const mipData: ArrayBufferView[] = [];
+        // reconstruct mips and decode if needed
+        const mipDatas: ArrayBufferView[] = [];
         for (let m = 0; m < mips; m++) {
             const data = deswizzled.slice(m === 0 ? m : ends[m - 1], ends[m]);
             const width = Math.max(texture.width >>> m, 1);
@@ -209,10 +215,11 @@ export class OrigamiTextureHolder extends TextureHolder {
                     rgba = decompress({ ...texture, width, height, depth: 1 }, data).pixels;
                     break;
             }
-            mipData.push(rgba);
+            mipDatas.push(rgba);
         }
 
-        device.uploadTextureData(gfxTexture, 0, mipData);
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mips));
+        device.uploadTextureData(gfxTexture, 0, mipDatas);
 
         const extraInfo = new Map<string, string>();
         extraInfo.set("Format", getImageFormatString(texture.imageFormat));

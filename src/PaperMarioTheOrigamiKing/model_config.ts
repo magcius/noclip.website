@@ -5,6 +5,7 @@ export interface OrigamiModelConfig {
     materialBlacklist?: string[];
     skeletonAnimation?: string;
     boneVisibility?: string;
+    ignoreBoneList?: boolean; // this won't be needed once bone vis anims are used properly
 }
 
 const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, OrigamiModelConfig>([
@@ -52,7 +53,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_TreeMountainA", { skeletonAnimation: "C1" }],
     ["Mobj_TreeMountainB", { skeletonAnimation: "C1" }],
     ["Mobj_TreeMountainC", { skeletonAnimation: "C1" }],
-    ["Mobj_TreeGirlA", { skeletonAnimation: "N_WaitA1" }],
+    ["Mobj_TreeGirlA", { skeletonAnimation: "N_WaitB1" }],
     ["Mobj_ClockPendulumA", { skeletonAnimation: "C1" }],
     ["Mobj_LabMachineA", { skeletonAnimation: "C2" }],
     ["Mobj_FlowerC", { skeletonAnimation: "C1" }],
@@ -112,7 +113,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_PaperTapeLockD", { skeletonAnimation: "C1" }],
     ["Mobj_PaperTapeLockE", { skeletonAnimation: "C1" }],
     ["Mobj_PaperTapeLockF", { skeletonAnimation: "C1" }],
-    ["Mobj_PaperTapeLockG", { skeletonAnimation: "C1" }],
+    ["Mobj_PaperTapeLockG", { skeletonAnimation: "C1", ignoreBoneList: true }],
     ["Mobj_PaperTapeLockH", { skeletonAnimation: "C1" }],
     ["Mobj_PaperTapeLockI", { skeletonAnimation: "C1" }],
     ["Mobj_PaperTapeLockJ", { skeletonAnimation: "C1" }],
@@ -156,7 +157,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_WaterSurfaceWaterCaveB", { skeletonAnimation: "C4" }],
     ["Mobj_WaterSurfaceWaterCaveC", { skeletonAnimation: "C1" }],
     ["Mobj_WaterSurfaceWaterCaveD", { skeletonAnimation: "C1" }],
-    ["Mobj_WaterFlowingA", { skeletonAnimation: "C2_Flowing" }],
+    ["Mobj_WaterFlowingA", { skeletonAnimation: "C2_Flowing", ignoreBoneList: true }],
     ["Mobj_WaterFlowingB", { skeletonAnimation: "C2" }],
     ["Mobj_WaterFlowingC", { skeletonAnimation: "C1" }],
     ["Mobj_WaterBottleA", { skeletonAnimation: "C4" }], // might not be matched with surface water flow level
@@ -185,7 +186,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_GrassB", { skeletonAnimation: "C1" }],
     ["Mobj_BathPlugA", { skeletonAnimation: "C1" }],
     ["Mobj_WaterFlowingJungleB", { skeletonAnimation: "C1" }],
-    ["Mobj_TreePelmanismA", { skeletonAnimation: "C2" }],
+    ["Mobj_TreePelmanismA", { skeletonAnimation: "C2", ignoreBoneList: true }],
     ["Mobj_WaterFlowingSpaA", { skeletonAnimation: "C2" }],
     ["Mobj_WaterFlowingSpaD", { skeletonAnimation: "C1" }],
     ["Mobj_WaterPondA", { skeletonAnimation: "C1" }],
@@ -273,6 +274,44 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_WaterMillA", { skeletonAnimation: "C1" }],
     ["Mobj_GearB", { skeletonAnimation: "C1" }],
     ["Mobj_SetWindmill", { skeletonAnimation: "C1_Rotate" }],
+    ["Sobj_CloudA", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudB", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudC", { skeletonAnimation: "C1", ignoreBoneList: true }],
+    ["Sobj_CloudF", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudE", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudShadowA", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudShadowB", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudShadowD", { skeletonAnimation: "C1" }],
+    ["Sobj_TreeConiferB", { skeletonAnimation: "C1" }],
+    ["Mobj_WaterSurfaceA", { skeletonAnimation: "C1" }],
+    ["Sobj_WaterfallA", { skeletonAnimation: "C1" }],
+    ["Sobj_GondolaSceneryA", { skeletonAnimation: "C5" }],
+    ["Mobj_NinjaSingboardA", { skeletonAnimation: "C1" }],
+    ["Mobj_WaterSurfacePoolB", { skeletonAnimation: "C1" }],
+    ["Mobj_PeachShipWhitecapsA", { skeletonAnimation: "C1" }],
+    ["Mobj_ShipFlagA", { skeletonAnimation: "C1" }],
+    ["Mobj_CanyonRiverA", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudU", { skeletonAnimation: "C1" }],
+    ["Mobj_FenceC", { skeletonAnimation: "C1"}],
+    ["Mobj_KoopaShipWhitecapsA", { skeletonAnimation: "C1" }],
+    ["Mobj_LavaFallA", { skeletonAnimation: "C1" }],
+    ["Mobj_LavaFallB", { skeletonAnimation: "C1" }],
+    ["Mobj_LavaFallC", { skeletonAnimation: "C1" }],
+    ["Mobj_LavaFallD", { skeletonAnimation: "C1" }],
+    ["Mobj_CollaspeRockA", { skeletonAnimation: "C1" }],
+    ["Mobj_VolcanoRockA", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudO", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudV", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudW", { skeletonAnimation: "C1" }],
+    ["Sobj_CloudX", { skeletonAnimation: "C1", ignoreBoneList: true }],
+    ["Mobj_RideA", { skeletonAnimation: "C1" }],
+    ["Sobj_BlackWaterBubbleA", { skeletonAnimation: "C1_Expand" }],
+    ["Sobj_BlackWaterBubbleB", { skeletonAnimation: "C1_Expand" }],
+    ["Sobj_FireBlackWaterA", { skeletonAnimation: "C1" }],
+    ["Sobj_FireBlackWaterB", { skeletonAnimation: "C1" }],
+    ["Sobj_FireBlackWaterC", { skeletonAnimation: "C1" }],
+    ["Sobj_FireBlackWaterD", { skeletonAnimation: "C1" }],
+    ["Sobj_FireBlackWaterE", { skeletonAnimation: "C1" }],
 ]);
 
 export function getOrigamiModelConfig(id: string): OrigamiModelConfig | undefined {

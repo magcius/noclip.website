@@ -230,13 +230,15 @@ export class ModelData {
         }
 
         this.hiddenBoneList = [];
-        if (bfres.fbvs.length > 0 && ((this.config && this.config.boneVisibility) || this.skeletonAnimation)) {
+        const ignoreBoneList = this.config && this.config.ignoreBoneList === true;
+        if (bfres.fbvs.length > 0 && ((this.config && this.config.boneVisibility) || this.skeletonAnimation) && !ignoreBoneList) {
             const checkName = this.config ? (this.config.boneVisibility ? this.config.boneVisibility : this.skeletonAnimation!.name) : this.skeletonAnimation!.name;
             const bvs = bfres.fbvs.find((bvs) => bvs.name === checkName);
             if (bvs) {
                 this.hiddenBoneList = bvs.boneNames;
             }
         }
+
         this.bones = this.model.fskl.bones;
         if (this.skeletonAnimation) {
             for (let i = 0; i < this.bones.length; i++) {
@@ -252,7 +254,7 @@ export class ModelData {
 
         for (const shape of this.model.fshp) {
             if (this.config) {
-                if (this.config.shapeWhitelist && this.config.shapeWhitelist.includes(shape.name)) {
+                if (this.config.shapeWhitelist && !this.config.shapeWhitelist.includes(shape.name)) {
                     continue;
                 }
                 if (this.config.shapeBlacklist && this.config.shapeBlacklist.includes(shape.name)) {

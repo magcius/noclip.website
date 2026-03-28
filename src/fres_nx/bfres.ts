@@ -197,6 +197,7 @@ export interface FMAA {
 }
 
 export interface FBVS {
+    flag: number;
     name: string;
     frameCount: number;
     boneNames: string[];
@@ -1142,6 +1143,7 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
 function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, littleEndian: boolean): FBVS {
     const view = buffer.createDataView();
 
+    let flag;
     let name;
     let boneListOffset;
     let frameCount;
@@ -1158,11 +1160,13 @@ function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         baseValueOffset = view.getUint32(offset + 0x38, littleEndian);
         boneListOffset = view.getUint32(offset + 0x40, littleEndian);
         userDataArrayOffset = view.getUint32(offset + 0x48, littleEndian);
+        flag = view.getUint16(offset + 0x58, littleEndian);
         userDataCount = view.getUint16(offset + 0x5A, littleEndian);
         frameCount = view.getInt32(offset + 0x5C, littleEndian);
         boneCount = view.getUint16(offset + 0x60, littleEndian);
         curveCount = view.getUint16(offset + 0x62, littleEndian);
     } else {
+        flag = view.getUint16(offset + 0x04, littleEndian);
         name = readBinStr(buffer, view.getUint32(offset + 0x08, littleEndian), littleEndian);
         curveArrayOffset = view.getUint32(offset + 0x28, littleEndian);
         baseValueOffset = view.getUint32(offset + 0x30, littleEndian);
@@ -1174,16 +1178,16 @@ function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         userDataCount = view.getUint16(offset + 0x5C, littleEndian);
     }
 
-    const boneList: string[] = Array(boneCount);
+    const boneNames: string[] = Array(boneCount);
     for (let i = 0; i < boneCount; i++) {
         const name = readBinStr(buffer, view.getUint32(boneListOffset + (8 * i), littleEndian), littleEndian);
-        boneList[i] = name;
+        boneNames[i] = name;
     }
 
     const curves = parseCurves(buffer, fresVersion, curveArrayOffset, curveCount, littleEndian);
     const userData = parseUserData(buffer, fresVersion, userDataArrayOffset, userDataCount, littleEndian);
 
-    return { name, frameCount, boneNames: boneList, curves, userData };
+    return { flag, name, frameCount, boneNames, curves, userData };
 }
 
 export function isMarkerLittleEndian(marker: number): boolean {
@@ -1326,7 +1330,12 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         assert(readString(buffer, fbvsTableIdx, 0x04) === "FBVS");
         const fbvs_ = parseFBVS(buffer, fresVersion, fbvsTableIdx, littleEndian);
         fbvs.push(fbvs_);
-        fbvsTableIdx += 0x60;
+        if (fresVersion.major < 9) {
+            fbvsTableIdx += 0x68;
+        }
+        else {
+            fbvsTableIdx += 0x60;
+        }
     }
 
     const externalFileNames = parseResDic(externalFilesResDicOffset);

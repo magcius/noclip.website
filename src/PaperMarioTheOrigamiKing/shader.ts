@@ -22,10 +22,12 @@ const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
 ]);
 
 export class OrigamiProgram extends DeviceProgram {
-    public static ub_ShapeParams = 0;
+    public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
+    public static ub_ShapeParams = 2;
 
-    constructor(override name: string, private shaderAssign: FMAT_ShaderAssign, private samplers: Map<string, ChannelSource[]>, private boneMatricesCount: number, private vertexSkinWeightCount: number, private vertexAttributes: FVTX_VertexAttribute[]) {
+    constructor(override name: string, private shaderAssign: FMAT_ShaderAssign, private samplers: Map<string, ChannelSource[]>,
+        private boneMatricesCount: number, private vertexSkinWeightCount: number, private vertexAttributes: FVTX_VertexAttribute[]) {
         super();
     }
 
@@ -50,7 +52,6 @@ export class OrigamiProgram extends DeviceProgram {
                     case 4:
                     case -1:
                     default:
-                        // default to vec4 when -1 since that's the safest bet, even if slightly inefficent. Ain't building rockets here...
                         type = attribute === "_i0" ? "uvec4" : "vec4";
                         break;
                 }
@@ -179,17 +180,20 @@ precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
-layout(std140) uniform ub_ShapeParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat3x4 u_View;
-    Mat3x4 u_Shift;
-    Mat3x4 u_BoneMatrices[${this.boneMatricesCount}];
 };
 
 layout(std140) uniform ub_MaterialParams {
     Mat2x4 u_TexCoordSRT0;
     Mat2x4 u_TexCoordSRT1;
     vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
+};
+
+layout(std140) uniform ub_ShapeParams {
+    Mat3x4 u_Shift;
+    Mat3x4 u_BoneMatrices[${this.boneMatricesCount}];
 };
 
 ${this.getSamplerDefs()}

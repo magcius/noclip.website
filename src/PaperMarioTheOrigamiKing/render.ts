@@ -4,7 +4,7 @@ import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
 import { Curve, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FSKL_Bone, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
 import { ChannelSource, FilterMode, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureMapping } from '../TextureHolder.js';
@@ -61,7 +61,8 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
 function translateRenderInfoSingleString(renderInfo: FMAT_RenderInfo): string {
     assert(renderInfo.type === FMAT_RenderInfoType.String);
     if (renderInfo.values.length === 0) {
-        return "opaque"; // sometimes blend can be empty???
+        // sometimes blend can be empty???
+        return "opaque";
     }
     return renderInfo.values[0] as string;
 }
@@ -72,32 +73,40 @@ function translateCullMode(material: FMAT): GfxCullMode {
         return GfxCullMode.None;
     }
     const cullMode = translateRenderInfoSingleString(cullValue);
-    if (cullMode === "front") {
-        return GfxCullMode.Front;
-    } else if (cullMode === "back") {
-        return GfxCullMode.Back;
-    } else if (cullMode === "none") {
-        return GfxCullMode.None;
-    } else {
-        throw `Unknown cull mode ${cullMode}`;
+    switch (cullMode) {
+        case "front":
+            return GfxCullMode.Front;
+        case "back":
+            return GfxCullMode.Back;
+        case "none":
+            return GfxCullMode.None;
+        default:
+            throw `Unknown cull mode ${cullMode}`;
     }
 }
 
 function translateBlendMode(blendMode: string): GfxBlendMode {
-    if (blendMode === "transadd" || blendMode === "trans" || blendMode === "blend") {
-        return GfxBlendMode.Add;
-    } else {
-        throw `Unknown blend mode ${blendMode}`;
+    switch (blendMode) {
+        case "blend":
+        case "trans":
+        case "transadd":
+            return GfxBlendMode.Add;
+        default:
+            throw `Unknown blend mode ${blendMode}`;
     }
 }
 
 export class OrigamiModelRenderer {
     public name: string;
+    public visible: boolean;
     public shapeRenderers: ShapeRenderer[] = [];
-    public shiftMatrices: mat4[] = [];
+    public instanceMatrices: mat4[] = [];
+    private scratchMat = mat4.create();
+    private sceneBindings: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 
     constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, private modelData: ModelData) {
         this.name = this.modelData.model.name;
+        this.visible = true;
 
         // build materials, filter by config and name (mainly shadows/lighting are ignored)
         const materials: (MaterialInstance | null)[] = [];
@@ -112,7 +121,7 @@ export class OrigamiModelRenderer {
                         break;
                     }
                 }
-            } else if (material.name.toLowerCase().includes("mt_shadow") || material.name.toLowerCase().endsWith("_sm") || material.samplerInfo.length !== 5) {
+            } else if (material.name.toLowerCase().includes("mt_shadow") || material.name.toLowerCase().endsWith("_sm") || material.samplerInfo.length < 1) {
                 // sometimes the casing is inconsistent for materials (whoops!)
                 visible = false;
             }
@@ -127,7 +136,9 @@ export class OrigamiModelRenderer {
             if (visible) {
                 // patch texture names with model name (since some models have different textures under the same internal name)
                 for (let i = 0; i < material.textureName.length; i++) {
-                    if (!material.textureName[i].startsWith("Cmn_")) material.textureName[i] = `${this.name}_${material.textureName[i]}`;
+                    if (!material.textureName[i].startsWith("Cmn_")) {
+                        material.textureName[i] = `${this.name}_${material.textureName[i]}`;
+                    }
                 }
                 materials.push(new MaterialInstance(cache, textureHolder, material));
             } else {
@@ -148,68 +159,87 @@ export class OrigamiModelRenderer {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public setVisible(v: boolean): void {
+        this.visible = v;
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts(this.sceneBindings);
+        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_SceneParams, 28);
+        const d = template.mapUniformBufferF32(OrigamiProgram.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(d, offs, viewerInput.camera.viewMatrix);
+
         let ranAnimations = false;
-        for (let i = 0; i < this.shiftMatrices.length; i++) {
-            const shiftMatrix = this.shiftMatrices[i];
-            for (const shapeRenderer of this.shapeRenderers) {
-                // patch renderer bbox list on the first frame since length is not known at creation (should be better way to do this)
-                if (shapeRenderer.bboxes.length !== this.shiftMatrices.length) {
-                    shapeRenderer.bboxes = Array(this.shiftMatrices.length).fill(undefined);
+        for (const shapeRenderer of this.shapeRenderers) {
+            // patch bboxes on first frame since shift matrix count is unknown in the constructor
+            if (shapeRenderer.bboxes.length !== this.instanceMatrices.length) {
+                shapeRenderer.bboxes = Array(this.instanceMatrices.length).fill(undefined);
+            }
+
+            // compute bone matrices based on skin weight count, helps a lot with many instances
+            let rootSkinBoneMatrix: mat4 | undefined;
+            let boneMatrices = this.modelData.smoothRigidMatrices;
+            if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
+                if (this.modelData.skeletonAnimation) {
+                    boneMatrices = [this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.boneIndex)];
+                } else {
+                    boneMatrices = [shapeRenderer.staticBoneMatrix];
                 }
+            } else {
+                rootSkinBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.skinBoneIndices[0]);
+            }
 
-                let boneMatrices = this.modelData.smoothRigidMatrices;
-                if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
-                    if (this.modelData.skeletonAnimation) {
-                        boneMatrices = [this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.boneIndex)];
-                    } else {
-                        // use pre-computed matrix to save CPU time on static models
-                        boneMatrices = [shapeRenderer.staticBoneMatrix];
-                    }
-                }
+            const template = renderInstManager.pushTemplate();
+            shapeRenderer.fillTemplate(template);
 
-                // this is very CPU-expensive to call every frame, but have to?
-                const bbox = this.getBoundingBox(i, boneMatrices, shiftMatrix, shapeRenderer);
-
+            for (let i = 0; i < this.instanceMatrices.length; i++) {
+                const bbox = this.getBoundingBox(i, boneMatrices, rootSkinBoneMatrix, this.instanceMatrices[i], shapeRenderer);
                 if (viewerInput.camera.frustum.contains(bbox)) {
                     if (!ranAnimations && this.modelData.skeletonAnimation) {
-                        // advance animations for this frame only once
                         this.runAnimations(viewerInput);
                         ranAnimations = true;
                     }
-                    shapeRenderer.prepareToRender(device, renderInstManager, shiftMatrix, boneMatrices, bbox, viewerInput);
+                    shapeRenderer.prepareToRender(renderInstManager, this.instanceMatrices[i], boneMatrices, bbox, viewerInput);
                 }
             }
+
+            renderInstManager.popTemplate();
         }
+
+        renderInstManager.popTemplate();
     }
-    
-    private getBoundingBox(i: number, boneMatrices: mat4[], shiftMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
-        const outBBox = new AABB();
-        const baseBBox = shapeRenderer.shapeData.meshData[0].mesh.bbox;
+
+    private getBoundingBox(i: number, boneMatrices: mat4[], rootSkinBoneMatrix: mat4 | undefined, instanceMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
+        if (shapeRenderer.bboxes[i] && !this.modelData.skeletonAnimation) {
+            return shapeRenderer.bboxes[i]!;
+        }
+
+        if (!shapeRenderer.bboxes[i]) {
+            shapeRenderer.bboxes[i] = new AABB();
+        }
+        const mat = this.scratchMat;
+        const bbox = shapeRenderer.bboxes[i];
+        const base = shapeRenderer.shapeData.meshData[0].mesh.bbox;
+
         if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
-            if (this.modelData.skeletonAnimation || !shapeRenderer.bboxes[i]) {
-                // called once on the first frame for static or each frame for animated
-                const mat = mat4.create();
-                mat4.multiply(mat, shiftMatrix, boneMatrices[0]);
-                outBBox.transform(baseBBox, mat);
-                shapeRenderer.bboxes[i] = outBBox;
-            }
+            mat4.multiply(mat, instanceMatrix, boneMatrices[0]);
+            bbox.transform(base, mat);
+            shapeRenderer.bboxes[i] = bbox;
             return shapeRenderer.bboxes[i];
         } else {
-            for (let i = 0; i < shapeRenderer.shapeData.shape.skinBoneIndices.length; i++) {
-                const mat = mat4.create();
-                mat4.multiply(mat, shiftMatrix, this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.skinBoneIndices[i]));
-                const bbox = new AABB();
-                bbox.transform(baseBBox, mat);
-                outBBox.union(outBBox, bbox);
-            }
-            return outBBox;
+            // fast-ish approximate compute
+            mat4.multiply(mat, instanceMatrix, rootSkinBoneMatrix!);
+            bbox.transform(base, mat);
+            return bbox;
         }
     }
 
     private computeShiftMatrix(bones: FSKL_Bone[], boneIndex: number): mat4 {
+        // need to eventually refactor so that common calculations aren't done each frame...
         const bone = bones[boneIndex];
-        const srt: mat4 = mat4.create();
+        const srt = mat4.create();
         computeModelMatrixSRT(srt,
             bone.scale[0], bone.scale[1], bone.scale[2],
             bone.rotation[0], bone.rotation[1], bone.rotation[2],
@@ -218,7 +248,7 @@ export class OrigamiModelRenderer {
         if (bone.parentIndex === -1) {
             return srt;
         } else {
-            const shift: mat4 = mat4.create();
+            const shift = mat4.create();
             mat4.multiply(shift, this.computeShiftMatrix(bones, bone.parentIndex), srt);
             return shift;
         }
@@ -360,7 +390,7 @@ class MaterialInstance {
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
         const additiveBlend = blendString === "transadd";
-        this.isTranslucent = blendMode !== null;
+        this.isTranslucent = blendMode !== null || (fmat.shaderAssign.shaderOption.has("paste_type") && fmat.shaderAssign.shaderOption.get("paste_type") === "0");
         this.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
 
         this.megaStateFlags = {
@@ -401,6 +431,11 @@ class MaterialInstance {
     }
 
     public fillTemplate(template: GfxRenderInst): void {
+        template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: this.gfxSamplers.length }]);
+        template.sortKey = this.sortKey;
+        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        template.setMegaStateFlags(this.megaStateFlags);
+
         let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 20);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
         offs += this.texCoordSRT0.fillMatrix(d, offs);
@@ -420,38 +455,31 @@ class ShapeRenderer {
         this.meshData = shapeData.meshData[0];
         const program = new OrigamiProgram(
             this.material.fmat.name, this.material.fmat.shaderAssign,
-            material.samplerChannels,
-            shapeData.boneMatrixLength, isSkeletonAnimated ? shapeData.vertexSkinWeightCount : -1,
+            material.samplerChannels, shapeData.boneMatrixLength,
+            isSkeletonAnimated ? shapeData.vertexSkinWeightCount : -1,
             shapeData.vertexData.rawAttributes
         );
         this.gfxProgram = cache.createProgram(program);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, shiftMatrix: mat4, boneMatrices: mat4[], bbox: AABB, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplate();
+    public fillTemplate(template: GfxRenderInst) {
+        template.setGfxProgram(this.gfxProgram);
+        this.material.fillTemplate(template);
+    }
 
-        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: this.material.gfxSamplers.length }]);
-        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 40 + (12 * boneMatrices.length));
-        const d = template.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x3(d, offs, viewerInput.camera.viewMatrix);
+    public prepareToRender(renderInstManager: GfxRenderInstManager, shiftMatrix: mat4, boneMatrices: mat4[], bbox: AABB, viewerInput: ViewerRenderInput) {
+        const renderInst = renderInstManager.newRenderInst();
+
+        let offs = renderInst.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 12 + (12 * boneMatrices.length));
+        const d = renderInst.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
         offs += fillMatrix4x3(d, offs, shiftMatrix);
         for (const bm of boneMatrices) {
             offs += fillMatrix4x3(d, offs, bm);
         }
 
-        template.sortKey = this.material.sortKey;
-        template.setSamplerBindingsFromTextureMappings(this.material.textureMapping);
-        template.setGfxProgram(this.gfxProgram);
-        template.setMegaStateFlags(this.material.megaStateFlags);
-        this.material.fillTemplate(template);
-
-        const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(this.meshData.mesh.count);
         renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bbox));
         renderInstManager.submitRenderInst(renderInst);
-
-        renderInstManager.popTemplate();
     }
 }
