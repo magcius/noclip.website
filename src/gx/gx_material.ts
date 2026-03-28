@@ -483,7 +483,7 @@ export class GX_Program extends DeviceProgram {
             const amb = `u_ColorAmbReg[${i}]`;
             const mat = `u_ColorMatReg[${i}]`;
             const fudged = this.hacks.lightingFudge({ vtx, amb, mat, ambSource, matSource });
-            return `vec4(${fudged}); // Fudge!`;
+            return `vec4(${fudged})`;
         }
 
         if (lightingEnabled) {
@@ -501,7 +501,6 @@ export class GX_Program extends DeviceProgram {
     ${outputName} = ${this.generateColorChannel(lightChannel.colorChannel, i)};`;
         } else {
             return `
-    
     ${outputName}.rgb = (${this.generateColorChannel(lightChannel.colorChannel, i)}).rgb;
     ${outputName}.a = (${this.generateColorChannel(lightChannel.alphaChannel, i)}).a;`;
         }
