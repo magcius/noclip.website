@@ -138,7 +138,6 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
     Scenes_Example.sceneGroup,
-    Scenes_PaperMarioTheOrigamiKing.sceneGroup,
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
@@ -225,6 +224,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_GTA.sceneGroup.sa,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
+    Scenes_PaperMarioTheOrigamiKing.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SpongebobRevengeOfTheFlyingDutchman.sceneGroup,
     Scenes_SonicColors.sceneGroup,
