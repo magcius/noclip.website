@@ -167,8 +167,11 @@ export interface Curve {
     curveType: CurveType;
     startFrame: number;
     endFrame: number;
+    targetOffset: number;
+    delta: number;
     frames: number[];
     keys: number[][];
+    keyStepBooleans: boolean[];
 }
 
 export interface BoneAnimation {
@@ -197,11 +200,12 @@ export interface FMAA {
 }
 
 export interface FBVS {
-    flag: number;
     name: string;
+    flags: number;
     frameCount: number;
     boneNames: string[];
     curves: Curve[];
+    baseValues: boolean[];
     userData: Map<string, number[] | string[]>;
 }
 
@@ -915,10 +919,12 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offset: num
         const keyArrayOffset = view.getUint32(curveEntryOffset + 0x8, littleEndian);
         const flags = view.getUint16(curveEntryOffset + 0x10, littleEndian);
         const keyframeCount = view.getUint16(curveEntryOffset + 0x12, littleEndian);
+        const targetOffset = view.getUint32(curveEntryOffset + 0x14, littleEndian);
         const startFrame = view.getFloat32(curveEntryOffset + 0x18, littleEndian);
         const endFrame = view.getFloat32(curveEntryOffset + 0x1C, littleEndian);
         const dataScale = view.getFloat32(curveEntryOffset + 0x20, littleEndian);
         const dataOffset = view.getFloat32(curveEntryOffset + 0x24, littleEndian);
+        const delta = view.getFloat32(curveEntryOffset + 0x28, littleEndian);
 
         enum FrameType {
             F32, FixedPoint10x5, U8,
@@ -993,7 +999,11 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offset: num
 
                 switch(keyType) {
                     case KeyType.F32:
-                        value = view.getFloat32(keyEntryOffset, littleEndian);
+                        if (curveType === CurveType.StepBoolean) {
+                            value = view.getUint32(keyEntryOffset, littleEndian);
+                        } else {
+                            value = view.getFloat32(keyEntryOffset, littleEndian);
+                        }
                         keyEntryOffset += 0x4;
                         break;
 
@@ -1025,7 +1035,28 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offset: num
             keys.push(values);
         }
 
-        curves.push({ curveType, startFrame, endFrame, frames, keys });
+        let keyStepBooleans: boolean[] = [];
+        if (curveType === CurveType.StepBoolean) {
+            let keyIndex = 0;
+            keyStepBooleans = Array(keyframeCount);
+            for (let i = 0; i < keys.length; i++) {
+                if (keyframeCount <= keyIndex) {
+                    break;
+                }
+                let value = keys[i][0];
+                for (let j = 0; j < 32; j++) {
+                    if (keyframeCount <= keyIndex) {
+                        break;
+                    }
+                    const set = (value & 1) !== 0;
+                    value >>= 1;
+                    keyStepBooleans[keyIndex] = set;
+                    keyIndex++;
+                }
+            }
+        }
+
+        curves.push({ curveType, startFrame, endFrame, targetOffset, delta, frames, keys, keyStepBooleans });
         curveEntryOffset += 0x30;
     }
 
@@ -1143,11 +1174,11 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
 function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, littleEndian: boolean): FBVS {
     const view = buffer.createDataView();
 
-    let flag;
+    let flags;
     let name;
     let boneListOffset;
     let frameCount;
-    let boneCount;
+    let boneAnimationCount;
     let userDataArrayOffset;
     let userDataCount;
     let baseValueOffset;
@@ -1160,34 +1191,50 @@ function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         baseValueOffset = view.getUint32(offset + 0x38, littleEndian);
         boneListOffset = view.getUint32(offset + 0x40, littleEndian);
         userDataArrayOffset = view.getUint32(offset + 0x48, littleEndian);
-        flag = view.getUint16(offset + 0x58, littleEndian);
+        flags = view.getUint16(offset + 0x58, littleEndian);
         userDataCount = view.getUint16(offset + 0x5A, littleEndian);
         frameCount = view.getInt32(offset + 0x5C, littleEndian);
-        boneCount = view.getUint16(offset + 0x60, littleEndian);
+        boneAnimationCount = view.getUint16(offset + 0x60, littleEndian);
         curveCount = view.getUint16(offset + 0x62, littleEndian);
     } else {
-        flag = view.getUint16(offset + 0x04, littleEndian);
+        flags = view.getUint16(offset + 0x04, littleEndian);
         name = readBinStr(buffer, view.getUint32(offset + 0x08, littleEndian), littleEndian);
         curveArrayOffset = view.getUint32(offset + 0x28, littleEndian);
         baseValueOffset = view.getUint32(offset + 0x30, littleEndian);
         boneListOffset = view.getUint32(offset + 0x38, littleEndian);
         userDataArrayOffset = view.getUint32(offset + 0x40, littleEndian);
         frameCount = view.getInt32(offset + 0x50, littleEndian);
-        boneCount = view.getUint16(offset + 0x58, littleEndian);
+        boneAnimationCount = view.getUint16(offset + 0x58, littleEndian);
         curveCount = view.getUint16(offset + 0x5A, littleEndian);
         userDataCount = view.getUint16(offset + 0x5C, littleEndian);
     }
 
-    const boneNames: string[] = Array(boneCount);
-    for (let i = 0; i < boneCount; i++) {
+    const boneNames: string[] = Array(boneAnimationCount);
+    for (let i = 0; i < boneAnimationCount; i++) {
         const name = readBinStr(buffer, view.getUint32(boneListOffset + (8 * i), littleEndian), littleEndian);
         boneNames[i] = name;
+    }
+
+    const baseValues: boolean[] = Array(boneAnimationCount);
+    let index = 0;
+    let bvOffset = 0;
+    while (index < boneAnimationCount) {
+        let baseValue = view.getUint32(baseValueOffset + bvOffset, littleEndian);
+        for (let i = 0; i < 32; i++) {
+            if (boneAnimationCount <= index) {
+                break;
+            }
+            baseValues[index] = (baseValue & 1) !== 0;
+            baseValue >>= 1;
+            index++;
+        }
+        bvOffset += 4;
     }
 
     const curves = parseCurves(buffer, fresVersion, curveArrayOffset, curveCount, littleEndian);
     const userData = parseUserData(buffer, fresVersion, userDataArrayOffset, userDataCount, littleEndian);
 
-    return { flag, name, frameCount, boneNames, curves, userData };
+    return { flags, name, frameCount, boneNames, curves, baseValues, userData };
 }
 
 export function isMarkerLittleEndian(marker: number): boolean {
