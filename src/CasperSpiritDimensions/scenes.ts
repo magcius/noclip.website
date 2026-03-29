@@ -5,14 +5,13 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { Mesh, ObjectDefintion, RWParser, Texture, ObjectInstance, Level } from "./bin.js";
-import { LevelRenderer } from "./render.js";
-import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
+import { RWMesh, ObjectDefinition, RenderWareParser, RWTexture, TOMObjectInstance, CapserLevel } from "./bin.js";
+import { CasperLevelRenderer } from "./render.js";
+import { Checkbox, COOL_BLUE_COLOR, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 
-// hardcode to approximate fog colors for now
 const CLEAR_COLORS: number[][] = [
     [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
     [90, 79, 54], [5, 5, 5],     [5, 5, 5],    [5, 5, 5],
@@ -21,38 +20,47 @@ const CLEAR_COLORS: number[][] = [
 ];
 
 /*
-Game uses the RenderWare engine. Some files have their extensions changed (such as .TXD to .DIC) and may contain custom structs
+Game uses the RenderWare engine. Some files have their extensions changed (such as .TXD to .DIC) and contain custom structs
 
 TODO
 
-More efficient rendering & data structures for level objects
-Handle different kinds of transparency better (proper draw order)
+Add frustum culling for base level geometry by node bboxes
+knight242 texture is parsed wrong?
+Figure out X and Z for rotations
+Figure out lava in dragon's cave
+Figure out why some objects with meshes in TOM don't render
+Figure out normals/lighting
+Figure out how some objects/texture without alpha names are set to be transparent
 Level objects
-    Add different kinds, fix the ones currently ignored or hardcoded
-    Idle animations would be nice, but not needed
-    Even better, figure out AI pathing and have certain enemies/NPCs follow a default path (should be doable, it's all in plain text in the files)
+    Add different kinds, fix the ones currently ignored
+    Idle animations
+    Pathing?
 */
 
 class CasperRenderer implements SceneGfx {
     public textureHolder: TextureHolder;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    private levelRenderer: LevelRenderer;
+    private levelRenderer: CasperLevelRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, textures: Map<string, Texture>, objInstances: ObjectInstance[], objMeshes: Map<string, Mesh>) {
+    constructor(device: GfxDevice, level: CapserLevel, textures: Map<string, RWTexture>, objMeshes: Map<string, RWMesh>, objInstances: TOMObjectInstance[]) {
         const viewerTextures: ViewerTexture[] = [];
         for (const texture of textures.values()) {
-            const extraInfo = new Map<string, string>();
-            extraInfo.set("Has Alpha", `${texture.hasAlpha}`);
-            extraInfo.set("Bit Depth", `${texture.bitDepth}`);
-            viewerTextures.push({ gfxTexture: texture.gfxTexture, extraInfo });
+            viewerTextures.push({
+                gfxTexture: texture.gfxTexture,
+                extraInfo: new Map<string, string>([["Has Alpha", `${texture.hasAlpha}`], ["Bit Depth", `${texture.bitDepth}`]])
+            });
         }
+
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
-        const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, level, textures, objInstances, objMeshes);
+        this.levelRenderer = new CasperLevelRenderer(this.renderHelper.renderCache, level, textures, objMeshes, objInstances);
+
         this.clearColor = CLEAR_COLORS[level.number - 1];
+        this.clearColor[0] /= 255;
+        this.clearColor[1] /= 255;
+        this.clearColor[2] /= 255;
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -64,7 +72,7 @@ class CasperRenderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
+        mainColorDesc.clearColor = { r: this.clearColor[0], g: this.clearColor[1], b: this.clearColor[2], a: 1 };
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -84,25 +92,29 @@ class CasperRenderer implements SceneGfx {
     }
 
     public createPanels(): Panel[] {
-        const panel = new Panel();
-        panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
-        panel.setTitle(RENDER_HACKS_ICON, "Render Hacks");
+        const layersPanel = new LayerPanel();
+        layersPanel.setLayers(this.levelRenderer.meshLayers);
+
+        const optionsPanel = new Panel();
+        optionsPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        optionsPanel.setTitle(RENDER_HACKS_ICON, "Render Hacks");
         const toggleBackFaceCull = new Checkbox("Enable back-face culling", this.levelRenderer.cullMode == GfxCullMode.Back);
         toggleBackFaceCull.onchanged = () => {
             this.levelRenderer.cullMode = toggleBackFaceCull.checked ? GfxCullMode.Back : GfxCullMode.None
         };
-        panel.contents.appendChild(toggleBackFaceCull.elem);
+        optionsPanel.contents.appendChild(toggleBackFaceCull.elem);
         const toggleTextures = new Checkbox("Enable textures", true);
         toggleTextures.onchanged = () => {
             this.levelRenderer.showTextures = toggleTextures.checked
         };
-        panel.contents.appendChild(toggleTextures.elem);
+        optionsPanel.contents.appendChild(toggleTextures.elem);
         const toggleObjects = new Checkbox("Show objects", true);
         toggleObjects.onchanged = () => {
             this.levelRenderer.showObjects = toggleObjects.checked
         };
-        panel.contents.appendChild(toggleObjects.elem);
-        return [panel];
+        optionsPanel.contents.appendChild(toggleObjects.elem);
+
+        return [layersPanel, optionsPanel];
     }
 
     public destroy(device: GfxDevice): void {
@@ -123,43 +135,47 @@ class CasperScene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const bspFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
-        const dicFile = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${this.levelNumber}.DIC`);
-        const tomFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/${this.id}/M${this.id}.TOM`);
-        const obdFile = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/CASPER.OBD`);
-        const level = new RWParser(bspFile.createDataView()).parseLevel(this.levelNumber);
-        const objDict = new RWParser(obdFile.createDataView()).parseObjectDictionary();
-        const objInstances = new RWParser(tomFile.createDataView()).parseLevelObjects();
-        const objMeshes = await buildDFFMeshes(context.dataFetcher, pathBase, level, objDict, objInstances);
-        const textures = new RWParser(dicFile.createDataView()).parseDIC(device, level.materials);
-        return new CasperRenderer(device, level, textures, objInstances, objMeshes);
+        const bsp = await context.dataFetcher.fetchData(`${pathBase}/MODELS/${this.bspPath}`);
+        const dic = await context.dataFetcher.fetchData(`${pathBase}/MODELS/LEVEL${this.levelNumber}.DIC`);
+        const tom = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/${this.id}/M${this.id}.TOM`);
+        const obd = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/CASPER.OBD`);
+
+        const level = new RenderWareParser(bsp).parseBSP(this.id, this.levelNumber);
+
+        const objDefs = new RenderWareParser(obd).parseOBD();
+        const instances = new RenderWareParser(tom).parseTOM();
+        const meshes = await buildDFFMeshes(context.dataFetcher, level, objDefs, instances);
+
+        const textures = new RenderWareParser(dic).parseDIC(device, level.materials);
+
+        return new CasperRenderer(device, level, textures, meshes, instances);
     }
 }
 
 /**
  * Call this **before** parsing textures
  */
-async function buildDFFMeshes(dataFetcher: DataFetcher, pathBase: string, level: Level, objDict: ObjectDefintion[], objInstances: ObjectInstance[]): Promise<Map<string, Mesh>> {
-    const meshes = new Map<string, Mesh>();
+async function buildDFFMeshes(dataFetcher: DataFetcher, level: CapserLevel, objDefs: ObjectDefinition[], objInstances: TOMObjectInstance[]): Promise<Map<string, RWMesh>> {
+    const meshes = new Map<string, RWMesh>();
     for (const instance of objInstances) {
         // don't build the same mesh more than once
         if (meshes.has(instance.name)) {
             continue;
         }
-        let dffPath = "";
-        for (const def of objDict) {
+        let path = "";
+        for (const def of objDefs) {
             if (def.names.includes(instance.name)) {
-                dffPath = def.dffPath;
+                path = def.dffPath;
                 break;
             }
         }
-        if (dffPath === "") {
+        if (path === "") {
             // console.log("Skipping OBJ by no DFF", instance.name);
             continue;
         }
-        const dffFile = await dataFetcher.fetchData(`${pathBase}/${dffPath}`);
-        const mesh = new RWParser(dffFile.createDataView()).parseDFF();
-        if (mesh.vertexCount === 0) {
+        const dff = await dataFetcher.fetchData(`${pathBase}/${path}`);
+        const mesh = new RenderWareParser(dff).parseDFF();
+        if (mesh.vertices.length === 0) {
             // console.log("Skipping OBJ by no vertices", instance.name);
             continue;
         }

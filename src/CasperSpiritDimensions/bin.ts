@@ -1,22 +1,38 @@
 import { mat4 } from "gl-matrix";
-import { GfxCullMode, GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { AABB } from "../Geometry";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 // Credit to the "RW Analyze" tool by Steve M. for helping to parse the RenderWare files
 
-enum ChunkID {
-    STRUCT = 1, STRING = 2, EXTENSION = 3, TEXTURE = 6,
-    MATERIAL = 7, MATERIAL_LIST = 8, ATOMIC_SECTION = 9,
-    PLANE_SECTION = 10, WORLD = 11, FRAME_LIST = 14,
-    GEOMETRY = 15, CLUMP = 16, ATOMIC = 0x14, TEXTURE_NATIVE = 0x15,
-    TEXTURE_DICTIONARY = 0x16, GEOMETRY_LIST = 0x1A,
-    MORPH_PLG = 0x105, ANIMATION_PLG = 0x108, SKY_MIPMAP_VAL = 0x110,
-    SKIN_PLG = 0x116, PARTICLES_PLG = 0x118, COLLISION_PLG = 0x11D,
-    MATERIAL_EFFECTS_PLG = 0x120, LIBRARY_PLG = 0x189, BIN_MESH_PLG = 0x50E
+enum Chunk {
+    STRUCT = 1,
+    STRING = 2,
+    EXTENSION = 3,
+    TEXTURE = 6,
+    MATERIAL = 7,
+    MATERIAL_LIST = 8,
+    ATOMIC_SECTION = 9,
+    PLANE_SECTION = 10,
+    WORLD = 11,
+    FRAME_LIST = 14,
+    GEOMETRY = 15,
+    CLUMP = 16,
+    ATOMIC = 0x14,
+    TEXTURE_NATIVE = 0x15,
+    TEXTURE_DICTIONARY = 0x16,
+    GEOMETRY_LIST = 0x1A,
+    MORPH_PLG = 0x105,
+    ANIMATION_PLG = 0x108,
+    SKY_MIPMAP_VAL = 0x110,
+    SKIN_PLG = 0x116,
+    PARTICLES_PLG = 0x118,
+    COLLISION_PLG = 0x11D,
+    MATERIAL_EFFECTS_PLG = 0x120,
+    LIBRARY_PLG = 0x189,
+    BIN_MESH_PLG = 0x50E
 }
 
-/**
- * 12-byte header for each node in RW file
- */
 interface NodeHeader {
     id: number;
     size: number;
@@ -27,123 +43,118 @@ interface IndexSplit {
     indices: number[];
 }
 
-export interface LevelSector {
-    type: 'node' | 'leaf';
-    mesh?: Mesh;
-    children: LevelSector[];
+interface GeometryData {
+    vertices: number[];
+    uvs: number[];
+    colors: number[];
+    boundingSphere: BoundingSphere;
 }
 
-export interface Level {
+export interface RWBSPNode {
+    type: "node" | "leaf";
+    mesh?: RWMesh;
+    leaves: RWBSPNode[];
+}
+
+export interface CapserLevel {
     materials: string[];
-    objMeshes: Mesh[];
-    root: LevelSector;
+    root: RWBSPNode;
     number: number;
+    name: string;
 }
 
 /**
- * An object defintion from the CASPER.OBD file
+ * An object definition from the CASPER.OBD file
  */
-export interface ObjectDefintion {
+export interface ObjectDefinition {
     names: string[];
     dffPath: string;
     thirdValue: string;
 }
 
-export interface Mesh {
-    vertexCount: number;
+export interface RWMesh {
     vertices: number[];
     uvs: number[];
     colors: number[];
     indexSplits: IndexSplit[];
     materials?: string[];
+    boundingSphere?: BoundingSphere;
 }
 
-/**
- * Instance of an object from a level's TOM file
- */
-export class ObjectInstance {
+export interface BoundingSphere {
+    x: number;
+    y: number;
+    z: number;
+    r: number;
+}
+
+export class TOMObjectInstance {
     name: string;
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
     scale: { x: number; y: number; z: number };
     properties: string[];
     shiftMatrix: mat4;
+    bbox: AABB;
 }
 
-/**
- * Texture from DIC file, either 32-bit or unswizzled 8-bit. Uploaded to device upon creation
- */
-export class Texture {
+export class RWTexture {
     public gfxTexture: GfxTexture;
-    constructor(device: GfxDevice, name: string, public rgba: Uint8Array[], public width: number, public height: number, public bitDepth: number, public hasAlpha: boolean = false, public cullModeOverride: number) {
+
+    constructor(device: GfxDevice, name: string, mips: Uint8Array[], width: number, height: number, public bitDepth: number, public hasAlpha: boolean = false) {
         const gfxTexture = device.createTexture({
             width, height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
             usage: GfxTextureUsage.Sampled,
             dimension: GfxTextureDimension.n2D,
             depthOrArrayLayers: 1,
-            numLevels: rgba.length
+            numLevels: mips.length
         });
         device.setResourceName(gfxTexture, name);
-        device.uploadTextureData(gfxTexture, 0, rgba);
+        device.uploadTextureData(gfxTexture, 0, mips);
         this.gfxTexture = gfxTexture;
     }
 }
 
-// temp workarounds for level objects
-const TRANSPARENT_TEXTURES_MAP: Map<string, number[]> = new Map<string, number[]>([
-    ["skin1", [140, GfxCullMode.Back]],
-    ["kibosh", [200, GfxCullMode.Back]],
-    ["spinner", [250, GfxCullMode.None]],
-    ["gemg1", [1, GfxCullMode.Back]],
-    ["gemb1", [1, GfxCullMode.Back]],
-    ["gemr1", [1, GfxCullMode.Back]],
-    ["gemy1", [1, GfxCullMode.Back]],
-    ["fwatenv", [180, GfxCullMode.None]],
-    ["wizwtr1", [120, GfxCullMode.None]],
-    ["keyshldr", [70, GfxCullMode.Back]],
-    ["keyshldb", [70, GfxCullMode.Back]],
-    ["keyshldg", [70, GfxCullMode.Back]],
-    ["keyshldo", [70, GfxCullMode.Back]],
-    ["keyshldy", [70, GfxCullMode.Back]]
-]);
 const SCALE_OVERRIDES: Map<string, number[]> = new Map<string, number[]>([["needle2", [1, 1, 1]]]);
 const IGNORED_OBJS: string[] = ["6wall01", "6wall02", "6wall03", "6wall04", "6wall05", "robostand"];
 
-export class RWParser {
+/**
+ * Parses RenderWare files for the PS2
+ */
+export class RenderWareParser {
     private data: DataView;
     private offset: number = 0;
 
-    constructor(view: DataView) {
-        this.data = view;
+    constructor(buffer: ArrayBufferSlice) {
+        this.data = buffer.createDataView();
     }
 
-    private readHeader(): NodeHeader {
+    private parseHeader(): NodeHeader {
         const id = this.data.getUint32(this.offset, true);
         const size = this.data.getUint32(this.offset + 4, true);
         this.offset += 12;
         return { id, size };
     }
 
-    public parseLevel(number: number): Level {
-        const level: Level = {
+    public parseBSP(name: string, number: number): CapserLevel {
+        const level: CapserLevel = {
             materials: [],
-            objMeshes: [],
-            root: {type: "node", children: []},
-            number
+            root: { type: "node", leaves: [] },
+            number, name
         };
 
         while (this.offset < this.data.byteLength) {
-            const header = this.readHeader();
+            const header = this.parseHeader();
             const endOffset = this.offset + header.size;
-            if (header.id === ChunkID.WORLD) {
-                const struct = this.readHeader();
+            if (header.id === Chunk.WORLD) {
+                const struct = this.parseHeader();
                 this.offset += struct.size;
                 while (this.offset < endOffset) {
-                    const childHeader = this.readHeader();
-                    if (childHeader.id === ChunkID.MATERIAL_LIST) {
+                    const childHeader = this.parseHeader();
+                    if (childHeader.id === Chunk.MATERIAL_LIST) {
                         level.materials = this.parseMaterialList(childHeader.size);
-                    } else if (childHeader.id === ChunkID.PLANE_SECTION) {
+                    } else if (childHeader.id === Chunk.PLANE_SECTION) {
                         level.root = this.parsePlaneSection(childHeader);
                     } else {
                         this.offset += childHeader.size;
@@ -157,23 +168,23 @@ export class RWParser {
         return level;
     }
 
-    public parseDIC(device: GfxDevice, materials: string[]): Map<string, Texture> {
+    public parseDIC(device: GfxDevice, materials: string[]): Map<string, RWTexture> {
         this.offset = 0;
-        const txdHeader = this.readHeader();
+        const txdHeader = this.parseHeader();
         const txdEnd = this.offset + txdHeader.size;
-        const txdMetaStructHeader = this.readHeader(); 
+        const txdMetaStructHeader = this.parseHeader();
         this.offset += 4;
-        const textures: Map<string, Texture> = new Map();
+        const textures: Map<string, RWTexture> = new Map();
         while (this.offset < txdEnd) {
-            const nativeHeader = this.readHeader();
+            const nativeHeader = this.parseHeader();
             const nativeEnd = this.offset + nativeHeader.size;
             if (this.offset >= txdEnd) {
                 break;
             }
             // this always has "PS2"
-            const structMeta = this.readHeader();
+            const structMeta = this.parseHeader();
             this.offset += structMeta.size;
-            const nameHeader = this.readHeader();
+            const nameHeader = this.parseHeader();
             const textureName = this.readString(nameHeader.size);
             // only parse materials with known name
             if (materials.indexOf(textureName) === -1) {
@@ -182,25 +193,21 @@ export class RWParser {
             }
             // not sure what exactly this is, but any texture that has transparency in the game has this set to something
             // could be an alpha mask but there's not any matching texture with the name it gives
-            const alphaHeader = this.readHeader();
+            const alphaHeader = this.parseHeader();
             const alphaName = this.readString(alphaHeader.size);
 
-            const pixelStructHeader = this.readHeader();
-
-            const pixelStructMeta = this.readHeader(); // always 64 bytes
+            const pixelStructHeader = this.parseHeader();
+            const pixelStructMeta = this.parseHeader(); // always 64 bytes
             const pixelStructMetaEnd = this.offset + pixelStructMeta.size;
             const width = this.data.getUint16(this.offset, true);
             const height = this.data.getUint16(this.offset + 4, true);
             const bitDepth = this.data.getUint8(this.offset + 8);
 
             const pixelCount = width * height;
-            let rgba: Uint8Array = new Uint8Array(pixelCount * 4);
-            let rgba2 = null;
-
-            const transparencyOverride = TRANSPARENT_TEXTURES_MAP.get(textureName);
+            const mips: Uint8Array[] = [];
 
             this.offset = pixelStructMetaEnd;
-            const pixelDataHeader = this.readHeader();
+            const pixelDataHeader = this.parseHeader();
             if (bitDepth === 8) {
                 const colorIndices = new Uint8Array(this.data.buffer, this.offset + 80, pixelCount);
                 const swizzledCLUT = new Uint8Array(this.data.buffer, this.offset + pixelDataHeader.size - 1024, 1024);
@@ -214,6 +221,7 @@ export class RWParser {
                 }
 
                 // Credit: https://ps2linux.no-ip.info/playstation2-linux.com/docs/howto/display_docef7c.html?docid=75
+                const rgba = new Uint8Array(pixelCount * 4);
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++) {
                         const blockLocation = (y & -16) * width + (x & -16) * 2;
@@ -227,41 +235,39 @@ export class RWParser {
                         rgba[index] = clut[pointer];
                         rgba[index + 1] = clut[pointer + 1];
                         rgba[index + 2] = clut[pointer + 2];
-                        const a = Math.min(clut[pointer + 3] * 2, 255);
-                        rgba[index + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
+                        rgba[index + 3] = Math.min(clut[pointer + 3] * 2, 255);
                     }
                 }
+                mips.push(rgba);
             } else if (bitDepth === 32) {
                 // mip 0
+                const rgba = new Uint8Array(pixelCount * 4);
                 let clut = new Uint8Array(this.data.buffer, this.offset + 80, rgba.length);
                 for (let i = 0; i < rgba.length; i += 4) {
                     rgba[i] = clut[i];
                     rgba[i + 1] = clut[i + 1];
                     rgba[i + 2] = clut[i + 2];
-                    const a = Math.min(clut[i + 3] * 2, 255);
-                    rgba[i + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
+                    rgba[i + 3] = Math.min(clut[i + 3] * 2, 255);
                 }
+                mips.push(rgba);
+
                 // mip 1
                 const mip1Offset = this.offset + 80 + (pixelCount * 4) + 80;
-                const mip1Length = pixelCount * 2; // half resolution
+                const mip1Length = pixelCount * 2;
                 if (mip1Offset + mip1Length <= this.data.buffer.byteLength) {
-                    // check if there's actually another mip level, sometimes there's not
                     clut = new Uint8Array(this.data.buffer, mip1Offset, mip1Length);
-                    rgba2 = new Uint8Array(mip1Length);
+                    const rgba2 = new Uint8Array(mip1Length);
                     for (let i = 0; i < rgba2.length; i += 4) {
                         rgba2[i] = clut[i];
                         rgba2[i + 1] = clut[i + 1];
                         rgba2[i + 2] = clut[i + 2];
-                        const a = Math.min(clut[i + 3] * 2, 255);
-                        rgba2[i + 3] = transparencyOverride && a === 255 ? transparencyOverride[0] : a;
+                        rgba2[i + 3] = Math.min(clut[i + 3] * 2, 255);
                     }
+                    mips.push(rgba2);
                 }
             }
-            const t = new Texture(device, textureName,
-                rgba2 !== null ? [rgba, rgba2] : [rgba],
-                width, height, bitDepth,
-                alphaName.length > 0 || TRANSPARENT_TEXTURES_MAP.has(textureName),
-                transparencyOverride ? transparencyOverride[1] : 0);
+
+            const t = new RWTexture(device, textureName, mips, width, height, bitDepth, alphaName.length > 0);
             textures.set(textureName, t);
             this.offset = nativeEnd;
         }
@@ -269,11 +275,11 @@ export class RWParser {
         return textures;
     }
 
-    public parseLevelObjects(): ObjectInstance[] {
+    public parseTOM(): TOMObjectInstance[] {
         const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength));
         const lines = rawText.split("\n");
-        const instances: ObjectInstance[] = [];
-        let instance: ObjectInstance = new ObjectInstance();
+        const instances: TOMObjectInstance[] = [];
+        let instance: TOMObjectInstance = new TOMObjectInstance();
         let inProperties = false;
 
         for (let line of lines) {
@@ -283,7 +289,7 @@ export class RWParser {
             }
 
             if (line.startsWith("BEGIN_OBJ:")) {
-                instance = new ObjectInstance();
+                instance = new TOMObjectInstance();
                 const nameMatch = line.match(/"([^"]+)"/);
                 let name = nameMatch ? nameMatch[1] : "";
                 if (name.includes(",")) {
@@ -297,7 +303,7 @@ export class RWParser {
                     if (IGNORED_OBJS.indexOf(instance.name) === -1) {
                         instances.push(instance);
                     }
-                    instance = new ObjectInstance();
+                    instance = new TOMObjectInstance();
                 } else if (line.startsWith("BEGIN_USERPROPS:")) {
                     inProperties = true;
                 } else if (line.startsWith("END_USERPROPS:")) {
@@ -307,15 +313,15 @@ export class RWParser {
                     const key = parts[0].replace(":", "");
                     const values = parts.slice(1).map(Number);
                     if (key === "POS") {
-                        instance.position = { x: values[0], y: values[2], z: values[1] };
+                        instance.position = { x: values[0], y: values[1], z: values[2] };
                     } else if (key === "ROTATE") {
-                        instance.rotation = { x: values[0], y: values[2], z: values[1] };
+                        instance.rotation = { x: values[0], y: values[1], z: values[2] };
                     } else if (key === "SCALE") {
                         if (SCALE_OVERRIDES.has(instance.name)) {
                             const s = SCALE_OVERRIDES.get(instance.name)!;
-                            instance.scale = { x: s[0], y: s[2], z: s[1] };
+                            instance.scale = { x: s[0], y: s[1], z: s[2] };
                         } else {
-                            instance.scale = { x: values[0], y: values[2], z: values[1] };
+                            instance.scale = { x: values[0], y: values[1], z: values[2] };
                         }
                     }
                 } else {
@@ -327,10 +333,10 @@ export class RWParser {
         return instances;
     }
 
-    public parseObjectDictionary(): ObjectDefintion[] {
+    public parseOBD(): ObjectDefinition[] {
         const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength));
         const lines = rawText.split("\n");
-        const objDefs: ObjectDefintion[] = [];
+        const objDefs: ObjectDefinition[] = [];
 
         function extractQuotedStrings(line: string): string[] {
             const matches = line.match(/"([^"]*)"/g);
@@ -367,56 +373,61 @@ export class RWParser {
         return objDefs;
     }
 
-    public parseDFF(): Mesh {
+    public parseDFF(): RWMesh {
         this.offset = 0;
-        const clumpHeader = this.readHeader();
+        const clumpHeader = this.parseHeader();
         const clumpEnd = this.offset + clumpHeader.size;
-        const clumpStructHeader = this.readHeader(); // struct is just object count, ignore
+        const clumpStructHeader = this.parseHeader(); // struct is just object count, ignore
         this.offset += clumpStructHeader.size;
-        const frameListHeader = this.readHeader(); // skip for now
+        const frameListHeader = this.parseHeader(); // skip for now
         this.offset += frameListHeader.size;
-        const atomicHeader = this.readHeader();
-        const atomicStructHeader = this.readHeader(); // frame and geometry index numbers
+        const atomicHeader = this.parseHeader();
+        const atomicStructHeader = this.parseHeader(); // frame and geometry index numbers
         this.offset += atomicStructHeader.size;
-        const geometryHeader = this.readHeader();
-        if (geometryHeader.id === ChunkID.GEOMETRY) {
-            const geometryStructHeader = this.readHeader();
+        const geometryHeader = this.parseHeader();
+        if (geometryHeader.id === Chunk.GEOMETRY) {
+            const geometryStructHeader = this.parseHeader();
             const geometryStructEnd = this.offset + geometryStructHeader.size;
-            const { vertexCount, vertices, uvs, colors } = this.parseGeometryStruct(this.offset, geometryStructEnd);
+            const geometryData = this.parseGeometryData(this.offset, geometryStructEnd);
             this.offset = geometryStructEnd;
-            const materialListHeader = this.readHeader();
+            const materialListHeader = this.parseHeader();
             const materials = this.parseMaterialList(materialListHeader.size);
             if (materials[0].length > 0) {
                 // temp don't build meshes without textures
-                const extensionHeader = this.readHeader();
+                const extensionHeader = this.parseHeader();
                 const splits: IndexSplit[] = [];
-                if (extensionHeader.id === ChunkID.EXTENSION) {
-                    const binMeshHeader = this.readHeader();
-                    if (binMeshHeader.id === ChunkID.BIN_MESH_PLG) {
+                if (extensionHeader.id === Chunk.EXTENSION) {
+                    const binMeshHeader = this.parseHeader();
+                    if (binMeshHeader.id === Chunk.BIN_MESH_PLG) {
                         splits.push(...this.parseBinMesh());
-                        return { vertexCount, vertices, uvs, colors, indexSplits: splits, materials };
+                        return {
+                            vertices: geometryData.vertices,
+                            uvs: geometryData.uvs, colors: geometryData.colors,
+                            indexSplits: splits, materials,
+                            boundingSphere: geometryData.boundingSphere
+                        };
                     }
                 }
             }
         }
-        return { vertexCount: 0, vertices: [], uvs: [], colors: [], indexSplits: [], materials: [] };
+        return { vertices: [], uvs: [], colors: [], indexSplits: [], materials: [] };
     }
 
-    private parsePlaneSection(header: NodeHeader): LevelSector {
+    private parsePlaneSection(header: NodeHeader): RWBSPNode {
         const endOffset = this.offset + header.size;
-        const sector: LevelSector = {
-            type: header.id === ChunkID.ATOMIC_SECTION ? 'leaf' : 'node',
-            children: []
+        const sector: RWBSPNode = {
+            type: header.id === Chunk.ATOMIC_SECTION ? 'leaf' : 'node',
+            leaves: []
         };
 
-        if (header.id === ChunkID.ATOMIC_SECTION) {
+        if (header.id === Chunk.ATOMIC_SECTION) {
             sector.mesh = this.parseAtomicSection();
             this.offset = endOffset;
         } else {
             while (this.offset < endOffset) {
-                const child = this.readHeader();
-                if (child.id === ChunkID.PLANE_SECTION || child.id === ChunkID.ATOMIC_SECTION) {
-                    sector.children.push(this.parsePlaneSection(child));
+                const child = this.parseHeader();
+                if (child.id === Chunk.PLANE_SECTION || child.id === Chunk.ATOMIC_SECTION) {
+                    sector.leaves.push(this.parsePlaneSection(child));
                 } else {
                     this.offset += child.size;
                 }
@@ -432,25 +443,25 @@ export class RWParser {
     private parseMaterialList(size: number): string[] {
         const names: string[] = [];
         const end = this.offset + size;
-        
-        const struct = this.readHeader();
+
+        const struct = this.parseHeader();
         const numMaterials = this.data.getInt32(this.offset, true);
         this.offset += struct.size;
 
         for (let i = 0; i < numMaterials; i++) {
-            const matHeader = this.readHeader();
+            const matHeader = this.parseHeader();
             const matEnd = this.offset + matHeader.size;
 
             while (this.offset < matEnd) {
-                const child = this.readHeader();
+                const child = this.parseHeader();
                 if (this.data.getUint8(this.offset + 12) === 0) {
                     names.push("");
                     this.offset += child.size;
-                } else if (child.id === ChunkID.TEXTURE) {
+                } else if (child.id === Chunk.TEXTURE) {
                     const texEnd = this.offset + child.size;
                     while (this.offset < texEnd) {
-                        const texChild = this.readHeader();
-                        if (texChild.id === ChunkID.STRING) {
+                        const texChild = this.parseHeader();
+                        if (texChild.id === Chunk.STRING) {
                             names.push(this.readString(texChild.size));
                             this.offset = texEnd;
                         } else {
@@ -466,14 +477,14 @@ export class RWParser {
         return names;
     }
 
-    private parseAtomicSection(): Mesh {
-        const structHeader = this.readHeader();
+    private parseAtomicSection(): RWMesh {
+        const structHeader = this.parseHeader();
         const structEnd = this.offset + structHeader.size;
 
         const vertexCount = this.data.getUint32(this.offset + 8, true);
         if (vertexCount === 0) {
-            this.offset = structEnd; 
-            return { vertexCount: 0, indexSplits: [], vertices: [], uvs: [], colors: [] };
+            this.offset = structEnd;
+            return { vertices: [], uvs: [], colors: [], indexSplits: [] };
         }
 
         // vertices (12), unknown colors (4), vertex colors (4), uvs (8)
@@ -512,20 +523,20 @@ export class RWParser {
 
         this.offset = structEnd;
 
-        const extHeader = this.readHeader();
+        const extHeader = this.parseHeader();
         const extEnd = this.offset + extHeader.size;
-        const splits: IndexSplit[] = [];
+        const indexSplits: IndexSplit[] = [];
         while (this.offset < extEnd - 12) {
-            const subHeader = this.readHeader();
-            if (subHeader.id === ChunkID.BIN_MESH_PLG) {
-                splits.push(...this.parseBinMesh());
+            const subHeader = this.parseHeader();
+            if (subHeader.id === Chunk.BIN_MESH_PLG) {
+                indexSplits.push(...this.parseBinMesh());
             }
             this.offset += subHeader.size;
         }
 
         this.offset = extEnd;
 
-        return { vertexCount, vertices, uvs, colors, indexSplits: splits };
+        return { vertices, uvs, colors, indexSplits };
     }
 
     private parseBinMesh(): IndexSplit[] {
@@ -567,7 +578,7 @@ export class RWParser {
         return splits;
     }
 
-    private parseGeometryStruct(start: number, end: number): { vertexCount: number, vertices: number[], uvs: number[], colors: number[] } {
+    private parseGeometryData(start: number, end: number): GeometryData {
         // header (28)
         // bitwise flags (1), ? (3), face num (4), vertex num (4), frame num (4), c1 (4), c2 (4), c3 (4)
         this.offset = start;
@@ -617,7 +628,15 @@ export class RWParser {
         // faces (8)
         pointer += 8 * faceCount;
 
-        // skip bounding sphere and unknown nums and work backwards
+        // bounding sphere (16)
+        const boundingSphere = {
+            x: this.data.getFloat32(pointer, true),
+            y: this.data.getFloat32(pointer + 4, true),
+            z: this.data.getFloat32(pointer + 8, true),
+            r: this.data.getFloat32(pointer + 12, true),
+        };
+
+        // work backwards
         pointer = end - (12 * vertexCount);
         if (geoNormals) {
             // skip normals if present
@@ -635,7 +654,7 @@ export class RWParser {
             pointer += 12;
         }
 
-        return { vertexCount, vertices, uvs, colors };
+        return { vertices, uvs, colors, boundingSphere };
     }
 
     private readString(size: number): string {
