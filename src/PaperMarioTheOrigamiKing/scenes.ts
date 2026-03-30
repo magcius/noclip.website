@@ -199,7 +199,10 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
             continue;
         }
         const m = mat4.create();
-        computeModelMatrixSRT(m, 1, 1, 1, 0, 0, 0, instance.position[0], instance.position[1], instance.position[2]);
+        computeModelMatrixSRT(m, 1, 1, 1,
+            0, 0, 0, // instance.rotationDeg * MathConstants.DEG_TO_RAD
+            instance.position[0], instance.position[1], instance.position[2]
+        );
         modelRenderer.instanceMatrices.push(m);
     }
 }
@@ -341,21 +344,23 @@ async function getNPCInstances(id: string, resources: OrigamiResources, dataFetc
         }
         const file = await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.bfres.zst`);
         resources.loadBFRES(device, assetGroup.file, BFRES.parse(decompressZST(file)));
-        if (assetGroup.file.startsWith("P_")) {
+        if (assetGroup.file.startsWith("P_") && assetGroup.file !== "P_KNPOLI_ITEM") {
             const texFile = await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.Default.bntx.zst`);
             const textures = BNTX.parse(decompressZST(texFile)).textures;
             // only load in the textures referenced in the materials
-            const materials = resources.modelData.get(assetGroup.file)!.model.fmat;
+            const model = resources.modelData.get(assetGroup.file)!;
+            const materials = model.materials;
             for (const m of materials) {
+                if (!m) {
+                    continue;
+                }
                 for (const n of m.textureName) {
-                    const t = textures.find((t) => t.name === n);
+                    const t = textures.find((t) => model.name + "_" + t.name === n);
                     if (t) {
                         if (!t.name.startsWith("Cmn_")) {
                             t.name = `${assetGroup.file}_${t.name}`;
                         }
-                        if (!resources.textureHolder.textureNames.includes(t.name)) {
-                            resources.textureHolder.addTexture(device, t);
-                        }
+                        resources.textureHolder.addTexture(device, t);
                     }
                 }
             }
@@ -382,9 +387,9 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
     }
 
     let npcInstances: NPCInstance[] = [];
-    // if (config.npc) {
-    //     npcInstances = await getNPCInstances(id, resources, dataFetcher, device);
-    // }
+    if (config.npc) {
+        npcInstances = await getNPCInstances(id, resources, dataFetcher, device);
+    }
 
     return { mobjInstances, sobjInstances, itemInstances, npcInstances };
 }
@@ -393,26 +398,23 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
 TODO
 
 Fix UVs that are sometimes the wrong set
-Fix objects with only albedo showing (seems to be different SRTs used)
-Figure out NPC rotation degree logic (probably just one axis)
 Figure out level objects for battle stages
 Add level variants that share the same base BFRES file (e.g. sensor lab offices and desert, seems to use .probe files)
 Add level states (i.e. post-game, before or after story events, etc)
     Ability to hide specific objects from level (rather than blindly rendering all of them)
     Ability to change animation/texture set/etc of shown objects
-Add toggleable render layers by model name
 Decide how to handle different mobj dispos files
-Add back npcs
 Figure out how water works (bone user data for mask, have to hardcode the color?)
 Figure out how "real" ice and lava works
-Properly utilize bone visiblity animations
-Add material/texture/shader param animations
-Add save states
+Add material/shader param animations
 Add particle effects
 Add bloom if base renderering can be made more efficient, otherwise not worth the cost
 Investigate renderInst.setInstanceCount
 Try out chunking bounding boxes for better frustum culling in huge levels
 Remove invisibile bones/shapes with static fvbs's instead of constantly skipping over them
+Properly utilize texture pattern animations
+Figure out how phantom models should be loaded (magic circles, vellumental spots, etc.)
+Investigate disfigured skeletons of collectible toad variants (messed up in Switch Toolbox too)
 */
 
 const pathBase = "PMTOK";
@@ -480,11 +482,11 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W0C1_PeachcastleA", "Battle - Peach's Castle"),
     "Whispering Woods",
     new PMTOKScene("map/field/W1C1_WakeUp", "Starting Area"),
-    new PMTOKScene("map/field/W1C1_CastleView", "Castle View"),
+    new PMTOKScene("map/field/W1C1_CastleView", "Castle Overlook"),
     new PMTOKScene("map/field/W1C1_LostForest", "Whispering Woods"),
     new PMTOKScene("map/field/W1C1_BigStump", "Whispering Woods (Grandsappy)"),
     new PMTOKScene("map/field/W1C1_CampSite", "Camp Site"),
-    new PMTOKScene("map/field/W1C1_LogHouse", "Log House"),
+    new PMTOKScene("map/field/W1C1_LogHouse", "Log Cabin (Interior)"),
     new PMTOKScene("map/battle/Btl_W1C1_MountainA", "Battle - Whispering Woods"),
     "Toad Town",
     new PMTOKScene("map/field/W1G1_KinokoTown", "Toad Town"),

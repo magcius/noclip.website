@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA, FBVS } from "../fres_nx/bfres";
+import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA, FBVS, FMAA, FMAT } from "../fres_nx/bfres";
 import { AttributeFormat, getChannelFormat, getTypeFormat, IndexFormat } from "../fres_nx/nngfx_enum";
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxDevice, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
@@ -55,6 +55,8 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
             return GfxFormat.F32_RG;
         case AttributeFormat._32_32_32_Float:
             return GfxFormat.F32_RGB;
+        case AttributeFormat._32_32_32_32_Float:
+            return GfxFormat.F32_RGBA;
         default:
             console.error(getChannelFormat(attributeFormat), getTypeFormat(attributeFormat));
             throw `Unknown attribute format ${attributeFormat}`;
@@ -205,11 +207,14 @@ export class ShapeData {
 }
 
 export class ModelData {
-    public model: FMDL;
+    public name: string;
     public skeletonAnimation: FSKA | undefined;
     public boneVisibilityAnimation: FBVS | undefined;
+    public texturePatternAnimation: FMAA | undefined;
     public shapeData: ShapeData[] = [];
     public bones: FSKL_Bone[];
+    public skeleton: FSKL;
+    public materials: (FMAT | null)[] = [];
     public currentSKAFrame: number = 0;
     public currentBVSFrame: number = 0;
     public skeletonAnimationBoneIndices: number[] = [];
@@ -218,41 +223,60 @@ export class ModelData {
     public baseBoneVisibility: Map<number, boolean> = new Map();
     public smoothRigidMatrices: mat4[] = [];
 
-    constructor(cache: GfxRenderCache, public bfres: FRES, public config: OrigamiModelConfig | undefined) {
-        this.model = bfres.fmdl[0];
+    constructor(cache: GfxRenderCache, bfres: FRES, public config: OrigamiModelConfig | undefined) {
+        const model = bfres.fmdl[0];
+        this.name = model.name;
+        this.skeleton = model.fskl;
+
         if (this.config && this.config.fska) {
             this.skeletonAnimation = bfres.fska.find(a => a.name === this.config!.fska);
             if (!this.skeletonAnimation) {
-                console.warn("Could not find skeleton animation", this.config.fska, "in", this.model.name);
+                console.warn("Could not find skeleton animation", this.config.fska, "in", model.name);
             }
         }
 
-        if (this.config && (this.config.fska || this.config.fbvs)) {
-            const fbvsName = this.config.fbvs ? this.config.fbvs : this.config.fska;
+        if (this.config && (this.config.fska || this.config.fbvs || this.config.texturePattern)) {
+            const fbvsName = this.config.fbvs ? this.config.fbvs : (this.config.fska ? this.config.fska : this.config.texturePattern);
             if (fbvsName) {
                 this.boneVisibilityAnimation = bfres.fbvs.find(v => v.name === fbvsName);
             }
 
             if (this.boneVisibilityAnimation) {
                 const boneNames = this.boneVisibilityAnimation.boneNames;
-                const baseValues = this.boneVisibilityAnimation.baseValues;
+                // boneNames and baseValues are assumed to have equal length
                 for (let i = 0; i < boneNames.length; i++) {
-                    const boneIndex = this.model.fskl.bones.findIndex(b => b.name === boneNames[i]);
-                    if (boneIndex >= 0) {
-                        this.baseBoneVisibility.set(boneIndex, baseValues[i]);
+                    const globalBoneIndex = this.skeleton.bones.findIndex(b => b.name === boneNames[i]);
+                    if (globalBoneIndex >= 0) {
+                        this.baseBoneVisibility.set(globalBoneIndex, this.boneVisibilityAnimation.baseValues[i]);
                     }
                 }
 
                 for (const curve of this.boneVisibilityAnimation.curves) {
+                    let keyIndex = 0;
+                    const keyStepBooleans = Array(curve.keys.length);
+                    for (let i = 0; i < curve.keys.length; i++) {
+                        if (curve.keys.length <= keyIndex) {
+                            break;
+                        }
+                        let value = curve.keys[i][0];
+                        for (let j = 0; j < 32; j++) {
+                            if (curve.keys.length <= keyIndex) {
+                                break;
+                            }
+                            const set = (value & 1) !== 0;
+                            value >>= 1;
+                            keyStepBooleans[keyIndex] = set;
+                            keyIndex++;
+                        }
+                    }
                     const boneName = this.boneVisibilityAnimation.boneNames[curve.targetOffset];
-                    const globalBoneIndex = this.model.fskl.bones.findIndex(b => b.name === boneName);
+                    const globalBoneIndex = this.skeleton.bones.findIndex(b => b.name === boneName);
                     for (let i = 0; i < curve.frames.length; i++) {
-                        const frameNum = curve.frames[i];
-                        const frame = this.boneVisibilityFrames.get(frameNum);
+                        const frame = this.boneVisibilityFrames.get(curve.frames[i]);
                         const visibility = frame ? frame : new Map<number, boolean>();
-                        visibility.set(globalBoneIndex, curve.keyStepBooleans[i]);
+                        visibility.set(globalBoneIndex, keyStepBooleans[i]);
                         if (!frame) {
-                            this.boneVisibilityFrames.set(frameNum, visibility);
+                            this.boneVisibilityFrames.set(curve.frames[i], visibility);
                         }
                     }
                 }
@@ -262,11 +286,11 @@ export class ModelData {
                 }
             } else if (this.config.fbvs) {
                 // don't warn if tried to find matching fska name, sometimes there isn't one
-                console.warn("Could not find bone visibility animation", this.config.fbvs, "in", this.model.name);
+                console.warn("Could not find bone visibility animation", this.config.fbvs, "in", model.name);
             }
         }
 
-        this.bones = this.model.fskl.bones;
+        this.bones = model.fskl.bones;
         if (this.skeletonAnimation) {
             for (let i = 0; i < this.bones.length; i++) {
                 let index = -1;
@@ -279,7 +303,80 @@ export class ModelData {
         }
         this.computeSmoothRigidMatrices();
 
-        for (const shape of this.model.fshp) {
+        if (this.config && this.config.texturePattern) {
+            this.texturePatternAnimation = bfres.fmaa.find(a => a.name === this.config?.texturePattern);
+            if (!this.texturePatternAnimation) {
+                console.warn("Could not find texture pattern animation", this.config.texturePattern, "in", model.name);
+            } else {
+                // patch texture names
+                const ma = this.texturePatternAnimation.materialAnimations[0];
+                const ta = ma.texturePatternAnimations[0];
+
+                let materialIndex = this.config.materialBind ? this.config.materialBind : this.texturePatternAnimation.bindIndices[0];
+                if (materialIndex === 0xFFFF) {
+                    materialIndex = 0;
+                }
+
+                let newTextureNameIndex = -1;
+                const useCurve = ta.curveIndex < ma.curves.length;
+                const useConstant = ta.constantIndex < ma.constants.length;
+                if (useCurve) {
+                    newTextureNameIndex = ma.curves[ta.curveIndex].keys[0][0] + 1;
+                } else if (useConstant) {
+                    newTextureNameIndex = ma.constants[ta.constantIndex].valueInt;
+                } else {
+                    console.warn("Could not determine material index for", this.config.texturePattern, "in", model.name);
+                }
+
+                if (newTextureNameIndex > -1) {
+                    const material = model.fmat[materialIndex];
+                    const textureNameIndex = material.samplerInfo.findIndex(s => s.name === ta.samplerName);
+                    if (textureNameIndex > -1) {
+                        material.textureName[textureNameIndex] = this.texturePatternAnimation.textureNames[newTextureNameIndex];
+                    } else {
+                        console.warn("Could not determine texture name index for", this.config.texturePattern, "in", model.name);
+                    }
+                }
+            }
+        }
+
+        for (let i = 0; i < model.fmat.length; i++) {
+            const material = model.fmat[i];
+            const shaderAssignExec = material.userData.get("__ShaderAssignExec");
+            let visible = true;
+            if (shaderAssignExec) {
+                for (const s of shaderAssignExec as string[]) {
+                    if (s.includes("SetAttribute('visibility', 'false')")) {
+                        visible = false;
+                        break;
+                    }
+                }
+            } else if (material.name.toLowerCase().includes("mt_shadow") || material.name.toLowerCase().endsWith("_sm") || material.samplerInfo.length < 1) {
+                // sometimes the casing is inconsistent for materials (whoops!)
+                visible = false;
+            }
+            if (visible && this.config) {
+                if (this.config.materialWhitelist && !this.config.materialWhitelist.includes(material.name)) {
+                    visible = false;
+                }
+                if (this.config.materialBlacklist && this.config.materialBlacklist.includes(material.name)) {
+                    visible = false;
+                }
+            }
+            if (visible) {
+                for (let i = 0; i < material.textureName.length; i++) {
+                    if (!material.textureName[i].startsWith("Cmn_")) {
+                        material.textureName[i] = `${model.name}_${material.textureName[i]}`;
+                    }
+                }
+                this.materials.push(material);
+            } else {
+                // append null for consistent indices
+                this.materials.push(null);
+            }
+        }
+
+        for (const shape of model.fshp) {
             if (this.config) {
                 if (this.config.shapeWhitelist && !this.config.shapeWhitelist.includes(shape.name)) {
                     continue;
@@ -288,8 +385,8 @@ export class ModelData {
                     continue;
                 }
             }
-            const vd = new VertexData(cache.device, this.model.fvtx[shape.vertexIndex]);
-            const sd = new ShapeData(cache, shape, vd, this.model.fskl);
+            const vd = new VertexData(cache.device, model.fvtx[shape.vertexIndex]);
+            const sd = new ShapeData(cache, shape, vd, model.fskl);
             if (this.boneVisibilityAnimation) {
                 const visibility = this.baseBoneVisibility.get(shape.boneIndex);
                 if (visibility !== undefined) {
@@ -302,12 +399,12 @@ export class ModelData {
 
     public computeSmoothRigidMatrices(): void {
         this.smoothRigidMatrices = [];
-        for (let i = 0; i < this.model.fskl.smoothRigidIndices.length; i++) {
-            const shiftMatrix = this.computeShiftMatrix(this.bones, this.model.fskl.smoothRigidIndices[i]);
-            if (i < this.model.fskl.boneLocalFromBindPoseMatrices.length) {
-                const scratch: mat4 = mat4.create();
-                mat4.multiply(scratch, shiftMatrix, this.model.fskl.boneLocalFromBindPoseMatrices[i])
-                this.smoothRigidMatrices.push(scratch);
+        for (let i = 0; i < this.skeleton.smoothRigidIndices.length; i++) {
+            const shiftMatrix = this.computeShiftMatrix(this.bones, this.skeleton.smoothRigidIndices[i]);
+            if (i < this.skeleton.boneLocalFromBindPoseMatrices.length) {
+                const m: mat4 = mat4.create();
+                mat4.multiply(m, shiftMatrix, this.skeleton.boneLocalFromBindPoseMatrices[i])
+                this.smoothRigidMatrices.push(m);
             } else {
                 this.smoothRigidMatrices.push(shiftMatrix);
             }

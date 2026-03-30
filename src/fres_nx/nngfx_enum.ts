@@ -129,6 +129,7 @@ export enum AttributeFormat {
     _16_16_16_16_Float = ((ChannelFormat.R16_G16_B16_A16 << TypeFormat.$Bits) | TypeFormat.Float),
     _32_32_Float       = ((ChannelFormat.R32_G32         << TypeFormat.$Bits) | TypeFormat.Float),
     _32_32_32_Float    = ((ChannelFormat.R32_G32_B32     << TypeFormat.$Bits) | TypeFormat.Float),
+    _32_32_32_32_Float = ((ChannelFormat.R32_G32_B32_A32 << TypeFormat.$Bits) | TypeFormat.Float),
 }
 
 export function getChannelFormat(format: ImageFormat | AttributeFormat): ChannelFormat {

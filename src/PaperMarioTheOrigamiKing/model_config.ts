@@ -5,6 +5,8 @@ export interface OrigamiModelConfig {
     materialBlacklist?: string[];
     fska?: string;
     fbvs?: string;
+    texturePattern?: string;
+    materialBind?: number;
 }
 
 // NOTE: static fbvs's are cheaper than static fska's, so fvbs is preferred
@@ -21,7 +23,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_RubbleA", { fbvs: "C1" }],
     ["Mobj_PotA", { fbvs: "C1" }],
     ["Mojb_PotB", { fbvs: "C1" }],
-    ["Mobj_WoodBoxAWaterWay", { fbvs: "C1" }],
+    ["Mobj_WoodBoxAWaterWay", { materialBlacklist: ["Mt_BG", "lambert1"], fbvs: "C1" }],
     ["Mobj_RockA", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["PaperAlpha__Mt_RockA", "Wire__Mt_Wire"] }],
     ["Mobj_RockB", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["Paper__Mt_Rock", "Wire__Mt_Wire"] }],
     ["Mobj_RockC", { shapeWhitelist: ["PaperStatic__Mt_RockC", "WireStatic__Mt_Wire"] }],
@@ -31,7 +33,6 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["W4C1_StoreRoom", { shapeBlacklist: ["PipeFlameB__Mt_Pipe"] }],
     ["Mobj_GrassF", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["Grass__Mt_Grass"] }],
     ["Mobj_HugeRockA", { materialWhitelist: ["Mt_HugeRockA"], shapeWhitelist: ["Rock__Mt_HugeRockA"] }],
-    
     ["Mobj_StallObjectA", { materialBlacklist: ["Mt_ColorPattern"], shapeWhitelist: ["Box__Mt_Box"] }],
     ["Mobj_CoffinA", { shapeBlacklist: ["MarkG__Mt_OrnamentGold", "MarkA__Mt_OrnamentGold", "MarkB__Mt_OrnamentGold", "MarkC__Mt_OrnamentGold", "MarkD__Mt_OrnamentGold", "MarkE__Mt_OrnamentGold"] }],
     ["Mobj_BarrelA", { shapeWhitelist: ["Wood1__Mt_Wood", "Wire1__Mt_Wire", "Metal1__Mt_Metal"] }],
@@ -287,7 +288,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_ShipFlagA", { fska: "C1" }],
     ["Mobj_CanyonRiverA", { fska: "C1" }],
     ["Sobj_CloudU", { fska: "C1" }],
-    ["Mobj_FenceC", { fska: "C1"}],
+    ["Mobj_FenceC", { fska: "C1" }],
     ["Mobj_KoopaShipWhitecapsA", { fska: "C1" }],
     ["Mobj_LavaFallA", { fska: "C1" }],
     ["Mobj_LavaFallB", { fska: "C1" }],
@@ -307,6 +308,44 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Sobj_FireBlackWaterC", { fska: "C1" }],
     ["Sobj_FireBlackWaterD", { fska: "C1" }],
     ["Sobj_FireBlackWaterE", { fska: "C1" }],
+    ["O_HEI", { materialBlacklist: ["Mt_ColorPattern1", "Mt_HEI_BS"], fska: "N_WaitA1" }],
+    ["O_PCH", { materialBlacklist: ["Mt_ColorPattern", "Mt_PCH_BS"], fska: "N_WaitA1" }],
+    ["P_MET", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KUR", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_NOK", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_BRSH", { materialBlacklist: ["Mt_HimPera"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1", materialBind: 1 }],
+    ["P_GBN", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_LUG", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KPA", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_PCH", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KMK", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1", materialBind: 1 }],
+    ["P_KPAJ", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1", materialBind: 1 }],
+    ["P_KNPOLI", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["O_KNG", { materialBlacklist: ["Mt_KNG_BS"], fska: "N_WaitA1" }],
+    ["O_KUR", { materialBlacklist: ["Mt_KUR_BS"], fska: "N_WaitA1" }],
+    ["O_BSA", { materialBlacklist: ["Mt_BSA_BS"], fska: "N_WaitA1" }],
+    ["O_CHU", { materialBlacklist: ["Mt_CHU_BS"], fska: "N_WaitA1" }],
+    ["P_KPAO", { materialBlacklist: ["Mt_decal"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["O_NOK", { materialBlacklist: ["Mt_ColorPattern", "Mt_NOK_BS", "Mt_NOK_Shell_BS"], fska: "N_WaitA1" }],
+    ["O_BRSH", { materialBlacklist: ["Mt_BRSH_BS", "lambert1"], fska: "N_WaitA1" }],
+    ["O_GBN", { materialBlacklist: ["Mt_GBN_BS", "Mt_GBN_W", "Mt_GBN_W_BS"], fska: "N_WaitA1" }],
+    ["P_KNP", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KNPC", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KNPCAP", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KNP_Town", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "Gallery_Stand_1", texturePattern: "Gallery_Stand_1" }],
+    ["P_KNPN", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KNP_Saisyo", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KNP_Maki", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "WRY_Stand_1", texturePattern: "WRY_Stand_1" }],
+    ["P_KNP_Shop", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["O_KNP_Semi", { materialBlacklist: ["Mt_O_KNP_Semi_BS", "Mt_ColorPattern"], fska: "N_WalkA1" }],
+    ["O_KNP_FlowerB", { materialBlacklist: ["Mt_KNP_FlowerB_BS", "Mt_ColorPattern"], fska: "N_WaitA1" }],
+    ["OG_FIR", { materialBlacklist: ["Mt_FIR_BDY_Cap_BS", "Mt_ColorPattern", "Mt_FIR_KNG_Crown_BS"], fska: "N_WaitA1" }],
+    ["P_CRN", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_HEI", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["Mobj_KingSealF1", { fbvs: "C1" }],
+    ["Mobj_StretchPassageA", { fska: "C1", texturePattern: "C1" }],
+    ["W1G1_KartRoad", { fbvs: "C1" }],
+    ["P_KNP_E", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Walk_1", texturePattern: "NML_Walk_1" }],
 ]);
 
 export function getOrigamiModelConfig(id: string): OrigamiModelConfig | undefined {

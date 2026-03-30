@@ -106,53 +106,15 @@ export class OrigamiModelRenderer {
     private sceneBindings: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 
     constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, private modelData: ModelData) {
-        this.name = this.modelData.model.name;
+        this.name = this.modelData.name;
         this.visible = true;
 
-        // build materials, filter by config and name (mainly shadows/lighting are ignored)
-        const materials: (MaterialInstance | null)[] = [];
-        for (let matIndex = 0; matIndex < this.modelData.model.fmat.length; matIndex++) {
-            const material = this.modelData.model.fmat[matIndex];
-            const shaderAssignExec = material.userData.get("__ShaderAssignExec");
-            let visible = true;
-            if (shaderAssignExec) {
-                for (const s of shaderAssignExec as string[]) {
-                    if (s.includes("SetAttribute('visibility', 'false')")) {
-                        visible = false;
-                        break;
-                    }
-                }
-            } else if (material.name.toLowerCase().includes("mt_shadow") || material.name.toLowerCase().endsWith("_sm") || material.samplerInfo.length < 1) {
-                // sometimes the casing is inconsistent for materials (whoops!)
-                visible = false;
-            }
-            if (visible && this.modelData.config) {
-                if (this.modelData.config.materialWhitelist && !this.modelData.config.materialWhitelist.includes(material.name)) {
-                    visible = false;
-                }
-                if (this.modelData.config.materialBlacklist && this.modelData.config.materialBlacklist.includes(material.name)) {
-                    visible = false;
-                }
-            }
-            if (visible) {
-                // patch texture names with model name (since some models have different textures under the same internal name)
-                for (let i = 0; i < material.textureName.length; i++) {
-                    if (!material.textureName[i].startsWith("Cmn_")) {
-                        material.textureName[i] = `${this.name}_${material.textureName[i]}`;
-                    }
-                }
-                materials.push(new MaterialInstance(cache, textureHolder, material));
-            } else {
-                // append null for consistent indices
-                materials.push(null);
-            }
-        }
-
-        // build shape renderers and pre-compute their static SRT
         for (const shapeData of this.modelData.shapeData) {
-            const material = materials[shapeData.shape.materialIndex];
+            const material = this.modelData.materials[shapeData.shape.materialIndex];
             if (material) {
-                const sr = new ShapeRenderer(cache, shapeData, material, this.modelData.skeletonAnimation !== undefined);
+                const matInstance = new MaterialInstance(cache, textureHolder, material);
+                const sr = new ShapeRenderer(cache, shapeData, matInstance, this.modelData.skeletonAnimation !== undefined);
+
                 sr.staticBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeData.shape.boneIndex);
                 this.shapeRenderers.push(sr);
             }
@@ -287,9 +249,9 @@ export class OrigamiModelRenderer {
     }
 
     private getBonesAt(frame: number): FSKL_Bone[] {
-        const bones: FSKL_Bone[] = Array(this.modelData.model.fskl.bones.length);
-        for (let boneIndex = 0; boneIndex < this.modelData.model.fskl.bones.length; boneIndex++) {
-            const bone = this.modelData.model.fskl.bones[boneIndex];
+        const bones: FSKL_Bone[] = Array(this.modelData.skeleton.bones.length);
+        for (let boneIndex = 0; boneIndex < this.modelData.skeleton.bones.length; boneIndex++) {
+            const bone = this.modelData.skeleton.bones[boneIndex];
             const animationIndex = this.modelData.skeletonAnimationBoneIndices[boneIndex];
             if (animationIndex === -1) {
                 bones[boneIndex] = bone;
@@ -297,6 +259,7 @@ export class OrigamiModelRenderer {
             }
             const srt: number[] = [];
             const animation = this.modelData.skeletonAnimation!.boneAnimations[animationIndex];
+            // store this, don't compute same thing each frame!!!
             let curveIndex = 0;
             let flags = animation.flags >> 6;
             for (let i = 0; i < 10; i++) {
@@ -330,7 +293,7 @@ export class OrigamiModelRenderer {
                 }
             }
         }
-        console.warn("Could not find keyframe value for", this.name);
+        // console.warn("Could not find keyframe value for", this.name);
         return 0;
     }
 }
@@ -415,7 +378,10 @@ class MaterialInstance {
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
         const additiveBlend = blendString === "transadd";
-        this.isTranslucent = blendMode !== null || (fmat.shaderAssign.shaderOption.has("paste_type") && fmat.shaderAssign.shaderOption.get("paste_type") === "0");
+        this.isTranslucent =
+            fmat.name === "Mt_Pera" ||
+            blendMode !== null ||
+            fmat.shaderAssign.shaderOption.get("paste_type") === "0";
         this.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
 
         this.megaStateFlags = {

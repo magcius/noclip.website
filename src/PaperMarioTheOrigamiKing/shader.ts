@@ -14,11 +14,13 @@ const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
     ["_b0", "vec4"], // bitangent
     ["_u0", "vec2"], // uv 1
     ["_u1", "vec2"], // uv 2
+    ["_u2", "vec2"], // uv 3
     ["_i0", ""], // index, dynamic type
     ["_w0", ""], // weight, dynamic type
     ["albedo", "vec2"], // same format as UVs but doesn't have any data (???)
     ["detail", "vec2"], // same format as UVs but doesn't have any data (???)
-    ["lightmap", "vec2"] // same format as UVs but doesn't have any data (???)
+    ["lightmap", "vec2"], // same format as UVs but doesn't have any data (???)
+    ["paper", "vec4"] // need to investigate this more, very rare (toad town ending npc)
 ]);
 
 export class OrigamiProgram extends DeviceProgram {

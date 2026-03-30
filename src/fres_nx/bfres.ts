@@ -171,7 +171,12 @@ export interface Curve {
     delta: number;
     frames: number[];
     keys: number[][];
-    keyStepBooleans: boolean[];
+}
+
+export interface AnimationConstant {
+    targetOffset: number;
+    valueInt: number;
+    valueFloat: number;
 }
 
 export interface BoneAnimation {
@@ -187,14 +192,24 @@ export interface FSKA {
     boneAnimations: BoneAnimation[];
 }
 
+export interface TexturePatternAnimation {
+    samplerName: string;
+    curveIndex: number;
+    constantIndex: number;
+}
+
 export interface MaterialAnimation {
     name: string;
     curves: Curve[];
+    constants: AnimationConstant[];
+    texturePatternAnimations: TexturePatternAnimation[];
 }
 
 export interface FMAA {
     name: string;
     frameCount: number;
+    textureNames: string[];
+    bindIndices: number[];
     materialAnimations: MaterialAnimation[];
     userData: Map<string, number[] | string[]>;
 }
@@ -1035,28 +1050,7 @@ function parseCurves(buffer: ArrayBufferSlice, fresVersion: Version, offset: num
             keys.push(values);
         }
 
-        let keyStepBooleans: boolean[] = [];
-        if (curveType === CurveType.StepBoolean) {
-            let keyIndex = 0;
-            keyStepBooleans = Array(keyframeCount);
-            for (let i = 0; i < keys.length; i++) {
-                if (keyframeCount <= keyIndex) {
-                    break;
-                }
-                let value = keys[i][0];
-                for (let j = 0; j < 32; j++) {
-                    if (keyframeCount <= keyIndex) {
-                        break;
-                    }
-                    const set = (value & 1) !== 0;
-                    value >>= 1;
-                    keyStepBooleans[keyIndex] = set;
-                    keyIndex++;
-                }
-            }
-        }
-
-        curves.push({ curveType, startFrame, endFrame, targetOffset, delta, frames, keys, keyStepBooleans });
+        curves.push({ curveType, startFrame, endFrame, targetOffset, delta, frames, keys });
         curveEntryOffset += 0x30;
     }
 
@@ -1128,47 +1122,89 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
     const view = buffer.createDataView();
 
     let name;
+    let bindIndicesArrayOffset;
     let materialAnimationArrayOffset;
     let userDataArrayOffset;
     let userDataResDicOffset;
     let frameCount;
     let userDataCount;
     let materialAnimationCount;
+    let textureNameArrayOffset;
+    let textureCount;
 
     if (fresVersion.major < 9) {
         name = readBinStr(buffer, view.getUint32(offset + 0x10, littleEndian), littleEndian);
+        bindIndicesArrayOffset = view.getUint32(offset + 0x28, littleEndian);
         materialAnimationArrayOffset = view.getUint32(offset + 0x30, littleEndian);
+        textureNameArrayOffset = view.getUint32(offset + 0x40, littleEndian);
         userDataArrayOffset = view.getUint32(offset + 0x48, littleEndian);
         userDataResDicOffset = view.getUint32(offset + 0x50, littleEndian);
         userDataCount = view.getUint16(offset + 0x62, littleEndian);
         materialAnimationCount = view.getUint16(offset + 0x64, littleEndian);
         frameCount = view.getUint32(offset + 0x68, littleEndian);
-    }
-    else {
+        textureCount = view.getUint16(offset + 0x76, littleEndian);
+    } else {
         name = readBinStr(buffer, view.getUint32(offset + 0x8, littleEndian), littleEndian);
+        bindIndicesArrayOffset = view.getUint32(offset + 0x20, littleEndian);
         materialAnimationArrayOffset = view.getUint32(offset + 0x28, littleEndian);
+        textureNameArrayOffset = view.getUint32(offset + 0x38, littleEndian);
         userDataArrayOffset = view.getUint32(offset + 0x40, littleEndian);
         userDataResDicOffset = view.getUint32(offset + 0x48, littleEndian);
         frameCount = view.getUint32(offset + 0x58, littleEndian);
         userDataCount = view.getUint16(offset + 0x60, littleEndian);
         materialAnimationCount = view.getUint16(offset + 0x62, littleEndian);
+        textureCount = view.getUint16(offset + 0x6C, littleEndian);
+    }
+
+    const textureNames: string[] = Array(textureCount);
+    for (let i = 0; i < textureCount; i++) {
+        textureNames[i] = readBinStr(buffer, view.getUint32(textureNameArrayOffset + (i * 8), littleEndian), littleEndian);
+    }
+
+    const bindIndices: number[] = Array(materialAnimationCount);
+    for (let i = 0; i < materialAnimationCount; i++) {
+        bindIndices[i] = view.getUint16(bindIndicesArrayOffset + (i * 2), littleEndian);
     }
 
     let materialAnimations: MaterialAnimation[] = [];
     let materialAnimationEntryOffset = materialAnimationArrayOffset;
     for (let materialAnimationIndex = 0; materialAnimationIndex < materialAnimationCount; materialAnimationIndex++) {
-        const name = readBinStr(buffer, view.getUint32(materialAnimationEntryOffset + 0x0, littleEndian), littleEndian);
+        const name = readBinStr(buffer, view.getUint32(materialAnimationEntryOffset, littleEndian), littleEndian);
+        const texturePatternAnimationArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x10, littleEndian);
         const curveArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x18, littleEndian);
+        const constantArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x20, littleEndian);
+        const firstTexturePatternCurveIndex = view.getUint16(materialAnimationEntryOffset + 0x2A, littleEndian);
+        const texturePatternAnimationCount = view.getUint16(materialAnimationEntryOffset + 0x34, littleEndian);
+        const constantCount = view.getUint16(materialAnimationEntryOffset + 0x36, littleEndian);
         const curveCount = view.getUint16(materialAnimationEntryOffset + 0x38, littleEndian);
+
         const curves = parseCurves(buffer, fresVersion, curveArrayOffset, curveCount, littleEndian);
 
-        materialAnimations.push({ name, curves });
+        const constants: AnimationConstant[] = Array(constantCount);
+        for (let i = 0; i < constantCount; i++) {
+            const offs = i * 8;
+            const targetOffset = view.getUint32(constantArrayOffset + offs, littleEndian);
+            const valueInt = view.getInt32(constantArrayOffset + offs + 4, littleEndian);
+            const valueFloat = view.getFloat32(constantArrayOffset + offs + 4, littleEndian);
+            constants[i] = { targetOffset, valueInt, valueFloat };
+        }
+
+        const texturePatternAnimations: TexturePatternAnimation[] = Array(texturePatternAnimationCount);
+        for (let i = 0; i < texturePatternAnimationCount; i++) {
+            const offs = i * 0x10;
+            const samplerName = readBinStr(buffer, view.getUint32(texturePatternAnimationArrayOffset + offs, littleEndian), littleEndian);
+            const curveIndex = firstTexturePatternCurveIndex + view.getUint16(texturePatternAnimationArrayOffset + offs + 0x08, littleEndian);
+            const constantIndex = view.getUint16(texturePatternAnimationArrayOffset + offs + 0x0A, littleEndian);
+            texturePatternAnimations[i] = { samplerName, curveIndex, constantIndex };
+        }
+
+        materialAnimations.push({ name, curves, constants, texturePatternAnimations });
         materialAnimationEntryOffset += 0x40;
     }
 
     const userData = parseUserData(buffer, fresVersion, userDataArrayOffset, userDataCount, littleEndian);
 
-    return { name, frameCount, materialAnimations, userData };
+    return { name, frameCount, textureNames, bindIndices, materialAnimations, userData };
 }
 
 function parseFBVS(buffer: ArrayBufferSlice, fresVersion: Version, offset: number, littleEndian: boolean): FBVS {
