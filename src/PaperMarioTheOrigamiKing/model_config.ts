@@ -6,7 +6,6 @@ export interface OrigamiModelConfig {
     fska?: string;
     fbvs?: string;
     texturePattern?: string;
-    materialBind?: number;
 }
 
 // NOTE: static fbvs's are cheaper than static fska's, so fvbs is preferred
@@ -313,13 +312,13 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["P_MET", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_KUR", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_NOK", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
-    ["P_BRSH", { materialBlacklist: ["Mt_HimPera"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1", materialBind: 1 }],
+    ["P_BRSH", { materialBlacklist: ["Mt_HimPera"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_GBN", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_LUG", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_KPA", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_PCH", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
-    ["P_KMK", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1", materialBind: 1 }],
-    ["P_KPAJ", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1", materialBind: 1 }],
+    ["P_KMK", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
+    ["P_KPAJ", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["P_KNPOLI", { shapeWhitelist: ["Pera01_Shape__Mt_Pera"], fska: "NML_Stand_1", texturePattern: "NML_Stand_1" }],
     ["O_KNG", { materialBlacklist: ["Mt_KNG_BS"], fska: "N_WaitA1" }],
     ["O_KUR", { materialBlacklist: ["Mt_KUR_BS"], fska: "N_WaitA1" }],

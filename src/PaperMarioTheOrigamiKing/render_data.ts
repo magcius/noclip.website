@@ -308,14 +308,9 @@ export class ModelData {
             if (!this.texturePatternAnimation) {
                 console.warn("Could not find texture pattern animation", this.config.texturePattern, "in", model.name);
             } else {
-                // patch texture names
+                // patch texture names, temp util of texture pattern anims
                 const ma = this.texturePatternAnimation.materialAnimations[0];
                 const ta = ma.texturePatternAnimations[0];
-
-                let materialIndex = this.config.materialBind ? this.config.materialBind : this.texturePatternAnimation.bindIndices[0];
-                if (materialIndex === 0xFFFF) {
-                    materialIndex = 0;
-                }
 
                 let newTextureNameIndex = -1;
                 const useCurve = ta.curveIndex < ma.curves.length;
@@ -329,12 +324,16 @@ export class ModelData {
                 }
 
                 if (newTextureNameIndex > -1) {
-                    const material = model.fmat[materialIndex];
-                    const textureNameIndex = material.samplerInfo.findIndex(s => s.name === ta.samplerName);
-                    if (textureNameIndex > -1) {
-                        material.textureName[textureNameIndex] = this.texturePatternAnimation.textureNames[newTextureNameIndex];
+                    const material = model.fmat.find(m => m.name === ma.name);
+                    if (!material) {
+                        console.warn("Could not match material name", ma.name, "in", model.name);
                     } else {
-                        console.warn("Could not determine texture name index for", this.config.texturePattern, "in", model.name);
+                        const textureNameIndex = material.samplerInfo.findIndex(s => s.name === ta.samplerName);
+                        if (textureNameIndex > -1) {
+                            material.textureName[textureNameIndex] = this.texturePatternAnimation.textureNames[newTextureNameIndex];
+                        } else {
+                            console.warn("Could not determine texture name index for", this.config.texturePattern, "in", model.name);
+                        }
                     }
                 }
             }

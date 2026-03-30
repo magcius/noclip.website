@@ -406,13 +406,12 @@ Add level states (i.e. post-game, before or after story events, etc)
 Decide how to handle different mobj dispos files
 Figure out how water works (bone user data for mask, have to hardcode the color?)
 Figure out how "real" ice and lava works
-Add material/shader param animations
 Add particle effects
 Add bloom if base renderering can be made more efficient, otherwise not worth the cost
 Investigate renderInst.setInstanceCount
 Try out chunking bounding boxes for better frustum culling in huge levels
 Remove invisibile bones/shapes with static fvbs's instead of constantly skipping over them
-Properly utilize texture pattern animations
+Properly utilize texture pattern/shader param animations
 Figure out how phantom models should be loaded (magic circles, vellumental spots, etc.)
 Investigate disfigured skeletons of collectible toad variants (messed up in Switch Toolbox too)
 */
