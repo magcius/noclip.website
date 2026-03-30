@@ -402,8 +402,7 @@ Add level states (i.e. post-game, before or after story events, etc)
     Ability to change animation/texture set/etc of shown objects
 Add toggleable render layers by model name
 Decide how to handle different mobj dispos files
-Add back sobjs and npcs
-Fix transparency on certain textures
+Add back npcs
 Figure out how water works (bone user data for mask, have to hardcode the color?)
 Figure out how "real" ice and lava works
 Properly utilize bone visiblity animations
@@ -413,6 +412,7 @@ Add particle effects
 Add bloom if base renderering can be made more efficient, otherwise not worth the cost
 Investigate renderInst.setInstanceCount
 Try out chunking bounding boxes for better frustum culling in huge levels
+Remove invisibile bones/shapes with static fvbs's instead of constantly skipping over them
 */
 
 const pathBase = "PMTOK";

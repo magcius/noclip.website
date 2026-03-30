@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA } from "../fres_nx/bfres";
+import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA, FBVS } from "../fres_nx/bfres";
 import { AttributeFormat, getChannelFormat, getTypeFormat, IndexFormat } from "../fres_nx/nngfx_enum";
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxDevice, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
@@ -183,6 +183,7 @@ export class MeshData {
 export class ShapeData {
     public meshData: MeshData[] = [];
     public boneMatrixLength: number;
+    public visible: boolean = true;
     public vertexSkinWeightCount;
 
     constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: VertexData, skeleton: FSKL) {
@@ -206,36 +207,62 @@ export class ShapeData {
 export class ModelData {
     public model: FMDL;
     public skeletonAnimation: FSKA | undefined;
+    public boneVisibilityAnimation: FBVS | undefined;
     public shapeData: ShapeData[] = [];
     public bones: FSKL_Bone[];
-    public hiddenBoneList: string[];
-    public currentSkeletonAnimationFrame: number = 0;
+    public currentSKAFrame: number = 0;
+    public currentBVSFrame: number = 0;
     public skeletonAnimationBoneIndices: number[] = [];
+    public boneVisibilityFrames: Map<number, Map<number, boolean>> = new Map();
+    public boneVisibility: Map<number, boolean> = new Map();
+    public baseBoneVisibility: Map<number, boolean> = new Map();
     public smoothRigidMatrices: mat4[] = [];
 
     constructor(cache: GfxRenderCache, public bfres: FRES, public config: OrigamiModelConfig | undefined) {
         this.model = bfres.fmdl[0];
-        if (this.config && this.config.skeletonAnimation) {
-            let animation = undefined;
-            for (const ska of bfres.fska) {
-                if (ska.name === this.config.skeletonAnimation) {
-                    animation = ska;
-                    break;
-                }
+        if (this.config && this.config.fska) {
+            this.skeletonAnimation = bfres.fska.find(a => a.name === this.config!.fska);
+            if (!this.skeletonAnimation) {
+                console.warn("Could not find skeleton animation", this.config.fska, "in", this.model.name);
             }
-            if (!animation) {
-                console.warn("Could not find skeleton animation", this.config.skeletonAnimation, "in", this.model.name);
-            }
-            this.skeletonAnimation = animation;
         }
 
-        this.hiddenBoneList = [];
-        const ignoreBoneList = this.config && this.config.ignoreBoneList === true;
-        if (bfres.fbvs.length > 0 && ((this.config && this.config.boneVisibility) || this.skeletonAnimation) && !ignoreBoneList) {
-            const checkName = this.config ? (this.config.boneVisibility ? this.config.boneVisibility : this.skeletonAnimation!.name) : this.skeletonAnimation!.name;
-            const bvs = bfres.fbvs.find((bvs) => bvs.name === checkName);
-            if (bvs) {
-                this.hiddenBoneList = bvs.boneNames;
+        if (this.config && (this.config.fska || this.config.fbvs)) {
+            const fbvsName = this.config.fbvs ? this.config.fbvs : this.config.fska;
+            if (fbvsName) {
+                this.boneVisibilityAnimation = bfres.fbvs.find(v => v.name === fbvsName);
+            }
+
+            if (this.boneVisibilityAnimation) {
+                const boneNames = this.boneVisibilityAnimation.boneNames;
+                const baseValues = this.boneVisibilityAnimation.baseValues;
+                for (let i = 0; i < boneNames.length; i++) {
+                    const boneIndex = this.model.fskl.bones.findIndex(b => b.name === boneNames[i]);
+                    if (boneIndex >= 0) {
+                        this.baseBoneVisibility.set(boneIndex, baseValues[i]);
+                    }
+                }
+
+                for (const curve of this.boneVisibilityAnimation.curves) {
+                    const boneName = this.boneVisibilityAnimation.boneNames[curve.targetOffset];
+                    const globalBoneIndex = this.model.fskl.bones.findIndex(b => b.name === boneName);
+                    for (let i = 0; i < curve.frames.length; i++) {
+                        const frameNum = curve.frames[i];
+                        const frame = this.boneVisibilityFrames.get(frameNum);
+                        const visibility = frame ? frame : new Map<number, boolean>();
+                        visibility.set(globalBoneIndex, curve.keyStepBooleans[i]);
+                        if (!frame) {
+                            this.boneVisibilityFrames.set(frameNum, visibility);
+                        }
+                    }
+                }
+
+                if (this.boneVisibilityAnimation.curves.length > 0) {
+                    this.boneVisibility = this.boneVisibilityFrames.get(0)!;
+                }
+            } else if (this.config.fbvs) {
+                // don't warn if tried to find matching fska name, sometimes there isn't one
+                console.warn("Could not find bone visibility animation", this.config.fbvs, "in", this.model.name);
             }
         }
 
@@ -262,7 +289,14 @@ export class ModelData {
                 }
             }
             const vd = new VertexData(cache.device, this.model.fvtx[shape.vertexIndex]);
-            this.shapeData.push(new ShapeData(cache, shape, vd, this.model.fskl));
+            const sd = new ShapeData(cache, shape, vd, this.model.fskl);
+            if (this.boneVisibilityAnimation) {
+                const visibility = this.baseBoneVisibility.get(shape.boneIndex);
+                if (visibility !== undefined) {
+                    sd.visible = visibility;
+                }
+            }
+            this.shapeData.push(sd);
         }
     }
 

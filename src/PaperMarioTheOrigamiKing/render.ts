@@ -96,6 +96,7 @@ function translateBlendMode(blendMode: string): GfxBlendMode {
     }
 }
 
+const FRAME_TIME = 0.03; // game only runs at 30 FPS... needs a S2E...
 export class OrigamiModelRenderer {
     public name: string;
     public visible: boolean;
@@ -150,8 +151,7 @@ export class OrigamiModelRenderer {
         // build shape renderers and pre-compute their static SRT
         for (const shapeData of this.modelData.shapeData) {
             const material = materials[shapeData.shape.materialIndex];
-            const boneName = this.modelData.bones[shapeData.shape.boneIndex].name;
-            if (material && !this.modelData.hiddenBoneList.includes(boneName)) {
+            if (material) {
                 const sr = new ShapeRenderer(cache, shapeData, material, this.modelData.skeletonAnimation !== undefined);
                 sr.staticBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeData.shape.boneIndex);
                 this.shapeRenderers.push(sr);
@@ -173,6 +173,10 @@ export class OrigamiModelRenderer {
 
         let ranAnimations = false;
         for (const shapeRenderer of this.shapeRenderers) {
+            if (!shapeRenderer.shapeData.visible) {
+                continue;
+            }
+
             // patch bboxes on first frame since shift matrix count is unknown in the constructor
             if (shapeRenderer.bboxes.length !== this.instanceMatrices.length) {
                 shapeRenderer.bboxes = Array(this.instanceMatrices.length).fill(undefined);
@@ -197,8 +201,13 @@ export class OrigamiModelRenderer {
             for (let i = 0; i < this.instanceMatrices.length; i++) {
                 const bbox = this.getBoundingBox(i, boneMatrices, rootSkinBoneMatrix, this.instanceMatrices[i], shapeRenderer);
                 if (viewerInput.camera.frustum.contains(bbox)) {
-                    if (!ranAnimations && this.modelData.skeletonAnimation) {
-                        this.runAnimations(viewerInput);
+                    if (!ranAnimations) {
+                        if (this.modelData.skeletonAnimation) {
+                            this.runSKA(viewerInput);
+                        }
+                        if (this.modelData.boneVisibilityAnimation) {
+                            this.runBVS(viewerInput);
+                        }
                         ranAnimations = true;
                     }
                     shapeRenderer.prepareToRender(renderInstManager, this.instanceMatrices[i], boneMatrices, bbox, viewerInput);
@@ -254,14 +263,30 @@ export class OrigamiModelRenderer {
         }
     }
 
-    private runAnimations(viewerInput: ViewerRenderInput) {
-        this.modelData.currentSkeletonAnimationFrame += viewerInput.deltaTime * 0.03; // game only runs at 30 FPS... needs a S2E...
-        this.modelData.currentSkeletonAnimationFrame = this.modelData.currentSkeletonAnimationFrame % this.modelData.skeletonAnimation!.frameCount;
-        this.modelData.bones = this.getBones(this.modelData.currentSkeletonAnimationFrame);
+    private runSKA(viewerInput: ViewerRenderInput) {
+        this.modelData.currentSKAFrame += viewerInput.deltaTime * FRAME_TIME;
+        this.modelData.currentSKAFrame %= this.modelData.skeletonAnimation!.frameCount;
+        this.modelData.bones = this.getBonesAt(this.modelData.currentSKAFrame);
         this.modelData.computeSmoothRigidMatrices();
     }
 
-    private getBones(frame: number): FSKL_Bone[] {
+    private runBVS(viewerInput: ViewerRenderInput) {
+        this.modelData.currentBVSFrame += viewerInput.deltaTime * FRAME_TIME;
+        this.modelData.currentBVSFrame %= this.modelData.boneVisibilityAnimation!.frameCount;
+        const frameVisibility = this.modelData.boneVisibilityFrames.get(Math.trunc(this.modelData.currentBVSFrame));
+        if (frameVisibility) {
+            this.modelData.boneVisibility = frameVisibility;
+        }
+        for (const shapeRenderer of this.shapeRenderers) {
+            const sd = shapeRenderer.shapeData;
+            const visibility = this.modelData.boneVisibility.get(sd.shape.boneIndex);
+            if (visibility !== undefined) {
+                sd.visible = visibility;
+            }
+        }
+    }
+
+    private getBonesAt(frame: number): FSKL_Bone[] {
         const bones: FSKL_Bone[] = Array(this.modelData.model.fskl.bones.length);
         for (let boneIndex = 0; boneIndex < this.modelData.model.fskl.bones.length; boneIndex++) {
             const bone = this.modelData.model.fskl.bones[boneIndex];
