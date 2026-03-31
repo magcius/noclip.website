@@ -58,113 +58,6 @@ const TRACK_RAM_LOW24 = 0x025c00;
 
 const bindingLayouts = [{ numUniformBuffers: 3, numSamplers: 2 }];
 
-// -- Per-draw-call color extracted from raw DL scanning. --
-interface DLColorState {
-    primColor: vec4;
-    envColor: vec4;
-}
-
-/**
- * Scan raw DL bytes to extract G_SETPRIMCOLOR / G_SETENVCOLOR
- * state indexed by cumulative triangle output position. Records
- * the running prim/env colour at each triangle index so that
- * DrawCallInstances can look up colours by firstIndex.
- */
-function scanDLColors(
-    segmentBuffers: ArrayBufferSlice[],
-    dlAddresses: number[],
-): Map<number, DLColorState> {
-    // Map from triangle start index (in terms of index buffer entries) to color state.
-    const colorByIndex: Map<number, DLColorState> = new Map();
-    let primColor = vec4.fromValues(1, 1, 1, 1);
-    let envColor = vec4.fromValues(1, 1, 1, 1);
-    // Cumulative index buffer position (each tri = 3 indices).
-    let triIndex = 0;
-    // Record at first triangle.
-    let colorDirty = true;
-
-    function resolveAddr(addr: number): DataView {
-        const seg = (addr >>> 24) & 0xff;
-        const buf = segmentBuffers[seg];
-        return buf.createDataView();
-    }
-
-    function walkDL(addr: number, depth: number): void {
-        if (depth > 16) {
-            return;
-        }
-        const view = resolveAddr(addr);
-        const offs0 = addr & 0x00ffffff;
-
-        for (let pc = offs0; ; pc += 8) {
-            if (pc + 8 > view.byteLength) {
-                break;
-            }
-            const w0 = view.getUint32(pc, false);
-            const w1 = view.getUint32(pc + 4, false);
-            const cmd = (w0 >>> 24) & 0xff;
-
-            switch (cmd) {
-                case 0xb8: // G_ENDDL
-                    return;
-
-                case 0x06: // G_DL (branch)
-                    walkDL(w1, depth + 1);
-                    break;
-
-                case 0xfa: {
-                    // G_SETPRIMCOLOR
-                    const r = (w1 >>> 24) & 0xff;
-                    const g = (w1 >>> 16) & 0xff;
-                    const b = (w1 >>> 8) & 0xff;
-                    const a = (w1 >>> 0) & 0xff;
-                    primColor = vec4.fromValues(r / 0xff, g / 0xff, b / 0xff, a / 0xff);
-                    colorDirty = true;
-                    break;
-                }
-                case 0xfb: {
-                    // G_SETENVCOLOR
-                    const r = (w1 >>> 24) & 0xff;
-                    const g = (w1 >>> 16) & 0xff;
-                    const b = (w1 >>> 8) & 0xff;
-                    const a = (w1 >>> 0) & 0xff;
-                    envColor = vec4.fromValues(r / 0xff, g / 0xff, b / 0xff, a / 0xff);
-                    colorDirty = true;
-                    break;
-                }
-
-                case 0xbf: // G_TRI1
-                    if (colorDirty) {
-                        colorByIndex.set(triIndex, {
-                            primColor: vec4.clone(primColor),
-                            envColor: vec4.clone(envColor),
-                        });
-                        colorDirty = false;
-                    }
-                    triIndex += 3;
-                    break;
-
-                case 0xb1: // G_TRI2
-                    if (colorDirty) {
-                        colorByIndex.set(triIndex, {
-                            primColor: vec4.clone(primColor),
-                            envColor: vec4.clone(envColor),
-                        });
-                        colorDirty = false;
-                    }
-                    triIndex += 6;
-                    break;
-            }
-        }
-    }
-
-    for (const addr of dlAddresses) {
-        walkDL(addr, 0);
-    }
-
-    return colorByIndex;
-}
-
 // -- TGR-specific DrawCallInstance with prim/env color support. --
 
 const viewMatrixScratch = mat4.create();
@@ -181,19 +74,13 @@ class TGRDrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private readonly textureMappings = nArray(2, () => new TextureMapping());
-    private readonly primColor: vec4;
-    private readonly envColor: vec4;
     private usesLighting = false;
 
     public constructor(
         geometryData: RenderData,
         private readonly drawMatrix: mat4[],
         private readonly drawCall: DrawCall,
-        primColor: vec4,
-        envColor: vec4,
     ) {
-        this.primColor = vec4.clone(primColor);
-        this.envColor = vec4.clone(envColor);
 
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
@@ -344,22 +231,10 @@ class TGRDrawCallInstance {
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillVec4(
-            comb,
-            offs,
-            this.primColor[0],
-            this.primColor[1],
-            this.primColor[2],
-            this.primColor[3],
-        );
-        fillVec4(
-            comb,
-            offs,
-            this.envColor[0],
-            this.envColor[1],
-            this.envColor[2],
-            this.envColor[3],
-        );
+        const prim = this.drawCall.DP_PrimColor;
+        const env = this.drawCall.DP_EnvColor;
+        offs += fillVec4(comb, offs, prim[0], prim[1], prim[2], prim[3]);
+        fillVec4(comb, offs, env[0], env[1], env[2], env[3]);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -938,13 +813,11 @@ export class TGRRenderer implements SceneGfx, Destroyable {
         // Walk all unique instance DLs and record draw call ranges.
         let dlErrorCount = 0;
         const dlToDrawCallRange: Map<number, { start: number; end: number }> = new Map();
-        const dlAddressesInOrder: number[] = [];
 
         for (const dlOff of uniqueDLOffsets) {
             const out = rspState.finish();
             const startDC = out ? out.drawCalls.length : 0;
             const dlAddr = track.pointerBase + dlOff;
-            dlAddressesInOrder.push(dlAddr);
 
             // Reset render state to defaults before each DL.
             // The game's RenderTrackGeometry sets these once
@@ -999,7 +872,6 @@ export class TGRRenderer implements SceneGfx, Destroyable {
             const out = rspState.finish();
             const startDC = out ? out.drawCalls.length : 0;
             const skyAddr = track.pointerBase + track.skyboxDLOffset;
-            dlAddressesInOrder.push(skyAddr);
 
             // The sky DL sets its own RSP/RDP state, but we
             // reset to clean defaults to avoid inheriting state
@@ -1041,11 +913,6 @@ export class TGRRenderer implements SceneGfx, Destroyable {
             return;
         }
 
-        // Scan raw DL bytes to extract prim/env colors indexed
-        // by triangle position. This avoids needing to match
-        // BK's exact draw-call boundary detection.
-        const colorByIndex = scanDLColors(segmentBuffers, dlAddressesInOrder);
-
         console.debug(
             `TGR: ${rspOutput.drawCalls.length} draw calls, ` +
                 `${sharedOutput.textureCache.textures.length} textures, ` +
@@ -1082,31 +949,6 @@ export class TGRRenderer implements SceneGfx, Destroyable {
             0,
             1,
         );
-
-        // Default colors for draw calls where no
-        // SETPRIMCOLOR/SETENVCOLOR was found.
-        const defaultPrim = vec4.fromValues(1, 1, 1, 1);
-        const defaultEnv = vec4.fromValues(1, 1, 1, 1);
-
-        // Build a function to look up the most recent color state
-        // at or before a given index.
-        const colorIndices = Array.from(colorByIndex.keys()).sort((a, b) => a - b);
-        function lookupColor(firstIndex: number): DLColorState | null {
-            // Binary search for the largest index <= firstIndex.
-            let lo = 0,
-                hi = colorIndices.length - 1;
-            let best = -1;
-            while (lo <= hi) {
-                const mid = (lo + hi) >>> 1;
-                if (colorIndices[mid] <= firstIndex) {
-                    best = mid;
-                    lo = mid + 1;
-                } else {
-                    hi = mid - 1;
-                }
-            }
-            return best >= 0 ? colorByIndex.get(colorIndices[best])! : null;
-        }
 
         // Build per-instance draw call groups with transform
         // matrices.
@@ -1156,19 +998,13 @@ export class TGRRenderer implements SceneGfx, Destroyable {
                     continue;
                 }
 
-                // Look up the most recent prim/env color at this
-                // draw call's firstIndex.
-                const colorState = lookupColor(dc.firstIndex);
-                const prim = colorState ? colorState.primColor : defaultPrim;
-                const env = colorState ? colorState.envColor : defaultEnv;
-
                 // On Season Winner, hide the banner texture but
                 // keep the poles.
                 if (isBanner && isSeasonWinner && dc.textureIndices.length > 0) {
                     continue;
                 }
 
-                const dci = new TGRDrawCallInstance(this.renderData, drawMatrices, dc, prim, env);
+                const dci = new TGRDrawCallInstance(this.renderData, drawMatrices, dc);
                 dci.isTransparent = isTransparent;
                 group.drawCallInstances.push(dci);
             }
@@ -1213,16 +1049,10 @@ export class TGRRenderer implements SceneGfx, Destroyable {
                     continue;
                 }
 
-                const colorState = lookupColor(dc.firstIndex);
-                const prim = colorState ? colorState.primColor : defaultPrim;
-                const env = colorState ? colorState.envColor : defaultEnv;
-
                 const dci = new TGRDrawCallInstance(
                     this.renderData,
                     skyDrawMatrices,
                     dc,
-                    prim,
-                    env,
                 );
                 dci.isSky = true;
                 dci.disableDepthWrite();

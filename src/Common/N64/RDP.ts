@@ -472,13 +472,7 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     default:
         throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
     }
-    // Clone the tile state so the Texture has its own immutable snapshot.
-    // Without this, the Texture holds a mutable reference to DP_TileState
-    // which gets overwritten by subsequent SETTILE commands, corrupting
-    // the sampler wrap modes and texture cache lookups.
-    const snapshotTile = new TileState();
-    snapshotTile.copy(tile);
-    const out = new Texture(snapshotTile, dramAddr, dramPalAddr, tileW, tileH, dst);
+    const out = new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
 
     return out;
 }

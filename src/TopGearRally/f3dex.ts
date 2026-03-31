@@ -1,3 +1,4 @@
+import { vec4 } from "gl-matrix";
 import * as RDP from "../Common/N64/RDP.js";
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -163,6 +164,10 @@ export class DrawCall {
     public DP_OtherModeH = 0;
     /** RDP colour combiner parameters. */
     public DP_Combine: RDP.CombineParams;
+    /** Primitive colour set by G_SETPRIMCOLOR. */
+    public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
+    /** Environment colour set by G_SETENVCOLOR. */
+    public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
 
     /** Indices into the texture cache for this draw call. */
     public textureIndices: number[] = [];
@@ -430,6 +435,23 @@ export interface RSPStateInterface {
      * @param {number} w1 Low word.
      */
     gMoveMem?: (w0: number, w1: number) => void;
+    /**
+     * Sets the primitive colour (optional).
+     * @param {number} lod LOD fraction.
+     * @param {number} r Red (0-255).
+     * @param {number} g Green (0-255).
+     * @param {number} b Blue (0-255).
+     * @param {number} a Alpha (0-255).
+     */
+    gSPSetPrimColor?: (lod: number, r: number, g: number, b: number, a: number) => void;
+    /**
+     * Sets the environment colour (optional).
+     * @param {number} r Red (0-255).
+     * @param {number} g Green (0-255).
+     * @param {number} b Blue (0-255).
+     * @param {number} a Alpha (0-255).
+     */
+    gSPSetEnvColor?: (r: number, g: number, b: number, a: number) => void;
 }
 
 /** Default RSP state machine that interprets F3DEX commands into draw calls. */
@@ -456,6 +478,8 @@ export class RSPState implements RSPStateInterface {
     private readonly DP_TextureImageState = new TextureImageState();
     private readonly DP_TileState = nArray(8, () => new RDP.TileState());
     private readonly DP_TMemTracker: Map<number, number> = new Map();
+    private readonly DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
+    private readonly DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
 
     /**
      * Creates an RSP state with the given segment buffers and
@@ -665,6 +689,18 @@ export class RSPState implements RSPStateInterface {
         }
     }
 
+    /** @inheritdoc */
+    public gSPSetPrimColor(lod: number, r: number, g: number, b: number, a: number): void {
+        vec4.set(this.DP_PrimColor, r / 0xff, g / 0xff, b / 0xff, a / 0xff);
+        this.stateChanged = true;
+    }
+
+    /** @inheritdoc */
+    public gSPSetEnvColor(r: number, g: number, b: number, a: number): void {
+        vec4.set(this.DP_EnvColor, r / 0xff, g / 0xff, b / 0xff, a / 0xff);
+        this.stateChanged = true;
+    }
+
     private _setGeometryMode(newGeometryMode: number): void {
         if (this.SP_GeometryMode === newGeometryMode) {
             return;
@@ -767,6 +803,8 @@ export class RSPState implements RSPStateInterface {
             dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            vec4.copy(dc.DP_PrimColor, this.DP_PrimColor);
+            vec4.copy(dc.DP_EnvColor, this.DP_EnvColor);
             this.flushTextures(dc);
         }
     }
@@ -1083,7 +1121,26 @@ export function runDL_F3DEX(state: RSPStateInterface, addr: number): void {
                 break;
 
             case F3DEX_GBI.G_SETPRIMCOLOR:
+                {
+                    const lod = (w0 >>> 0) & 0xff;
+                    const r = (w1 >>> 24) & 0xff;
+                    const g = (w1 >>> 16) & 0xff;
+                    const b = (w1 >>> 8) & 0xff;
+                    const a = (w1 >>> 0) & 0xff;
+                    state.gSPSetPrimColor?.(lod, r, g, b, a);
+                }
+                break;
+
             case F3DEX_GBI.G_SETENVCOLOR:
+                {
+                    const r = (w1 >>> 24) & 0xff;
+                    const g = (w1 >>> 16) & 0xff;
+                    const b = (w1 >>> 8) & 0xff;
+                    const a = (w1 >>> 0) & 0xff;
+                    state.gSPSetEnvColor?.(r, g, b, a);
+                }
+                break;
+
             case F3DEX_GBI.G_SETBLENDCOLOR:
             case F3DEX_GBI.G_SETFOGCOLOR:
             case F3DEX_GBI.G_SETFILLCOLOR:
