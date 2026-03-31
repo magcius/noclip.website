@@ -12,7 +12,7 @@ uniform sampler2D u_Texture;
 void main() {
     ivec2 t_FragCoord = ivec2(gl_FragCoord.xy);
 #if !GFX_VIEWPORT_ORIGIN_TL()
-    t_FragCoord.y = ${height >>> mipLevel} - t_FragCoord.y;
+    t_FragCoord.y = ${Math.max(height >>> mipLevel, 1)} - t_FragCoord.y;
 #endif
     gl_FragColor = texelFetch(TEXTURE(u_Texture), t_FragCoord.xy, ${mipLevel});
 }`;
@@ -35,8 +35,8 @@ export class TextureCanvas {
 
     constructor(private swapChain: GfxSwapChain, private texture: GfxTexture, private mipLevel: number = 0, private zSlice: number = 0) {
         this.canvas = document.createElement('canvas');
-        this.canvas.width = texture.width >>> mipLevel;
-        this.canvas.height = texture.height >>> mipLevel;
+        this.canvas.width = Math.max(texture.width >>> mipLevel, 1);
+        this.canvas.height = Math.max(texture.height >>> mipLevel, 1);
 
         this.render();
     }
