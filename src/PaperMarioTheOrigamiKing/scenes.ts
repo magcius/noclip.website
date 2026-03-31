@@ -139,6 +139,7 @@ class OrigamiRenderer implements SceneGfx {
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.renderHelper.pushTemplateRenderInst();
+        // level states would be handled here with different sets of model renderers (list of indicies, not duplicate renderers being stored)
         for (const renderer of this.modelRenderers) {
             if (renderer.visible) {
                 renderer.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
@@ -168,7 +169,7 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         computeModelMatrixSRT(m, 1, 1, 1,
             instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
             instance.position[0], instance.position[1], instance.position[2]);
-        modelRenderer.instanceMatrices.push(m);
+        modelRenderer.addInstanceMatrix(m);
     }
 
     for (const instance of levelObjects.sobjInstances) {
@@ -180,7 +181,7 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         computeModelMatrixSRT(m, instance.scale[0], instance.scale[1], instance.scale[2],
             instance.rotation[0] * MathConstants.DEG_TO_RAD, instance.rotation[1] * MathConstants.DEG_TO_RAD, instance.rotation[2] * MathConstants.DEG_TO_RAD,
             instance.position[0], instance.position[1], instance.position[2]);
-        modelRenderer.instanceMatrices.push(m);
+        modelRenderer.addInstanceMatrix(m);
     }
 
     for (const instance of levelObjects.itemInstances) {
@@ -190,7 +191,7 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         }
         const m = mat4.create();
         computeModelMatrixSRT(m, 1, 1, 1, 0, 0, 0, instance.position[0], instance.position[1], instance.position[2]);
-        modelRenderer.instanceMatrices.push(m);
+        modelRenderer.addInstanceMatrix(m);
     }
 
     for (const instance of levelObjects.npcInstances) {
@@ -200,10 +201,10 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         }
         const m = mat4.create();
         computeModelMatrixSRT(m, 1, 1, 1,
-            0, 0, 0, // instance.rotationDeg * MathConstants.DEG_TO_RAD
+            0, instance.rotationDeg * MathConstants.DEG_TO_RAD, 0,
             instance.position[0], instance.position[1], instance.position[2]
         );
-        modelRenderer.instanceMatrices.push(m);
+        modelRenderer.addInstanceMatrix(m);
     }
 }
 
@@ -400,6 +401,7 @@ TODO
 Fix UVs that are sometimes the wrong set
 Figure out level objects for battle stages
 Add level variants that share the same base BFRES file (e.g. sensor lab offices and desert, seems to use .probe files)
+Figure out how the desert levels work (day/night variants)
 Add level states (i.e. post-game, before or after story events, etc)
     Ability to hide specific objects from level (rather than blindly rendering all of them)
     Ability to change animation/texture set/etc of shown objects
@@ -408,15 +410,16 @@ Figure out how water works (bone user data for mask, have to hardcode the color?
 Figure out how "real" ice and lava works
 Add particle effects
 Add bloom if base renderering can be made more efficient, otherwise not worth the cost
-Investigate renderInst.setInstanceCount
 Try out chunking bounding boxes for better frustum culling in huge levels
 Remove invisibile bones/shapes with static fvbs's instead of constantly skipping over them
 Properly utilize texture pattern/shader param animations
 Figure out how phantom models should be loaded (magic circles, vellumental spots, etc.)
 Investigate disfigured skeletons of collectible toad variants (messed up in Switch Toolbox too)
+Add model color variants, both color pattern and texture sets
+Patch model bboxes on first frame of animations
 */
 
-const pathBase = "PMTOK";
+const pathBase = "PaperMarioTOK";
 class PMTOKScene implements SceneDesc {
     public id: string;
 
@@ -456,7 +459,7 @@ class PMTOKScene implements SceneDesc {
         // patch base model renderer
         for (const modelRenderer of renderer.modelRenderers) {
             if (modelRenderer.name.startsWith(this.id.slice(0, 4))) {
-                modelRenderer.instanceMatrices = [mat4.create()];
+                modelRenderer.addInstanceMatrix(mat4.create());
                 break; 
             }
         }
@@ -482,14 +485,14 @@ const sceneDescs = [
     "Whispering Woods",
     new PMTOKScene("map/field/W1C1_WakeUp", "Starting Area"),
     new PMTOKScene("map/field/W1C1_CastleView", "Castle Overlook"),
-    new PMTOKScene("map/field/W1C1_LostForest", "Whispering Woods"),
+    new PMTOKScene("map/field/W1C1_LostForest", "Whispering Woods <!>"),
     new PMTOKScene("map/field/W1C1_BigStump", "Whispering Woods (Grandsappy)"),
-    new PMTOKScene("map/field/W1C1_CampSite", "Camp Site"),
+    new PMTOKScene("map/field/W1C1_CampSite", "Camp Site <!>"),
     new PMTOKScene("map/field/W1C1_LogHouse", "Log Cabin (Interior)"),
     new PMTOKScene("map/battle/Btl_W1C1_MountainA", "Battle - Whispering Woods"),
     "Toad Town",
-    new PMTOKScene("map/field/W1G1_KinokoTown", "Toad Town"),
-    new PMTOKScene("map/field/W1G1_KinokoTownEnding", "Toad Town (Ending)"),
+    new PMTOKScene("map/field/W1G1_KinokoTown", "Toad Town <!>"),
+    new PMTOKScene("map/field/W1G1_KinokoTownEnding", "Toad Town (Ending) <!>"),
     new PMTOKScene("map/field/W1G1_MuseumEntrance", "Museum (Entrance)"),
     new PMTOKScene("map/field/W1G1_ArtGallery", "Museum (Art Gallery)"),
     new PMTOKScene("map/field/W1G1_KinopioGallery", "Museum (Toad Gallery)"),
@@ -525,7 +528,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W7C1_KinopioHouse", "Sensor Lab"),
     new PMTOKScene("map/battle/Btl_W1G2_HillA", "Battle - Picnic Road"),
     "Overlook Moutain",
-    new PMTOKScene("map/field/W1G3_Observatory", "Overlook Mountain"),
+    new PMTOKScene("map/field/W1G3_Observatory", "Overlook Mountain <!>"),
     new PMTOKScene("map/field/W1G3_GondolaLift", "Gondola Lift"),
     new PMTOKScene("map/battle/Btl_W1G3_ObservatoryA", "Battle - Overlook Mountain"),
     "Earth Vellumental Temple",
@@ -546,25 +549,25 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W1C4_TenbouTowerA", "Battle - Overlook Tower"),
     new PMTOKScene("map/battle/Btl_W1C4_TenbouTowerBossA", "Battle - Overlook Tower (Boss)"),
     "Autumn Mountain",
-    new PMTOKScene("map/field/W2G1_MomijiMountain", "Autumn Mountain"),
+    new PMTOKScene("map/field/W2G1_MomijiMountain", "Autumn Mountain <!>"),
     new PMTOKScene("map/field/W2C1_IgaguriValley", "Chestnut Valley"),
-    new PMTOKScene("map/field/W2C3_DownRiver", "Eddy River"),
+    new PMTOKScene("map/field/W2C3_DownRiver", "Eddy River <!>"),
     new PMTOKScene("map/battle/Btl_W2G1_MomijiMountainA", "Battle - Autumn Mountain"),
     "Water Vellumental Shrine",
     new PMTOKScene("map/field/W2C2_EntranceDragon", "Main Room"),
     new PMTOKScene("map/field/W2C2_CrabIntro", "Crab Room"),
-    new PMTOKScene("map/field/W2C2_PuzzleEasy", "Slide Puzzle (Easy)"),
-    new PMTOKScene("map/field/W2C2_PanelGetA", "Secret Room 1"),
     new PMTOKScene("map/field/W2C2_BoxMaze", "Box Maze"),
-    new PMTOKScene("map/field/W2C2_CryDragon", "Water Wheel"),
+    new PMTOKScene("map/field/W2C2_CryDragon", "Water Wheels"),
+    new PMTOKScene("map/field/W2C2_PuzzleEasy", "Slide Puzzle (Easy)"),
     new PMTOKScene("map/field/W2C2_PuzzleHard", "Slide Puzzle (Hard)"),
     new PMTOKScene("map/field/W2C2_LoopWay", "Interstitial Room"),
+    new PMTOKScene("map/field/W2C2_PanelGetA", "Secret Room 1"),
     new PMTOKScene("map/field/W2C2_PanelGetB", "Secret Room 2"),
     new PMTOKScene("map/field/W2C2_BossArea", "Boss Room"),
     new PMTOKScene("map/battle/Btl_W2C2_WaterCaveA", "Battle - Water Vellumental Shrine"),
     new PMTOKScene("map/battle/Btl_W2C2_WaterCaveBossA", "Battle - Water Vellumental Shrine (Boss)"),
     "Shogun Studios",
-    new PMTOKScene("map/field/W2G2_CastlePark", "Shogun Studios"),
+    new PMTOKScene("map/field/W2G2_CastlePark", "Shogun Studios <!>"),
     new PMTOKScene("map/field/W2G2_HouseA", "House 1"),
     new PMTOKScene("map/field/W2G2_HouseE", "House 2"),
     new PMTOKScene("map/field/W2G2_HouseF", "House 3"),
@@ -615,7 +618,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W4C1_GessoArea", "Gooper Blooper Arena"),
     new PMTOKScene("map/battle/Btl_W4C1_PeachShipA", "Battle - The Princess Peach"),
     "Sweetpaper Valley",
-    new PMTOKScene("map/field/W3G1_Canyon", "Sweetpaper Valley"),
+    new PMTOKScene("map/field/W3G1_Canyon", "Sweetpaper Valley <!>"),
     "Breezy Tunnel",
     new PMTOKScene("map/field/W3C1_Tunnel", "Breezy Tunnel"),
     new PMTOKScene("map/field/W3C1_LeftPassage", "Side Room 1"),
@@ -624,8 +627,8 @@ const sceneDescs = [
     new PMTOKScene("map/field/W3C1_TunnelExit", "Breezy Tunnel Exit"),
     new PMTOKScene("map/battle/Btl_W3C1_TunnelA", "Battle - Breezy Tunnel"),
     "Scorching Sandpaper Desert", // needs more work, uses multiple files
-    new PMTOKScene("map/field/W3G2_Desert", "Desert"),
-    new PMTOKScene("map/field/W3G2_DesertRuin", "Desert Ruin"),
+    new PMTOKScene("map/field/W3G2_Desert", "Desert <!>"),
+    new PMTOKScene("map/field/W3G2_DesertRuin", "Desert Ruin <!>"),
     new PMTOKScene("map/field/W3G2_IceKinopio", "Rescue Captain T. Ode"),
     new PMTOKScene("map/field/W3G2_KinopioTop", "Tower Top"),
     new PMTOKScene("map/field/W3G2_KinopioTopRe", "Tower Top Reversed"),
@@ -636,7 +639,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W3G2_SamboArea", "Giant Pokey Arena"),
     new PMTOKScene("map/battle/Btl_W3G2_DesertA", "Battle - Scorching Sandpaper Desert"),
     "Shroom City",
-    new PMTOKScene("map/field/W3G3_Oasis", "Shroom City"),
+    new PMTOKScene("map/field/W3G3_Oasis", "Shroom City <!>"),
     new PMTOKScene("map/field/W3G3_HotelLobby", "Hotel Lobby"),
     new PMTOKScene("map/field/W3G3_HotelPool", "Hotel Pool"),
     new PMTOKScene("map/field/W3G3_LeftPassage", "Hotel Hallway (Left)"),
@@ -679,12 +682,12 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W3C4_RuinA", "Battle - Temple of Shrooms (Disco Hall)"),
     new PMTOKScene("map/battle/Btl_W3C4_RuinBossA", "Battle - Temple of Shrooms (Boss)"),
     "The Great Sea",
-    new PMTOKScene("map/field/W4G1_Ocean", "The Great Sea"),
+    new PMTOKScene("map/field/W4G1_Ocean", "The Great Sea <!>"),
     new PMTOKScene("map/field/W4G1_Ship", "Boat at Sea"),
     new PMTOKScene("map/field/W4G1_UnderSeaA", "Underwater"),
     new PMTOKScene("map/field/W4G1_DokuroIsland", "Bonehead Island"),
-    new PMTOKScene("map/field/W4G1_DokuroFirst", "Bonehead Island Interior 1"),
-    new PMTOKScene("map/field/W4G1_DokuroSecond", "Bonehead Island Interior 2"),
+    new PMTOKScene("map/field/W4G1_DokuroFirst", "Bonehead Island (Interior 1)"),
+    new PMTOKScene("map/field/W4G1_DokuroSecond", "Bonehead Island (Interior 2)"),
     new PMTOKScene("map/field/W4G1_HeartIsland", "Heart Island"),
     new PMTOKScene("map/field/W4G1_KinokoIsland", "Mushroom Island"),
     new PMTOKScene("map/field/W4G1_KinopioHouse", "Mushroom Island (House)"),
@@ -699,8 +702,8 @@ const sceneDescs = [
     new PMTOKScene("map/field/W4G1_RingIsland", "Scuffle Island"),
     new PMTOKScene("map/battle/Btl_W4G1_OceanA", "Battle - The Great Sea"),
     "Diamond Island",
-    new PMTOKScene("map/field/W4G2_OrbIsland", "Diamond Island"),
-    new PMTOKScene("map/field/W4G1_UnderSeaOrb", "Underwater (Diamond Island)"),
+    new PMTOKScene("map/field/W4G2_OrbIsland", "Diamond Island <!>"),
+    new PMTOKScene("map/field/W4G1_UnderSeaOrb", "Diamond Island (Underwater)"),
     new PMTOKScene("map/field/W4G2_CourageEntrance", "Courage Entrance"),
     new PMTOKScene("map/field/W4G2_CourageLevel1", "Courage Level"),
     new PMTOKScene("map/field/W4G2_CourageOrb", "Courage Orb"),
@@ -710,10 +713,10 @@ const sceneDescs = [
     new PMTOKScene("map/field/W4C2_BigJump", "Big Jump"),
     new PMTOKScene("map/field/W4C2_IceSlide", "Ice Slide"),
     new PMTOKScene("map/field/W4C2_JumpStart", "Jump Start"),
-    new PMTOKScene("map/field/W4C2_PuzzleTutorial", "Ice Slide Puzzle Tutorial"),
+    new PMTOKScene("map/field/W4C2_PuzzleTutorial", "Ice Slide Puzzle (Tutorial)"),
     new PMTOKScene("map/field/W4C2_PuzzleEasy", "Ice Slide Puzzle (Easy)"),
     new PMTOKScene("map/field/W4C2_PuzzleHard", "Ice Slide Puzzle (Hard)"),
-    new PMTOKScene("map/field/W4C2_PuzzleResetA", "Ice Slide Puzzle Reset"),
+    new PMTOKScene("map/field/W4C2_PuzzleResetA", "Puzzle Reset Room"),
     new PMTOKScene("map/field/W4C2_SpiralStair", "Spiral Staircase"),
     new PMTOKScene("map/field/W4C2_BossArea", "Boss Room"),
     new PMTOKScene("map/battle/Btl_W4C2_IceMountainA", "Battle - Ice Vellumental Mountain"),
@@ -727,7 +730,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W4C3_FireArea", "Fire Area"),
     new PMTOKScene("map/field/W4C3_FireIce", "Fire Ice"),
     new PMTOKScene("map/field/W4C3_FourGod", "Four Vellumentals Room"),
-    new PMTOKScene("map/field/W4C3_PuzzleReset", "Puzzle Reset"),
+    new PMTOKScene("map/field/W4C3_PuzzleReset", "Puzzle Reset Room"),
     new PMTOKScene("map/field/W4C3_WaterArea", "Water Area"),
     new PMTOKScene("map/field/W4C3_BossArea", "Top of the Tower"),
     new PMTOKScene("map/battle/Btl_W4C3_OrbTowerA", "Battle - Sea Tower"),
@@ -740,12 +743,12 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W5G1_SkySpaA", "Battle - Shangri-Spa"),
     new PMTOKScene("map/battle/Btl_W5G1_SkySpaBossA", "Battle - Shangri-Spa (Boss)"),
     "Spring of Jungle Mist",
-    new PMTOKScene("map/field/W5C2_BreakBridge", "Entrance"),
+    new PMTOKScene("map/field/W5C2_BreakBridge", "Entrance <!>"),
     new PMTOKScene("map/field/W5C2_JungleSpa", "Spring of Jungle Mist"),
     new PMTOKScene("map/field/W5C2_BigTreeFirst", "Big Tree (1st Floor)"),
     new PMTOKScene("map/field/W5C2_BigTreeSecond", "Big Tree (2nd Floor)"),
     new PMTOKScene("map/field/W5C2_BigTreeThird", "Big Tree (3rd Floor)"),
-    new PMTOKScene("map/field/W5C2_DeepJungle", "Deep Jungle"),
+    new PMTOKScene("map/field/W5C2_DeepJungle", "Deep Jungle <!>"),
     new PMTOKScene("map/field/W5C2_DeadEnd", "Dead End 1"),
     new PMTOKScene("map/field/W5C2_DeadEndB", "Dead End 2"),
     new PMTOKScene("map/field/W5C2_LeafMemory", "Leaf Memory Puzzle"),

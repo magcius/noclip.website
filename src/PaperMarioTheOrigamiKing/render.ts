@@ -4,7 +4,7 @@ import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
 import { Curve, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FSKL_Bone, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
 import { ChannelSource, FilterMode, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureMapping } from '../TextureHolder.js';
@@ -101,68 +101,101 @@ export class OrigamiModelRenderer {
     public name: string;
     public visible: boolean;
     public shapeRenderers: ShapeRenderer[] = [];
-    public instanceMatrices: mat4[] = [];
+    private instanceMatrices: mat4[] = [];
+    private instanceBBoxes: AABB[] = [];
+    private isLevelModel: boolean = false;
     private scratchMat = mat4.create();
+    private lastComputedSKAFrame: number = -1;
+    private lastComputedBoneMatrices: mat4[][] = [];
     private sceneBindings: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 
     constructor(cache: GfxRenderCache, textureHolder: OrigamiTextureHolder, private modelData: ModelData) {
         this.name = this.modelData.name;
         this.visible = true;
+        this.isLevelModel = this.name.startsWith("Btl_") || (this.name.startsWith("W") && this.name.substring(4, 5) === "_");
 
         for (const shapeData of this.modelData.shapeData) {
             const material = this.modelData.materials[shapeData.shape.materialIndex];
             if (material) {
                 const matInstance = new MaterialInstance(cache, textureHolder, material);
                 const sr = new ShapeRenderer(cache, shapeData, matInstance, this.modelData.skeletonAnimation !== undefined);
-
                 sr.staticBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeData.shape.boneIndex);
                 this.shapeRenderers.push(sr);
             }
         }
+
+        this.lastComputedBoneMatrices = Array(this.shapeRenderers.length).fill([]);
     }
 
     public setVisible(v: boolean): void {
         this.visible = v;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplate();
-        template.setBindingLayouts(this.sceneBindings);
-        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_SceneParams, 28);
-        const d = template.mapUniformBufferF32(OrigamiProgram.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x3(d, offs, viewerInput.camera.viewMatrix);
+    public addInstanceMatrix(matrix: mat4) {
+        this.instanceMatrices.push(matrix);
+        this.instanceBBoxes = Array(this.instanceMatrices.length).fill(undefined);
+        for (let i = 0; i < this.instanceMatrices.length; i++) {
+            this.instanceBBoxes[i] = this.modelData.bbox.clone();
+            this.instanceBBoxes[i].transform(this.instanceBBoxes[i], this.instanceMatrices[i]);
+        }
+        if (this.isLevelModel) {
+            for (const shapeRenderer of this.shapeRenderers) {
+                shapeRenderer.instanceBBoxes = Array(this.instanceMatrices.length).fill(undefined);
+            }
+        }
+    }
 
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         let ranAnimations = false;
-        for (const shapeRenderer of this.shapeRenderers) {
-            if (!shapeRenderer.shapeData.visible) {
+        let filledTemplate = false;
+        this.lastComputedBoneMatrices = this.lastComputedBoneMatrices.fill([]);
+
+        for (let instanceIndex = 0; instanceIndex < this.instanceMatrices.length; instanceIndex++) {
+            if (!viewerInput.camera.frustum.contains(this.instanceBBoxes[instanceIndex])) {
                 continue;
             }
 
-            // patch bboxes on first frame since shift matrix count is unknown in the constructor
-            if (shapeRenderer.bboxes.length !== this.instanceMatrices.length) {
-                shapeRenderer.bboxes = Array(this.instanceMatrices.length).fill(undefined);
+            // only bother to fill template if at least one instance is visible
+            if (!filledTemplate) {
+                const template = renderInstManager.pushTemplate();
+                template.setBindingLayouts(this.sceneBindings);
+                let offs = template.allocateUniformBuffer(OrigamiProgram.ub_SceneParams, 28);
+                const d = template.mapUniformBufferF32(OrigamiProgram.ub_SceneParams);
+                offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+                offs += fillMatrix4x3(d, offs, viewerInput.camera.viewMatrix);
+
+                filledTemplate = true;
             }
 
-            // compute bone matrices based on skin weight count, helps a lot with many instances
-            let rootSkinBoneMatrix: mat4 | undefined;
-            let boneMatrices = this.modelData.smoothRigidMatrices;
-            if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
-                if (this.modelData.skeletonAnimation) {
-                    boneMatrices = [this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.boneIndex)];
-                } else {
-                    boneMatrices = [shapeRenderer.staticBoneMatrix];
+            for (let shapeIndex = 0; shapeIndex < this.shapeRenderers.length; shapeIndex++) {
+                const shapeRenderer = this.shapeRenderers[shapeIndex];
+                if (!shapeRenderer.shapeData.visible) {
+                    continue;
                 }
-            } else {
-                rootSkinBoneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.skinBoneIndices[0]);
-            }
 
-            const template = renderInstManager.pushTemplate();
-            shapeRenderer.fillTemplate(template);
+                // only computes bone matrices for this shape once per frame
+                if (this.lastComputedBoneMatrices[shapeIndex].length === 0) {
+                    let bm;
+                    if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
+                        if (this.modelData.skeletonAnimation) {
+                            bm = [this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.boneIndex)];
+                        } else {
+                            bm = [shapeRenderer.staticBoneMatrix];
+                        }
+                    } else {
+                        bm = this.modelData.smoothRigidMatrices;
+                    }
+                    this.lastComputedBoneMatrices[shapeIndex] = bm;
+                }
 
-            for (let i = 0; i < this.instanceMatrices.length; i++) {
-                const bbox = this.getBoundingBox(i, boneMatrices, rootSkinBoneMatrix, this.instanceMatrices[i], shapeRenderer);
-                if (viewerInput.camera.frustum.contains(bbox)) {
+                let shapeBBox: AABB | undefined;
+                if (this.isLevelModel) {
+                    shapeBBox = this.getShapeBoundingBox(instanceIndex, shapeRenderer.staticBoneMatrix, this.instanceMatrices[instanceIndex], shapeRenderer);
+                }
+
+                if (!this.isLevelModel || (this.isLevelModel && shapeBBox && viewerInput.camera.frustum.contains(shapeBBox))) {
+                    shapeRenderer.fillTemplate(renderInstManager.pushTemplate());
+
                     if (!ranAnimations) {
                         if (this.modelData.skeletonAnimation) {
                             this.runSKA(viewerInput);
@@ -172,38 +205,28 @@ export class OrigamiModelRenderer {
                         }
                         ranAnimations = true;
                     }
-                    shapeRenderer.prepareToRender(renderInstManager, this.instanceMatrices[i], boneMatrices, bbox, viewerInput);
+
+                    shapeRenderer.prepareToRender(renderInstManager, this.instanceMatrices[instanceIndex], this.lastComputedBoneMatrices[shapeIndex], this.instanceBBoxes[instanceIndex], viewerInput);
+
+                    renderInstManager.popTemplate();
                 }
             }
+        }
 
+        if (filledTemplate) {
             renderInstManager.popTemplate();
         }
-
-        renderInstManager.popTemplate();
     }
 
-    private getBoundingBox(i: number, boneMatrices: mat4[], rootSkinBoneMatrix: mat4 | undefined, instanceMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
-        if (shapeRenderer.bboxes[i] && !this.modelData.skeletonAnimation) {
-            return shapeRenderer.bboxes[i]!;
-        }
-
-        if (!shapeRenderer.bboxes[i]) {
-            shapeRenderer.bboxes[i] = new AABB();
-        }
-        const mat = this.scratchMat;
-        const bbox = shapeRenderer.bboxes[i];
-        const base = shapeRenderer.shapeData.meshData[0].mesh.bbox;
-
-        if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
-            mat4.multiply(mat, instanceMatrix, boneMatrices[0]);
-            bbox.transform(base, mat);
-            shapeRenderer.bboxes[i] = bbox;
-            return shapeRenderer.bboxes[i];
+    private getShapeBoundingBox(instanceIndex: number, boneMatrix: mat4, instanceMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
+        if (shapeRenderer.instanceBBoxes[instanceIndex]) {
+            return shapeRenderer.instanceBBoxes[instanceIndex];
         } else {
-            // fast-ish approximate compute
-            mat4.multiply(mat, instanceMatrix, rootSkinBoneMatrix!);
-            bbox.transform(base, mat);
-            return bbox;
+            const mat = this.scratchMat;
+            mat4.multiply(mat, instanceMatrix, boneMatrix);
+            shapeRenderer.instanceBBoxes[instanceIndex] = new AABB();
+            shapeRenderer.instanceBBoxes[instanceIndex].transform(shapeRenderer.shapeData.meshData.mesh.bbox, mat);
+            return shapeRenderer.instanceBBoxes[instanceIndex];
         }
     }
 
@@ -228,22 +251,26 @@ export class OrigamiModelRenderer {
     private runSKA(viewerInput: ViewerRenderInput) {
         this.modelData.currentSKAFrame += viewerInput.deltaTime * FRAME_TIME;
         this.modelData.currentSKAFrame %= this.modelData.skeletonAnimation!.frameCount;
-        this.modelData.bones = this.getBonesAt(this.modelData.currentSKAFrame);
-        this.modelData.computeSmoothRigidMatrices();
+        // only compute bones and matrices when the frame actually changes (which is less often than render framerate)
+        if (this.lastComputedSKAFrame !== Math.trunc(this.modelData.currentSKAFrame)) {
+            this.modelData.bones = this.getBonesAt(this.modelData.currentSKAFrame);
+            this.modelData.computeSmoothRigidMatrices();
+            this.lastComputedSKAFrame = Math.trunc(this.modelData.currentSKAFrame);
+        }
     }
 
     private runBVS(viewerInput: ViewerRenderInput) {
         this.modelData.currentBVSFrame += viewerInput.deltaTime * FRAME_TIME;
         this.modelData.currentBVSFrame %= this.modelData.boneVisibilityAnimation!.frameCount;
         const frameVisibility = this.modelData.boneVisibilityFrames.get(Math.trunc(this.modelData.currentBVSFrame));
+        // only update visibilities when the current frame has values
         if (frameVisibility) {
-            this.modelData.boneVisibility = frameVisibility;
-        }
-        for (const shapeRenderer of this.shapeRenderers) {
-            const sd = shapeRenderer.shapeData;
-            const visibility = this.modelData.boneVisibility.get(sd.shape.boneIndex);
-            if (visibility !== undefined) {
-                sd.visible = visibility;
+            for (const shapeRenderer of this.shapeRenderers) {
+                const sd = shapeRenderer.shapeData;
+                const visibility = frameVisibility.get(sd.shape.boneIndex);
+                if (visibility !== undefined) {
+                    sd.visible = visibility;
+                }
             }
         }
     }
@@ -379,7 +406,7 @@ class MaterialInstance {
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
         const additiveBlend = blendString === "transadd";
         this.isTranslucent =
-            fmat.name === "Mt_Pera" ||
+            fmat.name.toLowerCase() === "mt_pera" ||
             blendMode !== null ||
             fmat.shaderAssign.shaderOption.get("paste_type") === "0";
         this.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
@@ -437,13 +464,13 @@ class MaterialInstance {
 }
 
 class ShapeRenderer {
-    public bboxes: (AABB | undefined)[] = [];
+    public instanceBBoxes: (AABB | undefined)[] = [];
     public staticBoneMatrix: mat4;
     private gfxProgram: GfxProgram;
     private meshData: MeshData;
 
     constructor(cache: GfxRenderCache, public shapeData: ShapeData, private material: MaterialInstance, isSkeletonAnimated: boolean = false) {
-        this.meshData = shapeData.meshData[0];
+        this.meshData = shapeData.meshData;
         const program = new OrigamiProgram(
             this.material.fmat.name, this.material.fmat.shaderAssign,
             material.samplerChannels, shapeData.boneMatrixLength,
@@ -458,12 +485,12 @@ class ShapeRenderer {
         this.material.fillTemplate(template);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, shiftMatrix: mat4, boneMatrices: mat4[], bbox: AABB, viewerInput: ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, instanceMatrix: mat4, boneMatrices: mat4[], bbox: AABB, viewerInput: ViewerRenderInput) {
         const renderInst = renderInstManager.newRenderInst();
 
         let offs = renderInst.allocateUniformBuffer(OrigamiProgram.ub_ShapeParams, 12 + (12 * boneMatrices.length));
         const d = renderInst.mapUniformBufferF32(OrigamiProgram.ub_ShapeParams);
-        offs += fillMatrix4x3(d, offs, shiftMatrix);
+        offs += fillMatrix4x3(d, offs, instanceMatrix);
         for (const bm of boneMatrices) {
             offs += fillMatrix4x3(d, offs, bm);
         }

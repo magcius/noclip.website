@@ -8,6 +8,7 @@ import { GfxInputLayout, GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { OrigamiModelConfig } from "./model_config";
 import { computeModelMatrixSRT } from "../MathHelpers";
+import { AABB } from "../Geometry";
 
 // Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
@@ -183,15 +184,13 @@ export class MeshData {
 }
 
 export class ShapeData {
-    public meshData: MeshData[] = [];
+    public meshData: MeshData;
     public boneMatrixLength: number;
     public visible: boolean = true;
     public vertexSkinWeightCount;
 
     constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: VertexData, skeleton: FSKL) {
-        for (const mesh of shape.mesh) {
-            this.meshData.push(new MeshData(cache, mesh, vertexData));
-        }
+        this.meshData = new MeshData(cache, shape.mesh[0], vertexData);
         this.boneMatrixLength = 1;
         if (shape.vertexSkinWeightCount > 0) {
             this.boneMatrixLength = skeleton.smoothRigidIndices.length;
@@ -200,14 +199,13 @@ export class ShapeData {
     }
 
     public destroy(device: GfxDevice): void {
-        for (const meshData of this.meshData) {
-            meshData.destroy(device);
-        }
+        this.meshData.destroy(device);
     }
 }
 
 export class ModelData {
     public name: string;
+    public bbox: AABB;
     public skeletonAnimation: FSKA | undefined;
     public boneVisibilityAnimation: FBVS | undefined;
     public texturePatternAnimation: FMAA | undefined;
@@ -350,8 +348,10 @@ export class ModelData {
                         break;
                     }
                 }
-            } else if (material.name.toLowerCase().includes("mt_shadow") || material.name.toLowerCase().endsWith("_sm") || material.samplerInfo.length < 1) {
-                // sometimes the casing is inconsistent for materials (whoops!)
+            } else if (material.name.toLowerCase().includes("mt_shadow") ||
+                material.name.toLowerCase().endsWith("_sm") || material.name.toLowerCase().endsWith("_bs") ||
+                material.name.toLowerCase().includes("lambert") || material.name.toLowerCase().includes("colorpattern") ||
+                material.samplerInfo.length < 1) {
                 visible = false;
             }
             if (visible && this.config) {
@@ -375,6 +375,7 @@ export class ModelData {
             }
         }
 
+        const shapeBBoxes: AABB[] = [];
         for (const shape of model.fshp) {
             if (this.config) {
                 if (this.config.shapeWhitelist && !this.config.shapeWhitelist.includes(shape.name)) {
@@ -393,7 +394,12 @@ export class ModelData {
                 }
             }
             this.shapeData.push(sd);
+            if (sd && sd.visible && sd.meshData.mesh.bbox) {
+                shapeBBoxes.push(sd.meshData.mesh.bbox);
+            }
         }
+
+        this.bbox = this.mergeAABB(shapeBBoxes);
     }
 
     public computeSmoothRigidMatrices(): void {
@@ -432,5 +438,30 @@ export class ModelData {
             mat4.multiply(shift, this.computeShiftMatrix(bones, bone.parentIndex), srt);
             return shift;
         }
+    }
+
+    private mergeAABB(boxes: AABB[]): AABB {
+        if (boxes.length === 0) {
+            console.warn("No valid shapes for", this.name);
+            return new AABB();
+        }
+
+        let minX = boxes[0].min[0];
+        let minY = boxes[0].min[1];
+        let minZ = boxes[0].min[2];
+        let maxX = boxes[0].max[0];
+        let maxY = boxes[0].max[1];
+        let maxZ = boxes[0].max[2];
+
+        for (const box of boxes) {
+            minX = Math.min(minX, box.min[0]);
+            minY = Math.min(minY, box.min[1]);
+            minZ = Math.min(minZ, box.min[2]);
+            maxX = Math.max(maxX, box.max[0]);
+            maxY = Math.max(maxY, box.max[1]);
+            maxZ = Math.max(maxZ, box.max[2]);
+        }
+
+        return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
     }
 }
