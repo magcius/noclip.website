@@ -6917,5 +6917,17 @@
     "SaveState_Spyro3/58/1": "ShareData=AOE:7Ul^&3T+:c&9p&pcWYx?UQ4?OgUrn&fUJgHeWGQaYUZOpl9FW+IUs8$p=a",
     "SaveState_Spyro3/61/1": "ShareData=AD1&rUg]GgT&:LU90J21Wa(!Y6dTiDUY2~6UCrVPV{LVnUqe*f9T]rAUkyG7=a",
     "SaveState_Spyro3/64/1": "ShareData=AA4cb8{]OiT5[Z-9uHCWWUbr56mC&0Ul+vET5@+PWfglsUae:RTSdW(8-m3M=a",
-    "SaveState_Spyro3/67/1": "ShareData=AOmp!Ug16R9DIZEUWieoV{qesQ85M0UpT8UUC/t2WB-RG92hZL8*RC|UdMt4=a"
+    "SaveState_Spyro3/67/1": "ShareData=AOmp!Ug16R9DIZEUWieoV{qesQ85M0UpT8UUC/t2WB-RG92hZL8*RC|UdMt4=a",
+
+    "SaveState_TopGearRally/desert/1": "ShareData=AYQD/UUPqpT_wWu9hTE_XE-gqQx@&GUnqBuT4*DTV_;pKUvf,686^[,T|55hW~",
+    "SaveState_TopGearRally/mountain/1": "ShareData=AM~MJUn*DSTH-qq8:MU$Xgaw,5}8;8Us4cAT1dJ6V~xRGT~1Kw8@|eOUXC!}W~",
+    "SaveState_TopGearRally/coastline/1": "ShareData=AEnvx9lwo-8t@Z&9p!eoW;&uxQpn*7UWr,286+,AV?0)rUY!C08yuw79itbnW~",
+    "SaveState_TopGearRally/jungle/1": "ShareData=AM&k@943lsS1:gcTd$zNWyk?Q5xu03Ul3_i8;nP7Wl5!b80*T$8)obB9mVFPW~",
+    "SaveState_TopGearRally/stripmine/1": "ShareData=AVBy6Up&s+S^@JKT17LhWwwKoP(q9)Ua-]o9BOxDV)1n*9C|=dT]WX9UZ+G_XL",
+    "SaveState_TopGearRally/desert_m/1": "ShareData=ARVxT8?[I3UUa]c9i:5MXIsolQk@?LUqKn8UO&8KVx/2YUV?BITt/0a8?A]~={",
+    "SaveState_TopGearRally/mountain_m/1": "ShareData=AG1ns98LEBTu/SQ9L(QVXlI{k6Fn=qUiEBQT@2MmVvIo,UCZ3RT11/69tu;i={",
+    "SaveState_TopGearRally/coastline_m/1": "ShareData=ABFDUUaGXvUMx9s9rMxFW1wXgQ@LHjUm*ZWUG+=EWCwi=UedLp8/VtzUp(T^={",
+    "SaveState_TopGearRally/jungle_m/1": "ShareData=AK3MCUg9cl8Ky3D8/m[6W8!ubP}(;:UWGk;8)|t~We7!hT@/x-T-J,wUoRYj={",
+    "SaveState_TopGearRally/stripmine_m/1": "ShareData=AHyy[9i]v)8Z7@&T1u7WWxo-wQQ2B;Uh}SGT5bmIV$M^z9E2+mT8CfS9k=o2-X",
+    "SaveState_TopGearRally/season_winner/1": "ShareData=ASwYt9oRPi7xTv^TBD6OXU*mvRVuteUf6;3T1hTIV1OT*8df5TT++q29qC0kW~"
 }
