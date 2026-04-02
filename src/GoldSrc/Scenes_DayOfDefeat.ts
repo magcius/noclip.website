@@ -36,6 +36,8 @@ export class DayOfDefeatSceneDesc implements SceneDesc {
 
         renderer.textureCache.addBSP(bspFile);
 
+        // Day of Defeat maps frequently reference WADs from other maps, and mappers
+        // often included every WAD on their system, so expect some 404s.
         await Promise.all(bspFile.getWadList().map(async (v) => {
             const wadPath = normalizeWadPath(v);
             let wadData = await sceneContext.dataFetcher.fetchData(`${pathBase}/${wadPath}`, { allow404: true });
@@ -48,6 +50,15 @@ export class DayOfDefeatSceneDesc implements SceneDesc {
             if (wadData.byteLength > 0) {
                 const wad = parseWAD(wadData);
                 renderer.textureCache.addWAD(wad);
+                return;
+            }
+
+            // WAD not found - check if it matches a map name and load that BSP's textures
+            const wadName = wadPath.split('/').pop()!.replace(/\.wad$/, '');
+            const siblingBspData = await sceneContext.dataFetcher.fetchData(`${pathBase}/dod/maps/${wadName}.bsp`, { allow404: true });
+            if (siblingBspData.byteLength > 0) {
+                const siblingBsp = new BSPFile(siblingBspData);
+                renderer.textureCache.addBSP(siblingBsp);
             }
         }));
 
