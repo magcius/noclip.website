@@ -5,12 +5,35 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { RWMesh, ObjectDefinition, RenderWareParser, RWTexture, TOMObjectInstance, CapserLevel } from "./bin.js";
+import { CasperMesh, CasperObjectDefinition, CasperRWParser, CasperTexture, CasperObjectInstance, CapserLevel } from "./bin.js";
 import { CasperLevelRenderer } from "./render.js";
 import { Checkbox, COOL_BLUE_COLOR, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
+
+/*
+Game uses the RenderWare engine. Some files have their extensions changed (such as .TXD to .DIC) and contain custom structs
+
+TODO
+
+Add frustum culling for base level geometry by node bboxes (need to check if nodes actually have bboxes)
+    This isn't really needed since performance is not a problem, but good to have nonetheless
+knight242 texture is parsed wrong?
+Figure out X and Z for rotations (inconsistent across different objects)
+    Example the grate and gems in snowy town
+Figure out lava in dragon's cave
+Figure out why some objects with meshes in TOM don't render
+    Example the cannon in the amusement park
+Figure out normals/lighting
+Figure out how some objects/texture without alpha names are set to be transparent
+    Example casper himself or kibosh
+Level objects
+    Add different kinds, fix the ones currently ignored
+    Idle animations, mix of plaintext and .ska files
+    Pathing?
+Investigate instanced rendering
+*/
 
 const CLEAR_COLORS: number[][] = [
     [34, 35, 45], [91, 123, 68], [34, 35, 45], [11, 16, 29],
@@ -19,24 +42,6 @@ const CLEAR_COLORS: number[][] = [
     [12, 12, 39], [5, 5, 5],     [7, 10, 21],  [7, 19, 34]
 ];
 
-/*
-Game uses the RenderWare engine. Some files have their extensions changed (such as .TXD to .DIC) and contain custom structs
-
-TODO
-
-Add frustum culling for base level geometry by node bboxes
-knight242 texture is parsed wrong?
-Figure out X and Z for rotations
-Figure out lava in dragon's cave
-Figure out why some objects with meshes in TOM don't render
-Figure out normals/lighting
-Figure out how some objects/texture without alpha names are set to be transparent
-Level objects
-    Add different kinds, fix the ones currently ignored
-    Idle animations
-    Pathing?
-*/
-
 class CasperRenderer implements SceneGfx {
     public textureHolder: TextureHolder;
     private renderHelper: GfxRenderHelper;
@@ -44,7 +49,7 @@ class CasperRenderer implements SceneGfx {
     private levelRenderer: CasperLevelRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: CapserLevel, textures: Map<string, RWTexture>, objMeshes: Map<string, RWMesh>, objInstances: TOMObjectInstance[]) {
+    constructor(device: GfxDevice, level: CapserLevel, textures: Map<string, CasperTexture>, objMeshes: Map<string, CasperMesh>, objInstances: CasperObjectInstance[]) {
         const viewerTextures: ViewerTexture[] = [];
         for (const texture of textures.values()) {
             viewerTextures.push({
@@ -130,6 +135,7 @@ class CasperScene implements SceneDesc {
     private levelNumber: number;
 
     constructor(private bspPath: string, public name: string) {
+        // game is inconsistent with level numbers like "02" vs "2"
         this.id = bspPath.split("/")[1].split(".")[0];
         this.levelNumber = Number(this.id.split("LEVEL")[1]);
     }
@@ -140,23 +146,23 @@ class CasperScene implements SceneDesc {
         const tom = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/${this.id}/M${this.id}.TOM`);
         const obd = await context.dataFetcher.fetchData(`${pathBase}/SCRIPTC/CASPER.OBD`);
 
-        const level = new RenderWareParser(bsp).parseBSP(this.id, this.levelNumber);
+        const level = new CasperRWParser(bsp).parseBSP(this.id, this.levelNumber);
 
-        const objDefs = new RenderWareParser(obd).parseOBD();
-        const instances = new RenderWareParser(tom).parseTOM();
-        const meshes = await buildDFFMeshes(context.dataFetcher, level, objDefs, instances);
+        const objDefs = new CasperRWParser(obd).parseOBD();
+        const instances = new CasperRWParser(tom).parseTOM();
+        const objMeshes = await buildDFFMeshes(context.dataFetcher, level, objDefs, instances);
 
-        const textures = new RenderWareParser(dic).parseDIC(device, level.materials);
+        const textures = new CasperRWParser(dic).parseDIC(device, level.materials);
 
-        return new CasperRenderer(device, level, textures, meshes, instances);
+        return new CasperRenderer(device, level, textures, objMeshes, instances);
     }
 }
 
 /**
- * Call this **before** parsing textures
+ * Call this _before_ parsing textures so meshes' materials aren't ignored
  */
-async function buildDFFMeshes(dataFetcher: DataFetcher, level: CapserLevel, objDefs: ObjectDefinition[], objInstances: TOMObjectInstance[]): Promise<Map<string, RWMesh>> {
-    const meshes = new Map<string, RWMesh>();
+async function buildDFFMeshes(dataFetcher: DataFetcher, level: CapserLevel, objDefs: CasperObjectDefinition[], objInstances: CasperObjectInstance[]): Promise<Map<string, CasperMesh>> {
+    const meshes = new Map<string, CasperMesh>();
     for (const instance of objInstances) {
         // don't build the same mesh more than once
         if (meshes.has(instance.name)) {
@@ -174,7 +180,7 @@ async function buildDFFMeshes(dataFetcher: DataFetcher, level: CapserLevel, objD
             continue;
         }
         const dff = await dataFetcher.fetchData(`${pathBase}/${path}`);
-        const mesh = new RenderWareParser(dff).parseDFF();
+        const mesh = new CasperRWParser(dff).parseDFF();
         if (mesh.vertices.length === 0) {
             // console.log("Skipping OBJ by no vertices", instance.name);
             continue;

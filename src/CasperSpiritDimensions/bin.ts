@@ -47,18 +47,18 @@ interface GeometryData {
     vertices: number[];
     uvs: number[];
     colors: number[];
-    boundingSphere: BoundingSphere;
+    boundingSphere: CasperBoundingSphere;
 }
 
-export interface RWBSPNode {
+export interface CasperBSPNode {
     type: "node" | "leaf";
-    mesh?: RWMesh;
-    leaves: RWBSPNode[];
+    mesh?: CasperMesh;
+    leaves: CasperBSPNode[];
 }
 
 export interface CapserLevel {
     materials: string[];
-    root: RWBSPNode;
+    root: CasperBSPNode;
     number: number;
     name: string;
 }
@@ -66,39 +66,39 @@ export interface CapserLevel {
 /**
  * An object definition from the CASPER.OBD file
  */
-export interface ObjectDefinition {
+export interface CasperObjectDefinition {
     names: string[];
     dffPath: string;
     thirdValue: string;
 }
 
-export interface RWMesh {
+export interface CasperMesh {
     vertices: number[];
     uvs: number[];
     colors: number[];
     indexSplits: IndexSplit[];
     materials?: string[];
-    boundingSphere?: BoundingSphere;
+    boundingSphere?: CasperBoundingSphere;
 }
 
-export interface BoundingSphere {
+export interface CasperBoundingSphere {
     x: number;
     y: number;
     z: number;
     r: number;
 }
 
-export class TOMObjectInstance {
-    name: string;
-    position: { x: number; y: number; z: number };
-    rotation: { x: number; y: number; z: number };
-    scale: { x: number; y: number; z: number };
-    properties: string[];
-    shiftMatrix: mat4;
-    bbox: AABB;
+export class CasperObjectInstance {
+    name: string = "";
+    position: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+    rotation: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+    scale: { x: number; y: number; z: number } = { x: 1, y: 1, z: 1 };
+    properties: string[] = [];
+    shiftMatrix: mat4 = mat4.create();
+    bbox: AABB = new AABB();
 }
 
-export class RWTexture {
+export class CasperTexture {
     public gfxTexture: GfxTexture;
 
     constructor(device: GfxDevice, name: string, mips: Uint8Array[], width: number, height: number, public bitDepth: number, public hasAlpha: boolean = false) {
@@ -119,10 +119,7 @@ export class RWTexture {
 const SCALE_OVERRIDES: Map<string, number[]> = new Map<string, number[]>([["needle2", [1, 1, 1]]]);
 const IGNORED_OBJS: string[] = ["6wall01", "6wall02", "6wall03", "6wall04", "6wall05", "robostand"];
 
-/**
- * Parses RenderWare files for the PS2
- */
-export class RenderWareParser {
+export class CasperRWParser {
     private data: DataView;
     private offset: number = 0;
 
@@ -168,13 +165,13 @@ export class RenderWareParser {
         return level;
     }
 
-    public parseDIC(device: GfxDevice, materials: string[]): Map<string, RWTexture> {
+    public parseDIC(device: GfxDevice, materials: string[]): Map<string, CasperTexture> {
         this.offset = 0;
         const txdHeader = this.parseHeader();
         const txdEnd = this.offset + txdHeader.size;
         const txdMetaStructHeader = this.parseHeader();
         this.offset += 4;
-        const textures: Map<string, RWTexture> = new Map();
+        const textures: Map<string, CasperTexture> = new Map();
         while (this.offset < txdEnd) {
             const nativeHeader = this.parseHeader();
             const nativeEnd = this.offset + nativeHeader.size;
@@ -267,7 +264,7 @@ export class RenderWareParser {
                 }
             }
 
-            const t = new RWTexture(device, textureName, mips, width, height, bitDepth, alphaName.length > 0);
+            const t = new CasperTexture(device, textureName, mips, width, height, bitDepth, alphaName.length > 0);
             textures.set(textureName, t);
             this.offset = nativeEnd;
         }
@@ -275,11 +272,11 @@ export class RenderWareParser {
         return textures;
     }
 
-    public parseTOM(): TOMObjectInstance[] {
+    public parseTOM(): CasperObjectInstance[] {
         const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength));
         const lines = rawText.split("\n");
-        const instances: TOMObjectInstance[] = [];
-        let instance: TOMObjectInstance = new TOMObjectInstance();
+        const instances: CasperObjectInstance[] = [];
+        let instance: CasperObjectInstance = new CasperObjectInstance();
         let inProperties = false;
 
         for (let line of lines) {
@@ -289,7 +286,7 @@ export class RenderWareParser {
             }
 
             if (line.startsWith("BEGIN_OBJ:")) {
-                instance = new TOMObjectInstance();
+                instance = new CasperObjectInstance();
                 const nameMatch = line.match(/"([^"]+)"/);
                 let name = nameMatch ? nameMatch[1] : "";
                 if (name.includes(",")) {
@@ -303,7 +300,7 @@ export class RenderWareParser {
                     if (IGNORED_OBJS.indexOf(instance.name) === -1) {
                         instances.push(instance);
                     }
-                    instance = new TOMObjectInstance();
+                    instance = new CasperObjectInstance();
                 } else if (line.startsWith("BEGIN_USERPROPS:")) {
                     inProperties = true;
                 } else if (line.startsWith("END_USERPROPS:")) {
@@ -333,10 +330,10 @@ export class RenderWareParser {
         return instances;
     }
 
-    public parseOBD(): ObjectDefinition[] {
+    public parseOBD(): CasperObjectDefinition[] {
         const rawText = new TextDecoder("utf-8").decode(new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength));
         const lines = rawText.split("\n");
-        const objDefs: ObjectDefinition[] = [];
+        const objDefs: CasperObjectDefinition[] = [];
 
         function extractQuotedStrings(line: string): string[] {
             const matches = line.match(/"([^"]*)"/g);
@@ -373,7 +370,7 @@ export class RenderWareParser {
         return objDefs;
     }
 
-    public parseDFF(): RWMesh {
+    public parseDFF(): CasperMesh {
         this.offset = 0;
         const clumpHeader = this.parseHeader();
         const clumpEnd = this.offset + clumpHeader.size;
@@ -413,9 +410,9 @@ export class RenderWareParser {
         return { vertices: [], uvs: [], colors: [], indexSplits: [], materials: [] };
     }
 
-    private parsePlaneSection(header: NodeHeader): RWBSPNode {
+    private parsePlaneSection(header: NodeHeader): CasperBSPNode {
         const endOffset = this.offset + header.size;
-        const sector: RWBSPNode = {
+        const sector: CasperBSPNode = {
             type: header.id === Chunk.ATOMIC_SECTION ? 'leaf' : 'node',
             leaves: []
         };
@@ -477,7 +474,7 @@ export class RenderWareParser {
         return names;
     }
 
-    private parseAtomicSection(): RWMesh {
+    private parseAtomicSection(): CasperMesh {
         const structHeader = this.parseHeader();
         const structEnd = this.offset + structHeader.size;
 

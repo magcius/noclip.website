@@ -8,7 +8,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { RWMesh, RWTexture, TOMObjectInstance, CapserLevel, RWBSPNode, BoundingSphere } from "./bin";
+import { CasperMesh, CasperTexture, CasperObjectInstance, CapserLevel, CasperBSPNode, CasperBoundingSphere } from "./bin";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
 import { AABB } from "../Geometry";
@@ -110,7 +110,7 @@ export class CasperLevelRenderer {
     public cullMode: GfxCullMode = GfxCullMode.None;
     public meshLayers: Layer[] = [];
 
-    constructor(cache: GfxRenderCache, private level: CapserLevel, private textures: Map<string, RWTexture>, meshes: Map<string, RWMesh>, private objInstances: TOMObjectInstance[]) {
+    constructor(cache: GfxRenderCache, private level: CapserLevel, private textures: Map<string, CasperTexture>, meshes: Map<string, CasperMesh>, private objInstances: CasperObjectInstance[]) {
         if (BACK_CULL_LEVELS.includes(this.level.number)) {
             this.cullMode = GfxCullMode.Back;
         }
@@ -124,7 +124,7 @@ export class CasperLevelRenderer {
         });
         this.meshLayers.push({ name: this.level.name, visible: true, setVisible(v: boolean) { this.visible = v } });
 
-        const boundingSpheres: Map<string, BoundingSphere> = new Map();
+        const boundingSpheres: Map<string, CasperBoundingSphere> = new Map();
         for (const [name, mesh] of meshes.entries()) {
             const { vertices, indices, uvs, colors } = this.buildBuffersObj(name, mesh);
             this.buffers.set(name, {
@@ -245,6 +245,9 @@ export class CasperLevelRenderer {
             device.destroyBuffer(buffers.color);
             device.destroyBuffer(buffers.uv);
         }
+        for (const texture of this.textures.values()) {
+            device.destroyTexture(texture.gfxTexture);
+        }
     }
 
     private buildBuffersLevel(): MeshBufferData {
@@ -253,7 +256,7 @@ export class CasperLevelRenderer {
         const colors: number[] = [];
         const uvs: number[] = [];
         const indexGroups = new Map<string, number[]>();
-        const traverse = (node: RWBSPNode) => {
+        const traverse = (node: CasperBSPNode) => {
             if (node.mesh && node.mesh.vertices.length > 0) {
                 const offsetBase = vertexOffset;
                 vertices.push(...node.mesh.vertices.map(p => p * WORLD_SCALE));
@@ -296,7 +299,7 @@ export class CasperLevelRenderer {
         return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), colors: new Float32Array(colors), uvs: new Float32Array(uvs) };
     }
 
-    private buildBuffersObj(name: string, mesh: RWMesh): MeshBufferData {
+    private buildBuffersObj(name: string, mesh: CasperMesh): MeshBufferData {
         const vertices: number[] = [];
         const colors: number[] = [];
         const uvs: number[] = [];
@@ -364,7 +367,7 @@ export class CasperLevelRenderer {
         }
     }
 
-    private computeShiftMatrix(obj: TOMObjectInstance): mat4 {
+    private computeShiftMatrix(obj: CasperObjectInstance): mat4 {
         const srt = mat4.create();
         computeModelMatrixSRT(srt,
             obj.scale.x, obj.scale.y, obj.scale.z,
