@@ -1,4 +1,4 @@
-import { mat4, quat } from "gl-matrix";
+import { mat4, quat, vec4 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
@@ -33,9 +33,20 @@ interface MeshBuffers {
     index: GfxBuffer;
     color: GfxBuffer;
     uv: GfxBuffer;
+    shift0?: GfxBuffer;
+    shift1?: GfxBuffer;
+    shift2?: GfxBuffer;
+    shift3?: GfxBuffer;
 }
 
 class Shader extends DeviceProgram {
+    public static a_Position = 0;
+    public static a_Color = 1;
+    public static a_UV = 2;
+    public static a_Shift0 = 3;
+    public static a_Shift1 = 4;
+    public static a_Shift2 = 5;
+    public static a_Shift3 = 6;
     public static ub_SceneParams = 0;
     public static ub_InstanceParams = 1;
 
@@ -45,12 +56,8 @@ precision highp float;
 ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_ProjectionView;
+    Mat4x4 u_Projection;
     float u_ShowTextures;
-};
-
-layout(std140) uniform ub_InstanceParams {
-    Mat4x4 u_ShiftMatrix;
 };
 
 uniform sampler2D u_Texture;
@@ -59,15 +66,19 @@ varying vec3 v_Color;
 varying vec2 v_UV;
 
 #ifdef VERT
-layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec3 a_Color;
-layout(location = 2) in vec2 a_UV;
+layout(location = ${Shader.a_Position}) in vec3 a_Position;
+layout(location = ${Shader.a_Color}) in vec3 a_Color;
+layout(location = ${Shader.a_UV}) in vec2 a_UV;
+layout(location = ${Shader.a_Shift0}) in vec4 a_Shift0;
+layout(location = ${Shader.a_Shift1}) in vec4 a_Shift1;
+layout(location = ${Shader.a_Shift2}) in vec4 a_Shift2;
+layout(location = ${Shader.a_Shift3}) in vec4 a_Shift3;
 
 void main() {
     v_Color = a_Color;
     v_UV = a_UV;
-    vec4 worldPos = UnpackMatrix(u_ShiftMatrix) * vec4(a_Position, 1.0);
-    gl_Position = UnpackMatrix(u_ProjectionView) * worldPos;
+    vec4 worldPos = mat4(a_Shift0, a_Shift1, a_Shift2, a_Shift3) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * worldPos;
 }
 #endif
 
@@ -96,7 +107,6 @@ void main() {
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 const WORLD_SCALE = 300; // raw XYZ are extremely small
 const BACK_CULL_LEVELS = [5, 8, 9, 11, 12, 14]; // levels that are mostly interior
-const NOSHIFT_MATRIX = mat4.create();
 
 export class CasperLevelRenderer {
     private buffers: Map<string, MeshBuffers> = new Map();
@@ -145,14 +155,22 @@ export class CasperLevelRenderer {
 
         this.gfxInputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
-                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Color
-                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 } // a_UV
+                { location: Shader.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
+                { location: Shader.a_Color, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
+                { location: Shader.a_UV, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
+                { location: Shader.a_Shift0, bufferIndex: 3, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
+                { location: Shader.a_Shift1, bufferIndex: 4, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
+                { location: Shader.a_Shift2, bufferIndex: 5, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
+                { location: Shader.a_Shift3, bufferIndex: 6, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 }
             ],
             vertexBufferDescriptors: [
-                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // pos (x, y, z)
-                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // color (x: r, y: g, z: b)
-                { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex } // uv (x: u, y: v)
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerInstance },
+                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerInstance },
+                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerInstance },
+                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerInstance }
             ],
             indexBufferFormat: GfxFormat.U32_R
         });
@@ -167,6 +185,35 @@ export class CasperLevelRenderer {
             const bbox = new AABB(bs.x - bs.r, bs.y - bs.r, bs.z - bs.r, bs.x + bs.r, bs.y + bs.r, bs.z + bs.r);
             bbox.transform(bbox, instance.shiftMatrix);
             instance.bbox = bbox;
+        }
+
+        // patch buffers with instance shifts
+        for (const name of this.buffers.keys()) {
+            const buffers = this.buffers.get(name)!;
+            const shift0: number[] = [];
+            const shift1: number[] = [];
+            const shift2: number[] = [];
+            const shift3: number[] = [];
+            if (name === this.level.name) {
+                const identity = this.convertMat4ToVec4Columns(this.computeShiftMatrix(new CasperObjectInstance()));
+                shift0.push(...identity[0]);
+                shift1.push(...identity[1]);
+                shift2.push(...identity[2]);
+                shift3.push(...identity[3]);
+            } else {
+                for (const instance of this.objInstances.filter(i => i.name === name)) {
+                    const shiftColumns = this.convertMat4ToVec4Columns(instance.shiftMatrix);
+                    shift0.push(...shiftColumns[0]);
+                    shift1.push(...shiftColumns[1]);
+                    shift2.push(...shiftColumns[2]);
+                    shift3.push(...shiftColumns[3]);
+                }
+            }
+            buffers.shift0 = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(shift0).buffer);
+            buffers.shift1 = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(shift1).buffer);
+            buffers.shift2 = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(shift2).buffer);
+            buffers.shift3 = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(shift3).buffer);
+            // this.buffers.set(name, buffers);
         }
 
         for (const t of this.textures.values()) {
@@ -193,13 +240,14 @@ export class CasperLevelRenderer {
 
         let offset = template.allocateUniformBuffer(Shader.ub_SceneParams, 17);
         const uniformBuffer = template.mapUniformBufferF32(Shader.ub_SceneParams);
-        // u_ProjectionView (16)
+        // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.clipFromWorldMatrix);
         // u_ShowTextures (1)
         uniformBuffer[offset++] = this.showTextures ? 1.0 : 0.0;
 
         for (const [name, batch] of this.batches.entries()) {
-            if (name === this.level.name || (name !== this.level.name && this.showObjects)) {
+            const isLevel = name === this.level.name;
+            if (isLevel || (!isLevel && this.showObjects)) {
                 if (!this.meshLayers.find(m => m.name === name)!.visible) {
                     continue;
                 }
@@ -208,28 +256,14 @@ export class CasperLevelRenderer {
                 renderInst.setVertexInput(this.gfxInputLayout, [
                     { buffer: buffers.vertex, byteOffset: 0 },
                     { buffer: buffers.color, byteOffset: 0 },
-                    { buffer: buffers.uv, byteOffset: 0 }
+                    { buffer: buffers.uv, byteOffset: 0 },
+                    { buffer: buffers.shift0!, byteOffset: 0 },
+                    { buffer: buffers.shift1!, byteOffset: 0 },
+                    { buffer: buffers.shift2!, byteOffset: 0 },
+                    { buffer: buffers.shift3!, byteOffset: 0 }
                 ], { buffer: buffers.index, byteOffset: 0 });
 
-                if (name === this.level.name) {
-                    let instanceOffset = renderInst.allocateUniformBuffer(Shader.ub_InstanceParams, 16);
-                    const instanceUniformBuffer = renderInst.mapUniformBufferF32(Shader.ub_InstanceParams);
-                    // u_ShiftMatrix (16)
-                    instanceOffset += fillMatrix4x4(instanceUniformBuffer, instanceOffset, NOSHIFT_MATRIX);
-
-                    this.renderBatch(viewerInput, batch, renderHelper.renderInstManager);
-                } else {
-                    for (const instance of this.objInstances.filter(i => i.name === name)) {
-                        if (viewerInput.camera.frustum.contains(instance.bbox)) {
-                            let instanceOffset = renderInst.allocateUniformBuffer(Shader.ub_InstanceParams, 16);
-                            const instanceUniformBuffer = renderInst.mapUniformBufferF32(Shader.ub_InstanceParams);
-                            // u_ShiftMatrix (16)
-                            instanceOffset += fillMatrix4x4(instanceUniformBuffer, instanceOffset, instance.shiftMatrix);
-
-                            this.renderBatch(viewerInput, batch, renderHelper.renderInstManager, false, instance.bbox);
-                        }
-                    }
-                }
+                this.renderBatch(batch, renderHelper.renderInstManager, isLevel ? 1 : this.objInstances.filter(i => i.name === name).length, isLevel);
 
                 renderHelper.renderInstManager.popTemplate();
             }
@@ -244,6 +278,10 @@ export class CasperLevelRenderer {
             device.destroyBuffer(buffers.index);
             device.destroyBuffer(buffers.color);
             device.destroyBuffer(buffers.uv);
+            device.destroyBuffer(buffers.shift0!);
+            device.destroyBuffer(buffers.shift1!);
+            device.destroyBuffer(buffers.shift2!);
+            device.destroyBuffer(buffers.shift3!);
         }
         for (const texture of this.textures.values()) {
             device.destroyTexture(texture.gfxTexture);
@@ -338,7 +376,7 @@ export class CasperLevelRenderer {
         return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), colors: new Float32Array(colors), uvs: new Float32Array(uvs) };
     }
 
-    private renderBatch(viewerInput: ViewerRenderInput, drawCalls: DrawCall[], renderInstManager: GfxRenderInstManager, respectCullMode: boolean = true, bbox?: AABB) {
+    private renderBatch(drawCalls: DrawCall[], renderInstManager: GfxRenderInstManager, instanceCount: number, respectCullMode: boolean = true) {
         for (const drawCall of drawCalls) {
             const texture = this.textures.get(drawCall.textureName);
             if (!texture) {
@@ -352,17 +390,14 @@ export class CasperLevelRenderer {
                 setAttachmentStateSimple(megaState, {
                     blendMode: GfxBlendMode.Add,
                     blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha
                 });
             }
-            if (bbox) {
-                renderInst.sortKey = setSortKeyDepth(this.sortKeys.get(texture.gfxTexture.ResourceName!)!, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bbox));
-            } else {
-                renderInst.sortKey = this.sortKeys.get(texture.gfxTexture.ResourceName!)!;
-            }
+            renderInst.sortKey = this.sortKeys.get(texture.gfxTexture.ResourceName!)!;
             renderInst.setMegaStateFlags(megaState);
             renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: texture.gfxTexture, gfxSampler: this.gfxSampler }]);
             renderInst.setDrawCount(drawCall.indexCount, drawCall.indexOffset);
+            renderInst.setInstanceCount(instanceCount);
             renderInstManager.submitRenderInst(renderInst);
         }
     }
@@ -375,5 +410,13 @@ export class CasperLevelRenderer {
             obj.position.x * WORLD_SCALE, obj.position.z * WORLD_SCALE, -obj.position.y * WORLD_SCALE
         );
         return srt;
+    }
+
+    private convertMat4ToVec4Columns(m: Readonly<mat4>): vec4[] {
+        const col0 = vec4.fromValues(m[0], m[1], m[2], m[3]);
+        const col1 = vec4.fromValues(m[4], m[5], m[6], m[7]);
+        const col2 = vec4.fromValues(m[8], m[9], m[10], m[11]);
+        const col3 = vec4.fromValues(m[12], m[13], m[14], m[15]);
+        return [col0, col1, col2, col3];
     }
 }

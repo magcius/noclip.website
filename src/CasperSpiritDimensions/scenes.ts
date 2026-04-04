@@ -32,7 +32,6 @@ Level objects
     Add different kinds, fix the ones currently ignored
     Idle animations, mix of plaintext and .ska files
     Pathing?
-Investigate instanced rendering
 */
 
 const CLEAR_COLORS: number[][] = [
