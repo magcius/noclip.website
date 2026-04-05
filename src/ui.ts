@@ -814,7 +814,7 @@ export class Panel implements Widget {
         }
     }
 
-    private syncSize() {
+    public syncSize() {
         const widthExpanded = this.expanded || this.mainPanel.matches(':hover');
         this.mainPanel.style.width = widthExpanded ? '440px' : '28px';
 
@@ -1866,6 +1866,7 @@ class ViewerSettings extends Panel {
     private fovSlider: Slider;
     private camControllerClasses: CameraControllerClass[] = [FPSCameraController, OrbitCameraController, OrthoCameraController];
     private camRadioButtons: RadioButtons;
+    private orthoRealignButton: HTMLElement;
     private camSpeedSlider: Slider;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
@@ -1888,6 +1889,29 @@ class ViewerSettings extends Panel {
             this.setCameraControllerIndex(this.camRadioButtons.selectedIndex);
         };
         this.contents.appendChild(this.camRadioButtons.elem);
+
+        this.orthoRealignButton = document.createElement('div');
+        this.orthoRealignButton.textContent = 'Realign Camera';
+        this.orthoRealignButton.style.cursor = 'pointer';
+        this.orthoRealignButton.style.padding = '8px';
+        this.orthoRealignButton.style.textAlign = 'center';
+        this.orthoRealignButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        this.orthoRealignButton.style.borderRadius = '4px';
+        this.orthoRealignButton.style.marginTop = '4px';
+        this.orthoRealignButton.style.userSelect = 'none';
+        this.orthoRealignButton.onmouseover = () => {
+            this.orthoRealignButton.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        };
+        this.orthoRealignButton.onmouseout = () => {
+            this.orthoRealignButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        };
+        this.orthoRealignButton.onclick = () => {
+            const c = this.viewer.cameraController;
+            if (c instanceof OrthoCameraController)
+                c.realign();
+        };
+        setElementVisible(this.orthoRealignButton, false);
+        this.contents.appendChild(this.orthoRealignButton);
 
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
@@ -1958,6 +1982,8 @@ class ViewerSettings extends Panel {
         if (keyMoveSpeed !== null)
             this.camSpeedSlider.setValue(keyMoveSpeed);
         this.fovSlider.setValue(camera.fovY / Math.PI * 100);
+
+        setElementVisible(this.orthoRealignButton, cameraController instanceof OrthoCameraController && cameraController.shouldShowRealignmentButton());
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
@@ -1966,6 +1992,9 @@ class ViewerSettings extends Panel {
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
         this.updateCameraSpeedFromSlider();
+
+        // The scene may adjust the camera controller in viewer.setCameraController, so re-update.
+        this.setupFromCamera(this.viewer.cameraController!, this.viewer.camera);
     }
 
     private onScrollWheel(): void {

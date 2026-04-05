@@ -718,6 +718,7 @@ export class OrthoCameraController implements CameraController {
     public yTarget: number = this.y;
 
     public translation = vec3.create();
+    public translationTarget = vec3.create();
     public txVel: number = 0;
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
@@ -725,12 +726,27 @@ export class OrthoCameraController implements CameraController {
     private nearPlane = -this.farPlane;
 
     private sceneMoveSpeedMult = 1;
+    public exponentialZoomFactor = 0; // 0 = linear zoom, >1 = exponential (e.g., 1.05 for 5% per click)
+    public realignmentSettings : { xTarget : number; yTarget : number } | null = null;
 
     constructor() {
     }
 
     public setSceneMoveSpeedMult(v: number): void {
         this.sceneMoveSpeedMult = v;
+    }
+
+    public shouldShowRealignmentButton() : boolean {
+        return this.realignmentSettings !== null
+    }
+
+    public realign(): void {
+        const realignmentSettings = this.realignmentSettings;
+        if (realignmentSettings !== null) {
+            this.xTarget = realignmentSettings.xTarget
+            this.yTarget = realignmentSettings.yTarget;
+            this.forceUpdate = true;
+        }
     }
 
     public cameraUpdateForced(): void {
@@ -782,6 +798,7 @@ export class OrthoCameraController implements CameraController {
         if (inputManager.isKeyDownEventTriggered('KeyB')) {
             this.txVel = this.tyVel = 0;
             vec3.zero(this.translation);
+            vec3.zero(this.translationTarget);
         }
 
         const shouldOrbit = this.shouldOrbit;
@@ -800,14 +817,25 @@ export class OrthoCameraController implements CameraController {
             this.xTarget += this.orbitSpeed * 1/25;
         }
 
-        let zTargetAdjAmt = inputManager.dz * 80.0;
-        if (inputManager.isKeyDown('KeyQ'))
-            zTargetAdjAmt -= 80.0;
-        if (inputManager.isKeyDown('KeyE'))
-            zTargetAdjAmt += 80.0;
-        this.zTarget += zTargetAdjAmt;
-        if (this.zTarget > -10)
-            this.zTarget = -10;
+        if (this.exponentialZoomFactor > 1) {
+            // Exponential zoom
+            let zTargetAdjAmt = inputManager.dz;
+            if (inputManager.isKeyDown('KeyQ'))
+                zTargetAdjAmt -= 1.0;
+            if (inputManager.isKeyDown('KeyE'))
+                zTargetAdjAmt += 1.0;
+            this.zTarget *= Math.pow(this.exponentialZoomFactor, -zTargetAdjAmt * this.sceneMoveSpeedMult);
+        } else {
+            // Linear zoom
+            let zTargetAdjAmt = inputManager.dz * 80.0;
+            if (inputManager.isKeyDown('KeyQ'))
+                zTargetAdjAmt -= 80.0;
+            if (inputManager.isKeyDown('KeyE'))
+                zTargetAdjAmt += 80.0;
+            this.zTarget += zTargetAdjAmt * this.sceneMoveSpeedMult;
+        }
+        if (this.zTarget > -1)
+            this.zTarget = -1;
         let zTargetDelta = this.zTarget - this.z;
 
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
@@ -840,7 +868,8 @@ export class OrthoCameraController implements CameraController {
         this.xTarget = this.xTarget % MathConstants.TAU;
         this.yTarget = this.yTarget % MathConstants.TAU;
 
-        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || zTargetDelta !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        const translationDelta = vec3.squaredDistance(this.translation, this.translationTarget);
+        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || zTargetDelta !== 0 || this.txVel !== 0 || this.tyVel !== 0 || translationDelta > 0;
         if (updated) {
             this.x = lerpAngle(this.x, this.xTarget, 0.1);
             this.y = lerpAngle(this.y, this.yTarget, 0.1);
@@ -853,11 +882,26 @@ export class OrthoCameraController implements CameraController {
             const kSpringZ = 0.1;
             this.z += zTargetDelta * kSpringZ;
 
+            // Velocity-driven pan moves both translation and translationTarget in lock-step,
+            // so the target tracks the current position when the user is panning normally.
             getMatrixAxisX(scratchVec3a, this.camera.worldMatrix);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * this.z * this.sceneMoveSpeedMult);
+            vec3.scale(scratchVec3a, scratchVec3a, this.txVel * this.z * this.sceneMoveSpeedMult);
+            vec3.add(this.translation,       this.translation,       scratchVec3a);
+            vec3.add(this.translationTarget, this.translationTarget, scratchVec3a);
 
             getMatrixAxisY(scratchVec3a, this.camera.worldMatrix);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * this.z * this.sceneMoveSpeedMult);
+            vec3.scale(scratchVec3a, scratchVec3a, this.tyVel * this.z * this.sceneMoveSpeedMult);
+            vec3.add(this.translation,       this.translation,       scratchVec3a);
+            vec3.add(this.translationTarget, this.translationTarget, scratchVec3a);
+
+            // When something external (e.g. a "zoom to" button) sets translationTarget
+            // without updating translation, ease toward it. Snap once we're close enough
+            // so the updated-check can settle.
+            if (translationDelta > 1e-6) {
+                vec3.lerp(this.translation, this.translation, this.translationTarget, 0.1);
+            } else if (translationDelta > 0) {
+                vec3.copy(this.translation, this.translationTarget);
+            }
 
             this.forceUpdate = false;
         }

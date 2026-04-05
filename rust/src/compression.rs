@@ -14,6 +14,7 @@ pub fn lzma_decompress(
     pb: u32,
     dict_size: u32,
     unpacked_size: u64,
+    streamed: bool,
 ) -> Vec<u8> {
     let properties = lzma_rs::decompress::raw::LzmaProperties {
         lc: lc,
@@ -21,7 +22,7 @@ pub fn lzma_decompress(
         pb: pb,
     };
     let params =
-        lzma_rs::decompress::raw::LzmaParams::new(properties, dict_size, Some(unpacked_size));
+        lzma_rs::decompress::raw::LzmaParams::new(properties, dict_size, if streamed { None } else { Some(unpacked_size) });
     let mut decoder = lzma_rs::decompress::raw::LzmaDecoder::new(params, None).unwrap();
     let mut dst = Vec::<u8>::with_capacity(unpacked_size.try_into().unwrap());
     decoder.decompress(&mut src, &mut dst).unwrap();
