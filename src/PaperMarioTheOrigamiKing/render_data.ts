@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA, FBVS, FMAA, FMAT } from "../fres_nx/bfres";
+import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FMDL, FSKL, FSKA, FBVS, FMAA, FMAT, ShaderParamAnimation } from "../fres_nx/bfres";
 import { AttributeFormat, getChannelFormat, getTypeFormat, IndexFormat } from "../fres_nx/nngfx_enum";
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxDevice, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
@@ -9,6 +9,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { OrigamiModelConfig } from "./model_config";
 import { computeModelMatrixSRT } from "../MathHelpers";
 import { AABB } from "../Geometry";
+import { Destroyable } from "../SceneBase";
 
 // Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
@@ -77,22 +78,25 @@ function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
     }
 }
 
-export class VertexData {
+/**
+ * Processed FVTX for _Paper Mario: The Origami King_
+ */
+export class OrigamiVertexData implements Destroyable {
     public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     public inputBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public rawAttributes: FVTX_VertexAttribute[] = [];
 
-    constructor(device: GfxDevice, public vertices: FVTX) {
-        this.rawAttributes = vertices.vertexAttributes;
-        let nextBufferIndex = vertices.vertexBuffers.length;
-        for (let i = 0; i < vertices.vertexAttributes.length; i++) {
-            const vertexAttribute = vertices.vertexAttributes[i];
+    constructor(device: GfxDevice, public fvtx: FVTX) {
+        this.rawAttributes = fvtx.vertexAttributes;
+        let nextBufferIndex = fvtx.vertexBuffers.length;
+        for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
+            const vertexAttribute = fvtx.vertexAttributes[i];
             const bufferIndex = vertexAttribute.bufferIndex;
             if (this.inputBufferDescriptors[bufferIndex] === undefined) {
                 this.inputBufferDescriptors[bufferIndex] = null;
             }
-            const vertexBuffer = vertices.vertexBuffers[bufferIndex];
+            const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
             const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
                 const attribBufferIndex = nextBufferIndex++;
@@ -160,13 +164,16 @@ export class VertexData {
     }
 }
 
-export class MeshData {
+/**
+ * Processed FSHP mesh for _Paper Mario: The Origami King_
+ */
+export class OrigamiMeshData implements Destroyable {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
     public indexBuffer: GfxBuffer;
 
-    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, vertexData: VertexData) {
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, vertexData: OrigamiVertexData) {
         const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
         this.inputLayout = cache.createInputLayout({
             indexBufferFormat,
@@ -183,14 +190,17 @@ export class MeshData {
     }
 }
 
-export class ShapeData {
-    public meshData: MeshData;
+/**
+ * Processed FSHP for _Paper Mario: The Origami King_
+ */
+export class OrigamiShapeData implements Destroyable {
+    public meshData: OrigamiMeshData;
     public boneMatrixLength: number;
     public visible: boolean = true;
     public vertexSkinWeightCount;
 
-    constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: VertexData, skeleton: FSKL) {
-        this.meshData = new MeshData(cache, shape.mesh[0], vertexData);
+    constructor(cache: GfxRenderCache, public shape: FSHP, public vertexData: OrigamiVertexData, skeleton: FSKL) {
+        this.meshData = new OrigamiMeshData(cache, shape.mesh[0], vertexData);
         this.boneMatrixLength = 1;
         if (shape.vertexSkinWeightCount > 0) {
             this.boneMatrixLength = skeleton.smoothRigidIndices.length;
@@ -203,23 +213,34 @@ export class ShapeData {
     }
 }
 
-export class ModelData {
+/**
+ * Processed FMDL for _Paper Mario: The Origami King_
+ */
+export class OrigamiModelData implements Destroyable {
     public name: string;
     public bbox: AABB;
     public skeletonAnimation: FSKA | undefined;
     public boneVisibilityAnimation: FBVS | undefined;
     public texturePatternAnimation: FMAA | undefined;
-    public shapeData: ShapeData[] = [];
+    public shaderParamAnimation: FMAA | undefined;
+    public shapeData: OrigamiShapeData[] = [];
     public bones: FSKL_Bone[];
     public skeleton: FSKL;
     public materials: (FMAT | null)[] = [];
     public currentSKAFrame: number = 0;
     public currentBVSFrame: number = 0;
-    public skeletonAnimationBoneIndices: number[] = [];
-    public boneVisibilityFrames: Map<number, Map<number, boolean>> = new Map();
-    public boneVisibility: Map<number, boolean> = new Map();
-    public baseBoneVisibility: Map<number, boolean> = new Map();
+    public currentTPAFrame: number = 0;
+    public currentSPAFrame: number = 0;
     public smoothRigidMatrices: mat4[] = [];
+    public skeletonAnimationBoneIndices: number[] = [];
+    public boneVisibility: Map<number, boolean> = new Map();
+    public boneVisibilityFrames: Map<number, Map<number, boolean>> = new Map();
+    public baseBoneVisibility: Map<number, boolean> = new Map();
+    public texturePatternFrames: Map<number, string> = new Map();
+    public texturePatternSampler: string = "";
+    public texturePatternSetFirstFrame: boolean = false;
+    public shaderParamName: string = "";
+    public shaderParamFrames: Map<number, number[]> = new Map();
 
     constructor(cache: GfxRenderCache, bfres: FRES, public config: OrigamiModelConfig | undefined) {
         const model = bfres.fmdl[0];
@@ -234,9 +255,9 @@ export class ModelData {
         }
 
         if (this.config && (this.config.fska || this.config.fbvs || this.config.texturePattern)) {
-            const fbvsName = this.config.fbvs ? this.config.fbvs : (this.config.fska ? this.config.fska : this.config.texturePattern);
-            if (fbvsName) {
-                this.boneVisibilityAnimation = bfres.fbvs.find(v => v.name === fbvsName);
+            const searchName = this.config.fbvs ? this.config.fbvs : (this.config.fska ? this.config.fska : this.config.texturePattern);
+            if (searchName) {
+                this.boneVisibilityAnimation = bfres.fbvs.find(v => v.name === searchName);
             }
 
             if (this.boneVisibilityAnimation) {
@@ -306,31 +327,43 @@ export class ModelData {
             if (!this.texturePatternAnimation) {
                 console.warn("Could not find texture pattern animation", this.config.texturePattern, "in", model.name);
             } else {
-                // patch texture names, temp util of texture pattern anims
                 const ma = this.texturePatternAnimation.materialAnimations[0];
                 const ta = ma.texturePatternAnimations[0];
-
-                let newTextureNameIndex = -1;
                 const useCurve = ta.curveIndex < ma.curves.length;
                 const useConstant = ta.constantIndex < ma.constants.length;
+
                 if (useCurve) {
-                    newTextureNameIndex = ma.curves[ta.curveIndex].keys[0][0] + 1;
+                    const curve = ma.curves[ta.curveIndex];
+                    for (let i = 0; i < curve.frames.length; i++) {
+                        this.texturePatternFrames.set(curve.frames[i], model.name + "_" + this.texturePatternAnimation.textureNames[curve.keys[i][0] + 1]);
+                    }
                 } else if (useConstant) {
-                    newTextureNameIndex = ma.constants[ta.constantIndex].valueInt;
+                    this.texturePatternFrames.set(0, model.name + "_" + this.texturePatternAnimation.textureNames[ma.constants[ta.constantIndex].valueInt]);
                 } else {
-                    console.warn("Could not determine material index for", this.config.texturePattern, "in", model.name);
+                    console.warn("Could not determine texture pattern frames for", this.config.texturePattern, "in", model.name);
                 }
 
-                if (newTextureNameIndex > -1) {
-                    const material = model.fmat.find(m => m.name === ma.name);
-                    if (!material) {
-                        console.warn("Could not match material name", ma.name, "in", model.name);
-                    } else {
-                        const textureNameIndex = material.samplerInfo.findIndex(s => s.name === ta.samplerName);
-                        if (textureNameIndex > -1) {
-                            material.textureName[textureNameIndex] = this.texturePatternAnimation.textureNames[newTextureNameIndex];
-                        } else {
-                            console.warn("Could not determine texture name index for", this.config.texturePattern, "in", model.name);
+                this.texturePatternSampler = ta.samplerName;
+            }
+        }
+
+        if (this.config && this.config.shaderParam) {
+            this.shaderParamAnimation = bfres.fmaa.find(a => a.name === this.config?.shaderParam);
+            if (!this.shaderParamAnimation) {
+                console.warn("Could not find shader param animation", this.config.shaderParam, "in", model.name);
+            } else {
+                const ma = this.shaderParamAnimation.materialAnimations[0];
+                if (ma) {
+                    const curves = ma.curves;
+                    const constants = ma.constants;
+                    const animationInfo = ma.shaderParamAnimations[0];
+                    if (animationInfo) {
+                        this.shaderParamName = animationInfo.paramName;
+                        const curve = curves[animationInfo.firstCurveIndex];
+                        const constant = constants[animationInfo.firstConstantIndex];
+                        for (let i = 0; i < curve.frames.length; i++) {
+                            const key = curve.keys[i];
+                            this.shaderParamFrames.set(curve.frames[i], [key[0], key[1], constant.valueFloat, key[2], key[3]]);
                         }
                     }
                 }
@@ -351,7 +384,7 @@ export class ModelData {
             } else if (material.name.toLowerCase().includes("mt_shadow") ||
                 material.name.toLowerCase().endsWith("_sm") || material.name.toLowerCase().endsWith("_bs") ||
                 material.name.toLowerCase().includes("lambert") || material.name.toLowerCase().includes("colorpattern") ||
-                material.samplerInfo.length < 1) {
+                (material.samplerInfo.length < 1 && material.name.toLowerCase() !== "mt_mask")) {
                 visible = false;
             }
             if (visible && this.config) {
@@ -385,8 +418,8 @@ export class ModelData {
                     continue;
                 }
             }
-            const vd = new VertexData(cache.device, model.fvtx[shape.vertexIndex]);
-            const sd = new ShapeData(cache, shape, vd, model.fskl);
+            const vd = new OrigamiVertexData(cache.device, model.fvtx[shape.vertexIndex]);
+            const sd = new OrigamiShapeData(cache, shape, vd, model.fskl);
             if (this.boneVisibilityAnimation) {
                 const visibility = this.baseBoneVisibility.get(shape.boneIndex);
                 if (visibility !== undefined) {

@@ -57,7 +57,7 @@ export function getOrigamiLevelConfig(id: string): OrigamiLevelConfig | undefine
         ["W1G1_HouseG", { mobj: true, sobj: false, aobj: true, item: true, npc: true }],
         ["W1G1_KartRoad", { mobj: true, sobj: true, aobj: false, item: false, npc: true }],
         ["W1G1_KartRoadEndCredits", { mobj: true, sobj: true, aobj: false, item: false, npc: true }],
-        ["W1G1_KinokoTown", { mobj: true, sobj: true, aobj: true, item: true, npc: true, altMobj: ["Mobj", "Mobj_ReleaseBlue", "Mobj_ReleaseGreen", "Mobj_ReleasePurple", "Mobj_ReleaseRed", "Mobj_ReleaseYellow"] }],
+        ["W1G1_KinokoTown", { mobj: true, sobj: true, aobj: true, item: true, npc: true, altMobj: ["Mobj"/*, "Mobj_ReleaseBlue", "Mobj_ReleaseGreen", "Mobj_ReleasePurple", "Mobj_ReleaseRed", "Mobj_ReleaseYellow"*/] }],
         ["W1G1_KinokoTownEnding", { mobj: true, sobj: true, aobj: false, item: false, npc: true }],
         ["W1G1_KinokoTownEndingAfterCredits", { mobj: true, sobj: true, aobj: false, item: false, npc: true }],
         ["W1G1_KinokoTownOpening", { mobj: true, sobj: true, aobj: false, item: false, npc: true }],

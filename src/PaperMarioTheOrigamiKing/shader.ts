@@ -3,6 +3,7 @@ import { ChannelSource } from "../fres_nx/nngfx_enum";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
+import { OrigamiMaterialInstance } from "./render";
 
 // Adapated code from MK8D/Odyessy and TMSFE. Switch Toolbox was a big help too
 
@@ -23,51 +24,59 @@ const ATTRIBUTE_MAP: Map<string, string> = new Map<string, string>([
     ["paper", "vec4"] // need to investigate this more, very rare (toad town ending npc)
 ]);
 
+function getVertAttributeDefs(shaderName: string, vertexSkinWeightCount: number, vertexAttributes: FVTX_VertexAttribute[]): string {
+    let s = "";
+    for (let i = 0; i < vertexAttributes.length; i++) {
+        const attribute = vertexAttributes[i].name;
+        let type = ATTRIBUTE_MAP.get(attribute);
+
+        // override type for index/weight based on skin weights
+        if (["_i0", "_w0"].includes(attribute)) {
+            switch (vertexSkinWeightCount) {
+                case 1:
+                    type = attribute === "_i0" ? "uint" : "int";
+                    break;
+                case 2:
+                    type = attribute === "_i0" ? "uvec2" : "vec2";
+                    break;
+                case 3:
+                    type = attribute === "_i0" ? "uvec3" : "vec3";
+                    break;
+                case 4:
+                case -1:
+                default:
+                    type = attribute === "_i0" ? "uvec4" : "vec4";
+                    break;
+            }
+        }
+
+        if (type === undefined) {
+            console.warn("Unknown attribute", attribute, "in", shaderName);
+        } else if (type.length > 0) {
+            s += `layout(location = ${i}) in ${type} ${attribute};\n`;
+        } else {
+            console.warn("Could not determine type for", attribute, "in", shaderName);
+        }
+    }
+    return s;
+}
+
+/**
+ * Main shader for _Paper Mario: The Origami King_. Supports amibent occlusion, baked shadow maps and material detail.
+ */
 export class OrigamiProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_ShapeParams = 2;
+    private shaderAssign: FMAT_ShaderAssign;
+    private samplers: Map<string, ChannelSource[]>;
 
-    constructor(override name: string, private shaderAssign: FMAT_ShaderAssign, private samplers: Map<string, ChannelSource[]>,
-        private boneMatricesCount: number, private vertexSkinWeightCount: number, private vertexAttributes: FVTX_VertexAttribute[]) {
+    constructor(material: OrigamiMaterialInstance, private boneMatricesCount: number, private vertexSkinWeightCount: number, private vertexAttributes: FVTX_VertexAttribute[]) {
         super();
-    }
-
-    private getVertAttributeDefs(): string {
-        let s = "";
-        for (let i = 0; i < this.vertexAttributes.length; i++) {
-            const attribute = this.vertexAttributes[i].name;
-            let type = ATTRIBUTE_MAP.get(attribute);
-
-            // override type for index/weight based on skin weights
-            if (["_i0", "_w0"].includes(attribute)) {
-                switch (this.vertexSkinWeightCount) {
-                    case 1:
-                        type = attribute === "_i0" ? "uint" : "int";
-                        break;
-                    case 2:
-                        type = attribute === "_i0" ? "uvec2" : "vec2";
-                        break;
-                    case 3:
-                        type = attribute === "_i0" ? "uvec3" : "vec3";
-                        break;
-                    case 4:
-                    case -1:
-                    default:
-                        type = attribute === "_i0" ? "uvec4" : "vec4";
-                        break;
-                }
-            }
-
-            if (type === undefined) {
-                console.warn("Unknown attribute", attribute, "in", this.name);
-            } else if (type.length > 0) {
-                s += `layout(location = ${i}) in ${type} ${attribute};\n`;
-            } else {
-                console.warn("Could not determine type for", attribute, "in", this.name);
-            }
-        }
-        return s;
+        this.name = "OrigamiProgram_" + material.fmat.name;
+        this.shaderAssign = material.fmat.shaderAssign;
+        this.samplers = material.samplerChannels;
+        this.setBoth();
     }
 
     private getSamplerDefs(): string {
@@ -132,7 +141,7 @@ export class OrigamiProgram extends DeviceProgram {
         return optionValue === "1";
     }
 
-    public getAttribute(name: string, dneValue: string): string {
+    private getAttribute(name: string, dneValue: string): string {
         for (const a of this.vertexAttributes) {
             if (a.name === name) {
                 return name;
@@ -177,7 +186,8 @@ export class OrigamiProgram extends DeviceProgram {
         return s;
     }
 
-    public override both = `
+    private setBoth() {
+        this.both = `
 precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
@@ -190,7 +200,7 @@ layout(std140) uniform ub_SceneParams {
 layout(std140) uniform ub_MaterialParams {
     Mat2x4 u_TexCoordSRT0;
     Mat2x4 u_TexCoordSRT1;
-    vec4 u_Floats; // x=glossiness, y=alphaRef, z=yFlip, w=whiteBack
+    float u_AlphaRef;
 };
 
 layout(std140) uniform ub_ShapeParams {
@@ -201,7 +211,7 @@ layout(std140) uniform ub_ShapeParams {
 ${this.getSamplerDefs()}
 
 #ifdef VERT
-${this.getVertAttributeDefs()}
+${getVertAttributeDefs(this.name, this.vertexSkinWeightCount, this.vertexAttributes)}
 
 out vec4 v_NormalWorld;
 out vec4 v_TangentWorld;
@@ -209,7 +219,7 @@ out vec4 v_BitangentWorld;
 out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
-out vec4 v_Floats;
+out float v_AlphaRef;
 
 void main() {
     ${this.getPositionWorld()};
@@ -221,7 +231,7 @@ void main() {
     v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(${this.getAttribute('_u0', 'vec2(0.0)')}, 1.0, 1.0);
     v_TexCoord1 = ${this.getAttribute('_u1', this.getAttribute('_u0', 'vec2(0.0)'))};
     v_TexCoord2 = UnpackMatrix(u_TexCoordSRT1) * vec4(v_TexCoord1, 1.0, 1.0);
-    v_Floats = u_Floats;
+    v_AlphaRef = u_AlphaRef;
 }
 #endif
 
@@ -232,13 +242,13 @@ in vec4 v_BitangentWorld;
 in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
-in vec4 v_Floats;
+in float v_AlphaRef;
 
 void main() {
     ${this.getTextureColor('_a0', 'color', 'v_TexCoord0')};
 
     ${this.getOptionBoolean('alpha_test') ? `
-    if (color.a < v_Floats.y) {
+    if (color.a < v_AlphaRef) {
         discard;
     }` : ``}
 
@@ -282,4 +292,62 @@ void main() {
 }
 #endif
 `;
+    }
+}
+
+/**
+ * Minimal version of OrigamiProgram for water surfaces. The color is hardcoded and no textures are used. Expects a single bone matrix.
+ */
+export class OrigamiWaterProgram extends DeviceProgram {
+    public static ub_SceneParams = 0;
+    public static ub_MaterialParams = 1;
+    public static ub_ShapeParams = 2;
+
+    constructor(materialName: string, private vertexSkinWeightCount: number, private vertexAttributes: FVTX_VertexAttribute[]) {
+        super();
+        this.name = "OrigamiWaterProgram_" + materialName;
+        this.setBoth();
+    }
+
+    private setBoth() {
+        this.both = `
+precision highp float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat3x4 u_View;
+};
+
+layout(std140) uniform ub_MaterialParams {
+    Mat2x4 u_TexCoordSRT0;
+    Mat2x4 u_TexCoordSRT1;
+    float u_AlphaRef;
+};
+
+layout(std140) uniform ub_ShapeParams {
+    Mat3x4 u_Shift;
+    Mat3x4 u_BoneMatrix;
+};
+
+#ifdef VERT
+${getVertAttributeDefs(this.name, this.vertexSkinWeightCount, this.vertexAttributes)}
+
+void main() {
+    vec3 PositionWorld = UnpackMatrix(u_BoneMatrix) * vec4(_p0, 1.0);
+    PositionWorld = UnpackMatrix(u_Shift) * vec4(PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_View) * vec4(PositionWorld, 1.0), 1.0);
+}
+#endif
+
+#ifdef FRAG
+void main() {
+    vec4 color = vec4(0.0, 0.08, 0.9, 0.6);
+    color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
+    gl_FragColor = color;
+}
+#endif
+`;
+    }
 }

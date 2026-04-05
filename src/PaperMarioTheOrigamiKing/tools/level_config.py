@@ -1,5 +1,7 @@
 import os
 
+# Generates level config map contents for copy-pasting from the the console to level_config.ts
+
 def gen_configs(dir_path):
     if not os.path.exists(dir_path):
         return
@@ -25,5 +27,5 @@ def gen_configs(dir_path):
 
         print(f"[\"{level_id}\", {'{'} mobj: {has_mobj}, sobj: {has_sobj}, aobj: {has_aobj}, item: {has_item}, npc: {has_npc}{(", altMobj: " + alt_mobj_str) if len(alt_mobj_str) > 0 else ''} {'}'}],")
 
-dir_path = "../../../data/PMTOK/data/map"
+dir_path = "../../../data/PaperMarioTOK/data/map"
 gen_configs(dir_path)

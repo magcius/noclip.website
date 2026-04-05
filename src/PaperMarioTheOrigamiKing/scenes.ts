@@ -1,11 +1,11 @@
 import * as BNTX from "../fres_nx/bntx.js";
 import * as BFRES from "../fres_nx/bfres.js";
 import { decompress } from "fzstd";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { ModelData } from "./render_data.js";
+import { OrigamiModelData } from "./render_data.js";
 import { OrigamiModelRenderer } from "./render.js";
 import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF, NPCInstance, NPCType } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
@@ -28,10 +28,12 @@ interface OrigamiLevelObjects {
     npcInstances: NPCInstance[];
 }
 
-// Adapated from Odyssey's ResourceSystem class
-export class OrigamiResources {
+/**
+ * Resource system for _Paper Mario: The Origami King_. Based on Odyssey's ResourceSystem class.
+ */
+export class OrigamiResources implements Destroyable {
     public textureHolder = new OrigamiTextureHolder();
-    public modelData = new Map<string, ModelData>();
+    public modelData = new Map<string, OrigamiModelData>();
     private renderCache: GfxRenderCache;
     private loadedBFRESNames: string[] = [];
     private requestedCommonTextures: string[] = [];
@@ -40,11 +42,14 @@ export class OrigamiResources {
         this.renderCache = new GfxRenderCache(device);
     }
 
-    private loadBFRESTextures(device: GfxDevice, name: string, bfres: BFRES.FRES, search: string) {
+    private loadBFRESTextures(device: GfxDevice, name: string, bfres: BFRES.FRES, search: string, whiteList?: string[]) {
         const embeddedTextureFile = bfres.externalFiles.find((f) => f.name.endsWith(search));
         if (embeddedTextureFile) {
             const bntx = BNTX.parse(embeddedTextureFile.buffer);
             for (const t of bntx.textures) {
+                if (whiteList && !whiteList.includes(t.name)) {
+                    continue;
+                }
                 if (!t.name.startsWith("Cmn_")) {
                     t.name = `${name}_${t.name}`;
                 }
@@ -59,11 +64,24 @@ export class OrigamiResources {
     public loadBFRES(device: GfxDevice, name: string, bfres: BFRES.FRES) {
         if (!this.loadedBFRESNames.includes(name)) {
             this.loadedBFRESNames.push(name);
-            this.loadBFRESTextures(device, name, bfres, ".bntx");
-            this.loadBFRESTextures(device, name, bfres, ".en-US.bntx"); // some models have language-dependent textures
+            const referencedTextureNames: string[] = [];
             const model = bfres.fmdl[0];
+            for (const material of model.fmat) {
+                referencedTextureNames.push(...material.textureName);
+            }
+
             const config = getOrigamiModelConfig(model.name);
-            this.modelData.set(model.name, new ModelData(this.renderCache, bfres, config));
+            const md = new OrigamiModelData(this.renderCache, bfres, config);
+
+            if (md.texturePatternAnimation) {
+                referencedTextureNames.push(...md.texturePatternAnimation.textureNames);
+            }
+
+            this.loadBFRESTextures(device, name, bfres, ".bntx", referencedTextureNames);
+            this.loadBFRESTextures(device, name, bfres, ".en-US.bntx"); // some models have language-dependent textures
+
+            this.modelData.set(model.name, md);
+
             for (const material of model.fmat) {
                 for (const t of material.textureName) {
                     if (t.startsWith("Cmn_") && !this.requestedCommonTextures.includes(t)) {
@@ -95,24 +113,19 @@ export class OrigamiResources {
 
 class OrigamiRenderer implements SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
-    private resources: OrigamiResources;
     public renderHelper: GfxRenderHelper;
     public textureHolder: OrigamiTextureHolder;
     public modelRenderers: OrigamiModelRenderer[] = [];
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, public resources: OrigamiResources) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.textureHolder = resources.textureHolder;
     }
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
         layersPanel.setLayers(this.modelRenderers);
         return [layersPanel];
-    }
-
-    public setResources(res: OrigamiResources) {
-        this.resources = res;
-        this.textureHolder = res.textureHolder;
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -348,7 +361,7 @@ async function getNPCInstances(id: string, resources: OrigamiResources, dataFetc
         if (assetGroup.file.startsWith("P_") && assetGroup.file !== "P_KNPOLI_ITEM") {
             const texFile = await dataFetcher.fetchData(`${pathBase}/${assetGroup.directory}/${assetGroup.file}.Default.bntx.zst`);
             const textures = BNTX.parse(decompressZST(texFile)).textures;
-            // only load in the textures referenced in the materials
+            // only load in the textures referenced in the materials and texture pattern animation
             const model = resources.modelData.get(assetGroup.file)!;
             const materials = model.materials;
             for (const m of materials) {
@@ -357,6 +370,17 @@ async function getNPCInstances(id: string, resources: OrigamiResources, dataFetc
                 }
                 for (const n of m.textureName) {
                     const t = textures.find((t) => model.name + "_" + t.name === n);
+                    if (t) {
+                        if (!t.name.startsWith("Cmn_")) {
+                            t.name = `${assetGroup.file}_${t.name}`;
+                        }
+                        resources.textureHolder.addTexture(device, t);
+                    }
+                }
+            }
+            if (model.texturePatternAnimation) {
+                for (const n of model.texturePatternAnimation.textureNames) {
+                    const t = textures.find((t) => t.name === n); // use unpatched texture name
                     if (t) {
                         if (!t.name.startsWith("Cmn_")) {
                             t.name = `${assetGroup.file}_${t.name}`;
@@ -398,25 +422,30 @@ async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resource
 /*
 TODO
 
-Fix UVs that are sometimes the wrong set
+Fix UVs that are sometimes the wrong set (top of save block, sea tower walls, etc.)
 Figure out level objects for battle stages
 Add level variants that share the same base BFRES file (e.g. sensor lab offices and desert, seems to use .probe files)
-Figure out how the desert levels work (day/night variants)
+Figure out how the desert levels work (day/night variants, it's just texture sets?)
 Add level states (i.e. post-game, before or after story events, etc)
     Ability to hide specific objects from level (rather than blindly rendering all of them)
     Ability to change animation/texture set/etc of shown objects
+    Use sets of model renderers by indices and switch with ui panel
 Decide how to handle different mobj dispos files
-Figure out how water works (bone user data for mask, have to hardcode the color?)
+Look in to how water works more, try to remove hardcoded color
 Figure out how "real" ice and lava works
 Add particle effects
-Add bloom if base renderering can be made more efficient, otherwise not worth the cost
-Try out chunking bounding boxes for better frustum culling in huge levels
-Remove invisibile bones/shapes with static fvbs's instead of constantly skipping over them
-Properly utilize texture pattern/shader param animations
+Add bloom? Might be too expensive but most levels have enough head room
+Remove invisibile bones/shapes with static fbvs's instead of constantly skipping over them
 Figure out how phantom models should be loaded (magic circles, vellumental spots, etc.)
 Investigate disfigured skeletons of collectible toad variants (messed up in Switch Toolbox too)
 Add model color variants, both color pattern and texture sets
 Patch model bboxes on first frame of animations
+Add texture whitelist/blacklist to model configs to speed up load times when decompression is required by low end devices
+Investigate the .probe and .light files
+Investigate instanced rendering (requires some re-work of vertex buffer building if same approach as Casper, otherwise might do uniform buffers instead)
+Pre-compute fska SRT values by frame, unless there's more than ~1000 frames, and apply to bones directly instead of re-writing entire bone array
+Conditional NPC rotation, their type def has a rotation enum
+Debug occasional "status access violation" errors (not a memory leak)
 */
 
 const pathBase = "PaperMarioTOK";
@@ -429,9 +458,11 @@ class PMTOKScene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const resources = new OrigamiResources(device);
-        const renderer = new OrigamiRenderer(device);
+        const renderer = new OrigamiRenderer(device, resources);
 
         const bfres = await context.dataFetcher.fetchData(`${pathBase}/${this.path}.bfres.zst`);
+        const commonBntx = await context.dataFetcher.fetchData(`${pathBase}/graphics/textures/common/default.bntx.zst`);
+
         resources.loadBFRES(device, this.id, BFRES.parse(decompressZST(bfres)));
 
         // there's not an apparent way to detect if a level has mobj/sobjs etc, so that info is hardcoded as configs
@@ -446,9 +477,7 @@ class PMTOKScene implements SceneDesc {
 
         const levelObjects = await loadLevelObjects(this.id, config, resources, context.dataFetcher, device);
 
-        const commonBntx = await context.dataFetcher.fetchData(`${pathBase}/graphics/textures/common/default.bntx.zst`);
         resources.loadRequestedCommonTextures(device, decompressZST(commonBntx));
-        renderer.setResources(resources);
 
         for (const modelData of resources.modelData.values()) {
             renderer.modelRenderers.push(new OrigamiModelRenderer(renderer.renderHelper.renderCache, resources.textureHolder, modelData));
@@ -603,7 +632,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W2C5_FourthTheater", "Stage 4"),
     new PMTOKScene("map/battle/Btl_W2C5_GekijouBossA", "Battle - Big Sho' Theater"),
     "The Princess Peach",
-    new PMTOKScene("map/field/W4C1_ShipDeck", "The Princess Peach"),
+    new PMTOKScene("map/field/W4C1_ShipDeck", "The Princess Peach <!>"),
     new PMTOKScene("map/field/W4C1_ControlRoom", "Bridge"),
     new PMTOKScene("map/field/W4C1_EngineRoom", "Engine Room"),
     new PMTOKScene("map/field/W4C1_GuestPassage", "Guest Area Hallway"),
@@ -626,8 +655,8 @@ const sceneDescs = [
     new PMTOKScene("map/field/W3C1_FindOlivia", "Cheer Up Olivia"),
     new PMTOKScene("map/field/W3C1_TunnelExit", "Breezy Tunnel Exit"),
     new PMTOKScene("map/battle/Btl_W3C1_TunnelA", "Battle - Breezy Tunnel"),
-    "Scorching Sandpaper Desert", // needs more work, uses multiple files
-    new PMTOKScene("map/field/W3G2_Desert", "Desert <!>"),
+    "Scorching Sandpaper Desert", // needs more work, uses multiple files and need to correct names
+    new PMTOKScene("map/field/W3G2_Desert", "Scorching Sandpaper Desert <!>"),
     new PMTOKScene("map/field/W3G2_DesertRuin", "Desert Ruin <!>"),
     new PMTOKScene("map/field/W3G2_IceKinopio", "Rescue Captain T. Ode"),
     new PMTOKScene("map/field/W3G2_KinopioTop", "Tower Top"),
@@ -662,8 +691,8 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W3C3_FirecaveA", "Battle - Fire Vellumental Cave"),
     new PMTOKScene("map/battle/Btl_W3C3_FirecaveBossA", "Battle - Fire Vellumental Cave (Boss)"),
     "Temple of Shrooms",
-    new PMTOKScene("map/field/W3C4_Desert", "Desert Activation Area"),
-    new PMTOKScene("map/field/W3C4_Outside", "Outside Entrance"),
+    new PMTOKScene("map/field/W3C4_Desert", "Desert Activation Area <!>"),
+    new PMTOKScene("map/field/W3C4_Outside", "Outside Entrance <!>"),
     new PMTOKScene("map/field/W3C4_EntranceWay", "Entrance Hallway"),
     new PMTOKScene("map/field/W3C4_TwoKinopio", "Twin Statues Room"),
     new PMTOKScene("map/field/W3C4_HorrorWay", "Horror Hallway"),
@@ -684,7 +713,7 @@ const sceneDescs = [
     "The Great Sea",
     new PMTOKScene("map/field/W4G1_Ocean", "The Great Sea <!>"),
     new PMTOKScene("map/field/W4G1_Ship", "Boat at Sea"),
-    new PMTOKScene("map/field/W4G1_UnderSeaA", "Underwater"),
+    new PMTOKScene("map/field/W4G1_UnderSeaA", "Underwater <!>"),
     new PMTOKScene("map/field/W4G1_DokuroIsland", "Bonehead Island"),
     new PMTOKScene("map/field/W4G1_DokuroFirst", "Bonehead Island (Interior 1)"),
     new PMTOKScene("map/field/W4G1_DokuroSecond", "Bonehead Island (Interior 2)"),
@@ -697,7 +726,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W4G1_HatenaIsland", "? Island"),
     new PMTOKScene("map/field/W4G1_CloverIsland", "Club Island"),
     new PMTOKScene("map/field/W4G1_MoonIsland", "Full Moon Island"),
-    new PMTOKScene("map/field/W4G1_UnderSeaMoonIsland", "Full Moon Island (Underwater)"),
+    new PMTOKScene("map/field/W4G1_UnderSeaMoonIsland", "Full Moon Island (Underwater) <!>"),
     new PMTOKScene("map/field/W4G1_SpadeIsland", "Spade Island"),
     new PMTOKScene("map/field/W4G1_RingIsland", "Scuffle Island"),
     new PMTOKScene("map/battle/Btl_W4G1_OceanA", "Battle - The Great Sea"),
@@ -723,8 +752,8 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W4C2_IceMountainBossA", "Battle - Ice Vellumental Mountain (Boss)"),
     "Sea Tower",
     new PMTOKScene("map/field/W4C3_OrbTower", "Sea Tower"),
-    new PMTOKScene("map/field/W4C3_OutSideA", "Outside 1"),
-    new PMTOKScene("map/field/W4C3_OutSideB", "Outside 2"),
+    new PMTOKScene("map/field/W4C3_OutSideA", "Outside (Lower)"),
+    new PMTOKScene("map/field/W4C3_OutSideB", "Outside (Upper)"),
     new PMTOKScene("map/field/W4C3_EarthArea", "Earth Area"),
     new PMTOKScene("map/field/W4C3_EarthWater", "Earth Water"),
     new PMTOKScene("map/field/W4C3_FireArea", "Fire Area"),
@@ -736,18 +765,18 @@ const sceneDescs = [
     new PMTOKScene("map/battle/Btl_W4C3_OrbTowerA", "Battle - Sea Tower"),
     new PMTOKScene("map/battle/Btl_W4C3_OrbTowerBossA", "Battle - Sea Tower (Boss)"),
     "Shangri-Spa",
-    new PMTOKScene("map/field/W5G1_SkySpa", "Shangri-Spa"),
+    new PMTOKScene("map/field/W5G1_SkySpa", "Shangri-Spa <!>"),
     new PMTOKScene("map/field/W5G1_SpaEntrance", "Spa Entrance"),
     new PMTOKScene("map/field/W5G1_SpaRoom", "Spa Room"),
     new PMTOKScene("map/field/W5G1_DokanRoom", "Pipe Room"),
     new PMTOKScene("map/battle/Btl_W5G1_SkySpaA", "Battle - Shangri-Spa"),
     new PMTOKScene("map/battle/Btl_W5G1_SkySpaBossA", "Battle - Shangri-Spa (Boss)"),
     "Spring of Jungle Mist",
-    new PMTOKScene("map/field/W5C2_BreakBridge", "Entrance <!>"),
+    new PMTOKScene("map/field/W5C2_BreakBridge", "Entrance"),
     new PMTOKScene("map/field/W5C2_JungleSpa", "Spring of Jungle Mist"),
-    new PMTOKScene("map/field/W5C2_BigTreeFirst", "Big Tree (1st Floor)"),
-    new PMTOKScene("map/field/W5C2_BigTreeSecond", "Big Tree (2nd Floor)"),
-    new PMTOKScene("map/field/W5C2_BigTreeThird", "Big Tree (3rd Floor)"),
+    new PMTOKScene("map/field/W5C2_BigTreeFirst", "Big Tree (1st Level)"),
+    new PMTOKScene("map/field/W5C2_BigTreeSecond", "Big Tree (2nd Level)"),
+    new PMTOKScene("map/field/W5C2_BigTreeThird", "Big Tree (3rd Level)"),
     new PMTOKScene("map/field/W5C2_DeepJungle", "Deep Jungle <!>"),
     new PMTOKScene("map/field/W5C2_DeadEnd", "Dead End 1"),
     new PMTOKScene("map/field/W5C2_DeadEndB", "Dead End 2"),
@@ -763,16 +792,16 @@ const sceneDescs = [
     "Bowser's Castle",
     new PMTOKScene("map/field/W5C3_BlackHandAreaSide", "Black Hand Area Side"),
     new PMTOKScene("map/field/W5C3_Dockyard", "Dockyard"),
-    new PMTOKScene("map/field/W5C3_EntranceWay", "Entrance"),
-    new PMTOKScene("map/field/W5C3_MainHall", "Main Hall"),
-    new PMTOKScene("map/field/W5C3_MetStatue", "Met Statue"),
-    new PMTOKScene("map/field/W5C3_PillarPassage", "Pillar Passage"),
-    new PMTOKScene("map/field/W5C3_ResidenceFloor", "Residence Floor"),
-    new PMTOKScene("map/field/W5C3_RoomA", "Room"),
+    new PMTOKScene("map/field/W5C3_EntranceWay", "Entrance Hall"),
+    new PMTOKScene("map/field/W5C3_MainHall", "Main Room"),
+    new PMTOKScene("map/field/W5C3_MetStatue", "Buzzy Beetle Statue Puzzle"),
+    new PMTOKScene("map/field/W5C3_PillarPassage", "Broken Pillars Room"),
+    new PMTOKScene("map/field/W5C3_ResidenceFloor", "Guest Rooms"),
+    new PMTOKScene("map/field/W5C3_RoomA", "Guest Room (Window Peek)"),
     new PMTOKScene("map/field/W5C3_SavePoint", "Save Room"),
-    new PMTOKScene("map/field/W5C3_Shooting", "Shooting Gallery 1"),
-    new PMTOKScene("map/field/W5C3_ShootingDemoAfter", "Shooting Gallery 2"),
-    new PMTOKScene("map/field/W5C3_ShootingDemoBefore", "Shooting Gallery 3"),
+    // new PMTOKScene("map/field/W5C3_Shooting", "Shooting Gallery 1 <!>"), // disabled for now, need to figure out dynamic placement of objects, scene setup
+    // new PMTOKScene("map/field/W5C3_ShootingDemoAfter", "Shooting Gallery 2"),
+    // new PMTOKScene("map/field/W5C3_ShootingDemoBefore", "Shooting Gallery 3"),
     new PMTOKScene("map/field/W5C3_ThroneRoom", "Throne Room"),
     new PMTOKScene("map/battle/Btl_W5C3_KoopaCastleA", "Battle - Bowser's Castle"),
     new PMTOKScene("map/battle/Btl_W5C3_KoopaCastleBossA", "Battle - Bowser's Castle (Boss 1)"),
@@ -791,7 +820,7 @@ const sceneDescs = [
     new PMTOKScene("map/field/W6C2_GrowRoom", "Grow Room"),
     new PMTOKScene("map/field/W6C2_LateralLift", "Lateral Lift"),
     new PMTOKScene("map/field/W6C2_PopUpBox", "Pop-Up Box Room"),
-    new PMTOKScene("map/field/W6C2_InsideBox", "Pop-Up Box Room (Inside)"),
+    new PMTOKScene("map/field/W6C2_InsideBox", "Pop-Up Box Room (Interior)"),
     new PMTOKScene("map/field/W6C2_StairRoomA", "Stair Room 1"),
     new PMTOKScene("map/field/W6C2_StairRoomC", "Stair Room 2"),
     new PMTOKScene("map/field/W6C2_ThroneRoom", "Throne Room"),
