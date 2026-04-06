@@ -61,7 +61,7 @@ pub fn decode_texture(src: &[u8], format: CompressedTextureFormat, width: usize,
     };
     // convert from BGRA32 to RGBA8
     let mut rgba8: Vec<u8> = Vec::with_capacity(bgra32.len() * 4);
-    for pixel in bgra32 {
+    for pixel in bgra32.iter() {
         let b: u8 = (pixel & 0xFF) as u8;
         let g: u8 = ((pixel >> 8) & 0xFF) as u8;
         let r: u8 = ((pixel >> 16) & 0xFF) as u8;

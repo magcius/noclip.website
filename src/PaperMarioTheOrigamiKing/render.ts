@@ -10,12 +10,14 @@ import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, makeSortKey, GfxR
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, nArray } from '../util.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { OrigamiModelData, OrigamiShapeData, OrigamiMeshData } from './render_data.js';
+import { OrigamiModelData, OrigamiShapeData } from './render_data.js';
 import { ViewerRenderInput } from "../viewer.js";
 import { OrigamiTextureHolder } from './texture.js';
 import { AABB } from '../Geometry.js';
 import { getPointCubic } from '../Spline.js';
 import { OrigamiProgram, OrigamiWaterProgram } from './shader.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { White } from '../Color.js';
 
 // Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
@@ -27,7 +29,6 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
         case TextureAddressMode.ClampToBorder:
             return GfxWrapMode.Clamp;
         case TextureAddressMode.Mirror:
-            return GfxWrapMode.Mirror;
         case TextureAddressMode.MirrorClampToEdge:
             return GfxWrapMode.Mirror;
         default:
@@ -119,6 +120,30 @@ function translateCompareMode(compareMode: CompareMode): GfxCompareMode {
     }
 }
 
+function getMergedAABB(boxes: AABB[]): AABB {
+    if (boxes.length === 0) {
+        return new AABB();
+    }
+
+    let minX = boxes[0].min[0];
+    let minY = boxes[0].min[1];
+    let minZ = boxes[0].min[2];
+    let maxX = boxes[0].max[0];
+    let maxY = boxes[0].max[1];
+    let maxZ = boxes[0].max[2];
+
+    for (const box of boxes) {
+        minX = Math.min(minX, box.min[0]);
+        minY = Math.min(minY, box.min[1]);
+        minZ = Math.min(minZ, box.min[2]);
+        maxX = Math.max(maxX, box.max[0]);
+        maxY = Math.max(maxY, box.max[1]);
+        maxZ = Math.max(maxZ, box.max[2]);
+    }
+
+    return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+}
+
 const FRAME_TIME = 0.03; // game only runs at 30 FPS... needs a S2E...
 
 /**
@@ -132,7 +157,10 @@ export class OrigamiModelRenderer {
     private instanceMatrices: mat4[] = [];
     private instanceBBoxes: AABB[] = [];
     private isLevelModel: boolean = false;
-    private scratchMat = mat4.create();
+    private currentSKAFrame: number = 0;
+    private currentBVSFrame: number = 0;
+    private currentTPAFrame: number = 0;
+    private currentSPAFrame: number = 0;
     private lastComputedSKAFrame: number = -1;
     private lastComputedBoneMatrices: mat4[][] = [];
     private sceneBindings: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
@@ -154,11 +182,23 @@ export class OrigamiModelRenderer {
                     matInstance = new OrigamiMaterialInstance(cache, this.textureHolder, material);
                     this.materialInstances.push(matInstance);
                 }
-                const bone = this.modelData.bones[shapeData.shape.boneIndex];
-                const boneMatrix = this.computeShiftMatrix(this.modelData.bones, shapeData.shape.boneIndex);
-                this.shapeRenderers.push(new ShapeRenderer(cache, shapeData, matInstance, this.materialInstances.indexOf(matInstance), boneMatrix, bone, this.modelData.skeletonAnimation !== undefined));
+                const bone = this.modelData.skeleton.bones[shapeData.shape.boneIndex];
+                const staticBoneMatrix = this.computeShiftMatrix(shapeData.shape.boneIndex);
+                this.shapeRenderers.push(new ShapeRenderer(cache, shapeData, matInstance, this.materialInstances.indexOf(matInstance), staticBoneMatrix, bone, this.modelData.skeletonAnimation !== undefined));
             }
         }
+
+        // patch bbox after computing shapes' static bone matrices
+        const shapeBBoxes: AABB[] = [];
+        for (const sr of this.shapeRenderers) {
+            const shapeData = sr.shapeData;
+            if (shapeData.meshData.mesh.bbox) {
+                const bbox = shapeData.meshData.mesh.bbox.clone();
+                bbox.transform(bbox, sr.staticBoneMatrix);
+                shapeBBoxes.push(bbox);
+            }
+        }
+        this.modelData.bbox = getMergedAABB(shapeBBoxes);
 
         this.lastComputedBoneMatrices = Array(this.shapeRenderers.length).fill([]);
     }
@@ -203,36 +243,35 @@ export class OrigamiModelRenderer {
                 filledTemplate = true;
             }
 
-            for (let si = 0; si < this.shapeRenderers.length; si++) {
-                const shapeRenderer = this.shapeRenderers[si];
+            for (let j = 0; j < this.shapeRenderers.length; j++) {
+                const shapeRenderer = this.shapeRenderers[j];
                 if (!shapeRenderer.shapeData.visible) {
                     continue;
                 }
 
                 // only compute bone matrices for this shape once per frame
-                if (this.lastComputedBoneMatrices[si].length === 0) {
+                if (this.lastComputedBoneMatrices[j].length === 0) {
                     let bm;
                     if (shapeRenderer.shapeData.vertexSkinWeightCount === 0) {
                         if (this.modelData.skeletonAnimation) {
-                            bm = [this.computeShiftMatrix(this.modelData.bones, shapeRenderer.shapeData.shape.boneIndex)];
+                            bm = [this.computeShiftMatrix(shapeRenderer.shapeData.shape.boneIndex)];
                         } else {
                             bm = [shapeRenderer.staticBoneMatrix];
                         }
                     } else {
                         bm = this.modelData.smoothRigidMatrices;
                     }
-                    this.lastComputedBoneMatrices[si] = bm;
+                    this.lastComputedBoneMatrices[j] = bm;
                 }
 
-                // for now, only levels' base models are given per-shape culling. It's too costly to do with mobj/sobjs/npcs etc
+                // for now, only levels' base models are given per-shape culling. It's too costly to do with objects
                 let shapeBBox: AABB | undefined;
                 if (this.isLevelModel) {
-                    shapeBBox = this.getShapeBoundingBox(i, shapeRenderer.staticBoneMatrix, this.instanceMatrices[i], shapeRenderer);
+                    shapeBBox = this.getShapeBoundingBox(i, shapeRenderer.staticBoneMatrix, shapeRenderer);
                 }
 
                 if (!this.isLevelModel || (this.isLevelModel && shapeBBox && viewerInput.camera.frustum.contains(shapeBBox))) {
                     shapeRenderer.fillTemplate(renderInstManager.pushTemplate(), this.materialInstances[shapeRenderer.materialInstanceIndex]);
-
                     // only run animations once per frame
                     if (!ranAnimations) {
                         if (this.modelData.skeletonAnimation) {
@@ -250,33 +289,55 @@ export class OrigamiModelRenderer {
                         ranAnimations = true;
                     }
 
-                    shapeRenderer.prepareToRender(renderInstManager, this.instanceMatrices[i], this.lastComputedBoneMatrices[si], this.instanceBBoxes[i], viewerInput);
+                    shapeRenderer.prepareToRender(renderInstManager, this.instanceMatrices[i], this.lastComputedBoneMatrices[j], this.instanceBBoxes[i], viewerInput);
 
                     renderInstManager.popTemplate();
                 }
             }
         }
 
+        // this doesn't work for some reason, will come back to it later
+        // patch instance bboxes after computing first frame of ska
+        // if (this.modelData.skeletonAnimation && !this.patchedInstanceBBoxes) {
+        //     this.instanceBBoxes = Array(this.instanceMatrices.length).fill(undefined);
+        //     const shapeBBoxes: AABB[] = [];
+        //     for (const sr of this.shapeRenderers) {
+        //         const shapeData = sr.shapeData;
+        //         if (shapeData.meshData.mesh.bbox) {
+        //             const bbox = shapeData.meshData.mesh.bbox.clone();
+        //             bbox.transform(bbox, this.computeShiftMatrix(shapeData.shape.boneIndex));
+        //             shapeBBoxes.push(bbox);
+        //         }
+        //     }
+        //     this.modelData.bbox = this.modelData.getMergedAABB(shapeBBoxes);
+        //     for (let i = 0; i < this.instanceMatrices.length; i++) {
+        //         this.instanceBBoxes[i] = this.modelData.bbox.clone();
+        //         this.instanceBBoxes[i].transform(this.instanceBBoxes[i], this.instanceMatrices[i]);
+        //     }
+        //     this.patchedInstanceBBoxes = true;
+        // }
+
         if (filledTemplate) {
             renderInstManager.popTemplate();
         }
     }
 
-    private getShapeBoundingBox(instanceIndex: number, boneMatrix: mat4, instanceMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
-        if (shapeRenderer.instanceBBoxes[instanceIndex]) {
-            return shapeRenderer.instanceBBoxes[instanceIndex];
+    private getShapeBoundingBox(i: number, boneMatrix: mat4, shapeRenderer: ShapeRenderer): AABB {
+        if (shapeRenderer.instanceBBoxes[i]) {
+            return shapeRenderer.instanceBBoxes[i];
         } else {
-            const mat = this.scratchMat;
-            mat4.multiply(mat, instanceMatrix, boneMatrix);
-            shapeRenderer.instanceBBoxes[instanceIndex] = new AABB();
-            shapeRenderer.instanceBBoxes[instanceIndex].transform(shapeRenderer.shapeData.meshData.mesh.bbox, mat);
-            return shapeRenderer.instanceBBoxes[instanceIndex];
+            // set instance bboxes on first call, assumes they won't need to change
+            const mat = mat4.create();
+            mat4.multiply(mat, this.instanceMatrices[i], boneMatrix);
+            shapeRenderer.instanceBBoxes[i] = new AABB();
+            shapeRenderer.instanceBBoxes[i].transform(shapeRenderer.shapeData.meshData.mesh.bbox, mat);
+            return shapeRenderer.instanceBBoxes[i];
         }
     }
 
-    private computeShiftMatrix(bones: FSKL_Bone[], boneIndex: number): mat4 {
+    private computeShiftMatrix(boneIndex: number): mat4 {
         // need to eventually refactor so that common calculations aren't done each frame...
-        const bone = bones[boneIndex];
+        const bone = this.modelData.skeleton.bones[boneIndex];
         const srt = mat4.create();
         computeModelMatrixSRT(srt,
             bone.scale[0], bone.scale[1], bone.scale[2],
@@ -287,31 +348,32 @@ export class OrigamiModelRenderer {
             return srt;
         } else {
             const shift = mat4.create();
-            mat4.multiply(shift, this.computeShiftMatrix(bones, bone.parentIndex), srt);
+            mat4.multiply(shift, this.computeShiftMatrix(bone.parentIndex), srt);
             return shift;
         }
     }
 
     private runSKA(viewerInput: ViewerRenderInput) {
-        this.modelData.currentSKAFrame += viewerInput.deltaTime * FRAME_TIME;
-        this.modelData.currentSKAFrame %= this.modelData.skeletonAnimation!.frameCount;
-        // only compute bones and matrices when the frame actually changes (which is less often than render framerate)
-        if (this.lastComputedSKAFrame !== Math.trunc(this.modelData.currentSKAFrame)) {
-            this.modelData.bones = this.getBonesAt(this.modelData.currentSKAFrame);
+        this.currentSKAFrame += viewerInput.deltaTime * FRAME_TIME;
+        this.currentSKAFrame %= this.modelData.skeletonAnimation!.frameCount;
+        const currentFrameInt = Math.trunc(this.currentSKAFrame);
+        // only compute bones and matrices on integer frame number changes
+        if (this.lastComputedSKAFrame !== currentFrameInt) {
+            this.computeBonesSRT(this.currentSKAFrame);
             this.modelData.computeSmoothRigidMatrices();
-            this.lastComputedSKAFrame = Math.trunc(this.modelData.currentSKAFrame);
+            this.lastComputedSKAFrame = currentFrameInt;
         }
     }
 
     private runBVS(viewerInput: ViewerRenderInput) {
-        this.modelData.currentBVSFrame += viewerInput.deltaTime * FRAME_TIME;
-        this.modelData.currentBVSFrame %= this.modelData.boneVisibilityAnimation!.frameCount;
-        const frameVisibility = this.modelData.boneVisibilityFrames.get(Math.trunc(this.modelData.currentBVSFrame));
-        // only update visibilities when the current frame has values
-        if (frameVisibility) {
+        this.currentBVSFrame += viewerInput.deltaTime * FRAME_TIME;
+        this.currentBVSFrame %= this.modelData.boneVisibilityAnimation!.frameCount;
+        const visibilities = this.modelData.boneVisibilityFrames.get(Math.trunc(this.currentBVSFrame));
+        // only update visibilities when the current frame has values (not possible to interpolate)
+        if (visibilities) {
             for (const shapeRenderer of this.shapeRenderers) {
                 const sd = shapeRenderer.shapeData;
-                const visibility = frameVisibility.get(sd.shape.boneIndex);
+                const visibility = visibilities.get(sd.shape.boneIndex);
                 if (visibility !== undefined) {
                     sd.visible = visibility;
                 }
@@ -320,100 +382,115 @@ export class OrigamiModelRenderer {
     }
 
     private runTPA(viewerInput: ViewerRenderInput) {
-        this.modelData.currentTPAFrame += viewerInput.deltaTime * FRAME_TIME;
-        this.modelData.currentTPAFrame %= this.modelData.texturePatternAnimation!.frameCount;
-        const textureName = this.modelData.texturePatternSetFirstFrame ? this.modelData.texturePatternFrames.get(Math.trunc(this.modelData.currentTPAFrame)) : this.modelData.texturePatternFrames.get(0);
-        // only update when the current frame has values
-        if (textureName) {
-            this.modelData.texturePatternSetFirstFrame = true;
-            const ta = this.modelData.texturePatternAnimation!;
-            const material = this.modelData.materials.find(m => m?.name === ta.materialAnimations[0].name);
-            if (material) {
-                const mi = this.materialInstances.find(mi => mi.fmat.name === ta.materialAnimations[0].name);
-                if (mi) {
-                    let textureMappingIndex = -1;
-                    let i = 0;
-                    for (const samplerName of material.shaderAssign.samplerAssign.values()) {
-                        if (samplerName === this.modelData.texturePatternSampler) {
-                            textureMappingIndex = i;
-                            break;
+        this.currentTPAFrame += viewerInput.deltaTime * FRAME_TIME;
+        this.currentTPAFrame %= this.modelData.texturePatternAnimation!.frameCount;
+        const currentFrameInt = Math.trunc(this.currentTPAFrame);
+        if (this.modelData.texturePatternValidFrameNumbers.includes(currentFrameInt) || !this.modelData.texturePatternSetFirstFrame) {
+            for (let i = 0; i < this.modelData.texturePatternAnimation!.materialAnimations.length; i++) {
+                const ma = this.modelData.texturePatternAnimation!.materialAnimations[i];
+                for (let j = 0; j < ma.texturePatternAnimations.length; j++) {
+                    const newTextureName = this.modelData.texturePatternFrames.get(i)!.get(j)!.get(this.modelData.texturePatternSetFirstFrame ? currentFrameInt : 0);
+                    if (newTextureName) {
+                        const tpa = ma.texturePatternAnimations[j];
+                        const material = this.modelData.materials.find(m => m?.name === ma.name);
+                        if (material) {
+                            const mi = this.materialInstances.find(mi => mi.fmat.name === ma.name);
+                            if (mi) {
+                                let textureMappingIndex = -1;
+                                let tmi = 0;
+                                for (const samplerName of material.shaderAssign.samplerAssign.values()) {
+                                    if (samplerName === tpa.samplerName) {
+                                        textureMappingIndex = tmi;
+                                        break;
+                                    }
+                                    tmi++;
+                                }
+                                const samplerMapping = mi.textureMapping[textureMappingIndex];
+                                this.textureHolder.fillTextureMapping(samplerMapping, newTextureName);
+                            } else {
+                                console.warn("Could not find material", ma.name, "for", this.name);
+                            }
+                        } else {
+                            console.warn("Target material for texture pattern animation", ma.name, "in", this.name, "has invalid index or null material at index");
                         }
-                        i++;
                     }
-                    const samplerMapping = mi.textureMapping[textureMappingIndex];
-                    this.textureHolder.fillTextureMapping(samplerMapping, textureName);
-                } else {
-                    console.warn("Could not find material", ta.materialAnimations[0].name, "for", this.name);
                 }
-            } else {
-                console.warn("Target material for texture pattern animation", ta.name, "in", this.name, "has invalid index or null material at index");
             }
+            this.modelData.texturePatternSetFirstFrame = true;
         }
     }
 
     // crude implementation of shadar param animations for now, only supports a single texsrt value
     private runSPA(viewerInput: ViewerRenderInput) {
-        this.modelData.currentSPAFrame += viewerInput.deltaTime * FRAME_TIME;
-        this.modelData.currentSPAFrame %= this.modelData.shaderParamAnimation!.frameCount;
-        const currentFrameInt = Math.trunc(this.modelData.currentSPAFrame);
+        this.currentSPAFrame += viewerInput.deltaTime * FRAME_TIME;
+        this.currentSPAFrame %= this.modelData.shaderParamAnimation!.frameCount;
+        const currentFrameInt = Math.trunc(this.currentSPAFrame);
         // only check frames on integer increases instead of every draw frame (might be a better way to check instead of epsilon)
-        if (Math.abs(currentFrameInt - this.modelData.currentSPAFrame) < 0.1) {
-            const ma = this.modelData.shaderParamAnimation!.materialAnimations[0];
-            let frameValues = this.modelData.shaderParamFrames.get(currentFrameInt);
-            if (!frameValues) {
-                // interpolate
-                const fci = ma.shaderParamAnimations[0].firstCurveIndex;
-                const frames = ma.curves[fci].frames;
-                const prevFrameIndex = frames.findIndex(f => f < currentFrameInt);
-                const nextFrameIndex = prevFrameIndex === frames.length ? 0 : prevFrameIndex + 1;
-                const interPerc = (currentFrameInt - frames[prevFrameIndex]) / Math.abs(frames[nextFrameIndex] - frames[prevFrameIndex]);
-                frameValues = [0, 0, 0, 0, 0];
-                for (let i = 0; i < frameValues.length; i++) {
-                    const prevValue = ma.curves[fci].keys[prevFrameIndex][i];
-                    const nextValue = ma.curves[fci].keys[nextFrameIndex][i];
-                    frameValues[i] = prevValue + (interPerc * Math.abs(nextValue - prevValue));
+        if (Math.abs(currentFrameInt - this.currentSPAFrame) < 0.1) {
+            for (let i = 0; i < this.modelData.shaderParamAnimation!.materialAnimations.length; i++) {
+                const ma = this.modelData.shaderParamAnimation!.materialAnimations[i];
+                for (let j = 0; j < ma.shaderParamAnimations.length; j++) {
+                    const spa = ma.shaderParamAnimations[j];
+                    let frameValues = this.modelData.shaderParamFrames.get(i)!.get(j)!.get(currentFrameInt);
+                    if (!frameValues) {
+                        // interpolate
+                        const fci = spa.firstCurveIndex;
+                        const frames = ma.curves[fci].frames;
+                        const prevFrameIndex = frames.findIndex(f => f < currentFrameInt);
+                        const nextFrameIndex = prevFrameIndex === frames.length ? 0 : prevFrameIndex + 1;
+                        const interPerc = (currentFrameInt - frames[prevFrameIndex]) / Math.abs(frames[nextFrameIndex] - frames[prevFrameIndex]);
+                        frameValues = [0, 0, ma.constants[spa.firstConstantIndex].valueFloat, 0, 0];
+                        for (const k of [0, 1, 3, 4]) {
+                            const prevValue = ma.curves[fci].keys[prevFrameIndex][k < 3 ? k : k - 1];
+                            const nextValue = ma.curves[fci].keys[nextFrameIndex][k < 3 ? k : k - 1];
+                            frameValues[k] = prevValue + (interPerc * Math.abs(nextValue - prevValue));
+                        }
+                    }
+                    const materialInstance = this.materialInstances.find(mi => mi.fmat.name === ma.name)!;
+                    switch (spa.paramName) {
+                        case "texsrt0":
+                            materialInstance.texCoordSRT0.translationT = -frameValues[1];
+                            materialInstance.texCoordSRT0.compute();
+                            break;
+                        case "texsrt1":
+                            materialInstance.texCoordSRT1.translationT = -frameValues[1];
+                            materialInstance.texCoordSRT1.compute();
+                            break;
+                        case "texsrt2":
+                            // materialInstance.texCoordSRT2.translationT = -frameValues[1];
+                            // materialInstance.texCoordSRT2.compute();
+                            break;
+                        default:
+                            console.warn("Unimplemented shader param name", spa.paramName, "for", this.name);
+                            break;
+                    }
                 }
-            }
-            const materialInstance = this.materialInstances.find(mi => mi.fmat.name === ma.name)!;
-            switch (this.modelData.shaderParamName) {
-                case "texsrt0":
-                    materialInstance.texCoordSRT0.translationT = -frameValues[1];
-                    materialInstance.texCoordSRT0.compute();
-                    break;
-                default:
-                    console.warn("Unimplemented shader param name", this.modelData.shaderParamName, "for", this.name);
-                    break;
             }
         }
     }
 
-    private getBonesAt(frame: number): FSKL_Bone[] {
-        const bones: FSKL_Bone[] = Array(this.modelData.skeleton.bones.length);
-        for (let boneIndex = 0; boneIndex < this.modelData.skeleton.bones.length; boneIndex++) {
-            const bone = this.modelData.skeleton.bones[boneIndex];
-            const animationIndex = this.modelData.skeletonAnimationBoneIndices[boneIndex];
+    private computeBonesSRT(frame: number) {
+        for (let i = 0; i < this.modelData.skeleton.bones.length; i++) {
+            const animationIndex = this.modelData.animatedBoneIndicies[i];
             if (animationIndex === -1) {
-                bones[boneIndex] = bone;
                 continue;
             }
-            const srt: number[] = [];
+            const srt: number[] = Array(10);
             const animation = this.modelData.skeletonAnimation!.boneAnimations[animationIndex];
             let curveIndex = 0;
             let flags = animation.flags >> 6;
-            for (let i = 0; i < 10; i++) {
+            for (let j = 0; j < 10; j++) {
                 if (flags & 1) {
-                    srt.push(this.getKeyframe(animation.curves[curveIndex++], frame));
+                    srt[j] = this.getKeyframe(animation.curves[curveIndex++], frame);
                 } else {
-                    srt.push(animation.initialValues[i]);
+                    srt[j] = animation.initialValues[j];
                 }
                 flags >>= 1;
             }
-            bone.scale = vec3.fromValues(srt[0], srt[1], srt[2]);
-            bone.rotation = vec4.fromValues(srt[3], srt[4], srt[5], 1.0);
-            bone.translation = vec3.fromValues(srt[7], srt[8], srt[9]);
-            bones[boneIndex] = bone;
+            this.modelData.skeleton.bones[i].scale = vec3.fromValues(srt[0], srt[1], srt[2]);
+            this.modelData.skeleton.bones[i].rotation = vec4.fromValues(srt[3], srt[4], srt[5], 1.0);
+            this.modelData.skeleton.bones[i].translation = vec3.fromValues(srt[7], srt[8], srt[9]);
         }
-        return bones;
     }
 
     private getKeyframe(curve: Curve, currentFrame: number): number {
@@ -444,14 +521,11 @@ class TexSRT {
     public translationT = 0.0;
     private matrix: mat4 = mat4.create();
 
-    /**
-     * Call this *once* to pre-compute the matrix (rather than calculating the same one each frame)
-     */
     public compute(): void {
         const theta = this.rotation * MathConstants.DEG_TO_RAD;
         const sinR = Math.sin(theta);
         const cosR = Math.cos(theta);
-        // hardcoded to Maya calcs for now, can't find any other SRT modes in the files
+        // hardcoded to Maya, can't find any other SRT modes in the files
         this.matrix[0] = this.scaleS * cosR;
         this.matrix[4] = this.scaleS * sinR;
         this.matrix[12] = this.scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - this.translationS);
@@ -460,7 +534,7 @@ class TexSRT {
         this.matrix[13] = this.scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + this.translationT) + 1.0;
     }
 
-    public fillMatrix(d: Float32Array, offs: number): number {
+    public fillMatrix4x2(d: Float32Array, offs: number): number {
         return fillMatrix4x2(d, offs, this.matrix);
     }
 }
@@ -513,15 +587,22 @@ export class OrigamiMaterialInstance {
             this.samplerChannels.set(samplerName, cs);
         }
 
+        let npcPaper = false;
+        if (fmat.renderInfo.get("alphat_func")) {
+            const renderPass = fmat.renderInfo.get("render_pass");
+            const depthTestEqual = fmat.shaderAssign.shaderOption.get("depth_test_equal") === "0";
+            // heuristic for NPC pera (paper) material, usually Mt_Pera but not always
+            npcPaper = depthTestEqual && renderPass !== undefined;
+        }
         const blend = fmat.renderInfo.get("blend");
         const blendString = blend ? translateRenderInfoSingleString(blend) : "opaque";
         const blendMode = blendString !== "opaque" ? translateBlendMode(blendString) : null;
         const additiveBlend = blendString === "transadd";
         this.isTranslucent =
-            fmat.name.toLowerCase() === "mt_pera" ||
             fmat.name.toLowerCase() === "mt_mask" ||
             blendMode !== null ||
-            fmat.shaderAssign.shaderOption.get("paste_type") === "0";
+            fmat.shaderAssign.shaderOption.get("paste_type") === "0" ||
+            npcPaper;
         this.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
 
         this.megaStateFlags = {
@@ -563,8 +644,8 @@ export class OrigamiMaterialInstance {
 
         let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 17);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
-        offs += this.texCoordSRT0.fillMatrix(d, offs);
-        offs += this.texCoordSRT1.fillMatrix(d, offs);
+        offs += this.texCoordSRT0.fillMatrix4x2(d, offs);
+        offs += this.texCoordSRT1.fillMatrix4x2(d, offs);
         // offs += this.texCoordSRT2.fillMatrix(d, offs);
         d[offs++] = this.alphaRef;
     }

@@ -23,7 +23,7 @@ const PERA_SHAPE = ["Pera01_Shape__Mt_Pera"];
 // common configs grouped by name, checked before the other map
 const SHARED_ORIGAMI_MODEL_CONFIGS: Map<OrigamiModelConfig, string[]> = new Map<OrigamiModelConfig, string[]>([
     [{ fska: IDLE2 },
-        ["B_GOM", "B_HPC", "B_TAP_Last_new", "B_TAP_new", "B_TAP_Part", "H_BBL", "H_BOM", "H_GBNG", "H_GBNR", "H_GESB",
+    ["B_GOM", "B_HPC", "B_TAP_Last_new", "B_TAP_new", "B_TAP_Part", "H_BBL", "H_BOM", "H_GBNG", "H_GBNR", "H_GESB",
         "H_GESB_Foot1", "H_HEI", "H_HEID", "H_HEIM", "H_KURG", "H_KURM", "H_MET", "H_METF_Face", "H_MUTG", "H_NOK", "H_NOKG",
         "H_PAT", "H_SNBB", "H_TRS", "O_BDY", "O_BDY_COSA", "O_BDY_COSB", "O_BDY_COSC", "O_BDY_COSD", "O_BDY_COSE", "O_BRSB",
         "O_BRSF", "O_BRSH", "O_BRSI", "O_BRSM", "O_BSA", "O_BSAD", "O_BUL", "O_CBN", "O_CHU", "O_HEI", "O_KBN", "O_KNG",
@@ -34,14 +34,16 @@ const SHARED_ORIGAMI_MODEL_CONFIGS: Map<OrigamiModelConfig, string[]> = new Map<
         "O_KPAM", "O_KRN", "O_KSK", "O_KURB", "O_KURK", "O_MET", "O_METT", "O_MUC", "O_MUCI", "O_PAT", "O_PKF", "O_POO",
         "O_PPK", "O_SMO", "O_SMOM", "O_SNB", "O_TRS", "OG_ICE", "PC_HND", "PC_HND2", "PC_SLD", "PC_SLDP"]],
     [{ shapeWhitelist: PERA_SHAPE, fska: IDLE1, texturePattern: IDLE1 },
-        ["P_BOME", "P_CRN", "P_CRP", "P_GBN", "P_HEI", "P_HEISOM", "P_KNP", "P_KNP_Break", "P_KNP_Saisyo", "P_KNP_Shop",
+    ["P_BOME", "P_CRN", "P_CRP", "P_GBN", "P_HEI", "P_HEISOM", "P_KNP", "P_KNP_Break", "P_KNP_Saisyo", "P_KNP_Shop",
         "P_KNPBT", "P_KNPC", "P_KNPCAP", "P_KNPCK", "P_KNPG", "P_KNPN", "P_KNPOLI", "P_KPA", "P_KUR", "P_KURB", "P_LUG",
         "P_MET", "P_NOK", "P_PCH", "P_PUK", "P_BOM", "P_BOM_Cosplay", "P_BOM_END", "P_BOMG", "P_CRP_END", "P_CRP_Shop",
         "P_FPAC", "P_GES", "P_GES_Fishing", "P_HEIL", "P_HKN", "P_WAN", "P_KNPST", "P_TGZ", "P_PAT", "P_PAT_END", "P_NOKC",
         "P_NOKC_END", "P_NOK_END", "P_MUCL", "P_MUCC", "P_LUG_Kart", "P_LUG_HatLose", "P_LUG_Gear", "P_LIT", "P_KURC",
-        "P_KUR_END", "P_KNP_Sumi", "P_KNP_Hole", "P_KNP_HeadBrk", "P_KNP_Head", "P_KNP_END"]],
+        "P_KUR_END", "P_KNP_Sumi", "P_KNP_Hole", "P_KNP_HeadBrk", "P_KNP_Head", "P_KNP_END", "P_KNPE", "P_KNPE_END",
+        "P_KNPNIN", "P_KNPST_GOM", "P_KNPP", "P_KNPSK", "P_KPA_Crown"]],
     // lots of these should probably be checked again for fbvs instead of fska. Most were checked before fbvs's were parsed
-    [{ fska: C1 }, ["Item_Coin1", "Item_Coin10", "Item_Coin100", "Item_Coin10000", "Item_FireSet", "Item_Flower", "Item_FlowerSuper",
+    [{ fska: C1 },
+    ["Item_Coin1", "Item_Coin10", "Item_Coin100", "Item_Coin10000", "Item_FireSet", "Item_Flower", "Item_FlowerSuper",
         "Item_Hammer", "Item_HeartLarge", "Item_HeartMiddle", "Item_HeartSmall", "Item_HPMaxUp", "Item_HPMaxUPLarge",
         "Item_HPMaxUPSmall", "Item_Kinoko", "Item_KinokoDoubleSet", "Item_KinokoDry", "Item_KinokoGreat", "Item_KinokoSuper",
         "Item_OrigamiBookEarth", "Item_OrigamiBookFire", "Item_OrigamiBookIce", "Item_OrigamiBookWater", "Item_PaperLarge",
@@ -82,7 +84,8 @@ const SHARED_ORIGAMI_MODEL_CONFIGS: Map<OrigamiModelConfig, string[]> = new Map<
         "Sobj_CloudShadowA", "Sobj_CloudShadowB", "Sobj_CloudShadowD", "Sobj_CloudR", "Sobj_CloudU", "Sobj_CloudV", "Sobj_CloudW", "Sobj_CloudX",
         "Sobj_CloudJ", "Sobj_CloudZ", "Sobj_FireBlackWaterA", "Sobj_FireBlackWaterB", "Sobj_FireBlackWaterC", "Sobj_FireBlackWaterD",
         "Sobj_FireBlackWaterE", "Sobj_SandStormA", "Sobj_SandStormB", "Sobj_SandStormC", "Sobj_SandStormD", "Sobj_ShootingCloudA", "Sobj_ShootingCloudB",
-        "Sobj_StormWindA", "Sobj_TreeConiferB"]]
+        "Sobj_StormWindA", "Sobj_TreeConiferB", "Mobj_PelmanismLeaf", "Mobj_TheaterCurtainA", "Mobj_CactusE", "Mobj_CactusA", "Mobj_CactusB",
+        "Mobj_CactusC", "Mobj_CactusD"]]
 ]);
 
 const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, OrigamiModelConfig>([
@@ -105,8 +108,9 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_BlockHatenaOrigami", { fska: "C2" }],
     ["Mobj_BlockPow", { shapeWhitelist: ["BlockL__Mt_PowBlock"] }],
     ["Mobj_BlockSave", { fbvs: C1, texturePattern: "Color", shaderParam: "Color" }],
-    ["Mobj_BlockTomeiHatena", { fbvs: "C2" }],
+    ["Mobj_BlockTomeiHatena", { fbvs: "C2", texturePattern: "C2" }],
     ["Mobj_BoatA", { shapeWhitelist: ["Boat__Mt_Boat"] }],
+    ["Mobj_ChestnutBur", { fbvs: C1 }],
     ["Mobj_CoffinA", { shapeBlacklist: ["MarkG__Mt_OrnamentGold", "MarkA__Mt_OrnamentGold", "MarkB__Mt_OrnamentGold", "MarkC__Mt_OrnamentGold", "MarkD__Mt_OrnamentGold", "MarkE__Mt_OrnamentGold"] }],
     ["Mobj_CollapseWallFooting", { fska: "C2" }],
     ["Mobj_ElevatorDoorA", { fbvs: C1 }],
@@ -122,9 +126,20 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_IceRockA", { shapeWhitelist: ["IceRock__Mt_Main_Albedo_Blue", "WireBase__Mt_Wire"] }],
     ["Mobj_IndoorPlantB", { fbvs: C1 }],
     ["Mobj_KingSealA1", { fbvs: C1 }],
+    ["Mobj_KingSealB7", { fbvs: C1 }],
+    ["Mobj_KingSealB8", { fbvs: C1 }],
+    ["Mobj_KingSealC1", { fbvs: C1 }],
     ["Mobj_KingSealC2", { fbvs: C1 }],
+    ["Mobj_KingSealC3", { fbvs: C1 }],
     ["Mobj_KingSealC4", { fbvs: C1 }],
+    ["Mobj_KingSealC6", { fbvs: C1 }],
+    ["Mobj_KingSealC7", { fbvs: C1 }],
+    ["Mobj_KingSealC8", { fbvs: C1 }],
+    ["Mobj_KingSealC9", { fbvs: C1 }],
+    ["Mobj_KingSealC10", { fbvs: C1 }],
     ["Mobj_KingSealF1", { fbvs: C1 }],
+    ["Mobj_KingSealF2", { fbvs: C1 }],
+    ["Mobj_KingSealF3", { fbvs: C1 }],
     ["Mobj_KinopioStatueA", { shapeBlacklist: ["BaseB__Mt_Statue"] }],
     ["Mobj_LabMachineA", { fska: "C2" }],
     ["Mobj_LanternD", { materialBlacklist: ["Mt_Shasow"], fska: C1 }],
@@ -150,7 +165,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_TreeGirlA", { fska: "N_WaitB1" }],
     ["Mobj_TreePelmanismA", { fska: "C2" }],
     ["Mobj_TurtleStatueA", { fbvs: C1 }],
-    ["Mobj_WaterBottleA", { fska: "C4" }],
+    ["Mobj_WaterBottleA", { fska: "C4", shaderParam: "C4" }],
     ["Mobj_WaterCaveBoxA", { fbvs: C1 }],
     ["Mobj_WaterCaveTurbineA", { fska: "C2" }],
     ["Mobj_WaterCaveTurbineC", { fska: "C1_Rotation_L1" }],
@@ -162,6 +177,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Mobj_WaterFlowingPuzzleA", { fska: "C2" }],
     ["Mobj_WaterFlowingPuzzleB", { fska: "C2" }],
     ["Mobj_WaterFlowingSpaA", { fska: "C2" }],
+    ["Mobj_WaterIceMapA", { materialBlacklist: ["Mt_WaterIceMapA"] }], // hide entire model for now
     ["Mobj_WaterSpaC", { fska: "C3" }],
     ["Mobj_WaterSplashD", { fska: "C2" }],
     ["Mobj_WaterSplashE", { fska: "C5" }],
@@ -235,6 +251,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["P_KNP_Hole_Dance", { shapeWhitelist: PERA_SHAPE, fska: "Dance_Stand_1", texturePattern: "Dance_Stand_1" }],
     ["P_KNP_HoleHead", { shapeWhitelist: PERA_SHAPE, fska: "NML_Struggle_1", texturePattern: "NML_Struggle_1" }],
     ["P_KNP_HoleBundle", { fska: "NML_Stand_1_1", texturePattern: "NML_Stand_1_1" }],
+    ["P_KNP_Keijiban", { fska: "NML_StopA1", texturePattern: "NML_StopA1" }],
     ["P_KNP_L", { fska: IDLE1, texturePattern: IDLE1 }],
     ["P_KNP_LL", { fska: IDLE1, texturePattern: IDLE1 }],
     ["P_KNP_Mado", { fska: IDLE1, texturePattern: IDLE1 }],
@@ -247,6 +264,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["P_KNP_Telescope", { fbvs: IDLE1, texturePattern: IDLE1 }],
     ["P_KNP_Town", { shapeWhitelist: PERA_SHAPE, fska: "Gallery_Stand_1", texturePattern: "Gallery_Stand_1" }],
     ["P_KNP_Unique", { shapeWhitelist: PERA_SHAPE, fska: "HAT_Stand_1", texturePattern: "HAT_Stand_1" }],
+    ["P_KPA_END", { fska: IDLE1, texturePattern: IDLE1 }],
     ["P_KPAJ", { materialBlacklist: ["Mt_Decal"], shapeWhitelist: PERA_SHAPE, fska: IDLE1, texturePattern: IDLE1 }],
     ["P_KPAJ_END", { shapeWhitelist: PERA_SHAPE, fska: "END_Rantan_1", texturePattern: "END_Rantan_1" }],
     ["P_KPAO", { materialBlacklist: ["Mt_decal"], fska: IDLE1, texturePattern: IDLE1 }],
@@ -264,7 +282,7 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["P_MUC_Shop_END", { fska: "NML_Talk_1", texturePattern: "NML_Talk_1" }],
     ["P_POO", { shapeWhitelist: PERA_SHAPE, fska: "PNC_Stand_1", texturePattern: "PNC_Stand_1" }],
     ["P_PUK_E", { fska: "NML_Graspswim_1", texturePattern: "NML_Graspswim_1" }],
-    ["P_PUK_Fishing", { fska: IDLE1 }],
+    ["P_PUK_Fishing", { fska: IDLE1, texturePattern: IDLE1 }],
     ["P_WAN_END", { shapeWhitelist: PERA_SHAPE, fska: "Head_Stand_1", texturePattern: "Head_Stand_1" }],
     // sobjs
     ["Sobj_BlackWaterBubbleA", { fska: "C1_Expand" }],
@@ -272,11 +290,16 @@ const ORIGAMI_MODEL_CONFIGS: Map<string, OrigamiModelConfig> = new Map<string, O
     ["Sobj_CloudQ", { fbvs: "C4" }],
     ["Sobj_GondolaSceneryA", { fska: "C5" }],
     ["Sobj_WaterfallA", { fska: C1, shaderParam: "C1" }],
-    // level models
+    // level models (how many ways can they misspell "shadow"???)
     ["W1G1_KartRoad", { fbvs: C1 }],
+    ["W3G2_Desert_0001", { texturePattern: C1, fbvs: C1 }],
+    ["W3G2_Desert_0002", { texturePattern: "C2", fbvs: "C2" }],
+    ["W3C3_FireJump", { materialBlacklist: ["Mt_Sdw"] }],
     ["W3G3_HouseA", { materialBlacklist: ["Mt_Sahdow"] }],
     ["W3G3_HouseB", { materialBlacklist: ["Mt_Sahdow"] }],
+    ["W4C1_GessoArea", { materialBlacklist: ["Mt_Mask"] }],
     ["W4C1_StoreRoom", { shapeBlacklist: ["PipeFlameB__Mt_Pipe"] }],
+    ["W6C2_PopUpBox", { materialBlacklist: ["Mt_Shasow"] }],
 ]);
 
 export function getOrigamiModelConfig(id: string): OrigamiModelConfig | undefined {
