@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FSKL_Bone, FRES, FSKL, FSKA, FBVS, FMAA, FMAT } from "../fres_nx/bfres";
+import { FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, FSHP_Mesh, FSHP, FRES, FSKL, FSKA, FBVS, FMAA, FMAT } from "../fres_nx/bfres";
 import { AttributeFormat, getChannelFormat, getTypeFormat, IndexFormat } from "../fres_nx/nngfx_enum";
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxDevice, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";

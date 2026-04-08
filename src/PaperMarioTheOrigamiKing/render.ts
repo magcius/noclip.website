@@ -16,8 +16,6 @@ import { OrigamiTextureHolder } from './texture.js';
 import { AABB } from '../Geometry.js';
 import { getPointCubic } from '../Spline.js';
 import { OrigamiProgram, OrigamiWaterProgram } from './shader.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { White } from '../Color.js';
 
 // Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
@@ -296,7 +294,7 @@ export class OrigamiModelRenderer {
             }
         }
 
-        // this doesn't work for some reason, will come back to it later
+        // this doesn't work for some reason, will come back to it later. Might need to take into account bone weights?
         // patch instance bboxes after computing first frame of ska
         // if (this.modelData.skeletonAnimation && !this.patchedInstanceBBoxes) {
         //     this.instanceBBoxes = Array(this.instanceMatrices.length).fill(undefined);

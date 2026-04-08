@@ -7,7 +7,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { OrigamiModelData } from "./render_data.js";
 import { OrigamiModelRenderer } from "./render.js";
-import { ELFType, ItemInstance, ItemType, MObjInstance, SObjInstance, MObjType, ModelDef, parseELF, NPCInstance, NPCType } from "./bin_elf.js";
+import { OrigamiELFType, OrigamiItemInstance, OrigamiItemType, OrigamiMobjInstance, OrigamiSobjInstance, OrigamiMobjType, OrigamiModelDef, parseOrigamiELF, OrigamiNPCInstance, OrigamiNPCType } from "./bin_elf.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
@@ -21,11 +21,11 @@ import { DataFetcher } from "../DataFetcher.js";
 import { getOrigamiModelConfig } from "./model_config.js";
 import { LayerPanel, Panel } from "../ui.js";
 
-interface OrigamiLevelObjects {
-    mobjInstances: MObjInstance[];
-    sobjInstances: SObjInstance[];
-    itemInstances: ItemInstance[];
-    npcInstances: NPCInstance[];
+interface LevelObjectInstances {
+    mobjInstances: OrigamiMobjInstance[];
+    sobjInstances: OrigamiSobjInstance[];
+    itemInstances: OrigamiItemInstance[];
+    npcInstances: OrigamiNPCInstance[];
 }
 
 /**
@@ -174,8 +174,8 @@ function decompressZST(file: ArrayBufferSlice): ArrayBufferSlice {
     return ArrayBufferSlice.fromView(decompress(file.createTypedArray(Uint8Array)));
 }
 
-function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: OrigamiRenderer) {
-    for (const instance of levelObjects.mobjInstances) {
+function patchLevelObjectRenderers(instances: LevelObjectInstances, renderer: OrigamiRenderer) {
+    for (const instance of instances.mobjInstances) {
         const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.resolvedModelName);
         if (!modelRenderer) {
             continue;
@@ -187,7 +187,7 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         modelRenderer.addInstanceMatrix(m);
     }
 
-    for (const instance of levelObjects.sobjInstances) {
+    for (const instance of instances.sobjInstances) {
         const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.modelName);
         if (!modelRenderer) {
             continue;
@@ -199,7 +199,7 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         modelRenderer.addInstanceMatrix(m);
     }
 
-    for (const instance of levelObjects.itemInstances) {
+    for (const instance of instances.itemInstances) {
         const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.resolvedModelName);
         if (!modelRenderer) {
             continue;
@@ -209,48 +209,48 @@ function patchLevelObjectRenderers(levelObjects: OrigamiLevelObjects, renderer: 
         modelRenderer.addInstanceMatrix(m);
     }
 
-    for (const instance of levelObjects.npcInstances) {
+    for (const instance of instances.npcInstances) {
         const modelRenderer = renderer.modelRenderers.find(m => m.name === instance.resolvedModelName);
         if (!modelRenderer) {
             continue;
         }
         const m = mat4.create();
         computeModelMatrixSRT(m, 1, 1, 1,
-            0, instance.rotationDeg * MathConstants.DEG_TO_RAD, 0,
+            0, 0, /*instance.rotationDeg * MathConstants.DEG_TO_RAD,*/ 0,
             instance.position[0], instance.position[1], instance.position[2]
         );
         modelRenderer.addInstanceMatrix(m);
     }
 }
 
-async function getMobjInstances(id: string, config: OrigamiLevelConfig, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<MObjInstance[]> {
-    const instances: MObjInstance[] = [];
+async function getMobjInstances(id: string, config: OrigamiLevelConfig, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<OrigamiMobjInstance[]> {
+    const instances: OrigamiMobjInstance[] = [];
     const worldId = id.substring(0, 2);
     const levelGroupId = id.substring(0, 4);
 
-    const types: MObjType[] = [];
+    const types: OrigamiMobjType[] = [];
     for (const s of ["data_mobj_Cmn", `data_mobj_${worldId}_Cmn`, `data_mobj_${levelGroupId}`]) {
         const file = await dataFetcher.fetchData(`${pathBase}/data/mobj/${s}.elf.zst`);
-        types.push(...parseELF(decompressZST(file), ELFType.MobjType) as MObjType[]);
+        types.push(...parseOrigamiELF(decompressZST(file), OrigamiELFType.MobjType) as OrigamiMobjType[]);
     }
     if (config.aobj) {
         const file = await dataFetcher.fetchData(`${pathBase}/data/mobj/data_aobj.elf.zst`);
-        types.push(...parseELF(decompressZST(file), ELFType.MobjType) as MObjType[]);
+        types.push(...parseOrigamiELF(decompressZST(file), OrigamiELFType.MobjType) as OrigamiMobjType[]);
     }
 
-    const mobjModels: ModelDef[] = [];
+    const mobjModels: OrigamiModelDef[] = [];
     for (const s of ["data_mobj_model_Cmn", `data_mobj_model_${worldId}_Cmn`, `data_mobj_model_${levelGroupId}`]) {
         const file = await dataFetcher.fetchData(`${pathBase}/data/mobj_model/${s}.elf.zst`);
-        mobjModels.push(...parseELF(decompressZST(file), ELFType.MobjModel) as ModelDef[]);
+        mobjModels.push(...parseOrigamiELF(decompressZST(file), OrigamiELFType.MobjModel) as OrigamiModelDef[]);
     }
 
     for (const mobj of config.altMobj !== undefined ? config.altMobj : ["Mobj"]) {
         const file = await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_${mobj}.elf.zst`);
-        instances.push(...parseELF(decompressZST(file), ELFType.DisposMobj) as MObjInstance[]);
+        instances.push(...parseOrigamiELF(decompressZST(file), OrigamiELFType.DisposMobj) as OrigamiMobjInstance[]);
     }
     if (config.aobj) {
         const file = await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Aobj.elf.zst`);
-        instances.push(...parseELF(decompressZST(file), ELFType.DisposAobj) as MObjInstance[]);
+        instances.push(...parseOrigamiELF(decompressZST(file), OrigamiELFType.DisposAobj) as OrigamiMobjInstance[]);
     }
 
     const uniqueTypes: string[] = [];
@@ -277,10 +277,10 @@ async function getMobjInstances(id: string, config: OrigamiLevelConfig, resource
     return instances;
 }
 
-async function getSobjInstances(id: string, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<SObjInstance[]> {
-    const instances: SObjInstance[] = [];
+async function getSobjInstances(id: string, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<OrigamiSobjInstance[]> {
+    const instances: OrigamiSobjInstance[] = [];
     const disposFile = await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Sobj.elf.zst`);
-    instances.push(...parseELF(decompressZST(disposFile), ELFType.DisposSobj) as SObjInstance[]);
+    instances.push(...parseOrigamiELF(decompressZST(disposFile), OrigamiELFType.DisposSobj) as OrigamiSobjInstance[]);
 
     const uniqueModels: Map<string, string> = new Map();
     for (const instance of instances) {
@@ -297,15 +297,15 @@ async function getSobjInstances(id: string, resources: OrigamiResources, dataFet
     return instances;
 }
 
-async function getItemInstances(id: string, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<ItemInstance[]> {
-    const instances: ItemInstance[] = [];
+async function getItemInstances(id: string, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<OrigamiItemInstance[]> {
+    const instances: OrigamiItemInstance[] = [];
 
     const typesFile = await dataFetcher.fetchData(`${pathBase}/data/data_item.elf.zst`);
-    const types = parseELF(decompressZST(typesFile), ELFType.ItemType) as ItemType[];
+    const types = parseOrigamiELF(decompressZST(typesFile), OrigamiELFType.ItemType) as OrigamiItemType[];
     const modelsFile = await dataFetcher.fetchData(`${pathBase}/data/data_item_model.elf.zst`);
-    const models = parseELF(decompressZST(modelsFile), ELFType.ItemModel) as ModelDef[];
+    const models = parseOrigamiELF(decompressZST(modelsFile), OrigamiELFType.ItemModel) as OrigamiModelDef[];
     const disposFile = await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Item.elf.zst`)
-    instances.push(...parseELF(decompressZST(disposFile), ELFType.DisposItem) as ItemInstance[]);
+    instances.push(...parseOrigamiELF(decompressZST(disposFile), OrigamiELFType.DisposItem) as OrigamiItemInstance[]);
 
     const uniqueTypes: string[] = [];
     for (const instance of instances) {
@@ -331,15 +331,15 @@ async function getItemInstances(id: string, resources: OrigamiResources, dataFet
     return instances;
 }
 
-async function getNPCInstances(id: string, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<NPCInstance[]> {
-    const instances: NPCInstance[] = [];
+async function getNPCInstances(id: string, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<OrigamiNPCInstance[]> {
+    const instances: OrigamiNPCInstance[] = [];
 
     const typesFile = await dataFetcher.fetchData(`${pathBase}/data/data_npc.elf.zst`);
-    const npcTypes = parseELF(decompressZST(typesFile), ELFType.NPCType) as NPCType[];
+    const npcTypes = parseOrigamiELF(decompressZST(typesFile), OrigamiELFType.NPCType) as OrigamiNPCType[];
     const modelsFile = await dataFetcher.fetchData(`${pathBase}/data/data_npc_model.elf.zst`);
-    const npcModels = parseELF(decompressZST(modelsFile), ELFType.NPCModel) as ModelDef[];
+    const npcModels = parseOrigamiELF(decompressZST(modelsFile), OrigamiELFType.NPCModel) as OrigamiModelDef[];
     const disposFile = await dataFetcher.fetchData(`${pathBase}/data/map/${id}/dispos_Npc.elf.zst`);
-    instances.push(...parseELF(decompressZST(disposFile), ELFType.DisposNPC) as NPCInstance[]);
+    instances.push(...parseOrigamiELF(decompressZST(disposFile), OrigamiELFType.DisposNPC) as OrigamiNPCInstance[]);
 
     const uniqueTypes: string[] = [];
     for (const instance of instances) {
@@ -397,23 +397,23 @@ async function getNPCInstances(id: string, resources: OrigamiResources, dataFetc
     return instances;
 }
 
-async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<OrigamiLevelObjects> {
-    let mobjInstances: MObjInstance[] = [];
+async function loadLevelObjects(id: string, config: OrigamiLevelConfig, resources: OrigamiResources, dataFetcher: DataFetcher, device: GfxDevice): Promise<LevelObjectInstances> {
+    let mobjInstances: OrigamiMobjInstance[] = [];
     if (config.mobj) {
         mobjInstances = await getMobjInstances(id, config, resources, dataFetcher, device);
     }
 
-    let sobjInstances: SObjInstance[] = [];
+    let sobjInstances: OrigamiSobjInstance[] = [];
     if (config.sobj) {
         sobjInstances = await getSobjInstances(id, resources, dataFetcher, device);
     }
 
-    let itemInstances: ItemInstance[] = [];
+    let itemInstances: OrigamiItemInstance[] = [];
     if (config.item) {
         itemInstances = await getItemInstances(id, resources, dataFetcher, device);
     }
 
-    let npcInstances: NPCInstance[] = [];
+    let npcInstances: OrigamiNPCInstance[] = [];
     if (config.npc) {
         npcInstances = await getNPCInstances(id, resources, dataFetcher, device);
     }
@@ -491,6 +491,7 @@ Investigate instanced rendering (requires some re-work of vertex buffer building
 Pre-compute fska SRT values by frame (like BVS/TPA/SPA)
 Conditional NPC rotation, their type def has a rotation enum
 Debug occasional "status access violation" and "status breakpoint" browser-level errors (not a memory leak, can happen when tabbing out)
+Scene setup for kart road and bowser castle on rails segment
 */
 
 const pathBase = "PaperMarioTOK";

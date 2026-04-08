@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 
 // Credit to https://github.com/Darxoon/OrigamiWand for parsing logic
 
-export interface MObjInstance {
+export interface OrigamiMobjInstance {
     id: string;
     type: string;
     resolvedModelName: string;
@@ -11,7 +11,7 @@ export interface MObjInstance {
     rotation: vec3;
 }
 
-export interface SObjInstance {
+export interface OrigamiSobjInstance {
     id: string;
     position: vec3;
     rotation: vec3;
@@ -20,14 +20,14 @@ export interface SObjInstance {
     modelName: string;
 }
 
-export interface ItemInstance {
+export interface OrigamiItemInstance {
     id: string;
     type: string;
     resolvedModelName: string;
     position: vec3;
 }
 
-export interface NPCInstance {
+export interface OrigamiNPCInstance {
     id: string;
     type: string;
     resolvedModelName: string;
@@ -35,17 +35,17 @@ export interface NPCInstance {
     rotationDeg: number;
 }
 
-export interface MObjType {
+export interface OrigamiMobjType {
     id: string;
     modelId: string;
 }
 
-export interface ItemType {
+export interface OrigamiItemType {
     id: string;
     modelId: string;
 }
 
-export interface NPCType {
+export interface OrigamiNPCType {
     id: string;
     modelId: string;
 }
@@ -55,14 +55,14 @@ interface ModelAssetGroup {
     file: string;
 }
 
-export interface ModelDef {
+export interface OrigamiModelDef {
     id: string;
     assetGroups: ModelAssetGroup[];
     assetGroupOffset: number;
     assetGroupCount: number;
 }
 
-export enum ELFType {
+export enum OrigamiELFType {
     DisposMobj,
     DisposSobj,
     DisposAobj,
@@ -78,28 +78,28 @@ export enum ELFType {
 
 class Section {
     public static size: number = 64;
-    nameOffset: number;
-	name: string;
-	type: number;
-	offset: number;
-    byteLength: number;
-	
-	constructor(view: DataView, offset: number) {
-		this.nameOffset = view.getInt32(offset, true);
-		this.type = view.getInt32(offset + 4, true);
-		this.offset = view.getInt32(offset + 24, true);
+    public nameOffset: number;
+    public name: string = "";
+    public type: number;
+    public offset: number;
+    public byteLength: number;
+
+    constructor(view: DataView, offset: number) {
+        this.nameOffset = view.getInt32(offset, true);
+        this.type = view.getInt32(offset + 4, true);
+        this.offset = view.getInt32(offset + 24, true);
         this.byteLength = view.getInt32(offset + 32, true);
-	}
+    }
 }
 
 class Relocation {
     public static size: number = 24;
-    locationOffset: number;
-    infoLow: number;
-    infoHigh: number;
-    targetOffset: number;
+    public locationOffset: number;
+    public infoLow: number;
+    public infoHigh: number;
+    public targetOffset: number;
 
-	constructor(view: DataView, offset: number) {
+    constructor(view: DataView, offset: number) {
         this.locationOffset = view.getInt32(offset, true);
         this.infoLow = view.getInt32(offset + 8, true);
         this.infoHigh = view.getInt32(offset + 12, true);
@@ -109,12 +109,12 @@ class Relocation {
 
 class Symbol {
     public static size: number = 24;
-    name: string;
-    info: number;
-    visibility: number;
-    sectionHeaderIndex: number;
-    location: number;
-    byteLength: number;
+    public name: string;
+    public info: number;
+    public visibility: number;
+    public sectionHeaderIndex: number;
+    public location: number;
+    public byteLength: number;
 
     constructor(view: DataView, offset: number, stringSectionOffset: number) {
         const nameOffset = view.getInt32(offset, true);
@@ -155,8 +155,8 @@ function getStringAt(view: DataView, offset: number): string {
     return TEXT_DECODER.decode(new Uint8Array(c));
 }
 
-function parseDataSection_MObjInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): MObjInstance[] {
-    const instances: MObjInstance[] = [];
+function parseDataSection_MObjInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiMobjInstance[] {
+    const instances: OrigamiMobjInstance[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation2 = relocations.get(8 + MOBJ_INSTANCE_SIZE * i)!;
@@ -175,8 +175,8 @@ function parseDataSection_MObjInstances(view: DataView, section: Section, count:
     return instances;
 }
 
-function parseDataSection_SObjInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): SObjInstance[] {
-    const instances: SObjInstance[] = [];
+function parseDataSection_SObjInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiSobjInstance[] {
+    const instances: OrigamiSobjInstance[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation2 = relocations.get(8 + SOBJ_INSTANCE_SIZE * i)!;
@@ -200,8 +200,8 @@ function parseDataSection_SObjInstances(view: DataView, section: Section, count:
     return instances;
 }
 
-function parseDataSection_ItemInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): ItemInstance[] {
-    const instances: ItemInstance[] = [];
+function parseDataSection_ItemInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiItemInstance[] {
+    const instances: OrigamiItemInstance[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation2 = relocations.get(8 + ITEM_INSTANCE_SIZE * i)!;
@@ -217,8 +217,8 @@ function parseDataSection_ItemInstances(view: DataView, section: Section, count:
     return instances;
 }
 
-function parseDataSection_NPCInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): NPCInstance[] {
-    const instances: NPCInstance[] = [];
+function parseDataSection_NPCInstances(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiNPCInstance[] {
+    const instances: OrigamiNPCInstance[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation2 = relocations.get(8 + NPC_INSTANCE_SIZE * i)!;
@@ -235,8 +235,8 @@ function parseDataSection_NPCInstances(view: DataView, section: Section, count: 
     return instances;
 }
 
-function parseDataSection_MObjTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): MObjType[] {
-    const types: MObjType[] = [];
+function parseDataSection_MObjTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiMobjType[] {
+    const types: OrigamiMobjType[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation1 = relocations.get(MOBJ_TYPE_SIZE * i)!;
@@ -249,8 +249,8 @@ function parseDataSection_MObjTypes(view: DataView, section: Section, count: num
     return types;
 }
 
-function parseDataSection_ItemTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): ItemType[] {
-    const types: ItemType[] = [];
+function parseDataSection_ItemTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiItemType[] {
+    const types: OrigamiItemType[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation1 = relocations.get(ITEM_TYPE_SIZE * i)!;
@@ -263,8 +263,8 @@ function parseDataSection_ItemTypes(view: DataView, section: Section, count: num
     return types;
 }
 
-function parseDataSection_NPCTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): NPCType[] {
-    const types: ItemType[] = [];
+function parseDataSection_NPCTypes(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiNPCType[] {
+    const types: OrigamiItemType[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation1 = relocations.get(NPC_TYPE_SIZE * i)!;
@@ -277,8 +277,8 @@ function parseDataSection_NPCTypes(view: DataView, section: Section, count: numb
     return types;
 }
 
-function parseDataSection_ModelDefs(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): ModelDef[] {
-    const models: ModelDef[] = [];
+function parseDataSection_ModelDefs(view: DataView, section: Section, count: number, dataStringOffset: number, relocations: Map<number, Relocation>): OrigamiModelDef[] {
+    const models: OrigamiModelDef[] = [];
     let pointer = section.offset;
     for (let i = 0; i < count; i++) {
         const relocation1 = relocations.get(MODEL_DEF_SIZE * i)!;
@@ -306,7 +306,7 @@ function parseDataSection_ModelAssetGroup(view: DataView, section: Section, coun
     return groups;
 }
 
-export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
+export function parseOrigamiELF(buffer: ArrayBufferSlice, type: OrigamiELFType): any {
     const view = buffer.createDataView();
     const sectionHeaderTableOffset = view.getInt32(0x28, true);
     const sectionCount = view.getInt16(0x3C, true);
@@ -347,7 +347,7 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
     }
 
     const symbolTable: Symbol[] = [];
-    if (type === ELFType.MobjModel || type === ELFType.ItemModel || type === ELFType.NPCModel) {
+    if (type === OrigamiELFType.MobjModel || type === OrigamiELFType.ItemModel || type === OrigamiELFType.NPCModel) {
         // only bother to get symbols for model defs
         const symbolSection = sections.find(s => s.name === ".symtab")!;
         const start = symbolSection.offset;
@@ -360,40 +360,40 @@ export function parseELF(buffer: ArrayBufferSlice, type: ELFType): any {
 
     let data;
     switch (type) {
-        case ELFType.DisposAobj:
-        case ELFType.DisposMobj:
+        case OrigamiELFType.DisposAobj:
+        case OrigamiELFType.DisposMobj:
             data = parseDataSection_MObjInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.DisposSobj:
+        case OrigamiELFType.DisposSobj:
             data = parseDataSection_SObjInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.DisposItem:
+        case OrigamiELFType.DisposItem:
             data = parseDataSection_ItemInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.DisposNPC:
+        case OrigamiELFType.DisposNPC:
             data = parseDataSection_NPCInstances(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.MobjType:
+        case OrigamiELFType.MobjType:
             data = parseDataSection_MObjTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.ItemType:
+        case OrigamiELFType.ItemType:
             data = parseDataSection_ItemTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.NPCType:
+        case OrigamiELFType.NPCType:
             data = parseDataSection_NPCTypes(view, dataSection, rodataCount, rodataStringSection.offset, relocations.get(".data")!);
             break;
-        case ELFType.MobjModel:
-        case ELFType.ItemModel:
-        case ELFType.NPCModel:
+        case OrigamiELFType.MobjModel:
+        case OrigamiELFType.ItemModel:
+        case OrigamiELFType.NPCModel:
             let symbolName;
             switch (type) {
-                case ELFType.MobjModel:
+                case OrigamiELFType.MobjModel:
                     symbolName = "_ZN3wld3fld4data13modelMobj_numE";
                     break;
-                case ELFType.ItemModel:
+                case OrigamiELFType.ItemModel:
                     symbolName = "_ZN3wld3fld4data13modelItem_numE";
                     break;
-                case ELFType.NPCModel:
+                case OrigamiELFType.NPCModel:
                 default:
                     symbolName = "_ZN3wld3fld4data12modelNpc_numE";
                     break;
