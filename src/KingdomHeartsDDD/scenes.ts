@@ -39,7 +39,7 @@ class DreamDropRenderer implements SceneGfx {
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.room = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos);
+        this.room = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos, this.textures);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -140,17 +140,16 @@ const sceneDescs = [
     new Room("tm_05", "Tower Road"),
     new Room("tm_06", "Tower"),
     new Room("tm_07", "Dungeon"),
-    new Room("tm_08", "Training Yard"),
+    new Room("tm_08", "Training Yard (Day)"),
     new Room("tm_09", "Shore"),
     new Room("tm_10", "Green Room"),
     new Room("tm_11", "Machine Room"),
     new Room("tm_12", "Backstage"),
     new Room("tm_13", "Cell"),
     new Room("tm_14", "Mountain Road"),
-    new Room("tm_15", "Training Yard"),
+    new Room("tm_15", "Training Yard (Night)"),
     new Room("tm_16", "Theatre"),
     new Room("tm_17", "The Opéra"),
-    new Room("tm_18", "Tower"),
     new Room("tm_60", "Dive (Sora)"),
     new Room("tm_61", "Dive (Riku)"),
     "Symphony of Sorcery",

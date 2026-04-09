@@ -1,4 +1,4 @@
-import { vec2, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DreamDropTextureFormat } from "./texture";
 
@@ -56,77 +56,28 @@ export interface DreamDropPMO {
     materials: PMOMaterial[];
     mainShapes: DreamDropPMOShape[];
     secondShapes: DreamDropPMOShape[];
+    skeleton?: PMOSkeleton;
 }
 
 interface PMOMaterial {
-    textureOffset: number;
     textureName: string;
     scrollX: number;
     scrollY: number;
 }
 
-export class DreamDropPMOShape {
-    public vertices: PMOVertex[];
-    public indices: number[];
-    // public isTriangleStrip: boolean;
-    // public uvFormat: PMOVertexFormat;
-    // public normalFormat: PMOVertexFormat;
-    // public positionFormat: PMOVertexFormat;
-    // public weightFormat: PMOVertexFormat;
-    // public indicesFormat: number;
-    // public skinWeightsCount: number;
-    // public morphWeightsCount: number;
-    // public uniformDiffuse: boolean;
-    public primitiveFormat: PMOPrimitiveFormat;
-
-    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public group: number, public triangleStripCount: number, public attribute: number, public boneIndices: number[], public diffuseColor: number) {
-        this.vertices = Array(vertexCount);
-        // this.isTriangleStrip = getBit(vertexFlags, 30);
-        // this.uvFormat = getBitsRange(vertexFlags, 0, 2) as PMOVertexFormat;
-        // this.normalFormat = getBitsRange(vertexFlags, 5, 2) as PMOVertexFormat;
-        // this.positionFormat = getBitsRange(vertexFlags, 7, 2) as PMOVertexFormat;
-        // this.weightFormat = getBitsRange(vertexFlags, 9, 2) as PMOVertexFormat;
-        // this.indicesFormat = getBitsRange(vertexFlags, 11, 2);
-        // this.skinWeightsCount = getBitsRange(vertexFlags, 14, 3);
-        // this.morphWeightsCount = getBitsRange(vertexFlags, 18, 3);
-        // this.uniformDiffuse = getBitsRange(vertexFlags, 24, 1) === 1;
-        this.primitiveFormat = getBitsRange(vertexFlags, 28, 4) as PMOPrimitiveFormat;
-
-        this.indices = [];
-        switch (this.primitiveFormat) {
-            case PMOPrimitiveFormat.TRIANGLE_STRIP:
-                for (let i = 0; i < this.vertexCount - 2; i++) {
-                    if (i % 2 === 0) {
-                        this.indices.push(i);
-                        this.indices.push(i + 1);
-                        this.indices.push(i + 2);
-                    } else {
-                        this.indices.push(i + 1);
-                        this.indices.push(i);
-                        this.indices.push(i + 2);
-                    }
-                }
-                break;
-            case PMOPrimitiveFormat.TRIANGLE_LIST:
-                for (let i = 0; i < this.vertexCount - 2; i += 3) {
-                    this.indices.push(i);
-                    this.indices.push(i + 1);
-                    this.indices.push(i + 2);
-                }
-                break;
-            default:
-                console.warn("Unimplemented primitive format", this.primitiveFormat);
-                break;
-        }
-    }
+interface PMOSkeleton {
+    skinnedBoneCount: number;
+    nStdBone: number;
+    bones: PMOBone[];
 }
 
-interface PMOVertex {
-    uv: vec2;
-    color: vec4;
-    position: vec3;
-    weight: vec4;
-    joint: vec4;
+interface PMOBone {
+    index: number;
+    parentIndex: number;
+    skinnedIndex: number;
+    jointName: string;
+    transform: mat4;
+    inverseTransform: mat4;
 }
 
 enum PMOPrimitiveFormat {
@@ -139,8 +90,53 @@ enum PMOPrimitiveFormat {
     QUAD
 }
 
+export class DreamDropPMOShape {
+    public vertices: Float32Array;
+    public colors: Float32Array;
+    public uvs: Float32Array;
+    public indices: Uint32Array;
+    public primitiveFormat: PMOPrimitiveFormat;
+
+    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public group: number, public triangleStripCount: number, public attribute: number, public boneIndices: number[], public diffuseColor: number) {
+        this.vertices = new Float32Array(vertexCount * 3);
+        this.colors = new Float32Array(vertexCount * 4);
+        this.uvs = new Float32Array(vertexCount * 2);
+        this.primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PMOPrimitiveFormat;
+
+        const indices = [];
+        switch (this.primitiveFormat) {
+            case PMOPrimitiveFormat.TRIANGLE_STRIP:
+                for (let i = 0; i < this.vertexCount - 2; i++) {
+                    if (i % 2 === 0) {
+                        indices.push(i);
+                        indices.push(i + 1);
+                        indices.push(i + 2);
+                    } else {
+                        indices.push(i + 1);
+                        indices.push(i);
+                        indices.push(i + 2);
+                    }
+                }
+                break;
+            case PMOPrimitiveFormat.TRIANGLE_LIST:
+                for (let i = 0; i < this.vertexCount - 2; i += 3) {
+                    indices.push(i);
+                    indices.push(i + 1);
+                    indices.push(i + 2);
+                }
+                break;
+            default:
+                console.warn("Unimplemented primitive format", this.primitiveFormat);
+                break;
+        }
+        this.indices = new Uint32Array(indices);
+    }
+}
+
 const MAGIC_PMP = 5262672;
 const MAGIC_CTRT = 1414681667;
+const NORMALIZED_SCALE = 32768.0;
+const UV_SCALE = 2048.0; // best guess
 
 function getBits(n: number, pos: number, size: number) {
     return (n >> pos) & ((1 << size) - 1);
@@ -150,7 +146,7 @@ function getBit(n: number, pos: number) {
     return getBits(n, pos, 1) !== 0;
 }
 
-function getBitsRange(value: number, start: number = 0, length: number = 1): number {
+function getBitsRange32(value: number, start: number = 0, length: number = 1): number {
     let bit = value << 32 - (start + length);
     return bit >> 32 - length;
 }
@@ -208,7 +204,6 @@ export class DreamDropParser {
         this.offset = ctrtOffset;
         const ctrts: DreamDropCTRT[] = Array(ctrtCount);
         if (ctrtOffset > 0) {
-            console.log(ctrtOffset, ctrtCount);
             const ctrtInfo: CTRTInfo[] = Array(ctrtCount);
             for (let i = 0; i < ctrtCount; i++) {
                 const offset = this.getUint32();
@@ -222,6 +217,9 @@ export class DreamDropParser {
             for (let i = 0; i < ctrtCount; i++) {
                 const info = ctrtInfo[i];
                 this.offset = info.offset;
+                if (this.offset === 0) {
+                    continue;
+                }
                 const ctrtMagic = this.getUint32();
                 if (ctrtMagic !== MAGIC_CTRT) {
                     console.warn("Unknown CTRT magic", ctrtMagic);
@@ -242,10 +240,13 @@ export class DreamDropParser {
 
         const pmos: DreamDropPMO[] = Array(pmoCount);
         for (let i = 0; i < pmoCount; i++) {
+            if (pmoInfo[i].offset === 0) {
+                continue;
+            }
             pmos[i] = this.parsePMO(pmoInfo[i]);
         }
 
-        return { pmos, ctrts };
+        return { pmos: pmos.filter(p => p !== undefined), ctrts: ctrts.filter(t => t !== undefined) };
     }
 
     private parsePMO(info: PMOInfo): DreamDropPMO {
@@ -274,7 +275,7 @@ export class DreamDropParser {
             const scrollX = this.getFloat();
             const scrollY = this.getFloat();
             this.offset += 8;
-            materials[i] = { textureOffset, textureName, scrollX, scrollY };
+            materials[i] = { textureName, scrollX, scrollY };
         }
 
         const mainShapeOffset = this.getUint32();
@@ -320,7 +321,52 @@ export class DreamDropParser {
             this.parsePMOVertices(secondShapes[i]);
         }
 
-        return { position: info.position, rotation: info.rotation, scale: info.scale, headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials, mainShapes, secondShapes };
+        let skeleton;
+        if (skeletonOffset > 0) {
+            this.offset = info.offset + skeletonOffset + 8;
+            const boneCount = this.getUshort();
+            this.offset += 2;
+            const skinnedBoneCount = this.getUshort();
+            const nStdBone = this.getUshort();
+            const bones: PMOBone[] = Array(boneCount);
+            for (let i = 0; i < boneCount; i++) {
+                const index = this.getUshort();
+                this.offset += 2;
+                const parentIndex = this.getUshort();
+                this.offset += 2;
+                const skinnedIndex = this.getUshort();
+                this.offset += 6;
+                const jointName = this.getString(16);
+                const m1 = Array(16);
+                const m2 = Array(16);
+                for (let j = 0; j < m1.length; j++) {
+                    m1[j] = this.getFloat();
+                }
+                for (let j = 0; j < m1.length; j++) {
+                    m2[j] = this.getFloat();
+                }
+                const transform = mat4.fromValues(
+                    m1[0], m1[1], m1[2], m1[3],
+                    m1[4], m1[5], m1[6], m1[7],
+                    m1[8], m1[9], m1[10], m1[11],
+                    m1[12], m1[13], m1[14], m1[15]
+                );
+                const inverseTransform = mat4.fromValues(
+                    m2[0], m2[1], m2[2], m2[3],
+                    m2[4], m2[5], m2[6], m2[7],
+                    m2[8], m2[9], m2[10], m2[11],
+                    m2[12], m2[13], m2[14], m2[15]
+                );
+                bones[i] = { index, parentIndex, skinnedIndex, jointName, transform, inverseTransform };
+            }
+            skeleton = { skinnedBoneCount, nStdBone, bones };
+        }
+
+        return {
+            position: info.position, rotation: info.rotation, scale: info.scale,
+            headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials,
+            mainShapes, secondShapes, skeleton
+        };
     }
 
     private parsePMOShape(): DreamDropPMOShape {
@@ -342,67 +388,41 @@ export class DreamDropParser {
 
     private parsePMOVertices(shape: DreamDropPMOShape) {
         for (let i = 0; i < shape.vertexCount; i++) {
-            const uv = vec2.fromValues(0, 0);
-            const color = vec4.fromValues(0, 0, 0, 0);
-            const position = vec3.fromValues(0, 0, 0);
-            const weight = vec4.fromValues(0, 0, 0, 0);
-            const joint = vec4.fromValues(0, 0, 0, 0);
+            shape.uvs[i * 2] = this.getShort() / UV_SCALE;
+            shape.uvs[(i * 2) + 1] = 1 - this.getShort() / UV_SCALE; // flip
 
-            // uv format is always (confirm?) 16 bit norm
-            uv[0] = this.getShort() / 32768.0;
-            uv[1] = this.getShort() / 32768.0;
-            // treat colors as rgba8888, need to confirm. Might be abgr8888
-            color[0] = this.getByte() / 255.0;
-            color[1] = this.getByte() / 255.0;
-            color[2] = this.getByte() / 255.0;
-            color[3] = this.getByte() / 255.0;
+            shape.colors[i * 4] = this.getByte() / 255.0;
+            shape.colors[(i * 4) + 1] = this.getByte() / 255.0;
+            shape.colors[(i * 4) + 2] = this.getByte() / 255.0;
+            shape.colors[(i * 4) + 3] = this.getByte() / 255.0;
 
             switch (shape.vertexSizeBytes) {
                 case 14:
-                    position[0] = this.getShort() / 32768.0;
-                    position[1] = this.getShort() / 32768.0;
-                    position[2] = this.getShort() / 32768.0;
-                    break;
-                case 20:
-                    position[0] = this.getFloat();
-                    position[1] = this.getFloat();
-                    position[2] = this.getFloat();
-                    break;
                 case 22:
                 case 26:
-                    position[0] = this.getShort() / 32768.0;
-                    position[1] = this.getShort() / 32768.0;
-                    position[2] = this.getShort() / 32768.0;
-                    weight[0] = this.getByte();
-                    weight[1] = this.getByte();
-                    weight[2] = this.getByte();
-                    weight[3] = this.getByte();
-                    joint[0] = this.getByte();
-                    joint[1] = this.getByte();
-                    joint[2] = this.getByte();
-                    joint[3] = this.getByte();
-                    if (shape.vertexSizeBytes === 26) {
-                        this.offset += 4;
+                    shape.vertices[i * 3] = this.getShort() / NORMALIZED_SCALE;
+                    shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_SCALE;
+                    shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_SCALE;
+                    if (shape.vertexSizeBytes >= 22) {
+                        this.offset += 8;
+                        if (shape.vertexSizeBytes === 26) {
+                            this.offset += 4;
+                        }
                     }
                     break;
+                case 20:
                 case 28:
-                    position[0] = this.getFloat();
-                    position[1] = this.getFloat();
-                    position[2] = this.getFloat();
-                    weight[0] = this.getByte();
-                    weight[1] = this.getByte();
-                    weight[2] = this.getByte();
-                    weight[3] = this.getByte();
-                    joint[0] = this.getByte();
-                    joint[1] = this.getByte();
-                    joint[2] = this.getByte();
-                    joint[3] = this.getByte();
+                    shape.vertices[i * 3] = this.getFloat() / NORMALIZED_SCALE;
+                    shape.vertices[(i * 3) + 1] = this.getFloat() / NORMALIZED_SCALE;
+                    shape.vertices[(i * 3) + 2] = this.getFloat() / NORMALIZED_SCALE;
+                    if (shape.vertexSizeBytes === 28) {
+                        this.offset += 8;
+                    }
                     break;
                 default:
                     console.warn("Unimplemented vertex size", shape.vertexSizeBytes);
                     break;
             }
-            shape.vertices[i] = { uv, color, position, weight, joint };
         }
     }
 
