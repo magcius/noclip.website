@@ -45,12 +45,17 @@ interface PMOInfo {
  * Model data from a PMO for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropPMO {
-    modelCount: number;
-    flag: number;
-    scale: number;
+    id: number;
+    position: vec3;
+    rotation: vec3;
+    scale: vec3;
+    scaleNum: number;
+    flags: number;
+    headerFlags: number;
     bbox: number[];
     materials: PMOMaterial[];
-    model: PMOModel;
+    mainShapes: DreamDropPMOShape[];
+    secondShapes: DreamDropPMOShape[];
 }
 
 interface PMOMaterial {
@@ -60,36 +65,59 @@ interface PMOMaterial {
     scrollY: number;
 }
 
-interface PMOModel {
-    mainShapes: PMOShape[];
-    secondShapes: PMOShape[];
-}
-
-class PMOShape {
+export class DreamDropPMOShape {
     public vertices: PMOVertex[];
-    public isTriangleStrip: boolean;
-    public uvFormat: PMOVertexFormat;
-    public normalFormat: PMOVertexFormat;
-    public positionFormat: PMOVertexFormat;
-    public weightFormat: PMOVertexFormat;
-    public indicesFormat: number;
-    public skinWeightsCount: number;
-    public morphWeightsCount: number;
-    public uniformDiffuse: boolean;
+    public indices: number[];
+    // public isTriangleStrip: boolean;
+    // public uvFormat: PMOVertexFormat;
+    // public normalFormat: PMOVertexFormat;
+    // public positionFormat: PMOVertexFormat;
+    // public weightFormat: PMOVertexFormat;
+    // public indicesFormat: number;
+    // public skinWeightsCount: number;
+    // public morphWeightsCount: number;
+    // public uniformDiffuse: boolean;
     public primitiveFormat: PMOPrimitiveFormat;
 
     constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public group: number, public triangleStripCount: number, public attribute: number, public boneIndices: number[], public diffuseColor: number) {
         this.vertices = Array(vertexCount);
-        this.isTriangleStrip = getBit(vertexFlags, 30);
-        this.uvFormat = getBitsRange(vertexFlags, 0, 2) as PMOVertexFormat;
-        this.normalFormat = getBitsRange(vertexFlags, 5, 2) as PMOVertexFormat;
-        this.positionFormat = getBitsRange(vertexFlags, 7, 2) as PMOVertexFormat;
-        this.weightFormat = getBitsRange(vertexFlags, 9, 2) as PMOVertexFormat;
-        this.indicesFormat = getBitsRange(vertexFlags, 11, 2);
-        this.skinWeightsCount = getBitsRange(vertexFlags, 14, 3);
-        this.morphWeightsCount = getBitsRange(vertexFlags, 18, 3);
-        this.uniformDiffuse = getBitsRange(vertexFlags, 24, 1) === 1;
+        // this.isTriangleStrip = getBit(vertexFlags, 30);
+        // this.uvFormat = getBitsRange(vertexFlags, 0, 2) as PMOVertexFormat;
+        // this.normalFormat = getBitsRange(vertexFlags, 5, 2) as PMOVertexFormat;
+        // this.positionFormat = getBitsRange(vertexFlags, 7, 2) as PMOVertexFormat;
+        // this.weightFormat = getBitsRange(vertexFlags, 9, 2) as PMOVertexFormat;
+        // this.indicesFormat = getBitsRange(vertexFlags, 11, 2);
+        // this.skinWeightsCount = getBitsRange(vertexFlags, 14, 3);
+        // this.morphWeightsCount = getBitsRange(vertexFlags, 18, 3);
+        // this.uniformDiffuse = getBitsRange(vertexFlags, 24, 1) === 1;
         this.primitiveFormat = getBitsRange(vertexFlags, 28, 4) as PMOPrimitiveFormat;
+
+        this.indices = [];
+        switch (this.primitiveFormat) {
+            case PMOPrimitiveFormat.TRIANGLE_STRIP:
+                for (let i = 0; i < this.vertexCount - 2; i++) {
+                    if (i % 2 === 0) {
+                        this.indices.push(i);
+                        this.indices.push(i + 1);
+                        this.indices.push(i + 2);
+                    } else {
+                        this.indices.push(i + 1);
+                        this.indices.push(i);
+                        this.indices.push(i + 2);
+                    }
+                }
+                break;
+            case PMOPrimitiveFormat.TRIANGLE_LIST:
+                for (let i = 0; i < this.vertexCount - 2; i += 3) {
+                    this.indices.push(i);
+                    this.indices.push(i + 1);
+                    this.indices.push(i + 2);
+                }
+                break;
+            default:
+                console.warn("Unimplemented primitive format", this.primitiveFormat);
+                break;
+        }
     }
 }
 
@@ -101,18 +129,11 @@ interface PMOVertex {
     joint: vec4;
 }
 
-enum PMOVertexFormat {
-    NO_VERTEX,
-    NORMALIZED_8,
-    NORMALIZED_16,
-    FLOAT_32
-}
-
 enum PMOPrimitiveFormat {
     POINT,
     LINE,
     LINE_STRIP,
-    TRIANGLE,
+    TRIANGLE_LIST,
     TRIANGLE_STRIP,
     TRIANGLE_FAN,
     QUAD
@@ -185,34 +206,37 @@ export class DreamDropParser {
         }
 
         this.offset = ctrtOffset;
-        const ctrtInfo: CTRTInfo[] = Array(ctrtCount);
-        for (let i = 0; i < ctrtCount; i++) {
-            const offset = this.getUint32();
-            const name = this.getString(12);
-            const uvX = this.getFloat();
-            const uvY = this.getFloat();
-            this.offset += 8;
-            ctrtInfo[i] = { offset, name, uvX, uvY };
-        }
-
         const ctrts: DreamDropCTRT[] = Array(ctrtCount);
-        for (let i = 0; i < ctrtCount; i++) {
-            const info = ctrtInfo[i];
-            this.offset = info.offset;
-            const ctrtMagic = this.getUint32();
-            if (ctrtMagic !== MAGIC_CTRT) {
-                console.warn("Unknown CTRT magic", ctrtMagic);
-            } else {
-                this.offset = info.offset + 12;
-                const dataOffset = this.getUint32();
-                this.offset += 4;
-                const dataSize = this.getUint32();
-                this.offset += 4;
-                const format = this.getUint32() as DreamDropTextureFormat;
-                const width = this.getUshort();
-                const height = this.getUshort();
-                const data = this.buffer.slice(info.offset + dataOffset, info.offset + dataOffset + dataSize);
-                ctrts[i] = { name: info.name, width, height, format, data, uvX: info.uvX, uvY: info.uvY };
+        if (ctrtOffset > 0) {
+            console.log(ctrtOffset, ctrtCount);
+            const ctrtInfo: CTRTInfo[] = Array(ctrtCount);
+            for (let i = 0; i < ctrtCount; i++) {
+                const offset = this.getUint32();
+                const name = this.getString(12);
+                const uvX = this.getFloat();
+                const uvY = this.getFloat();
+                this.offset += 8;
+                ctrtInfo[i] = { offset, name, uvX, uvY };
+            }
+
+            for (let i = 0; i < ctrtCount; i++) {
+                const info = ctrtInfo[i];
+                this.offset = info.offset;
+                const ctrtMagic = this.getUint32();
+                if (ctrtMagic !== MAGIC_CTRT) {
+                    console.warn("Unknown CTRT magic", ctrtMagic);
+                } else {
+                    this.offset = info.offset + 12;
+                    const dataOffset = this.getUint32();
+                    this.offset += 4;
+                    const dataSize = this.getUint32();
+                    this.offset += 4;
+                    const format = this.getUint32() as DreamDropTextureFormat;
+                    const width = this.getUshort();
+                    const height = this.getUshort();
+                    const data = this.buffer.slice(info.offset + dataOffset, info.offset + dataOffset + dataSize);
+                    ctrts[i] = { name: info.name, width, height, format, data, uvX: info.uvX, uvY: info.uvY };
+                }
             }
         }
 
@@ -231,7 +255,7 @@ export class DreamDropParser {
         this.offset++;
         const materialCount = this.getByte();
         this.offset++;
-        const flag = this.getUshort();
+        const flags = this.getUshort();
         const skeletonOffset = this.getUint32();
         const modelOffset = this.getUint32();
         const polyCount = this.getUshort();
@@ -272,7 +296,7 @@ export class DreamDropParser {
             this.offset = info.offset + secondShapeOffset;
         }
 
-        const mainShapes: PMOShape[] = Array(mainShapeCount);
+        const mainShapes: DreamDropPMOShape[] = Array(mainShapeCount);
         for (let i = 0; i < mainShapeCount; i++) {
             mainShapes[i] = this.parsePMOShape();
         }
@@ -280,7 +304,7 @@ export class DreamDropParser {
             this.offset += 24;
         }
 
-        const secondShapes: PMOShape[] = Array(secondShapeCount);
+        const secondShapes: DreamDropPMOShape[] = Array(secondShapeCount);
         for (let i = 0; i < secondShapeCount; i++) {
             secondShapes[i] = this.parsePMOShape();
         }
@@ -296,12 +320,10 @@ export class DreamDropParser {
             this.parsePMOVertices(secondShapes[i]);
         }
 
-        const model = { mainShapes, secondShapes };
-
-        return { modelCount, flag, scale, bbox, materials, model };
+        return { position: info.position, rotation: info.rotation, scale: info.scale, headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials, mainShapes, secondShapes };
     }
 
-    private parsePMOShape(): PMOShape {
+    private parsePMOShape(): DreamDropPMOShape {
         const vertexCount = this.getUshort();
         const textureId = this.getByte();
         const vertexSizeBytes = this.getByte();
@@ -314,10 +336,11 @@ export class DreamDropParser {
             boneIndices[k] = this.getByte();
         }
         const diffuseColor = this.getInt32();
-        return new PMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, group, triangleStripCount, attribute, boneIndices, diffuseColor);
+
+        return new DreamDropPMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, group, triangleStripCount, attribute, boneIndices, diffuseColor);
     }
 
-    private parsePMOVertices(shape: PMOShape) {
+    private parsePMOVertices(shape: DreamDropPMOShape) {
         for (let i = 0; i < shape.vertexCount; i++) {
             const uv = vec2.fromValues(0, 0);
             const color = vec4.fromValues(0, 0, 0, 0);
@@ -325,12 +348,14 @@ export class DreamDropParser {
             const weight = vec4.fromValues(0, 0, 0, 0);
             const joint = vec4.fromValues(0, 0, 0, 0);
 
-            uv[0] = this.getShort();
-            uv[1] = this.getShort();
-            color[0] = this.getByte();
-            color[1] = this.getByte();
-            color[2] = this.getByte();
-            color[3] = this.getByte();
+            // uv format is always (confirm?) 16 bit norm
+            uv[0] = this.getShort() / 32768.0;
+            uv[1] = this.getShort() / 32768.0;
+            // treat colors as rgba8888, need to confirm. Might be abgr8888
+            color[0] = this.getByte() / 255.0;
+            color[1] = this.getByte() / 255.0;
+            color[2] = this.getByte() / 255.0;
+            color[3] = this.getByte() / 255.0;
 
             switch (shape.vertexSizeBytes) {
                 case 14:
@@ -386,6 +411,7 @@ export class DreamDropParser {
         for (let i = 0; i < length; i++) {
             n[i] = this.getByte();
         }
+
         return this.textDecoder.decode(n).trim().replaceAll("\x00", "");
     }
 
