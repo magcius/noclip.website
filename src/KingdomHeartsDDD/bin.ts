@@ -5,7 +5,7 @@ import { DreamDropTextureFormat } from "./texture";
 // Credit: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
 
 /**
- * Data from a PMP for _Kingdom Hearts 3D: Dream Drop Distance_
+ * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropPMP {
     pmos: DreamDropPMO[];
@@ -20,7 +20,7 @@ interface CTRTInfo {
 }
 
 /**
- * Texture data from a CTRT for _Kingdom Hearts 3D: Dream Drop Distance_
+ * Raw CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropCTRT {
     name: string;
@@ -42,7 +42,7 @@ interface PMOInfo {
 }
 
 /**
- * Model data from a PMO for _Kingdom Hearts 3D: Dream Drop Distance_
+ * Raw model for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropPMO {
     id: number;
@@ -54,8 +54,8 @@ export interface DreamDropPMO {
     headerFlags: number;
     bbox: number[];
     materials: PMOMaterial[];
-    mainShapes: DreamDropPMOShape[];
-    secondShapes: DreamDropPMOShape[];
+    opaqueShapes: DreamDropPMOShape[];
+    translucentShapes: DreamDropPMOShape[];
     skeleton?: PMOSkeleton;
 }
 
@@ -90,6 +90,9 @@ enum PMOPrimitiveFormat {
     QUAD
 }
 
+/**
+ * Raw model shape for _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export class DreamDropPMOShape {
     public vertices: Float32Array;
     public colors: Float32Array;
@@ -282,8 +285,8 @@ export class DreamDropParser {
         const secondShapeOffset = this.getUint32();
         const mainVertexCount = this.getUint32();
         const secondVertexCount = this.getUint32();
-        const mainShapeCount = this.getUint32();
-        const secondShapeCount = this.getUint32();
+        const opaqueShapeCount = this.getUint32();
+        const translucentShapeCount = this.getUint32();
         const vertexDataOffset = this.getUint32();
         const vertexDataSize = this.getUint32();
 
@@ -297,28 +300,28 @@ export class DreamDropParser {
             this.offset = info.offset + secondShapeOffset;
         }
 
-        const mainShapes: DreamDropPMOShape[] = Array(mainShapeCount);
-        for (let i = 0; i < mainShapeCount; i++) {
-            mainShapes[i] = this.parsePMOShape();
+        const opaqueShapes: DreamDropPMOShape[] = Array(opaqueShapeCount);
+        for (let i = 0; i < opaqueShapeCount; i++) {
+            opaqueShapes[i] = this.parsePMOShape();
         }
-        if (mainShapeCount > 0) {
+        if (opaqueShapeCount > 0) {
             this.offset += 24;
         }
 
-        const secondShapes: DreamDropPMOShape[] = Array(secondShapeCount);
-        for (let i = 0; i < secondShapeCount; i++) {
-            secondShapes[i] = this.parsePMOShape();
+        const translucentShapes: DreamDropPMOShape[] = Array(translucentShapeCount);
+        for (let i = 0; i < translucentShapeCount; i++) {
+            translucentShapes[i] = this.parsePMOShape();
         }
-        if (secondShapeCount > 0) {
+        if (translucentShapeCount > 0) {
             this.offset += 24;
         }
 
         this.offset = info.offset + vertexDataOffset;
-        for (let i = 0; i < mainShapeCount; i++) {
-            this.parsePMOVertices(mainShapes[i]);
+        for (let i = 0; i < opaqueShapeCount; i++) {
+            this.parsePMOVertices(opaqueShapes[i]);
         }
-        for (let i = 0; i < secondShapeCount; i++) {
-            this.parsePMOVertices(secondShapes[i]);
+        for (let i = 0; i < translucentShapeCount; i++) {
+            this.parsePMOVertices(translucentShapes[i]);
         }
 
         let skeleton;
@@ -365,7 +368,7 @@ export class DreamDropParser {
         return {
             position: info.position, rotation: info.rotation, scale: info.scale,
             headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials,
-            mainShapes, secondShapes, skeleton
+            opaqueShapes, translucentShapes, skeleton
         };
     }
 

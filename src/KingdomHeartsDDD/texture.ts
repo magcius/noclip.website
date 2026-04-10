@@ -14,14 +14,14 @@ export enum DreamDropTextureFormat {
     RGB_888,
     RGBA_5551,
     RGB_565,
-    RGBA_4444,
+    RGBA_4444, // unused
     LA8,
-    HILO8,
+    HILO8, // unused
     L8,
     A8,
-    LA4,
-    L4,
-    A4,
+    LA4, // unused
+    L4, // unused
+    A4, // unused
     ETC1,
     ETC1A4
 }
@@ -47,7 +47,7 @@ export class DreamDropTexture {
 }
 
 /**
- * Decodes texture data for _Kingdom Hearts 3D: Dream Drop Distance_
+ * Decodes CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     switch (ctrt.format) {

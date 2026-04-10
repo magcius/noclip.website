@@ -2,7 +2,7 @@ import { mat4 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
@@ -11,6 +11,8 @@ import { ViewerRenderInput } from "../viewer";
 import { DreamDropPMO, DreamDropPMOShape } from "./bin";
 import { computeModelMatrixSRT } from "../MathHelpers";
 import { DreamDropTexture } from "./texture";
+import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 class Shader extends DeviceProgram {
     public static a_Position = 0;
@@ -51,7 +53,6 @@ void main() {
     v_Color = a_Color;
     v_UV = a_UV;
     gl_Position = UnpackMatrix(u_Projection) * UnpackMatrix(u_Shift) * vec4(a_Position, 1.0);
-    // gl_Position = UnpackMatrix(u_Projection) * vec4(a_Position, 1.0);
 }
 #endif
 
@@ -62,7 +63,8 @@ void main() {
         if (color.a < 0.1) {
             discard;
         }
-        color *= v_Color;
+        vec3 ambient = vec3(0.075);
+        color *= vec4(clamp(v_Color.xyz + ambient, 0.0, 1.0), 1.0);
         gl_FragColor = color;
     } else {
         gl_FragColor = v_Color;
@@ -70,23 +72,25 @@ void main() {
 }
 #endif
     `;
-
-    constructor() {
-        super();
-    }
 }
 
 const WORLD_SCALE = 200.0;
 const INVALID_TEXTURE_INDEX = 0xFF;
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
+const SCRATCH_SKY_MAT = mat4.create();
+const SCRATCH_CLIP = mat4.create();
 
+/**
+ * Renderer for a room from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export class DreamDropRoomRenderer implements Destroyable {
-    private modelRenderers: RoomModelRenderer[];
+    private parts: RoomPartRenderer[];
+    private skyboxParts: RoomSkyboxRenderer[];
     private gfxSampler: GfxSampler;
     private gfxInputLayout: GfxInputLayout;
     private gfxProgram: GfxProgram;
 
-    constructor(cache: GfxRenderCache, pmos: DreamDropPMO[], textures: DreamDropTexture[]) {
+    constructor(cache: GfxRenderCache, pmos: DreamDropPMO[], textures: DreamDropTexture[], skyboxIds: number[]) {
         this.gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
@@ -109,13 +113,18 @@ export class DreamDropRoomRenderer implements Destroyable {
         });
         this.gfxProgram = cache.createProgram(new Shader());
 
-        this.modelRenderers = Array(pmos.length);
+        this.parts = [];
+        this.skyboxParts = [];
         for (let i = 0; i < pmos.length; i++) {
-            const t: DreamDropTexture[] = [];
+            const materialTextures: GfxTexture[] = [];
             for (const m of pmos[i].materials) {
-                t.push(textures.find(ddt => ddt.name === m.textureName)!);
+                materialTextures.push(textures.find(ddt => ddt.name === m.textureName)!.gfxTexture);
             }
-            this.modelRenderers[i] = new RoomModelRenderer(cache, pmos[i], t);
+            if (skyboxIds.includes(pmos[i].id)) {
+                this.skyboxParts.push(new RoomSkyboxRenderer(cache, pmos[i], materialTextures));
+            } else {
+                this.parts.push(new RoomPartRenderer(cache, pmos[i], materialTextures));
+            }
         }
     }
 
@@ -126,21 +135,41 @@ export class DreamDropRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
+        if (this.skyboxParts.length > 0) {
+            const skyTemplate = renderHelper.renderInstManager.pushTemplate();
+
+            let skyOffset = skyTemplate.allocateUniformBuffer(Shader.ub_SceneParams, 16);
+            const skyUniformBuffer = skyTemplate.mapUniformBufferF32(Shader.ub_SceneParams);
+            mat4.copy(SCRATCH_SKY_MAT, viewerInput.camera.viewMatrix);
+            SCRATCH_SKY_MAT[12] = 0;
+            SCRATCH_SKY_MAT[13] = 0;
+            SCRATCH_SKY_MAT[14] = 0;
+            mat4.mul(SCRATCH_CLIP, viewerInput.camera.projectionMatrix, SCRATCH_SKY_MAT);
+            // u_Projection (16)
+            skyOffset += fillMatrix4x4(skyUniformBuffer, skyOffset, SCRATCH_CLIP);
+
+            for (const part of this.skyboxParts) {
+                part.prepareToRender(device, renderHelper, this.gfxInputLayout, this.gfxSampler);
+            }
+
+            renderHelper.renderInstManager.popTemplate();
+        }
+
         let offset = template.allocateUniformBuffer(Shader.ub_SceneParams, 16);
         const uniformBuffer = template.mapUniformBufferF32(Shader.ub_SceneParams);
         // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.clipFromWorldMatrix);
 
-        for (const mr of this.modelRenderers) {
-            mr.prepareToRender(device, renderHelper, this.gfxInputLayout, this.gfxSampler);
+        for (const part of this.parts) {
+            part.prepareToRender(device, renderHelper, this.gfxInputLayout, this.gfxSampler);
         }
 
         renderHelper.renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice) {
-        for (const mr of this.modelRenderers) {
-            mr.destroy(device);
+        for (const part of [...this.skyboxParts, ...this.parts]) {
+            part.destroy(device);
         }
     }
 }
@@ -149,9 +178,12 @@ interface DrawCall {
     textureIndex: number;
     indexCount: number;
     indexOffset: number;
+    isTranslucent: boolean;
+    sortKey: number;
+    megaStateFlags: Partial<GfxMegaStateDescriptor>;
 }
 
-interface RoomData {
+interface RoomPartData {
     indices: Uint32Array;
     vertices: Float32Array;
     colors: Float32Array;
@@ -159,23 +191,22 @@ interface RoomData {
     drawCalls: DrawCall[];
 }
 
-class RoomModelRenderer implements Destroyable {
-    private drawCalls: DrawCall[];
-    private shiftMatrix: mat4;
-    private indexBufferDescriptor: GfxIndexBufferDescriptor;
-    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+class RoomPartRenderer implements Destroyable {
+    protected drawCalls: DrawCall[];
+    protected shiftMatrix: mat4;
+    protected indexBufferDescriptor: GfxIndexBufferDescriptor;
+    protected vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
-    constructor(cache: GfxRenderCache, pmo: DreamDropPMO, private textures: DreamDropTexture[]) {
-        const shapes = [...pmo.mainShapes, ...pmo.secondShapes];
-        const roomData = this.buildRoomData(shapes);
-        this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, roomData.indices.buffer), byteOffset: 0 };
+    constructor(cache: GfxRenderCache, model: DreamDropPMO, protected textures: GfxTexture[]) {
+        const data = this.buildData(model.opaqueShapes, model.translucentShapes);
+        this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, data.indices.buffer), byteOffset: 0 };
         this.vertexBufferDescriptors = [
-            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, roomData.vertices.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, roomData.colors.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, roomData.uvs.buffer), byteOffset: 0 }
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, data.vertices.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, data.colors.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, data.uvs.buffer), byteOffset: 0 }
         ];
-        this.drawCalls = roomData.drawCalls;
-        this.shiftMatrix = this.computeShiftMatrix(pmo);
+        this.drawCalls = data.drawCalls;
+        this.shiftMatrix = this.computeShiftMatrix(model);
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, gfxInputLayout: GfxInputLayout, gfxSampler: GfxSampler) {
@@ -194,12 +225,14 @@ class RoomModelRenderer implements Destroyable {
             const d = renderInst.mapUniformBufferF32(Shader.ub_CallParams);
             if (drawCall.textureIndex !== INVALID_TEXTURE_INDEX) {
                 d[o++] = 1.0;
-                renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.textures[drawCall.textureIndex].gfxTexture, gfxSampler }]);
+                renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.textures[drawCall.textureIndex], gfxSampler }]);
             } else {
                 d[o++] = 0.0;
             }
-
+            renderInst.setMegaStateFlags(drawCall.megaStateFlags);
+            renderInst.sortKey = drawCall.sortKey;
             renderInst.setDrawCount(drawCall.indexCount, drawCall.indexOffset);
+
             renderHelper.renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -213,13 +246,13 @@ class RoomModelRenderer implements Destroyable {
         }
     }
 
-    private buildRoomData(shapes: DreamDropPMOShape[]): RoomData {
+    private buildData(opaqueShapes: DreamDropPMOShape[], translucentShapes: DreamDropPMOShape[]): RoomPartData {
         let vertexOffset = 0;
         const vertices: number[] = [];
         const colors: number[] = [];
         const uvs: number[] = [];
         const indexGroups = new Map<number, number[]>();
-        for (const shape of shapes) {
+        for (const shape of [...opaqueShapes, ...translucentShapes]) {
             const offsetBase = vertexOffset;
             vertices.push(...shape.vertices);
             colors.push(...shape.colors);
@@ -234,11 +267,23 @@ class RoomModelRenderer implements Destroyable {
 
         const drawCalls: DrawCall[] = [];
         const indices: number[] = [];
+        const translucentTextureIndices = translucentShapes.map(s => s.textureIndex);
         indexGroups.forEach((groupIndices, textureIndex) => {
+            const isTranslucent = translucentTextureIndices.includes(textureIndex);
+            const megaStateFlags = {};
+            if (isTranslucent) {
+                setAttachmentStateSimple(megaStateFlags, {
+                    blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                });
+            }
             const drawCall = {
                 textureIndex: this.textures[textureIndex] ? textureIndex : INVALID_TEXTURE_INDEX,
                 indexOffset: indices.length,
-                indexCount: groupIndices.length
+                indexCount: groupIndices.length,
+                isTranslucent,
+                sortKey: makeSortKey(isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0),
+                megaStateFlags
             };
             indices.push(...groupIndices);
             drawCalls.push(drawCall);
@@ -247,13 +292,51 @@ class RoomModelRenderer implements Destroyable {
         return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), colors: new Float32Array(colors), uvs: new Float32Array(uvs), drawCalls };
     }
 
-    private computeShiftMatrix(pmo: DreamDropPMO) {
+    protected computeShiftMatrix(model: DreamDropPMO) {
         const srt = mat4.create();
         computeModelMatrixSRT(srt,
-            pmo.scale[0] * WORLD_SCALE, pmo.scale[1] * WORLD_SCALE, pmo.scale[2] * WORLD_SCALE,
-            pmo.rotation[0], pmo.rotation[1], pmo.rotation[2],
-            pmo.position[0] * WORLD_SCALE, pmo.position[1] * WORLD_SCALE, pmo.position[2] * WORLD_SCALE
+            model.scale[0] * WORLD_SCALE, model.scale[1] * WORLD_SCALE, model.scale[2] * WORLD_SCALE,
+            model.rotation[0], model.rotation[1], model.rotation[2],
+            model.position[0] * WORLD_SCALE, model.position[1] * WORLD_SCALE, model.position[2] * WORLD_SCALE
         );
         return srt;
+    }
+}
+
+class RoomSkyboxRenderer extends RoomPartRenderer {
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+
+    constructor(cache: GfxRenderCache, model: DreamDropPMO, textures: GfxTexture[]) {
+        super(cache, model, textures);
+        this.megaStateFlags = {
+            depthCompare: GfxCompareMode.Always,
+            depthWrite: false
+        };
+    }
+
+    public override prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, gfxInputLayout: GfxInputLayout, gfxSampler: GfxSampler) {
+        const template = renderHelper.renderInstManager.pushTemplate();
+
+        let offset = template.allocateUniformBuffer(Shader.ub_ModelParams, 16);
+        const uniformBuffer = template.mapUniformBufferF32(Shader.ub_ModelParams);
+        // u_Shift (16)
+        offset += fillMatrix4x4(uniformBuffer, offset, this.shiftMatrix);
+
+        template.setVertexInput(gfxInputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        for (const drawCall of this.drawCalls) {
+            const renderInst = renderHelper.renderInstManager.newRenderInst();
+
+            let o = renderInst.allocateUniformBuffer(Shader.ub_CallParams, 1);
+            const d = renderInst.mapUniformBufferF32(Shader.ub_CallParams);
+            d[o++] = 1.0;
+
+            renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.textures[drawCall.textureIndex], gfxSampler }]);
+            renderInst.setMegaStateFlags(this.megaStateFlags);
+            renderInst.setDrawCount(drawCall.indexCount, drawCall.indexOffset);
+
+            renderHelper.renderInstManager.submitRenderInst(renderInst);
+        }
+
+        renderHelper.renderInstManager.popTemplate();
     }
 }
