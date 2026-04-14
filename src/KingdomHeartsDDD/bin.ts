@@ -53,13 +53,12 @@ export interface DreamDropPMO {
     flags: number;
     headerFlags: number;
     bbox: number[];
-    materials: PMOMaterial[];
-    opaqueShapes: DreamDropPMOShape[];
-    translucentShapes: DreamDropPMOShape[];
+    materials: DreamDropPMOMaterial[];
+    shapes: DreamDropPMOShape[];
     skeleton?: PMOSkeleton;
 }
 
-interface PMOMaterial {
+export interface DreamDropPMOMaterial {
     textureName: string;
     scrollX: number;
     scrollY: number;
@@ -88,6 +87,12 @@ enum PMOPrimitiveFormat {
     TRIANGLE_STRIP,
     TRIANGLE_FAN,
     QUAD
+}
+
+export enum DreamDropShapeAttributeBlend {
+    TRANSLUCENT = 2,
+    TRANSLUCENT2 = 3,
+    ADDITIVE = 4
 }
 
 /**
@@ -271,7 +276,7 @@ export class DreamDropParser {
             bbox[i] = this.getFloat();
         }
 
-        const materials: PMOMaterial[] = Array(materialCount);
+        const materials: DreamDropPMOMaterial[] = Array(materialCount);
         for (let i = 0; i < materialCount; i++) {
             const textureOffset = this.getUint32();
             const textureName = this.getString(12);
@@ -368,7 +373,7 @@ export class DreamDropParser {
         return {
             position: info.position, rotation: info.rotation, scale: info.scale,
             headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials,
-            opaqueShapes, translucentShapes, skeleton
+            shapes: [...opaqueShapes, ...translucentShapes], skeleton
         };
     }
 

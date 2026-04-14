@@ -49,7 +49,7 @@ export class DreamDropTexture {
 /**
  * Decodes CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
+export function dreamDropDecodeCTRT(ctrt: DreamDropCTRT): Uint8Array {
     switch (ctrt.format) {
         case DreamDropTextureFormat.RGBA_8888:
             return decodeRGBA8888(ctrt);
@@ -75,7 +75,7 @@ export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     }
 }
 
-export function translateDreamDropTextureFormatString(format: DreamDropTextureFormat) {
+export function dreamDropTranslateTextureFormat(format: DreamDropTextureFormat): string {
     switch (format) {
         case DreamDropTextureFormat.RGBA_8888: return "RGBA_8888";
         case DreamDropTextureFormat.RGB_888: return "RGB_888";
