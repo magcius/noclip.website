@@ -146,6 +146,7 @@ export class OrigamiTextureHolder extends TextureHolder {
             keepCompressed = false;
         }
 
+        // assumes that valid/invalid mips are sequential
         let mips = 0;
         for (let m = 0; m < texture.textureDataArray[0].mipBuffers.length; m++) {
             mips += device.queryTextureFormatSupported(gfxFormat, Math.max(texture.width >>> m, 1), Math.max(texture.height >>> m, 1)) ? 1 : 0;

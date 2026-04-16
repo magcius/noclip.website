@@ -20,6 +20,7 @@ import { getOrigamiLevelConfig, OrigamiLevelConfig } from "./level_config.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { getOrigamiModelConfig } from "./model_config.js";
 import { LayerPanel, Panel } from "../ui.js";
+import { CameraController } from "../Camera.js";
 
 interface LevelObjectInstances {
     mobjInstances: OrigamiMobjInstance[];
@@ -126,6 +127,10 @@ class OrigamiRenderer implements SceneGfx {
         const layersPanel = new LayerPanel();
         layersPanel.setLayers(this.modelRenderers);
         return [layersPanel];
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.02);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
