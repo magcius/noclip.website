@@ -1124,7 +1124,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Gates on Skyloft that block doors
         else if (name === 'DmtGate'){
             const type = (params1>>> 8) & 0xF;
-            const typeName = 'StageF000'+['Gate', 'GodDoor', 'Shutter', 'Gate'][type];
+            const typeName = ['StageF000Gate', 'StageF000GodDoor', 'StageF000Shutter', 'StageF400Gate'][type];
             const m = spawnModelFromNames('Stage', typeName);
             console.info('Revist DmtGate');
         }
