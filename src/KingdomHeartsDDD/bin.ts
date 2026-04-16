@@ -105,7 +105,7 @@ export class DreamDropPMOShape {
     public indices: Uint32Array;
     public primitiveFormat: PMOPrimitiveFormat;
 
-    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public group: number, public triangleStripCount: number, public attribute: number, public boneIndices: number[], public diffuseColor: number) {
+    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public attribute: number) {
         this.vertices = new Float32Array(vertexCount * 3);
         this.colors = new Float32Array(vertexCount * 4);
         this.uvs = new Float32Array(vertexCount * 2);
@@ -386,12 +386,12 @@ export class DreamDropParser {
         const triangleStripCount = this.getByte();
         const attribute = this.getUshort();
         const boneIndices = Array(8);
-        for (let k = 0; k < boneIndices.length; k++) {
-            boneIndices[k] = this.getByte();
+        for (let i = 0; i < boneIndices.length; i++) {
+            boneIndices[i] = this.getByte();
         }
-        const diffuseColor = this.getInt32();
+        const unkColor = this.getInt32(); // openkh says diffuse, doesn't look like it though
 
-        return new DreamDropPMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, group, triangleStripCount, attribute, boneIndices, diffuseColor);
+        return new DreamDropPMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, attribute);
     }
 
     private parsePMOVertices(shape: DreamDropPMOShape) {

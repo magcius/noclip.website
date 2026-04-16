@@ -1,4 +1,4 @@
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -52,8 +52,8 @@ class Renderer implements SceneGfx {
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
-        const mainColorTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor), "Main Color");
-        const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor), "Main Depth");
+        const mainColorTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Color");
+        const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Depth");
         builder.pushPass((pass) => {
             pass.setDebugName("Main");
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -111,23 +111,23 @@ const sceneDescs = [
     new Room("di_01", "Beach (Day)"),
     new Room("di_02", "Beach (Evening)"),
     new Room("di_03", "Beach (Night)"),
-    new Room("di_05", "Main Island"),
+    new Room("di_05", "Phantom Ursula"),
     new Room("di_60", "Ocean"),
     "Traverse Town", // tw = the world ends with you
     new Room("tw_01", "First District"),
     new Room("tw_02", "Second District"),
     new Room("tw_03", "Third District"),
+    new Room("tw_14", "Third District"),
     new Room("tw_04", "Fourth District"),
     new Room("tw_05", "Fifth District"),
-    new Room("tw_06", "Garden"),
-    new Room("tw_07", "Post Office"),
-    new Room("tw_08", "Back Streets"),
-    new Room("tw_09", "Fountain Plaza"),
     new Room("tw_10", "Fifth District"),
-    new Room("tw_11", "Garden"),
+    new Room("tw_06", "Garden"),
+    new Room("tw_11", "Garden (Boss)"),
+    new Room("tw_08", "Back Streets"),
+    new Room("tw_07", "Post Office"),
+    new Room("tw_09", "Fountain Plaza"),
     new Room("tw_12", "Fountain Plaza (Boss)"),
     new Room("tw_13", "Fountain Plaza (Unfinished)"),
-    new Room("tw_14", "Third District"),
     new Room("tw_60", "Dive (Sora)"),
     new Room("tw_61", "Dive (Riku)"),
     "La Cité des Cloches", // nd = notre-dame
@@ -139,7 +139,7 @@ const sceneDescs = [
     new Room("nd_03", "Nave"),
     new Room("nd_15", "Nave (Burning)"),
     new Room("nd_04", "Bell Tower"),
-    new Room("nd_16", "Bell Tower (Burning)"),
+    new Room("nd_16", "Bell Tower"),
     new Room("nd_09", "Court of Miracles"),
     new Room("nd_20", "Court of Miracles (Unfinished)"),
     new Room("nd_11", "Bridge"),

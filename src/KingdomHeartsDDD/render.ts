@@ -64,13 +64,11 @@ void main() {
 #ifdef FRAG
 void main() {
     if (u_HasTexture > 0.1) {
-        vec4 color = texture(SAMPLER_2D(u_Texture), v_UV);
-        if (color.a < 0.1) {
+        vec4 texColor = texture(SAMPLER_2D(u_Texture), v_UV);
+        if (texColor.a < 0.1) {
             discard;
         }
-        vec3 ambient = vec3(0.075);
-        color *= vec4(clamp(v_Color.xyz + ambient, 0.0, 1.0), 1.0);
-        gl_FragColor = color;
+        gl_FragColor = texColor * v_Color;
     } else {
         gl_FragColor = v_Color;
     }
