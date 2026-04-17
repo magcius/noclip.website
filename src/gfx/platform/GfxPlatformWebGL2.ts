@@ -2208,7 +2208,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _applyStencil(): void {
         if (this._currentStencilRef === null)
             return;
-        this.gl.stencilFunc(this._currentMegaState.stencilCompare, this._currentStencilRef, 0xFF);
+        this.gl.stencilFunc(translateCompareMode(this._currentMegaState.stencilCompare), this._currentStencilRef, 0xFF);
     }
 
     private _setMegaState(newMegaState: GfxMegaStateDescriptor): void {
