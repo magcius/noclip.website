@@ -368,17 +368,41 @@ export abstract class ScrollSelect implements Widget {
                         outer.focus();
                 };
             } else if (item.type === ScrollSelectItemType.Header) {
+                outer.dataset.header = '1';
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('header');
                 textSpan.style.fontWeight = 'bold';
                 textSpan.style.lineHeight = `36px`;
                 textSpan.style.textShadow = `0 0 8px black`;
-                textSpan.style.paddingLeft = `8px`;
                 textSpan.style.verticalAlign = `baseline`;
+                const expandButton = document.createElement('span');
+                expandButton.textContent = `-`;
+                expandButton.style.display = `inline-block`;
+                expandButton.style.paddingRight = `8px`;
+                expandButton.style.width = `8px`;
+                expandButton.style.cursor = `pointer`;
+                let expanded = true;
+                const setExpanded = (v: boolean) => {
+                    expanded = v;
+                    expandButton.textContent = expanded ? `-` : `+`;
+                    for (let sib = outer.nextElementSibling; ; sib = sib?.nextElementSibling ?? null) {
+                        if (sib === null)
+                            break;
+                        const sibH = sib as HTMLElement;
+                        if (sibH.dataset.header)
+                            break;
+                        sibH.style.display = expanded ? `block` : `none`;
+                    }
+                };
+                expandButton.onclick = () => {
+                    setExpanded(!expanded);
+                };
+                textSpan.appendChild(expandButton);
+
                 if (item.html !== undefined)
                     textSpan.appendChild(item.html);
                 else if (item.name !== undefined)
-                    textSpan.textContent = item.name;
+                    textSpan.appendChild(document.createTextNode(item.name));
                 else
                     throw "whoops";
                 outer.appendChild(textSpan);
