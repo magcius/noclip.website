@@ -75,25 +75,6 @@ export function dreamDropDecodeCTRT(ctrt: DreamDropCTRT): Uint8Array {
     }
 }
 
-export function dreamDropTranslateTextureFormat(format: DreamDropTextureFormat): string {
-    switch (format) {
-        case DreamDropTextureFormat.RGBA_8888: return "RGBA_8888";
-        case DreamDropTextureFormat.RGB_888: return "RGB_888";
-        case DreamDropTextureFormat.RGBA_5551: return "RGBA_5551";
-        case DreamDropTextureFormat.RGB_565: return "RGB_565";
-        case DreamDropTextureFormat.RGBA_4444: return "RGBA_4444";
-        case DreamDropTextureFormat.LA8: return "LA8";
-        case DreamDropTextureFormat.HILO8: return "HILO8";
-        case DreamDropTextureFormat.L8: return "L8";
-        case DreamDropTextureFormat.A8: return "A8";
-        case DreamDropTextureFormat.LA4: return "LA4";
-        case DreamDropTextureFormat.L4: return "L4";
-        case DreamDropTextureFormat.A4: return "A4";
-        case DreamDropTextureFormat.ETC1: return "ETC1";
-        case DreamDropTextureFormat.ETC1A4: return "ETC1A4";
-    }
-}
-
 function decodeRGBA8888(ctrt: DreamDropCTRT): Uint8Array {
     const view = ctrt.data.createDataView();
     let offset = 0;
@@ -195,18 +176,18 @@ function decodeETC1(width: number, height: number, data: ArrayBufferSlice, alpha
                     let a1;
                     let a2;
                     if (alpha) {
-                        a2 = view.getUint32(offset + 0x00, true);
-                        a1 = view.getUint32(offset + 0x04, true);
-                        offset += 0x08;
+                        a2 = view.getUint32(offset, true);
+                        a1 = view.getUint32(offset + 4, true);
+                        offset += 8;
                     } else {
                         a2 = 0xFFFFFFFF;
                         a1 = 0xFFFFFFFF;
                     }
                     decodeETC1_4x4_Alpha(pixels, a1, a2, dest, width);
-                    const w2 = view.getUint32(offset + 0x00, true);
-                    const w1 = view.getUint32(offset + 0x04, true);
+                    const w2 = view.getUint32(offset, true);
+                    const w1 = view.getUint32(offset + 4, true);
                     decodeETC1_4x4_Color(pixels, w1, w2, dest, width);
-                    offset += 0x08;
+                    offset += 8;
                 }
             }
         }
@@ -263,18 +244,6 @@ function decodeETC1_4x4_Color(dest: Uint8Array, w1: number, w2: number, destOffs
     const intensityTable1 = intensityTableMap[(w1 >> 5) & 7];
     const intensityTable2 = intensityTableMap[(w1 >> 2) & 7];
 
-    function signed3(n: number) {
-        return n << 29 >> 29;
-    }
-
-    function getColors(colors: Uint8Array, r: number, g: number, b: number, intensityMap: number[]): void {
-        for (let i = 0; i < 4; i++) {
-            colors[(i * 3)] = clamp(r + intensityMap[i], 0, 255);
-            colors[(i * 3) + 1] = clamp(g + intensityMap[i], 0, 255);
-            colors[(i * 3) + 2] = clamp(b + intensityMap[i], 0, 255);
-        }
-    }
-
     const colors1 = new Uint8Array(3 * 4);
     const colors2 = new Uint8Array(3 * 4);
 
@@ -322,6 +291,18 @@ function decodeETC1_4x4_Color(dest: Uint8Array, w1: number, w2: number, destOffs
         dest[destIndex + 1] = colors[(lookup * 3) + 1];
         dest[destIndex + 2] = colors[(lookup * 3) + 2];
     }
+}
+
+function getColors(colors: Uint8Array, r: number, g: number, b: number, intensityMap: number[]): void {
+    for (let i = 0; i < 4; i++) {
+        colors[(i * 3)] = clamp(r + intensityMap[i], 0, 255);
+        colors[(i * 3) + 1] = clamp(g + intensityMap[i], 0, 255);
+        colors[(i * 3) + 2] = clamp(b + intensityMap[i], 0, 255);
+    }
+}
+
+function signed3(n: number) {
+    return n << 29 >> 29;
 }
 
 function morton7(n: number) {

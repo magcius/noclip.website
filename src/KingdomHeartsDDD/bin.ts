@@ -15,8 +15,6 @@ export interface DreamDropPMP {
 interface CTRTInfo {
     offset: number;
     name: string;
-    uvX: number;
-    uvY: number;
 }
 
 /**
@@ -28,8 +26,6 @@ export interface DreamDropCTRT {
     height: number;
     format: DreamDropTextureFormat;
     data: ArrayBufferSlice;
-    uvX: number;
-    uvY: number;
 }
 
 interface PMOInfo {
@@ -210,39 +206,18 @@ export class DreamDropParser {
         }
 
         this.offset = ctrtOffset;
-        const ctrts: DreamDropCTRT[] = Array(ctrtCount);
+        const ctrts: (DreamDropCTRT | undefined)[] = Array(ctrtCount);
         if (ctrtOffset > 0) {
-            const ctrtInfo: CTRTInfo[] = Array(ctrtCount);
+            const info: CTRTInfo[] = Array(ctrtCount);
             for (let i = 0; i < ctrtCount; i++) {
                 const offset = this.getUint32();
                 const name = this.getString(12);
-                const uvX = this.getFloat();
-                const uvY = this.getFloat();
-                this.offset += 8;
-                ctrtInfo[i] = { offset, name, uvX, uvY };
+                this.offset += 16;
+                info[i] = { offset, name };
             }
 
             for (let i = 0; i < ctrtCount; i++) {
-                const info = ctrtInfo[i];
-                this.offset = info.offset;
-                if (this.offset === 0) {
-                    continue;
-                }
-                const ctrtMagic = this.getUint32();
-                if (ctrtMagic !== MAGIC_CTRT) {
-                    console.warn("Unknown CTRT magic", ctrtMagic);
-                } else {
-                    this.offset = info.offset + 12;
-                    const dataOffset = this.getUint32();
-                    this.offset += 4;
-                    const dataSize = this.getUint32();
-                    this.offset += 4;
-                    const format = this.getUint32() as DreamDropTextureFormat;
-                    const width = this.getUshort();
-                    const height = this.getUshort();
-                    const data = this.buffer.slice(info.offset + dataOffset, info.offset + dataOffset + dataSize);
-                    ctrts[i] = { name: info.name, width, height, format, data, uvX: info.uvX, uvY: info.uvY };
-                }
+                ctrts[i] = this.parseCTRT(info[i].offset, info[i].name, false);
             }
         }
 
@@ -255,6 +230,28 @@ export class DreamDropParser {
         }
 
         return { pmos: pmos.filter(p => p !== undefined), ctrts: ctrts.filter(t => t !== undefined) };
+    }
+
+    public parseCTRT(offset: number, name: string, allowZeroOffset: boolean = true): DreamDropCTRT | undefined {
+        if ((!allowZeroOffset && offset > 0) || allowZeroOffset) {
+            this.offset = offset;
+            const magic = this.getUint32();
+            if (magic !== MAGIC_CTRT) {
+                console.warn("Unknown CTRT magic", magic);
+            } else {
+                this.offset = offset + 12;
+                const dataOffset = this.getUint32();
+                this.offset += 4;
+                const dataSize = this.getUint32();
+                this.offset += 4;
+                const format = this.getUint32() as DreamDropTextureFormat;
+                const width = this.getUshort();
+                const height = this.getUshort();
+                const data = this.buffer.slice(offset + dataOffset, offset + dataOffset + dataSize);
+                return { name, width, height, format, data };
+            }
+        }
+        return undefined;
     }
 
     private parsePMO(info: PMOInfo): DreamDropPMO {

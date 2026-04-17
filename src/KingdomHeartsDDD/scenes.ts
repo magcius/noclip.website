@@ -1,4 +1,4 @@
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -7,10 +7,10 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropParser, DreamDropPMP } from "./bin";
-import { DreamDropTexture, dreamDropDecodeCTRT, dreamDropTranslateTextureFormat } from "./texture";
+import { DreamDropTexture, DreamDropTextureFormat, dreamDropDecodeCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropRoomRenderer } from "./render";
-import { dreamDropGetRoomConfig } from "./room_config";
+import { dreamDropGetRoomConfig, DreamDropRoomConfig } from "./room_config";
 import { LayerPanel, Panel } from "../ui";
 
 class Renderer implements SceneGfx {
@@ -20,7 +20,7 @@ class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: DreamDropPMP, roomId: string) {
+    constructor(device: GfxDevice, pmp: DreamDropPMP, config: DreamDropRoomConfig | undefined) {
         const ctrts = pmp.ctrts;
         this.textures = Array(ctrts.length);
         for (let i = 0; i < ctrts.length; i++) {
@@ -34,14 +34,14 @@ class Renderer implements SceneGfx {
             viewerTextures[i] = {
                 gfxTexture: this.textures[i].gfxTexture,
                 extraInfo: new Map<string, string>([
-                    ["Format", `${dreamDropTranslateTextureFormat(this.textures[i].format)}`]
+                    ["Format", `${DreamDropTextureFormat[this.textures[i].format]}`]
                 ])
             };
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos, this.textures, dreamDropGetRoomConfig(roomId));
+        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos, this.textures, config);
     }
 
     public createPanels(): Panel[] {
@@ -99,11 +99,23 @@ class Room implements SceneDesc {
         device.checkForLeaks();
         const pmpFile = await context.dataFetcher.fetchData(`${pathBase}/map/${this.id}.pmp`);
         const pmp = new DreamDropParser(pmpFile).parsePMP();
-        return new Renderer(device, pmp, this.id);
+
+        const config = dreamDropGetRoomConfig(this.id);
+        if (config && config.externalCTT) {
+            for (const ctt of config.externalCTT) {
+                const cttFile = await context.dataFetcher.fetchData(`${pathBase}/map/${ctt}.ctt`);
+                const ctrt = new DreamDropParser(cttFile).parseCTRT(0, ctt);
+                if (ctrt) {
+                    pmp.ctrts.push(ctrt);
+                }
+            }
+        }
+
+        return new Renderer(device, pmp, config);
     }
 }
 
-// Adapted room names from https://openkh.dev/ddd/dictionary/worlds.html
+// Adapted room names from https://openkh.dev/ddd/dictionary/worlds.html and TCRF
 const id = "KHDDD";
 const name = "Kingdom Hearts 3D: Dream Drop Distance";
 const sceneDescs = [
@@ -167,8 +179,8 @@ const sceneDescs = [
     new Room("tl_08", "City"),
     new Room("tl_09", "Throughput"),
     new Room("tl_10", "Bridge"),
-    new Room("tl_11", "Arena"),
-    new Room("tl_16", "Arena"),
+    new Room("tl_11", "Light Cycle Arena"),
+    new Room("tl_16", "Light Cycle Arena"),
     new Room("tl_12", "Stadium"),
     new Room("tl_14", "Flynn's Hideout"),
     new Room("tl_03", "Debug Room"),
@@ -227,8 +239,8 @@ const sceneDescs = [
     new Room("fa_10", "Evil Grounds"),
     new Room("fa_11", "Precipice"),
     new Room("fa_15", "Chamber"),
-    new Room("fa_16", "Chamber"),
-    new Room("fa_19", "Tower Entrance"),
+    new Room("fa_16", "Chamber (Flooded)"),
+    new Room("fa_19", "Tower Entrance (Flooded)"),
     new Room("fa_04", "Debug Room 1"),
     new Room("fa_08", "Debug Room 2"),
     new Room("fa_12", "Debug Room 3"),
@@ -266,12 +278,12 @@ const sceneDescs = [
     new Room("rg_08", "Dark Margin"),
     "Mysterious Tower", // yt = yensid tower
     new Room("yt_01", "Chamber"),
+    new Room("yt_07", "Chamber (Open Door)"),
     new Room("yt_02", "Tower"),
-    new Room("yt_03", "Tower: Entrance"),
-    new Room("yt_04", "Station of Awakening"),
-    new Room("yt_06", "Beach"),
-    new Room("yt_07", "Entrance Door"),
-    new Room("yt_60", "Dive"),
+    new Room("yt_03", "Tower Entrance"),
+    new Room("yt_06", "Station of Awakening"),
+    new Room("yt_04", "Station of Awakening (Armored Ventus)"),
+    new Room("yt_60", "Dive to the Heart"),
     "Spirit Space", // de = dream eater
     new Room("de_01", "Flick Rush"),
     new Room("de_02", "Hexagonal Stage"),
