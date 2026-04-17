@@ -11,9 +11,6 @@ importers:
       crc-32:
         specifier: ^1.2.2
         version: 1.2.2
-      fzstd:
-        specifier: ^0.1.1
-        version: 0.1.1
       gl-matrix:
         specifier: 3.4.3
         version: 3.4.3
@@ -620,9 +617,6 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
-
-  fzstd@0.1.1:
-    resolution: {integrity: sha512-dkuVSOKKwh3eas5VkJy1AW1vFpet8TA/fGmVA5krThl8YcOVE/8ZIoEA1+U1vEn5ckxxhLirSdY837azmbaNHA==}
 
   get-tsconfig@4.13.6:
     resolution: {integrity: sha512-shZT/QMiSHc/YBLxxOkMtgSid5HFoauqCE3/exfsEcwg1WkeqjG+V40yBbBrsD+jW2HDXcs28xOfcbm2jI8Ddw==}
@@ -1353,8 +1347,6 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
-
-  fzstd@0.1.1: {}
 
   get-tsconfig@4.13.6:
     dependencies:

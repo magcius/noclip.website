@@ -1,5 +1,6 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use std::convert::TryInto;
+use std::io::Error;
 
 #[wasm_bindgen]
 pub fn lz4_decompress(src: &[u8], uncompressed_size: usize) -> Vec<u8> {
@@ -26,6 +27,11 @@ pub fn lzma_decompress(
     let mut dst = Vec::<u8>::with_capacity(unpacked_size.try_into().unwrap());
     decoder.decompress(&mut src, &mut dst).unwrap();
     dst
+}
+
+#[wasm_bindgen]
+pub fn zstd_decompress(src: &[u8]) -> Vec<u8> {
+    zstd::decode_all(src).unwrap()
 }
 
 #[wasm_bindgen]

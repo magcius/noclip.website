@@ -1,6 +1,5 @@
 import * as BNTX from "../fres_nx/bntx.js";
 import * as BFRES from "../fres_nx/bfres.js";
-import { decompress } from "fzstd";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -21,6 +20,7 @@ import { DataFetcher } from "../DataFetcher.js";
 import { getOrigamiModelConfig } from "./model_config.js";
 import { LayerPanel, Panel } from "../ui.js";
 import { CameraController } from "../Camera.js";
+import { zstd_decompress } from "noclip-rust-support";
 
 interface LevelObjectInstances {
     mobjInstances: OrigamiMobjInstance[];
@@ -176,7 +176,7 @@ class OrigamiRenderer implements SceneGfx {
 }
 
 function decompressZST(file: ArrayBufferSlice): ArrayBufferSlice {
-    return ArrayBufferSlice.fromView(decompress(file.createTypedArray(Uint8Array)));
+    return ArrayBufferSlice.fromView(zstd_decompress(file.createTypedArray(Uint8Array)));
 }
 
 function patchLevelObjectRenderers(instances: LevelObjectInstances, renderer: OrigamiRenderer) {
