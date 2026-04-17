@@ -361,7 +361,7 @@ export abstract class ScrollSelect implements Widget {
                 outer.onmouseup = () => {
                     this.isDragging = false;
                 };
-                outer.onmouseover = (e) => {
+                outer.onmouseenter = (e) => {
                     if (e.buttons === 0)
                         this.isDragging = false;
                     if (this.isDragging)
@@ -782,8 +782,8 @@ export class Panel implements Widget {
         this.toplevel.style.alignItems = 'start';
         this.toplevel.style.outline = 'none';
         this.toplevel.onkeydown = this.onKeyDown.bind(this);
-        this.toplevel.onmouseover = this.syncSize.bind(this);
-        this.toplevel.onmouseout = this.syncSize.bind(this);
+        this.toplevel.onmouseenter = this.syncSize.bind(this);
+        this.toplevel.onmouseleave = this.syncSize.bind(this);
         this.toplevel.tabIndex = -1;
 
         this.mainPanel = document.createElement('div');
@@ -1340,16 +1340,16 @@ export class TextureViewer extends Panel {
         this.surfaceView.style.height = '200px';
 
         // TODO(jstpierre): Make a less-sucky UI for the texture view.
-        this.surfaceView.onmouseover = () => {
+        this.surfaceView.onmouseenter = () => {
             // Checkerboard
             this.surfaceView.style.backgroundColor = 'white';
             this.surfaceView.style.backgroundImage = CHECKERBOARD_IMAGE;
         };
-        this.surfaceView.onmouseout = () => {
+        this.surfaceView.onmouseleave = () => {
             this.surfaceView.style.backgroundColor = 'black';
             this.surfaceView.style.backgroundImage = '';
         };
-        this.surfaceView.onmouseout(null as unknown as MouseEvent);
+        this.surfaceView.onmouseleave(null as unknown as MouseEvent);
 
         this.contents.appendChild(this.surfaceView);
 
@@ -2492,11 +2492,11 @@ abstract class SingleIconButton implements BottomBarWidget {
         this.elem.style.height = '32px';
         this.elem.style.pointerEvents = 'auto';
         this.elem.onclick = this.onClick.bind(this);
-        this.elem.onmouseover = () => {
+        this.elem.onmouseenter = () => {
             this.isHover = true;
             this.syncStyle();
         };
-        this.elem.onmouseout = () => {
+        this.elem.onmouseleave = () => {
             this.isHover = false;
             this.syncStyle();
         };
@@ -2804,12 +2804,12 @@ export class UI {
         this.panelToplevel.style.bottom = '0';
         this.panelToplevel.style.padding = '2em';
         this.panelToplevel.style.transition = '.2s background-color';
-        this.panelToplevel.onmouseover = () => {
+        this.panelToplevel.onmouseenter = () => {
             this.panelToplevel.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
             this.panelToplevel.style.overflow = 'auto';
             this.setPanelsAutoClosed(false);
         };
-        this.panelToplevel.onmouseout = () => {
+        this.panelToplevel.onmouseleave = () => {
             this.panelToplevel.style.backgroundColor = 'rgba(0, 0, 0, 0)';
             this.panelToplevel.style.overflow = 'hidden';
         };
