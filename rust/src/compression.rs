@@ -1,6 +1,5 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use std::convert::TryInto;
-use std::io::Error;
 
 #[wasm_bindgen]
 pub fn lz4_decompress(src: &[u8], uncompressed_size: usize) -> Vec<u8> {
