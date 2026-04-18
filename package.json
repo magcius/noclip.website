@@ -55,9 +55,7 @@
         "rsbuild.config.ts",
         "tsconfig.json"
       ],
-      "dependencies": [
-        "build:wasm-release"
-      ]
+      "dependencies": ["build:wasm-release"]
     },
     "start": {
       "command": "rsbuild dev",
