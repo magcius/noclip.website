@@ -1,7 +1,6 @@
-import { pmtok_deswizzle, pmtok_decode_texture, PMTOKCompressedTextureFormat, pmtok_get_deswizzled_size } from "noclip-rust-support";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { pmtok_decode_texture, PMTOKCompressedTextureFormat } from "noclip-rust-support";
 import { ChannelSource, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "../fres_nx/nngfx_enum";
-import { getFormatBlockWidth, getFormatBlockHeight, getFormatBytesPerBlock, decompress, getImageFormatString } from "../fres_nx/tegra_texture";
+import { decompress, getImageFormatString, deswizzleMips } from "../fres_nx/tegra_texture";
 import { GfxDevice, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { TextureHolder } from "../TextureHolder";
@@ -112,17 +111,6 @@ export class OrigamiTextureHolder extends TextureHolder {
     // keep track of channel sources so the shader can remap RGBA if needed
     public channelSources: Map<string, ChannelSource[]> = new Map();
 
-    private deswizzle(buffers: ArrayBufferSlice[], width: number, height: number, bw: number, bh: number, bb: number, mips: number): Uint8Array<ArrayBuffer> {
-        // combine mipBuffers into one so they're all deswizzled at once instead of seperate calls
-        let offset = 0;
-        const buffer = new Uint8Array(buffers.reduce((sum, b) => sum + b.byteLength, 0));
-        for (const b of buffers) {
-            buffer.set(b.createTypedArray(Uint8Array), offset);
-            offset += b.byteLength;
-        }
-        return pmtok_deswizzle(buffer, width, height, bw, bh, bb, mips) as Uint8Array<ArrayBuffer>;
-    }
-
     public addTexture(device: GfxDevice, texture: BRTI) {
         if (this.textureNames.includes(texture.name)) {
             return;
@@ -130,9 +118,6 @@ export class OrigamiTextureHolder extends TextureHolder {
 
         const channelFormat = getChannelFormat(texture.imageFormat);
         const typeFormat = getTypeFormat(texture.imageFormat);
-        const blockWidth = getFormatBlockWidth(channelFormat);
-        const blockHeight = getFormatBlockHeight(channelFormat);
-        const blockBytes = getFormatBytesPerBlock(channelFormat);
         const isBC = channelFormat >= ChannelFormat.Bc1 && channelFormat <= ChannelFormat.Bc7;
 
         // format translation assumes the device can keep BC textures compressed
@@ -141,41 +126,18 @@ export class OrigamiTextureHolder extends TextureHolder {
         const deviceSupportsFormat = device.queryTextureFormatSupported(gfxFormat, texture.width, texture.height);
         let keepCompressed = isBC && deviceSupportsFormat;
         if (isBC && !deviceSupportsFormat) {
-            // device is low spec and doesn't support BC as-is, fall back to decoded format
+            // fallback to decompressed format
             gfxFormat = getGfxFormatDecoded(typeFormat);
             keepCompressed = false;
         }
 
-        // assumes that valid/invalid mips are sequential
-        let mips = 0;
-        for (let m = 0; m < texture.textureDataArray[0].mipBuffers.length; m++) {
-            mips += device.queryTextureFormatSupported(gfxFormat, Math.max(texture.width >>> m, 1), Math.max(texture.height >>> m, 1)) ? 1 : 0;
-        }
-        // lowest mip level is always empty/black, don't waste time processing it
-        // sometimes the second lowest is also nothing but (seemingly) no way to detect this
-        mips = Math.max(1, mips - 1);
-        if (mips === 0) {
-            console.warn("No valid mips for", texture.name);
-            return;
-        }
+        const deswizzledMips = deswizzleMips(texture.width, texture.height, channelFormat, texture.textureDataArray[0]);
 
-        const deswizzled = this.deswizzle(texture.textureDataArray[0].mipBuffers.slice(0, mips), texture.width, texture.height, blockWidth, blockHeight, blockBytes, mips);
-
-        // after deswizzling, compute expected size for each mip level so it can be split back into mips correctly
-        let offset = 0;
-        const ends: number[] = [];
-        for (let m = 0; m < mips; m++) {
-            const size = pmtok_get_deswizzled_size(Math.max(texture.width >>> m, 1), Math.max(texture.height >>> m, 1), blockWidth, blockHeight, blockBytes);
-            ends.push(size + offset);
-            offset += size;
-        }
-
-        // reconstruct mips and decode if needed
         const mipDatas: ArrayBufferView[] = [];
-        for (let m = 0; m < mips; m++) {
-            const data = deswizzled.slice(m === 0 ? m : ends[m - 1], ends[m]);
+        for (let m = 0; m < Math.max(texture.textureDataArray[0].mipBuffers.length - 1, 1); m++) {
             const width = Math.max(texture.width >>> m, 1);
             const height = Math.max(texture.height >>> m, 1);
+            const data = deswizzledMips[m];
             let rgba;
             switch (channelFormat) {
                 case ChannelFormat.Bc1:
@@ -219,7 +181,7 @@ export class OrigamiTextureHolder extends TextureHolder {
             mipDatas.push(rgba);
         }
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mips));
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, texture.width, texture.height, mipDatas.length));
         device.uploadTextureData(gfxTexture, 0, mipDatas);
 
         const extraInfo = new Map<string, string>();

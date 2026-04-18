@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "./nngfx_enum.js";
-import { BRTI } from "./bntx.js";
+import { BRTI, TextureData } from "./bntx.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture.js";
 import { assert } from "../util.js";
@@ -141,11 +141,46 @@ export interface SwizzledSurface {
 }
 
 export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array<ArrayBuffer>> {
-    const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
+    const { buffer, channelFormat, width, height } = swizzledSurface;
     const blockWidth = getFormatBlockWidth(channelFormat);
     const blockHeight = getFormatBlockHeight(channelFormat);
     const bytesPerBlock = getFormatBytesPerBlock(channelFormat);
-    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), blockWidth, blockHeight, bytesPerBlock, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
+    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), width, height, blockWidth, blockHeight, bytesPerBlock) as Uint8Array<ArrayBuffer>;
+}
+
+export function deswizzleMips(width: number, height: number, channelFormat: ChannelFormat, textureData: TextureData): Uint8Array<ArrayBuffer>[] {
+    let combinedLength = 0;
+    textureData.mipBuffers.forEach(buffer => {
+        combinedLength += buffer.byteLength
+    });
+    const combinedBuffer = new Uint8Array(combinedLength);
+    let offset = 0;
+    textureData.mipBuffers.forEach(buffer => {
+        combinedBuffer.set(buffer.createTypedArray(Uint8Array), offset);
+        offset += buffer.byteLength;
+    });
+
+    const blockWidth = getFormatBlockWidth(channelFormat);
+    const blockHeight = getFormatBlockHeight(channelFormat);
+    const bytesPerBlock = getFormatBytesPerBlock(channelFormat);
+
+    const mips = textureData.mipBuffers.length;
+
+    offset = 0;
+    const mipBounds: number[] = Array(mips);
+    for (let mip = 0; mip < mips; mip++) {
+        const size = rust.tegra_deswizzled_size(Math.max(width >>> mip, 1), Math.max(height >>> mip, 1), blockWidth, blockHeight, bytesPerBlock);
+        mipBounds[mip] = size + offset;
+        offset += size;
+    }
+
+    const combinedDeswizzled = rust.tegra_deswizzle(combinedBuffer, width, height, blockWidth, blockHeight, bytesPerBlock, mips);
+
+    const deswizzledMips: Uint8Array<ArrayBuffer>[] = Array(mips);
+    for (let mip = 0; mip < mips; mip++) {
+        deswizzledMips[mip] = combinedDeswizzled.slice(mip === 0 ? 0 : mipBounds[mip - 1], mipBounds[mip]);
+    }
+    return deswizzledMips;
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {

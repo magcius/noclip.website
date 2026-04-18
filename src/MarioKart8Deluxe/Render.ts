@@ -10,7 +10,7 @@ import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
 import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMAT_ShaderParam, FMDL, FRES, FSHP, FSHP_Mesh, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Float2, parseFMAT_ShaderParam_Float4, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
 import * as BNTX from '../fres_nx/bntx.js';
 import { AttributeFormat, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
-import { decompress, deswizzle, getImageFormatString, translateImageFormat } from '../fres_nx/tegra_texture.js';
+import { decompress, deswizzleMips, getImageFormatString, translateImageFormat } from '../fres_nx/tegra_texture.js';
 import { AABB } from '../Geometry.js';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -53,19 +53,19 @@ export class BRTITextureHolder extends TextureHolder {
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
 
+        const deswizzledMips = deswizzleMips(textureEntry.width, textureEntry.height, channelFormat, textureEntry.textureDataArray[0]);
+
         for (let i = 0; i < textureEntry.textureDataArray[0].mipBuffers.length; i++) {
             const mipLevel = i;
 
-            const buffer = textureEntry.textureDataArray[0].mipBuffers[i];
+            const deswizzled = deswizzledMips[mipLevel];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const blockHeightLog2 = textureEntry.blockHeightLog2;
-            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then((deswizzled) => {
-                const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
-                const rgbaPixels = rgbaTexture.pixels;
-                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-            });
+
+            const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
+            const rgbaPixels = rgbaTexture.pixels;
+            device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
         }
 
         const extraInfo = new Map<string, string>();
