@@ -1320,10 +1320,10 @@ export class StudioPanel extends FloatingPanel {
         this.minimizeButton.onclick = toggleMinimize;
         this.header.onmousedown = null;
 
-        this.elem.onmouseover = () => {
+        this.elem.onmouseenter = () => {
             this.elem.style.opacity = '1';
         };
-        this.elem.onmouseout = () => {
+        this.elem.onmouseleave = () => {
             this.elem.style.opacity = '0.8';
         };
 
