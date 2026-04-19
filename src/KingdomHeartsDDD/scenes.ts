@@ -6,12 +6,61 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DreamDropParser, DreamDropPMP } from "./bin";
-import { DreamDropTexture, DreamDropTextureFormat, dreamDropDecodeCTRT } from "./texture";
+import { DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
+import { DreamDropTexture, DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { DreamDropRoomRenderer } from "./render";
-import { dreamDropGetRoomConfig, DreamDropRoomConfig } from "./room_config";
-import { LayerPanel, Panel } from "../ui";
+import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
+import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
+import { COOL_BLUE_COLOR, EYE_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
+import { DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
+import { vec3 } from "gl-matrix";
+import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
+
+function getCharaSubDirectory(name: string) {
+    switch (name.substring(0, 1).toLowerCase()) {
+        case "b":
+            return "boss";
+        case "d":
+            return "d_obj";
+        case "e":
+            return "e_obj";
+        case "m":
+            return "enemy";
+        case "f":
+            return "f_obj";
+        case "g":
+            return "gim";
+        case "h":
+            return "high";
+        case "n":
+            return "npc";
+        case "p":
+            return "pc";
+        case "w":
+            return "wep";
+        default:
+            throw `Unknown chara prefix for \"${name}\"`;
+    }
+}
+
+function getPrettyDataSetName(name: string) {
+    const n = name.toLowerCase();
+    if (n.includes("ex-map")) {
+        return "Objects (EX)";
+    } else if (n.includes("so-map")) {
+        return "Objects (Sora)";
+    } else if (n.includes("ri-map")) {
+        return "Objects (Riku)";
+    } else if (n.includes("ex-btl")) {
+        return "Enemies (EX)";
+    } else if (n.includes("so-btl")) {
+        return "Enemies (Sora)";
+    } else if (n.includes("ri-btl")) {
+        return "Enemies (Riku)";
+    } else {
+        return name;
+    }
+}
 
 class Renderer implements SceneGfx {
     public textureHolder: TextureHolder;
@@ -20,11 +69,15 @@ class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: DreamDropPMP, config: DreamDropRoomConfig | undefined) {
+    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: DreamDropRoomObjects, config: DreamDropRoomConfig | undefined) {
         const ctrts = pmp.ctrts;
+        for (const model of objects.models.values()) {
+            ctrts.push(...model.ctrts);
+        }
+
         this.textures = Array(ctrts.length);
         for (let i = 0; i < ctrts.length; i++) {
-            const pixels = dreamDropDecodeCTRT(ctrts[i]);
+            const pixels = decodeDreamDropCTRT(ctrts[i]);
             const t = new DreamDropTexture(device, ctrts[i].name, ctrts[i].format, ctrts[i].width, ctrts[i].height, pixels);
             this.textures[i] = t;
         }
@@ -33,21 +86,36 @@ class Renderer implements SceneGfx {
         for (let i = 0; i < this.textures.length; i++) {
             viewerTextures[i] = {
                 gfxTexture: this.textures[i].gfxTexture,
-                extraInfo: new Map<string, string>([
-                    ["Format", `${DreamDropTextureFormat[this.textures[i].format]}`]
-                ])
+                extraInfo: new Map([["Format", `${DreamDropTextureFormat[this.textures[i].format]}`]])
             };
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos, this.textures, config);
+        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos, this.textures, objects, config);
     }
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
-        layersPanel.setLayers(this.roomRenderer.parts);
-        return [layersPanel];
+        layersPanel.setLayers([...this.roomRenderer.parts, ...this.roomRenderer.objects]);
+
+        const setPanel = new Panel();
+        setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        setPanel.setTitle(EYE_ICON, "Object Sets");
+        const setNames = this.roomRenderer.sets.map(s => getPrettyDataSetName(s.name));
+        const select = new MultiSelect();
+        select.setStrings(setNames);
+        select.onitemchanged = (index: number, v: boolean) => {
+            this.roomRenderer.onSetChanged(index, v);
+        };
+        if (setNames.length > 0) {
+            select.setItemSelected(0, true);
+        } else {
+            setPanel.setVisible(false);
+        }
+        setPanel.contents.appendChild(select.elem);
+
+        return [setPanel, layersPanel];
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -91,16 +159,18 @@ class Renderer implements SceneGfx {
 
 const pathBase = "KingdomHeartsDDD";
 class Room implements SceneDesc {
-    constructor(public id: string, public name: string) {
+    public id: string;
 
+    constructor(private pmpName: string, public name: string) {
+        this.id = this.pmpName.replace("_", "");
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         device.checkForLeaks();
-        const pmpFile = await context.dataFetcher.fetchData(`${pathBase}/map/${this.id}.pmp`);
-        const pmp = new DreamDropParser(pmpFile).parsePMP();
+        const pmpFile = await context.dataFetcher.fetchData(`${pathBase}/map/${this.pmpName}.pmp`);
+        const pmp = new DreamDropParser(pmpFile).parsePMP(this.id);
 
-        const config = dreamDropGetRoomConfig(this.id);
+        const config = getDreamDropRoomConfig(this.id);
         if (config && config.externalCTT) {
             for (const ctt of config.externalCTT) {
                 const cttFile = await context.dataFetcher.fetchData(`${pathBase}/map/${ctt}.ctt`);
@@ -111,9 +181,65 @@ class Room implements SceneDesc {
             }
         }
 
-        return new Renderer(device, pmp, config);
+        const sets: DreamDropDataSet[] = [];
+        if (!DREAMDROP_INVALID_SETDATA.includes(this.id)) {
+            const setDataFile = await context.dataFetcher.fetchData(`${pathBase}/setdata/${this.id}set.bin`);
+            const setData = new DreamDropParser(setDataFile).parseSetData();
+            for (const set of setData) {
+                const instances: DreamDropObjectInstance[] = [];
+                for (const oloName of set.olos) {
+                    if (!DREAMDROP_VALID_OLO.has(this.id) || !DREAMDROP_VALID_OLO.get(this.id)!.includes(oloName)) {
+                        continue;
+                    }
+                    const oloFile = await context.dataFetcher.fetchData(`${pathBase}/setdata/${this.id}-${oloName}.olo`);
+                    const olo = new DreamDropParser(oloFile).parseOLO();
+                    instances.push(...olo.objects);
+                }
+                if (instances.length > 0) {
+                    const uniqueInstances = instances.filter((instance, index, self) =>
+                        index === self.findIndex((t) => (
+                            t.name === instance.name &&
+                            t.position[0] === instance.position[0] &&
+                            t.position[1] === instance.position[1] &&
+                            t.position[2] === instance.position[2] &&
+                            t.rotation[0] === instance.rotation[0] &&
+                            t.rotation[1] === instance.rotation[1] &&
+                            t.rotation[2] === instance.rotation[2]
+                        ))
+                    );
+                    sets.push({ name: set.name, instances: uniqueInstances });
+                }
+            }
+        }
+
+        const models: Map<string, DreamDropPMO> = new Map();
+        const validModels = [...DREAMDROP_VALID_BOSS, ...DREAMDROP_VALID_D_OBJ, ...DREAMDROP_VALID_E_OBJ, ...DREAMDROP_VALID_ENEMY, ...DREAMDROP_VALID_F_OBJ,
+            ...DREAMDROP_VALID_GIM, ...DREAMDROP_VALID_HIGH, ...DREAMDROP_VALID_NPC, ...DREAMDROP_VALID_PC, ...DREAMDROP_VALID_WEP];
+        for (const set of sets) {
+            for (const instance of set.instances) {
+                if (models.has(instance.name) || !validModels.includes(instance.name)) {
+                    continue;
+                }
+                const subdir = getCharaSubDirectory(instance.name);
+                const pmoFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${instance.name}.pmo`);
+                const pmo = new DreamDropParser(pmoFile).parsePMO(undefined, true, instance.name);
+                pmo.scale = vec3.fromValues(pmo.scaleNum, pmo.scaleNum, pmo.scaleNum);
+                models.set(instance.name, pmo);
+            }
+        }
+
+        return new Renderer(device, pmp, { sets, models }, config);
     }
 }
+
+/*
+TODO
+
+g_ex010 has a weird PMO format with no shapes or materials, fails at reading shape offsets
+g_nd300 also can't be read
+
+...and all else
+*/
 
 // Adapted room names from https://openkh.dev/ddd/dictionary/worlds.html and TCRF
 const id = "KHDDD";
@@ -123,8 +249,7 @@ const sceneDescs = [
     new Room("di_01", "Beach (Day)"),
     new Room("di_02", "Beach (Evening)"),
     new Room("di_03", "Beach (Night)"),
-    new Room("di_05", "Phantom Ursula"),
-    new Room("di_60", "Ocean"),
+    new Room("di_05", "Combat Tutorial"),
     "Traverse Town", // tw = the world ends with you
     new Room("tw_01", "First District"),
     new Room("tw_02", "Second District"),
@@ -133,27 +258,25 @@ const sceneDescs = [
     new Room("tw_04", "Fourth District"),
     new Room("tw_05", "Fifth District"),
     new Room("tw_10", "Fifth District"),
+    new Room("tw_07", "Post Office"),
     new Room("tw_06", "Garden"),
     new Room("tw_11", "Garden (Boss)"),
     new Room("tw_08", "Back Streets"),
-    new Room("tw_07", "Post Office"),
     new Room("tw_09", "Fountain Plaza"),
     new Room("tw_12", "Fountain Plaza (Boss)"),
-    new Room("tw_13", "Fountain Plaza (Unfinished)"),
     new Room("tw_60", "Dive (Sora)"),
     new Room("tw_61", "Dive (Riku)"),
-    "La Cité des Cloches", // nd = notre-dame
+    "La Cité des Cloches", // nd = the hunchback of notre-dame
     new Room("nd_10", "Town"),
     new Room("nd_01", "Square"),
     new Room("nd_02", "Square (Burning)"),
-    new Room("nd_19", "Square (Burning, Sora Boss)"),
-    new Room("nd_14", "Square (Burning, Riku Boss)"),
+    new Room("nd_19", "Square (Sora Boss)"),
+    new Room("nd_14", "Square (Riku Boss)"),
     new Room("nd_03", "Nave"),
     new Room("nd_15", "Nave (Burning)"),
     new Room("nd_04", "Bell Tower"),
     new Room("nd_16", "Bell Tower"),
     new Room("nd_09", "Court of Miracles"),
-    new Room("nd_20", "Court of Miracles (Unfinished)"),
     new Room("nd_11", "Bridge"),
     new Room("nd_18", "Bridge (Burning)"),
     new Room("nd_12", "Outskirts"),
@@ -181,14 +304,12 @@ const sceneDescs = [
     new Room("tl_10", "Bridge"),
     new Room("tl_11", "Light Cycle Arena"),
     new Room("tl_16", "Light Cycle Arena"),
-    new Room("tl_12", "Stadium"),
+    new Room("tl_12", "Stadium (Boss)"),
     new Room("tl_14", "Flynn's Hideout"),
-    new Room("tl_03", "Debug Room"),
     new Room("tl_60", "Dive (Sora)"),
     new Room("tl_61", "Dive (Riku)"),
     "Prankster's Paradise", // pi = pinocchio
     new Room("pi_01", "Amusement Park"),
-    new Room("pi_15", "Amusement Park (Unfinished)"),
     new Room("pi_11", "Windup Way"),
     new Room("pi_12", "Circus"),
     new Room("pi_04", "Promontory"),
@@ -199,7 +320,7 @@ const sceneDescs = [
     new Room("pi_14", "Ocean Depths (Floor)"),
     new Room("pi_13", "Ocean Surface"),
     new Room("pi_17", "Ocean Surface (No Moon)"),
-    new Room("pi_05", "Ocean Surface (Monstro)"),
+    new Room("pi_05", "Ocean Surface (Boss)"),
     new Room("pi_06", "Monstro: Mouth"),
     new Room("pi_07", "Monstro: Belly"),
     new Room("pi_18", "Monstro: Belly"),
@@ -209,8 +330,8 @@ const sceneDescs = [
     new Room("pi_60", "Dive (Sora)"),
     new Room("pi_61", "Dive (Riku)"),
     "Country of the Musketeers", // tm = the three musketeers
-    new Room("tm_01", "The Opéra"),
-    new Room("tm_17", "The Opéra"),
+    new Room("tm_01", "The Opéra (Sora)"),
+    new Room("tm_17", "The Opéra (Riku)"),
     new Room("tm_02", "Grand Lobby"),
     new Room("tm_03", "Theatre"),
     new Room("tm_16", "Theatre"),
@@ -237,15 +358,10 @@ const sceneDescs = [
     new Room("fa_07", "Golden Wood"),
     new Room("fa_09", "Snowgleam Wood"),
     new Room("fa_10", "Evil Grounds"),
-    new Room("fa_11", "Precipice"),
+    new Room("fa_11", "Precipice (Boss)"),
     new Room("fa_15", "Chamber"),
     new Room("fa_16", "Chamber (Flooded)"),
     new Room("fa_19", "Tower Entrance (Flooded)"),
-    new Room("fa_04", "Debug Room 1"),
-    new Room("fa_08", "Debug Room 2"),
-    new Room("fa_12", "Debug Room 3"),
-    new Room("fa_17", "Debug Room 4"),
-    new Room("fa_18", "Debug Room 5"),
     new Room("fa_60", "Dive (Sora)"),
     new Room("fa_61", "Dive (Riku)"),
     new Room("fa_62", "Chernabog (Boss Dive)"),
@@ -282,7 +398,7 @@ const sceneDescs = [
     new Room("yt_02", "Tower"),
     new Room("yt_03", "Tower Entrance"),
     new Room("yt_06", "Station of Awakening"),
-    new Room("yt_04", "Station of Awakening (Armored Ventus)"),
+    new Room("yt_04", "Station of Awakening (Boss)"),
     new Room("yt_60", "Dive to the Heart"),
     "Spirit Space", // de = dream eater
     new Room("de_01", "Flick Rush"),
@@ -291,18 +407,30 @@ const sceneDescs = [
     new Room("de_10", "Petting Plaza"),
     "World Map",
     new Room("wm_01", "World Map"),
-    "Treasure Planet (Unfinished)", // what could have been...
+    "Treasure Planet", // what could have been...
     new Room("tp_01", "The Legacy's Deck"),
-    new Room("tp_02", "Debug Room 1"),
-    new Room("tp_03", "Debug Room 2"),
-    new Room("tp_04", "Debug Room 3"),
-    new Room("tp_05", "Debug Room 4"),
-    new Room("tp_06", "Debug Room 5"),
-    new Room("tp_07", "Debug Room 6"),
-    new Room("tp_08", "Debug Room 7"),
-    new Room("tp_09", "Debug Room 8"),
-    new Room("tp_10", "Debug Room 9"),
-    new Room("tp_11", "Debug Room 10")
+    "Unfinished Rooms",
+    new Room("di_60", "di60 Ocean"),
+    new Room("nd_20", "nd20 Court of Miracles"),
+    new Room("pi_15", "pi15 Amusement Park"),
+    new Room("tw_13", "tw13 Fountain Plaza"),
+    "Debug Rooms",
+    new Room("fa_04", "fa04 Debug"),
+    new Room("fa_08", "fa08 Debug"),
+    new Room("fa_12", "fa12 Debug"),
+    new Room("fa_17", "fa17 Debug"),
+    new Room("fa_18", "fa18 Debug"),
+    new Room("tl_03", "tl03 Debug"),
+    new Room("tp_02", "tp02 Debug"),
+    new Room("tp_03", "tp03 Debug"),
+    new Room("tp_04", "tp04 Debug"),
+    new Room("tp_05", "tp05 Debug"),
+    new Room("tp_06", "tp06 Debug"),
+    new Room("tp_07", "tp07 Debug"),
+    new Room("tp_08", "tp08 Debug"),
+    new Room("tp_09", "tp09 Debug"),
+    new Room("tp_10", "tp10 Debug"),
+    new Room("tp_11", "tp11 Debug")
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

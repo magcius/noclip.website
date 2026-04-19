@@ -49,7 +49,7 @@ export class DreamDropTexture {
 /**
  * Decodes CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export function dreamDropDecodeCTRT(ctrt: DreamDropCTRT): Uint8Array {
+export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     switch (ctrt.format) {
         case DreamDropTextureFormat.RGBA_8888:
             return decodeRGBA8888(ctrt);

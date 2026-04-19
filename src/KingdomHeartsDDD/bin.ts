@@ -2,7 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DreamDropTextureFormat } from "./texture";
 
-// Credit: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
+// Credit for CTRT/PMP/PMO parsing https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
 
 /**
  * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
@@ -41,6 +41,7 @@ interface PMOInfo {
  * Raw model for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropPMO {
+    name: string;
     id: number;
     position: vec3;
     rotation: vec3;
@@ -51,13 +52,33 @@ export interface DreamDropPMO {
     bbox: number[];
     materials: DreamDropPMOMaterial[];
     shapes: DreamDropPMOShape[];
+    ctrts: DreamDropCTRT[];
     skeleton?: PMOSkeleton;
 }
 
+/**
+ * Material for a PMO from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export interface DreamDropPMOMaterial {
+    textureOffset: number;
     textureName: string;
     scrollX: number;
     scrollY: number;
+}
+
+export interface DreamDropSet {
+    name: string;
+    olos: string[];
+}
+
+export interface DreamDropOLO {
+    objects: DreamDropObjectInstance[];
+}
+
+export interface DreamDropObjectInstance {
+    name: string;
+    position: vec3;
+    rotation: vec3;
 }
 
 interface PMOSkeleton {
@@ -138,9 +159,12 @@ export class DreamDropPMOShape {
 }
 
 const MAGIC_PMP = 5262672;
+const MAGIC_PMO = 5197136;
 const MAGIC_CTRT = 1414681667;
+const MAGIC_SETBIN = 4411969;
+const MAGIC_OLO = 1330401088;
 const NORMALIZED_SCALE = 32768.0;
-const UV_SCALE = 2048.0; // best guess
+const UV_SCALE = 2048.0;
 
 function getBits(n: number, pos: number, size: number) {
     return (n >> pos) & ((1 << size) - 1);
@@ -169,7 +193,7 @@ export class DreamDropParser {
         this.textDecoder = new TextDecoder("utf-8");
     }
 
-    public parsePMP(): DreamDropPMP {
+    public parsePMP(name: string): DreamDropPMP {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_PMP) {
@@ -227,6 +251,7 @@ export class DreamDropParser {
                 continue;
             }
             pmos[i] = this.parsePMO(pmoInfo[i]);
+            pmos[i].name = `${name}_${i}_${pmos[i].id}`;
         }
 
         return { pmos: pmos.filter(p => p !== undefined), ctrts: ctrts.filter(t => t !== undefined) };
@@ -254,11 +279,87 @@ export class DreamDropParser {
         return undefined;
     }
 
-    private parsePMO(info: PMOInfo): DreamDropPMO {
-        this.offset = info.offset + 5;
-        const modelCount = this.getByte();
-        const version = this.getByte();
-        this.offset++;
+    public parseSetData(): DreamDropSet[] {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_SETBIN) {
+            console.warn("Unknown set magic", magic);
+        }
+        this.offset = 6;
+        const setCount = this.getUshort();
+        this.offset = 0x10;
+
+        const sets: DreamDropSet[] = Array(setCount);
+        for (let i = 0; i < setCount; i++) {
+            this.offset = 0x10 + (32 * i) + 4;
+            const setOffset = this.getUint32();
+            this.offset += 8;
+            const name = this.getString(16);
+            sets[i] = this.parseSet(setOffset, name);
+        }
+
+        return sets.filter(s => !s.name.includes("evt"));
+    }
+
+    public parseOLO(): DreamDropOLO {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_OLO) {
+            console.warn("Unknown OLO magic", magic);
+        }
+
+        // this.offset = 8;
+        // const objectCount = this.getUint32();
+        // const objectOffset = this.getUint32();
+        // this.offset = objectOffset;
+        // const objectNames: string[] = Array(objectCount);
+        // for (let i = 0; i < objectCount; i++) {
+        //     objectNames[i] = this.getString(16);
+        // }
+        const objects: DreamDropObjectInstance[] = [];
+
+        this.offset = 0x30;
+        const groupCount = this.getUint32();
+        const groupOffset = this.getUint32();
+        for (let i = 0; i < groupCount; i++) {
+            this.offset = groupOffset + (i * 0x30) + 40;
+            // const cx = this.getFloat();
+            // const cy = this.getFloat();
+            // const cz = this.getFloat();
+            // const radius = this.getFloat();
+            // this.offset += 24;
+            const layoutCount = this.getUint32();
+            const layoutOffset = this.getUint32();
+            for (let j = 0; j < layoutCount; j++) {
+                const start = layoutOffset + (j * 80);
+                this.offset = start;
+                const nameOffset = this.getUint32();
+                this.offset = nameOffset;
+                const name = this.getString(16);
+                this.offset = start + 4;
+                const px = this.getFloat();
+                const py = this.getFloat();
+                const pz = this.getFloat();
+                const rx = this.getFloat();
+                const ry = this.getFloat();
+                const rz = this.getFloat();
+                objects.push({ name, position: vec3.fromValues(px, py, pz), rotation: vec3.fromValues(rx, ry, rz) });
+            }
+        }
+
+        return { objects };
+    }
+
+    public parsePMO(info?: PMOInfo, parseCTRT: boolean = false, name: string = ""): DreamDropPMO {
+        if (!info) {
+            info = { offset: 0, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], flags: -1, id: -1 };
+        }
+        this.offset = info.offset;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_PMO) {
+            console.warn("Unknown PMO magic", magic);
+        }
+        this.offset += 4;
         const materialCount = this.getByte();
         this.offset++;
         const flags = this.getUshort();
@@ -280,11 +381,27 @@ export class DreamDropParser {
             const scrollX = this.getFloat();
             const scrollY = this.getFloat();
             this.offset += 8;
-            materials[i] = { textureName, scrollX, scrollY };
+            materials[i] = { textureOffset, textureName, scrollX, scrollY };
         }
 
-        const mainShapeOffset = this.getUint32();
-        const secondShapeOffset = this.getUint32();
+        const ctrts: DreamDropCTRT[] = [];
+        if (parseCTRT) {
+            const ret = this.offset;
+            for (const material of materials) {
+                const o = info.offset + material.textureOffset;
+                if (o === 0) {
+                    continue;
+                }
+                const ctrt = this.parseCTRT(o, material.textureName);
+                if (ctrt) {
+                    ctrts.push(ctrt);
+                }
+            }
+            this.offset = ret;
+        }
+
+        const opaqueShapeOffset = this.getUint32();
+        const translucentShapeOffset = this.getUint32();
         const mainVertexCount = this.getUint32();
         const secondVertexCount = this.getUint32();
         const opaqueShapeCount = this.getUint32();
@@ -294,12 +411,12 @@ export class DreamDropParser {
 
         this.offset += 8;
 
-        // mesh names are here, skipping
+        // shape names are here, skipping
 
-        if (mainShapeOffset !== 0) {
-            this.offset = info.offset + mainShapeOffset;
-        } else if (secondShapeOffset !== 0) {
-            this.offset = info.offset + secondShapeOffset;
+        if (opaqueShapeOffset !== 0) {
+            this.offset = info.offset + opaqueShapeOffset;
+        } else if (translucentShapeOffset !== 0) {
+            this.offset = info.offset + translucentShapeOffset;
         }
 
         const opaqueShapes: DreamDropPMOShape[] = Array(opaqueShapeCount);
@@ -368,9 +485,9 @@ export class DreamDropParser {
         }
 
         return {
-            position: info.position, rotation: info.rotation, scale: info.scale,
+            name, position: info.position, rotation: info.rotation, scale: info.scale,
             headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials,
-            shapes: [...opaqueShapes, ...translucentShapes], skeleton
+            shapes: [...opaqueShapes, ...translucentShapes], ctrts, skeleton
         };
     }
 
@@ -429,6 +546,16 @@ export class DreamDropParser {
                     break;
             }
         }
+    }
+
+    private parseSet(oloOffset: number, name: string): DreamDropSet {
+        this.offset = oloOffset + 6;
+        const oloCount = this.getUshort();
+        const olos: string[] = Array(oloCount);
+        for (let i = 0; i < oloCount; i++) {
+            olos[i] = this.getString(4);
+        }
+        return { name, olos };
     }
 
     private getString(length: number): string {
