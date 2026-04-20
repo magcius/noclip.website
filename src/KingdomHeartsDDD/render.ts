@@ -189,7 +189,13 @@ export class DreamDropRoomRenderer implements Destroyable {
         }
         this.setIndices = [];
         this.selectedSetIndices = [];
-        this.onSetChanged(0, true);
+        if (config && config.defaultSets) {
+            for (const set of config.defaultSets) {
+                this.onSetChanged(set, true);
+            }
+        } else {
+            this.onSetChanged(0, true);
+        }
     }
 
     public onSetChanged(index: number, v: boolean) {

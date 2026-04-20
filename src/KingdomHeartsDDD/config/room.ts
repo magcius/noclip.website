@@ -1,11 +1,12 @@
 export interface DreamDropRoomConfig {
     skyBoxIds?: number[];
     externalCTT?: string[];
+    defaultSets?: number[];
 }
 
 // ids of PMOs by room id that are rendered as the skybox
 // some skyboxes are already big enough with their srt, but most aren't
-// skybox PMOs are almost always the beginning of the list of PMOs in PMP
+// skybox PMOs are almost always at the beginning of the list of PMOs in PMP
 const SKYBOX_IDS: Map<string, number[]> = new Map([
     ["di01", [48, 47]],
     ["di02", [0, 1]],
@@ -146,16 +147,108 @@ const EXTERNAL_CTT: Map<string, string[]> = new Map([
         "eh2kh_024", "eh2kh_018", "lp_eh03_046", "eh2kh_029", "eh2kh_030", "eh_02_119", "eh2kh_010", "eh2kh_011",
         "lp_eh03_006", "eh2kh_012", "eh2kh_036", "eh_03_009", "lp_eh03_001", "lp_eh03_015", "lp_eh03_019", "eh2kh_037",
         "eh_03_004", "eh_03_024", "eh_03_026", "lp_eh03_038", "lp_eh03_042", "lp_eh03_044", "eh2kh_042", "eh2kh_043",
-        "eh_03_027", "eh2kh_041", "eh_03_000", "eh_03_001", "lp_eh03_000", "lp_eh03_003"]]
+        "eh_03_027", "eh2kh_041", "eh_03_000", "eh_03_001", "lp_eh03_000", "lp_eh03_003"]],
+    ["pi07", ["lppi4yk01", "pi07_001", "pi1ki006", "pi1ki008", "pi1ki010", "pi1ki013", "pi1ki020", "pi4yk001a", "pi4yk002a",
+        "pi4yk003a", "pi4yk004a", "pi4yk005a", "pi4yk006a", "pi4yk007a", "pi4yk008", "pi4yk010", "pi4yk011", "pi4yk012",
+        "pi4yk013", "pi4yk014", "pi4yk015", "pi4yk016", "pi4yk017", "pi4yk022_b", "pi4yk023", "wot"]],
+    ["pi09", ["pi_09_001"]],
+    ["pi10", ["lppi4yk01", "pi4yk001a", "pi4yk002a", "pi4yk003a", "pi4yk004a", "pi4yk005a", "pi4yk006a", "pi4yk007a",
+        "pi4yk008", "pi4yk010", "pi4yk011", "pi4yk012", "pi4yk013", "pi4yk014", "pi4yk015", "pi4yk016", "pi4yk017"]],
+    ["tm14", ["tm_05_014", "tm_14_007", "tm_14_008", "tm_14_011", "tm_14_012", "tm_14_013", "tm_14_019", "tm_14_020",
+        "tm_14_021", "tm_14_023", "tm_14_024", "tm_14_025", "tm_14_029", "tm_14_030", "tm_14_032.", "tm_14_033", "tm_05_019",
+        "tm_14_017", "tm_14_018", "tm_14_022", "tm_14_026", "tm_14_034", "tm_05_018", "tm_05_012", "tm_14_004", "tm_14_006",
+        "tm_14_015", "tm_14_016", "tm_14_027", "tm_14_028", "tm_14_035", "tm_14_036", "tm_14_037", "tm_05_002", "tm_05_003",
+        "tm_05_009", "tm_05_011", "tm_05_029", "tm_14_009", "tm_14_010", "tm_14_003"]]
+]);
+
+// override for default object set(s). If not specified then only the first set is turned on
+const DEFAULT_SETS: Map<string, number[]> = new Map([
+    ["tw01", [2]],
+    ["tw02", [1]],
+    ["tw03", [1]],
+    ["tw04", [1]],
+    ["tw05", [1]],
+    ["tw07", [1]],
+    ["tw06", [1]],
+    ["tw08", [1]],
+    ["tw09", [1]],
+    ["nd10", [1]],
+    ["nd02", [2]],
+    ["nd19", [0, 1]],
+    ["nd03", [1]],
+    ["nd15", [2]],
+    ["nd09", [1]],
+    ["nd11", [1]],
+    ["nd12", [1]],
+    ["nd05", [1]],
+    ["nd07", [1]],
+    ["nd06", [1]],
+    ["nd08", [1]],
+    ["nd13", [2]],
+    ["tl01", [1]],
+    ["tl02", [1]],
+    ["tl04", [1]],
+    ["tl05", [1]],
+    ["tl13", [1]],
+    ["tl06", [1]],
+    ["tl15", [1]],
+    ["tl07", [1]],
+    ["tl08", [1]],
+    ["tl09", [1]],
+    ["tl10", [1]],
+    ["tl11", []],
+    ["pi01", [1]],
+    ["pi11", [1]],
+    ["pi12", [1]],
+    ["pi04", [1]],
+    ["pi02", [1]],
+    ["pi03", [1]],
+    ["pi03", [1, 2]],
+    ["pi06", [1]],
+    ["pi07", [1]],
+    ["pi08", [1]],
+    ["pi09", [1]],
+    ["pi10", [1]],
+    ["tm01", [1]],
+    ["tm02", [1]],
+    ["tm03", [1]],
+    ["tm04", [1]],
+    ["tm05", [1]],
+    ["tm06", [1]],
+    ["tm09", [1]],
+    ["tm10", [1]],
+    ["tm11", [1]],
+    ["tm12", [1]],
+    ["tm13", [1]],
+    ["tm14", [1]],
+    ["fa01", [1]],
+    ["fa02", [1]],
+    ["fa03", [1]],
+    ["fa05", [1]],
+    ["fa11", [0, 1]],
+    ["fa15", [1]],
+    ["fa16", [1]],
+    ["fa19", [1]],
+    ["eh01", [1]],
+    ["eh02", [1]],
+    ["eh03", [1]],
+    ["eh04", [1]],
+    ["eh05", [2]],
+    ["eh06", [2]],
+    ["eh07", [2]],
+    ["eh08", [1]],
+    ["eh13", [1]],
+    ["eh14", [1]],
 ]);
 
 export function getDreamDropRoomConfig(roomId: string): DreamDropRoomConfig | undefined {
     const skyBoxIds = SKYBOX_IDS.get(roomId);
     const externalCTT = EXTERNAL_CTT.get(roomId);
+    const defaultSets = DEFAULT_SETS.get(roomId);
 
-    if (!skyBoxIds && !externalCTT) {
+    if (!skyBoxIds && !externalCTT && !defaultSets) {
         return undefined;
     }
 
-    return { skyBoxIds, externalCTT };
+    return { skyBoxIds, externalCTT, defaultSets };
 }
