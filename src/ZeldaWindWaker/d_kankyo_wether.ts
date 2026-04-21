@@ -1609,6 +1609,16 @@ function dKyr_sun_move(globals: dGlobals): void {
         // Sun should not glare during strange hours of night.
         sunCanGlare = false;
     }
+    else {
+        const sunForward = scratchVec3;
+        vec3.subtract(sunForward, pkt.sunPos, globals.camera.cameraPos);
+        vec3.normalize(sunForward, sunForward);
+
+        const facingAway = vec3.dot(globals.camera.cameraFwd, sunForward) > 1.0;
+        if (facingAway) {
+            sunCanGlare = false;
+        }
+    }
 
     let numCenterPointsVisible = 0, numPointsVisible = 0, numCulledPoints = 0;
 
