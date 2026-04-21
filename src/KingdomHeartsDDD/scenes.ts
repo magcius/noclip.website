@@ -11,7 +11,7 @@ import { DreamDropTexture, DreamDropTextureFormat, decodeDreamDropCTRT } from ".
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
-import { COOL_BLUE_COLOR, EYE_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
+import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
 import { vec3 } from "gl-matrix";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
@@ -98,6 +98,7 @@ class Renderer implements SceneGfx {
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
         layersPanel.setLayers([...this.roomRenderer.parts, ...this.roomRenderer.objects]);
+        layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
 
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
@@ -241,7 +242,7 @@ TODO
 g_ex010 has a weird PMO format with no shapes or materials, fails at reading shape offsets
 g_nd300 also can't be read
 
-...and all else
+...and all else. May your heart be your guiding key
 */
 
 // Adapted room names from https://openkh.dev/ddd/dictionary/worlds.html and TCRF

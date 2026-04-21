@@ -286,7 +286,7 @@ class ModelRenderer implements Destroyable, Layer {
             this.shapes[i] = new ShapeRenderer(cache, s, materials[s.textureIndex], isSkyBox);
         }
         this.shiftMatrices = [computeShiftMatrix(model.scale, model.rotation, model.position)];
-        this.bbox = new Float32Array(model.bbox);
+        this.bbox = new Float32Array(model.bbox.map(v => v / model.scaleNum)); // some bboxes need the divison (???)
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
