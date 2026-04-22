@@ -14,7 +14,6 @@ interface LevelStream {
     vertices: number[];
     colors: number[];
     uvs: number[];
-    tileIndices: number[];
     indicesGround: number[][];
     indicesTransparent: number[][];
     indicesLOD: number[][];
@@ -39,7 +38,6 @@ export interface SpyroLevel {
     vertices?: Float32Array;
     colors?: Float32Array;
     uvs?: Float32Array;
-    tileIndices?: Float32Array;
     indicesGround?: Uint32Array;
     indicesTransparent?: Uint32Array;
     indicesLOD?: Uint32Array;
@@ -520,7 +518,7 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
     const vertices: number[] = [];
     const colors: number[] = [];
     const stream: LevelStream = {
-        vertices: [], colors: [], uvs: [], tileIndices: [],
+        vertices: [], colors: [], uvs: [],
         indicesGround: [], indicesTransparent: [], indicesLOD: []
     };
     const tileCount = textures.tiles.length;
@@ -607,7 +605,6 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
             stream.vertices.push(vertices[vi], vertices[vi + 1], vertices[vi + 2]);
             stream.colors.push(r / 255, g / 255, b / 255, alpha);
             stream.uvs.push(uv[0], uv[1]);
-            stream.tileIndices.push(tileIndex);
             group[tileIndex].push(runningIndex++);
         }
     }
@@ -783,8 +780,9 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
 
     return {
         textures, game: gameNumber, id: levelNumber,
-        vertices: new Float32Array(stream.vertices), colors: new Float32Array(stream.colors),
-        uvs: new Float32Array(stream.uvs), tileIndices: new Float32Array(stream.tileIndices),
+        vertices: new Float32Array(stream.vertices),
+        colors: new Float32Array(stream.colors),
+        uvs: new Float32Array(stream.uvs),
         indicesGround: ground.indices, indicesTransparent: transparent.indices, indicesLOD: lod.indices,
         batchesGround: ground.batches, batchesTransparent: transparent.batches, batchesLOD: lod.batches
     };

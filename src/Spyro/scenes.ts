@@ -13,11 +13,10 @@ import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
 /*
 TODO
 
-    Clean up functions in bin.ts
+    Re-write rendering setup, clean up bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
-    Clean up the transparency handling. Transparent tiles/water can sometimes disappear behind other ones
-        This is an issue with draw order. Not really a big deal until/if mobys get added to levels that have transparency
+    Proper draw/depth ordering for transparent textures
     Some moby instances aren't detected for regular levels when they should be 
 
     Spyro 1

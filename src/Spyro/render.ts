@@ -17,6 +17,7 @@ import { Destroyable } from "../SceneBase";
 
 class Shader extends DeviceProgram {
     public static ub_SceneParams = 0;
+    public static ub_BatchParams = 1;
 
     public override both = `
 precision highp float;
@@ -25,37 +26,39 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Clip;
-    vec4 u_TimeLOD; // x = time, y = LOD flag
-    vec4 u_TileFlags[${MAX_TILES}]; // x = scroll
+    float u_Time;
+    float u_LOD;
+};
+
+layout(std140) uniform ub_BatchParams {
+    float u_Scroll;
 };
 
 uniform sampler2D u_Texture;
 
 varying vec4 v_Color;
 varying vec2 v_UV;
-varying float v_TileIndex;
 
 #ifdef VERT
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec2 a_UV;
-layout(location = 3) in float a_TileIndex;
 
 void main() {
     vec3 worldPos = a_Position;
     v_Color = a_Color;
     v_UV = a_UV;
-    v_TileIndex = a_TileIndex;
 
     if (a_Color.a < 0.5) {
-        float t1 = u_TimeLOD.x;
-        float t2 = u_TimeLOD.x * 0.12;
+        // water
+        float t1 = u_Time;
+        float t2 = u_Time * 0.12;
         float phase = dot(worldPos.xz, vec2(0.025, 0.03));
         float wave = sin(t1 + phase) * 3.0 + sin(t2 + phase * 1.7) * 1.5;
         worldPos.z += wave * 1.1;
     }
 
-    if (u_TimeLOD.y < 1.0) {
+    if (u_LOD < 1.0) {
         v_Color.rgb *= 1.9;
     }
 
@@ -65,15 +68,14 @@ void main() {
 
 #ifdef FRAG
 void main() {
-    if (u_TimeLOD.y == 1.0) {
+    if (u_LOD == 1.0) {
         gl_FragColor = v_Color;
         return;
     }
 
     vec2 uv = v_UV;
-    int idx = int(v_TileIndex + 0.5);
-    if (u_TileFlags[idx].x > 0.5) {
-        uv.y = fract(uv.y - u_TimeLOD.x * 0.45);
+    if (u_Scroll > 0.1) {
+        uv.y = fract(uv.y - u_Time * 0.45);
     }
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
 
@@ -91,7 +93,7 @@ void main() {
     }
 }
 
-const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 const BINDING_LAYOUTS_SKY: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 const NOCLIP_SPACE_CORRECTION = mat4.fromValues(
     1, 0, 0, 0,
@@ -102,7 +104,6 @@ const NOCLIP_SPACE_CORRECTION = mat4.fromValues(
 const SCRATCH_CLIP = mat4.create();
 const SCRATCH_SKY_VIEW = mat4.create();
 const SCRATCH_SKY_PROJ = mat4.create();
-const MAX_TILES = 144;
 
 export class SpyroLevelRenderer {
     public showMobys: boolean = false;
@@ -120,7 +121,7 @@ export class SpyroLevelRenderer {
     private inputLayout: GfxInputLayout;
     private tileCount: number;
     private gameNumber: number;
-    private scrollFlags: Float32Array;
+    private scrollFlags: number[];
 
     constructor(cache: GfxRenderCache, level: SpyroLevel, private mobyInstances: MobyInstance[]) {
         const device = cache.device;
@@ -142,7 +143,7 @@ export class SpyroLevelRenderer {
             this.textures[i] = texture;
         }
 
-        this.scrollFlags = new Float32Array(this.tileCount);
+        this.scrollFlags = Array(this.tileCount).fill(0.0);
         if (level.id in TILE_SCROLL_MAP[level.game]) {
             for (const ti of TILE_SCROLL_MAP[level.game][level.id]) {
                 if (ti != null && ti >= 0 && ti < this.tileCount) {
@@ -163,8 +164,7 @@ export class SpyroLevelRenderer {
         this.vertexBufferDescriptors = [
             { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.vertices!.buffer), byteOffset: 0 },
             { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.colors!.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.uvs!.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.tileIndices!.buffer), byteOffset: 0 }
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.uvs!.buffer), byteOffset: 0 }
         ];
         this.indexBufferDescriptors = [
             { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesGround!.buffer), byteOffset: 0 },
@@ -180,14 +180,12 @@ export class SpyroLevelRenderer {
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
                 { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
-                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
-                { location: 3, bufferIndex: 3, format: GfxFormat.F32_R, bufferByteOffset: 0 }
+                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 }
             ],
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
                 { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 8,  frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 4,  frequency: GfxVertexBufferFrequency.PerVertex }
+                { byteStride: 8,  frequency: GfxVertexBufferFrequency.PerVertex }
             ],
             indexBufferFormat: GfxFormat.U32_R
         });
@@ -200,23 +198,15 @@ export class SpyroLevelRenderer {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offs = template.allocateUniformBuffer(Shader.ub_SceneParams, 20 + (4 * MAX_TILES));
+        let offs = template.allocateUniformBuffer(Shader.ub_SceneParams, 18);
         const d = template.mapUniformBufferF32(Shader.ub_SceneParams);
-        // u_Clip
+        // u_Clip (16)
         mat4.mul(SCRATCH_CLIP, viewerInput.camera.clipFromWorldMatrix, NOCLIP_SPACE_CORRECTION);
         offs += fillMatrix4x4(d, offs, SCRATCH_CLIP);
-        // u_TimeLOD
+        // u_Time (1)
         d[offs++] = viewerInput.time * 0.001 * (this.gameNumber === 1 ? 2.6 : 2);
-        d[offs++] = (this.useLOD) || !this.showTextures ? 1.0 : 0.0;;
-        d[offs++] = 0.0;
-        d[offs++] = 0.0;
-        // u_TileFlags
-        for (let i = 0; i < MAX_TILES; i++) {
-            d[offs++] = i < this.tileCount ? this.scrollFlags[i] : 0.0;
-            d[offs++] = 0.0;
-            d[offs++] = 0.0;
-            d[offs++] = 0.0;
-        }
+        // u_LOD (1)
+        d[offs++] = (this.useLOD) || !this.showTextures ? 1.0 : 0.0;
 
         if (this.useLOD) {
             this.drawBatches(renderInstManager, this.batchesLOD, this.indexBufferDescriptors[2], false);
@@ -232,13 +222,18 @@ export class SpyroLevelRenderer {
         renderInstManager.popTemplate();
     }
 
-    private drawBatches(renderInstManager: GfxRenderInstManager, batches: SpyroDrawCall[], indexBuffer: GfxIndexBufferDescriptor, transparency: boolean) {
+    private drawBatches(renderInstManager: GfxRenderInstManager, batches: SpyroDrawCall[], indexBuffer: GfxIndexBufferDescriptor, additiveBlend: boolean) {
         for (const batch of batches) {
             const renderInst = renderInstManager.newRenderInst();
 
+            let offs = renderInst.allocateUniformBuffer(Shader.ub_BatchParams, 1);
+            const d = renderInst.mapUniformBufferF32(Shader.ub_BatchParams);
+            // u_Scroll (1)
+            d[offs++] = this.scrollFlags[batch.tileIndex];
+
             const megaState = renderInst.getMegaStateFlags();
             megaState.cullMode = this.cullMode;
-            if (transparency) {
+            if (additiveBlend) {
                 setAttachmentStateSimple(megaState, {
                     blendMode: GfxBlendMode.Add,
                     blendSrcFactor: GfxBlendFactor.SrcAlpha,
