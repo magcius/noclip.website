@@ -8,8 +8,8 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { Destroyable } from "../SceneBase";
 import { ViewerRenderInput } from "../viewer";
-import { DreamDropObjectInstance, DreamDropPMO, DreamDropPMOMaterial, DreamDropPMOShape, DreamDropShapeAttributeBlend } from "./bin";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { DreamDropObjectInstance, DreamDropPMO, DreamDropPMOFlags, DreamDropPMOMaterial, DreamDropPMOShape, DreamDropShapeAttributeBlend } from "./bin";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { DreamDropTexture } from "./texture";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -36,7 +36,7 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_ModelParams {
-    Mat4x4 u_Shift;
+    Mat4x4 u_View;
 };
 
 layout(std140) uniform ub_ShapeParams {
@@ -57,7 +57,7 @@ layout(location = ${Shader.a_UV}) in vec2 a_UV;
 void main() {
     v_Color = a_Color;
     v_UV = a_UV + (u_Time * u_Scroll);
-    gl_Position = UnpackMatrix(u_Projection) * UnpackMatrix(u_Shift) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * UnpackMatrix(u_View) * vec4(a_Position, 1.0);
 }
 #endif
 
@@ -80,14 +80,19 @@ void main() {
 const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0;
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
-const SCRATCH_SKY_MAT = mat4.create();
-const SCRATCH_CLIP = mat4.create();
 const SCRATCH_MVP = mat4.create();
+const SCRATCH_VIEW = mat4.create();
 
+/**
+ * Gets the 0-based nth nibble of a 2-byte number. For example, to get 4 from 0x0401, use `1` for `n`
+ */
 function getShortNibble(n: number, nibble: number): number {
     return (n >> ((3 - nibble) * 4)) & 15;
 }
 
+/**
+ * Creates shift matrix based on given SRT and `WORLD_SCALE`. Rotation is assumed to be in radians
+ */
 function computeShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
     const srt = mat4.create();
     computeModelMatrixSRT(srt,
@@ -116,8 +121,6 @@ export class DreamDropRoomRenderer implements Destroyable {
     public objects: ModelRenderer[];
     public sets: DreamDropDataSet[];
     public selectedSetIndices: number[];
-    private partIndices: number[];
-    private skyPartIndices: number[];
     private setIndices: number[];
     private allSetIndices: number[][];
     private gfxProgram: GfxProgram;
@@ -133,8 +136,6 @@ export class DreamDropRoomRenderer implements Destroyable {
         this.gfxProgram = cache.createProgram(new Shader());
 
         this.parts = Array(pmos.length);
-        this.partIndices = [];
-        this.skyPartIndices = [];
         for (let i = 0; i < pmos.length; i++) {
             const model = pmos[i];
             const materials: MaterialInstance[] = Array(model.materials.length);
@@ -145,11 +146,6 @@ export class DreamDropRoomRenderer implements Destroyable {
                 }
             }
             const isSkyBox = config && config.skyBoxIds && config.skyBoxIds.includes(model.id);
-            if (isSkyBox) {
-                this.skyPartIndices.push(i);
-            } else {
-                this.partIndices.push(i);
-            }
             this.parts[i] = new ModelRenderer(cache, model, materials, model.name, isSkyBox);
         }
 
@@ -217,38 +213,14 @@ export class DreamDropRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        if (this.skyPartIndices.length > 0) {
-            const skyTemplate = renderHelper.renderInstManager.pushTemplate();
-
-            let skyOffset = skyTemplate.allocateUniformBuffer(Shader.ub_SceneParams, 17);
-            const skyUniformBuffer = skyTemplate.mapUniformBufferF32(Shader.ub_SceneParams);
-            mat4.copy(SCRATCH_SKY_MAT, viewerInput.camera.viewMatrix);
-            SCRATCH_SKY_MAT[12] = 0;
-            SCRATCH_SKY_MAT[13] = 0;
-            SCRATCH_SKY_MAT[14] = 0;
-            mat4.mul(SCRATCH_CLIP, viewerInput.camera.projectionMatrix, SCRATCH_SKY_MAT);
-            // u_Projection (16)
-            skyOffset += fillMatrix4x4(skyUniformBuffer, skyOffset, SCRATCH_CLIP);
-            // u_Time (1)
-            skyUniformBuffer[skyOffset++] = viewerInput.time * FRAME_TIME;
-
-            for (const spi of this.skyPartIndices) {
-                if (this.parts[spi].visible) {
-                    this.parts[spi].prepareToRender(device, renderHelper, viewerInput);
-                }
-            }
-
-            renderHelper.renderInstManager.popTemplate();
-        }
-
         let offset = template.allocateUniformBuffer(Shader.ub_SceneParams, 17);
         const uniformBuffer = template.mapUniformBufferF32(Shader.ub_SceneParams);
         // u_Projection (16)
-        offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.clipFromWorldMatrix);
+        offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.projectionMatrix);
         // u_Time (1)
         uniformBuffer[offset++] = viewerInput.time * FRAME_TIME;
 
-        for (const i of this.partIndices) {
+        for (let i = 0; i < this.parts.length; i++) {
             if (this.parts[i].visible) {
                 this.parts[i].prepareToRender(device, renderHelper, viewerInput);
             }
@@ -276,6 +248,7 @@ class ModelRenderer implements Destroyable, Layer {
     public bbox: Float32Array;
     public shiftMatrices: mat4[];
     private shapes: ShapeRenderer[];
+    private isBillboard: boolean;
 
     constructor(cache: GfxRenderCache, model: DreamDropPMO, materials: MaterialInstance[], name: string, private isSkyBox: boolean = false) {
         // console.log(model.name, model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
@@ -287,6 +260,7 @@ class ModelRenderer implements Destroyable, Layer {
         }
         this.shiftMatrices = [computeShiftMatrix(model.scale, model.rotation, model.position)];
         this.bbox = new Float32Array(model.bbox.map(v => v / model.scaleNum)); // some bboxes need the divison (???)
+        this.isBillboard = getShortNibble(model.flags, 1) === DreamDropPMOFlags.BILLBOARD;
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
@@ -302,8 +276,18 @@ class ModelRenderer implements Destroyable, Layer {
             }
             let offset = template.allocateUniformBuffer(Shader.ub_ModelParams, 16);
             const uniformBuffer = template.mapUniformBufferF32(Shader.ub_ModelParams);
-            // u_Shift (16)
-            offset += fillMatrix4x4(uniformBuffer, offset, shiftMatrix);
+            // u_View (16)
+            mat4.copy(SCRATCH_VIEW, viewerInput.camera.viewMatrix);
+            if (this.isSkyBox) {
+                SCRATCH_VIEW[12] = 0;
+                SCRATCH_VIEW[13] = 0;
+                SCRATCH_VIEW[14] = 0;
+            }
+            mat4.mul(SCRATCH_VIEW, SCRATCH_VIEW, shiftMatrix);
+            if (this.isBillboard && !this.isSkyBox) {
+                calcBillboardMatrix(SCRATCH_VIEW, SCRATCH_VIEW, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
+            }
+            offset += fillMatrix4x4(uniformBuffer, offset, SCRATCH_VIEW);
 
             for (const shape of this.shapes) {
                 shape.prepareToRender(renderHelper);
@@ -313,7 +297,9 @@ class ModelRenderer implements Destroyable, Layer {
         renderHelper.renderInstManager.popTemplate();
     }
 
-
+    /**
+     * Frustum culling with an 8-point bounding box. Cheaper than standard AABB frustum culling
+     */
     private inView(bbox: Float32Array, m: mat4) {
         let aol = true, aor = true;
         let aob = true, aot = true;

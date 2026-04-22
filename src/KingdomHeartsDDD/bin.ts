@@ -106,10 +106,20 @@ enum PMOPrimitiveFormat {
     QUAD
 }
 
+/**
+ * Blend modes based on a shape's attribute 3rd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export enum DreamDropShapeAttributeBlend {
     TRANSLUCENT = 2,
-    TRANSLUCENT2 = 3,
+    TRANSLUCENT2 = 3, // unsure what the difference is between 2 and 3, if any
     ADDITIVE = 4
+}
+
+/**
+ * Values based on a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropPMOFlags {
+    BILLBOARD = 4
 }
 
 /**
@@ -518,6 +528,7 @@ export class DreamDropParser {
             shape.colors[(i * 4) + 2] = this.getByte() / 255.0;
             shape.colors[(i * 4) + 3] = this.getByte() / 255.0;
 
+            // uvs + colors are 8 bytes, so there's shape.vertexSizeBytes - 8 bytes left for other data
             switch (shape.vertexSizeBytes) {
                 case 14:
                 case 22:
@@ -526,9 +537,9 @@ export class DreamDropParser {
                     shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_SCALE;
                     shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_SCALE;
                     if (shape.vertexSizeBytes >= 22) {
-                        this.offset += 8;
+                        this.offset += 8; // skip
                         if (shape.vertexSizeBytes === 26) {
-                            this.offset += 4;
+                            this.offset += 4; // skip even more
                         }
                     }
                     break;
@@ -538,7 +549,7 @@ export class DreamDropParser {
                     shape.vertices[(i * 3) + 1] = this.getFloat() / NORMALIZED_SCALE;
                     shape.vertices[(i * 3) + 2] = this.getFloat() / NORMALIZED_SCALE;
                     if (shape.vertexSizeBytes === 28) {
-                        this.offset += 8;
+                        this.offset += 8; // skip
                     }
                     break;
                 default:
