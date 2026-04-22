@@ -7,7 +7,7 @@ import { GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platf
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { SpyroSkybox, SpyroLevel, MobyInstance, TILE_SCROLL_MAP, SpyroDrawCall } from "./bin";
+import { SpyroSkybox, SpyroLevel, MobyInstance, SPYRO_TILE_SCROLL_MAP, SpyroDrawCall } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
@@ -31,6 +31,8 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_BatchParams {
+    float u_Brightness;
+    float u_IsWater;
     float u_Scroll;
 };
 
@@ -49,17 +51,12 @@ void main() {
     v_Color = a_Color;
     v_UV = a_UV;
 
-    if (a_Color.a < 0.5) {
-        // water
+    if (u_IsWater > 0.1) {
         float t1 = u_Time;
         float t2 = u_Time * 0.12;
         float phase = dot(worldPos.xz, vec2(0.025, 0.03));
         float wave = sin(t1 + phase) * 3.0 + sin(t2 + phase * 1.7) * 1.5;
         worldPos.z += wave * 1.1;
-    }
-
-    if (u_LOD < 1.0) {
-        v_Color.rgb *= 1.9;
     }
 
     gl_Position = UnpackMatrix(u_Clip) * vec4(worldPos, 1.0);
@@ -79,11 +76,7 @@ void main() {
     }
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
 
-    if (v_Color.a < 0.99) {
-        gl_FragColor = vec4(texColor.rgb * v_Color.rgb, 1.0);
-    } else {
-        gl_FragColor = texColor * v_Color;
-    }
+    gl_FragColor = vec4(texColor.rgb * v_Color.rgb * u_Brightness, 1.0);
 }
 #endif
     `;
@@ -93,6 +86,12 @@ void main() {
     }
 }
 
+
+const BRIGHTNESS_OPAQUE = 1.9;
+const BRIGHTNESS_TRANSPARENT = 1.0;
+const MOBY_POS_SCALE = 1.0 / 16.0;
+const MOBY_ROT_COLOR = colorNewFromRGBA(1, 1, 0, 1);
+const MOBY_DEBUG_FLAGS = { flags: DebugDrawFlags.WorldSpace };
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 const BINDING_LAYOUTS_SKY: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 const NOCLIP_SPACE_CORRECTION = mat4.fromValues(
@@ -104,6 +103,8 @@ const NOCLIP_SPACE_CORRECTION = mat4.fromValues(
 const SCRATCH_CLIP = mat4.create();
 const SCRATCH_SKY_VIEW = mat4.create();
 const SCRATCH_SKY_PROJ = mat4.create();
+const SCRATCH_MOBY_POS = vec3.create();
+const SCRATCH_MOBY_ROT = vec3.create();
 
 export class SpyroLevelRenderer {
     public showMobys: boolean = false;
@@ -144,8 +145,8 @@ export class SpyroLevelRenderer {
         }
 
         this.scrollFlags = Array(this.tileCount).fill(0.0);
-        if (level.id in TILE_SCROLL_MAP[level.game]) {
-            for (const ti of TILE_SCROLL_MAP[level.game][level.id]) {
+        if (level.id in SPYRO_TILE_SCROLL_MAP[level.game]) {
+            for (const ti of SPYRO_TILE_SCROLL_MAP[level.game][level.id]) {
                 if (ti != null && ti >= 0 && ti < this.tileCount) {
                     this.scrollFlags[ti] = 1.0;
                 }
@@ -226,14 +227,19 @@ export class SpyroLevelRenderer {
         for (const batch of batches) {
             const renderInst = renderInstManager.newRenderInst();
 
-            let offs = renderInst.allocateUniformBuffer(Shader.ub_BatchParams, 1);
+            let offs = renderInst.allocateUniformBuffer(Shader.ub_BatchParams, 3);
             const d = renderInst.mapUniformBufferF32(Shader.ub_BatchParams);
+            // u_Brightness (1)
+            d[offs++] = additiveBlend ? BRIGHTNESS_TRANSPARENT : BRIGHTNESS_OPAQUE;
+            // u_IsWater (1)
+            d[offs++] = batch.isWater ? 1.0 : 0.0;
             // u_Scroll (1)
             d[offs++] = this.scrollFlags[batch.tileIndex];
 
             const megaState = renderInst.getMegaStateFlags();
             megaState.cullMode = this.cullMode;
             if (additiveBlend) {
+                megaState.depthWrite = false;
                 setAttachmentStateSimple(megaState, {
                     blendMode: GfxBlendMode.Add,
                     blendSrcFactor: GfxBlendFactor.SrcAlpha,
@@ -250,32 +256,25 @@ export class SpyroLevelRenderer {
     }
 
     private drawMobys(renderHelper: GfxRenderHelper): void {
-        const scale = 1.0 / 16;
-        const y = colorNewFromRGBA(1, 1, 0, 1);
         for (let i = 0; i < this.mobyInstances.length; i++) {
-            const m = this.mobyInstances[i];
-            const spyroPos = vec3.fromValues(m.x * scale, m.y * scale, m.z * scale);
-            const worldPos = vec3.create();
-            vec3.transformMat4(worldPos, spyroPos, NOCLIP_SPACE_CORRECTION);
+            const instance = this.mobyInstances[i];
+            vec3.transformMat4(SCRATCH_MOBY_POS, vec3.fromValues(instance.x * MOBY_POS_SCALE, instance.y * MOBY_POS_SCALE, instance.z * MOBY_POS_SCALE), NOCLIP_SPACE_CORRECTION);
 
-            const r = ((m.classId * 97) & 255) / 255;
-            const g = ((m.classId * 57) & 255) / 255;
-            const b = ((m.classId * 17) & 255) / 255;
-            const color = colorNewFromRGBA(r, g, b, 1);
-            renderHelper.debugDraw.drawLocator(worldPos, 20, color, { flags: DebugDrawFlags.WorldSpace });
+            const r = ((instance.classId * 97) & 255) / 255;
+            const g = ((instance.classId * 57) & 255) / 255;
+            const b = ((instance.classId * 17) & 255) / 255;
+            renderHelper.debugDraw.drawLocator(SCRATCH_MOBY_POS, 20, colorNewFromRGBA(r, g, b, 1), MOBY_DEBUG_FLAGS);
 
-            const yawRad = ((m.yaw + 64) & 0xFF) / 256 * (Math.PI * 2);
+            const yawRad = ((instance.yaw + 64) & 0xFF) / 256 * (Math.PI * 2);
             const forward = vec3.fromValues(Math.sin(yawRad), 0, Math.cos(yawRad));
             vec3.scale(forward, forward, 40);
-            const arrowEnd = vec3.create();
-            vec3.add(arrowEnd, worldPos, forward);
-            renderHelper.debugDraw.drawLine(worldPos, arrowEnd, y, undefined, { flags: DebugDrawFlags.WorldSpace });
+            vec3.add(SCRATCH_MOBY_ROT, SCRATCH_MOBY_POS, forward);
+            renderHelper.debugDraw.drawLine(SCRATCH_MOBY_POS, SCRATCH_MOBY_ROT, MOBY_ROT_COLOR, undefined, MOBY_DEBUG_FLAGS);
 
-            const labelPos = vec3.clone(worldPos);
-            const s = `${m.classId} (${i})`;
-            labelPos[0] -= s.length * 7; // roughly center it
-            labelPos[1] += 50;
-            renderHelper.debugDraw.drawWorldTextRU(s, labelPos, White, undefined, undefined, { flags: DebugDrawFlags.WorldSpace });
+            const s = `${instance.classId} (${i})`;
+            SCRATCH_MOBY_POS[0] -= s.length * 7; // roughly center it
+            SCRATCH_MOBY_POS[1] += 50;
+            renderHelper.debugDraw.drawWorldTextRU(s, SCRATCH_MOBY_POS, White, undefined, undefined, MOBY_DEBUG_FLAGS);
         }
     }
 

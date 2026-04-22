@@ -29,6 +29,7 @@ export interface SpyroDrawCall {
     tileIndex: number;
     indexOffset: number;
     indexCount: number;
+    isWater: boolean;
 }
 
 export interface SpyroLevel {
@@ -151,11 +152,13 @@ class VertexColor {
     r: number;
     g: number;
     b: number;
+    a: number;
 
     constructor(view: DataView, offset: number) {
         this.r = view.getUint8(offset);
         this.g = view.getUint8(offset + 1);
         this.b = view.getUint8(offset + 2);
+        this.a = view.getUint8(offset + 3);
     }
 }
 
@@ -316,7 +319,7 @@ export class VRAM {
     }
 }
 
-export const TILE_SCROLL_MAP: Record<number, Record<number, number[]>> = {
+export const SPYRO_TILE_SCROLL_MAP: Record<number, Record<number, number[]>> = {
     1: {
         11: [23], 13: [31], 17: [1], 27: [31], 35: [51], 37: [35],
         49: [54], 55: [66], 59: [12], 63: [77], 67: [55], 69: [29],
@@ -475,7 +478,7 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
     }
 }
 
-function buildBatches(tileGroups: number[][]) {
+function buildBatches(tileGroups: number[][], waterIndices?: number[]) {
     const batches: SpyroDrawCall[] = [];
     const indices: number[] = [];
     for (let i = 0; i < tileGroups.length; i++) {
@@ -483,7 +486,8 @@ function buildBatches(tileGroups: number[][]) {
         if (group.length === 0) {
             continue;
         }
-        batches.push({ tileIndex: i, indexOffset: indices.length, indexCount: group.length });
+        const isWater = waterIndices !== undefined && waterIndices.includes(i);
+        batches.push({ tileIndex: i, indexOffset: indices.length, indexCount: group.length, isWater });
         indices.push(...group);
     }
     return { batches, indices: new Uint32Array(indices) };
@@ -514,7 +518,7 @@ export function buildSpyroSkybox(data: DataView, gameNumber: number): SpyroSkybo
     return { backgroundColor, vertices, colors, faces };
 }
 
-export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gameNumber: number, levelNumber: number): SpyroLevel {
+export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gameNumber: number, id: number): SpyroLevel {
     const vertices: number[] = [];
     const colors: number[] = [];
     const stream: LevelStream = {
@@ -523,6 +527,7 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
     };
     const tileCount = textures.tiles.length;
     const invalidTile: boolean[] = [];
+    const waterIndices: number[] = [];
     const UV = { TL: [0, 1], TR: [1, 1], BR: [1, 0], BL: [0, 0], ZERO: [0, 0] };
     let runningIndex = 0;
 
@@ -591,19 +596,19 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
             return;
         }
         const group = opts.isLOD ? stream.indicesLOD : (opts.isTransparent || opts.isWater ? stream.indicesTransparent : stream.indicesGround);
-        const alpha = opts.isWater ? 0.4 : (opts.isTransparent ? 0.5 : 1.0);
         const v = [v1, v2, v3];
         const color = [c1, c2, c3];
         const uvs = [uv1, uv2, uv3];
         for (let i = 0; i < 3; i++) {
             const vi = v[i] * 3;
-            const ci = color[i] * 3;
+            const ci = color[i] * 4;
             const uv = uvs[i];
             const r = colors[ci];
             const g = colors[ci + 1];
             const b = colors[ci + 2];
+            const a = colors[ci + 3];
             stream.vertices.push(vertices[vi], vertices[vi + 1], vertices[vi + 2]);
-            stream.colors.push(r / 255, g / 255, b / 255, alpha);
+            stream.colors.push(r / 255, g / 255, b / 255, a / 255);
             stream.uvs.push(uv[0], uv[1]);
             group[tileIndex].push(runningIndex++);
         }
@@ -661,6 +666,10 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
             pushTri(v1, v2, v3, c1, c2, c3, A, B, C, tileIndex, opts);
             pushTri(v1, v3, v4, c1, c3, c4, A, C, D, tileIndex, opts);
         }
+
+        if (isWater && !waterIndices.includes(tileIndex)) {
+            waterIndices.push(tileIndex);
+        }
     }
 
     for (let partIndex = 0; partIndex < partCount; partIndex++) {
@@ -690,11 +699,11 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
             vertices.push(x, y, z);
         }
 
-        const lodColorOffset = colors.length / 3;
+        const lodColorOffset = colors.length / 4;
         for (let i = 0; i < header.lodColorCount; i++) {
             const c = new VertexColor(data, pointer);
             pointer += 4;
-            colors.push(c.r, c.g, c.b);
+            colors.push(c.r, c.g, c.b, c.a);
         }
 
         for (let i = 0; i < header.lodPolyCount; i++) {
@@ -758,11 +767,11 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
             vertices.push(x, y, z);
         }
 
-        const mdlColorOffset = colors.length / 3;
+        const mdlColorOffset = colors.length / 4;
         for (let i = 0; i < header.mdlColorCount; i++) {
             const c = new VertexColor(data, pointer);
             pointer += 4;
-            colors.push(c.r, c.g, c.b);
+            colors.push(c.r, c.g, c.b, c.a);
         }
 
         pointer += header.mdlColorCount * 4;
@@ -774,12 +783,12 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
         }
     }
 
-    const ground = buildBatches(stream.indicesGround);
-    const transparent = buildBatches(stream.indicesTransparent);
+    const ground = buildBatches(stream.indicesGround, waterIndices); // water polys are always transparent I think, but just to be sure
+    const transparent = buildBatches(stream.indicesTransparent, waterIndices);
     const lod = buildBatches(stream.indicesLOD);
 
     return {
-        textures, game: gameNumber, id: levelNumber,
+        textures, game: gameNumber, id,
         vertices: new Float32Array(stream.vertices),
         colors: new Float32Array(stream.colors),
         uvs: new Float32Array(stream.uvs),
