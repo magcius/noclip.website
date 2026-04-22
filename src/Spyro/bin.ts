@@ -1,3 +1,4 @@
+import { vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { assert } from "../util";
@@ -19,14 +20,20 @@ interface LevelStream {
     indicesLOD: number[][];
 }
 
-export interface TextureStore {
+export interface SpyroTextureStore {
     textures: GfxTexture[];
     colors: Uint8Array[];
     tiles: Tile[];
 }
 
-export interface Level {
-    textures: TextureStore;
+export interface SpyroDrawCall {
+    tileIndex: number;
+    indexOffset: number;
+    indexCount: number;
+}
+
+export interface SpyroLevel {
+    textures: SpyroTextureStore;
     game: number;
     id: number;
     vertices?: Float32Array;
@@ -36,12 +43,12 @@ export interface Level {
     indicesGround?: Uint32Array;
     indicesTransparent?: Uint32Array;
     indicesLOD?: Uint32Array;
-    batchesGround: { tileIndex: number, indexOffset: number, indexCount: number }[];
-    batchesTransparent: { tileIndex: number, indexOffset: number, indexCount: number }[];
-    batchesLOD: { tileIndex: number, indexOffset: number, indexCount: number }[];
+    batchesGround: SpyroDrawCall[];
+    batchesTransparent: SpyroDrawCall[];
+    batchesLOD: SpyroDrawCall[];
 };
 
-export interface LevelData {
+export interface SpyroLevelData {
     vram: VRAM;
     textureList: ArrayBufferSlice;
     ground: ArrayBufferSlice;
@@ -50,7 +57,7 @@ export interface LevelData {
     subfile4?: ArrayBufferSlice;
 }
 
-export interface Skybox {
+export interface SpyroSkybox {
     backgroundColor: number[];
     vertices: number[][];
     colors: number[][];
@@ -66,19 +73,29 @@ export interface MobyInstance {
 }
 
 class Tile {
-    mainX: number; mainY: number; p1: number; p2: number;
-    xx: number; yy: number; ss: number; ff: number;
-    px: number = 0; py: number = 0;
-    m: 4 | 8 | 15 = 4; size: number = 32;
-    x1: number = 0; x2: number = 0; x3: number = 0; x4: number = 0;
-    y1: number = 0; y2: number = 0; y3: number = 0; y4: number = 0;
-    rotation: number = 0; s: number = 0; offset: number = 0;
-    f: boolean = false; transparent: number = 0;
+    mainX: number;
+    mainY: number;
+    p: vec2;
+    xx: number;
+    yy: number;
+    ss: number;
+    ff: number;
+    px: number = 0;
+    py: number = 0;
+    m: 4 | 8 | 15 = 4;
+    size: number = 32;
+    x: vec4 = vec4.create();
+    y: vec4 = vec4.create();
+    rotation: number = 0;
+    s: number = 0;
+    offset: number = 0;
+    f: boolean = false;
+    transparent: number = 0;
+
     constructor(data: DataView, offset: number) {
         this.mainX = data.getUint8(offset);
         this.mainY = data.getUint8(offset + 1);
-        this.p1 = data.getUint8(offset + 2);
-        this.p2 = data.getUint8(offset + 3);
+        this.p = vec2.fromValues(data.getUint8(offset + 2), data.getUint8(offset + 3));
         this.xx = data.getUint8(offset + 4);
         this.yy = data.getUint8(offset + 5);
         this.ss = data.getUint8(offset + 6);
@@ -87,9 +104,20 @@ class Tile {
 }
 
 class PartHeader {
-    y: number; x: number; i0: number; z: number; flag: number;
-    lodVertexCount: number; lodColorCount: number; lodPolyCount: number; i1: number;
-    mdlVertexCount: number; mdlColorCount: number; mdlPolyCount: number; water: number;
+    y: number;
+    x: number;
+    i0: number;
+    z: number;
+    flag: number;
+    lodVertexCount: number;
+    lodColorCount: number;
+    lodPolyCount: number;
+    i1: number;
+    mdlVertexCount: number;
+    mdlColorCount: number;
+    mdlPolyCount: number;
+    water: number;
+
     constructor(data: DataView, offs: number) {
         this.y = data.getInt16(offs, true);
         this.x = data.getInt16(offs + 2, true);
@@ -108,7 +136,11 @@ class PartHeader {
 }
 
 class RawVertex {
-    byte1: number; byte2: number; byte3: number; byte4: number;
+    byte1: number;
+    byte2: number;
+    byte3: number;
+    byte4: number;
+
     constructor(data: DataView, offset: number) {
         this.byte1 = data.getUint8(offset);
         this.byte2 = data.getUint8(offset + 1);
@@ -118,7 +150,10 @@ class RawVertex {
 }
 
 class VertexColor {
-    r: number; g: number; b: number;
+    r: number;
+    g: number;
+    b: number;
+
     constructor(view: DataView, offset: number) {
         this.r = view.getUint8(offset);
         this.g = view.getUint8(offset + 1);
@@ -127,59 +162,48 @@ class VertexColor {
 }
 
 class LODPoly {
-    n: number; v1: number; v2: number; v3: number;
-    f: number; c1: number; c2: number; c3: number;
-    constructor(view: DataView, offs: number) {
-        this.n = view.getUint8(offs);
-        this.v1 = view.getUint8(offs + 1);
-        this.v2 = view.getUint8(offs + 2);
-        this.v3 = view.getUint8(offs + 3);
-        this.f = view.getUint8(offs + 4);
-        this.c1 = view.getUint8(offs + 5);
-        this.c2 = view.getUint8(offs + 6);
-        this.c3 = view.getUint8(offs + 7);
+    n: number;
+    v: vec3;
+    f: number;
+    c: vec3;
+
+    constructor(view: DataView, offset: number) {
+        this.n = view.getUint8(offset);
+        this.v = vec3.fromValues(view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+        this.f = view.getUint8(offset + 4);
+        this.c = vec3.fromValues(view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
     }
 }
 
 class LODPoly2 {
-    v1: number; v2: number; v3: number; v4: number;
-    c1: number; c2: number; c3: number; c4: number;
-    constructor(view: DataView, offs: number) {
-        this.v1 = view.getUint8(offs);
-        this.v2 = view.getUint8(offs + 1);
-        this.v3 = view.getUint8(offs + 2);
-        this.v4 = view.getUint8(offs + 3);
-        this.c1 = view.getUint8(offs + 4);
-        this.c2 = view.getUint8(offs + 5);
-        this.c3 = view.getUint8(offs + 6);
-        this.c4 = view.getUint8(offs + 7);
+    v: vec4;
+    c: vec4;
+
+    constructor(view: DataView, offset: number) {
+        this.v = vec4.fromValues(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+        this.c = vec4.fromValues(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
     }
 }
 
 class Polygon {
-    v1: number; v2: number; v3: number; v4: number;
-    c1: number; c2: number; c3: number; c4: number;
-    t: number; r: number; // S1 only
-    s1: number; s2: number; s3: number; s4: number; tt: number; ii: number; // S2 only
-    constructor(view: DataView, offs: number, gameNumber: number) {
-        this.v1 = view.getUint8(offs);
-        this.v2 = view.getUint8(offs + 1);
-        this.v3 = view.getUint8(offs + 2);
-        this.v4 = view.getUint8(offs + 3);
-        this.c1 = view.getUint8(offs + 4);
-        this.c2 = view.getUint8(offs + 5);
-        this.c3 = view.getUint8(offs + 6);
-        this.c4 = view.getUint8(offs + 7);
+    v: vec4;
+    c: vec4;
+    t: number = 0; // S1 only
+    r: number = 0; // S1 only
+    s: vec4 = vec4.create(); // S2 only
+    tt: number = 0; // S2 only
+    ii: number = 0; // S2 only
+
+    constructor(view: DataView, offset: number, gameNumber: number) {
+        this.v = vec4.fromValues(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+        this.c = vec4.fromValues(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
         if (gameNumber == 1) {
-            this.t = view.getUint8(offs + 8);
-            this.r = view.getUint8(offs + 9);
+            this.t = view.getUint8(offset + 8);
+            this.r = view.getUint8(offset + 9);
         } else {
-            this.s1 = view.getUint8(offs + 8);
-            this.s2 = view.getUint8(offs + 9);
-            this.s3 = view.getUint8(offs + 10);
-            this.s4 = view.getUint8(offs + 11);
-            this.tt = view.getUint8(offs + 12) & 127;
-            this.ii = view.getUint8(offs + 13);
+            this.s = vec4.fromValues(view.getUint8(offset + 8), view.getUint8(offset + 9), view.getUint8(offset + 10), view.getUint8(offset + 11));
+            this.tt = view.getUint8(offset + 12) & 127;
+            this.ii = view.getUint8(offset + 13);
         }
     }
 }
@@ -390,8 +414,8 @@ function readColorLookupTable(vram: VRAM, px: number, py: number, n: number): [n
 }
 
 function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, height: number = tile.size): Uint8Array {
-    let x4 = tile.x4;
-    const y4 = tile.y4;
+    let x4 = tile.x[3];
+    const y4 = tile.y[3];
     if (tile.m === 4) {
         x4 = x4 >> 2;
         const palette = readColorLookupTable(vram, tile.px, tile.py, 16);
@@ -440,7 +464,7 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
         const out = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const word = vram.getWord(tile.x4 + x, y4 + y);
+                const word = vram.getWord(tile.x[3] + x, y4 + y);
                 const [r, g, b, a] = colorBitsToRGBA(word);
                 const dst = (y * width + x) * 4;
                 out[dst + 0] = r;
@@ -454,7 +478,7 @@ function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, hei
 }
 
 function buildBatches(tileGroups: number[][]) {
-    const batches: { tileIndex: number; indexOffset: number; indexCount: number }[] = [];
+    const batches: SpyroDrawCall[] = [];
     const indices: number[] = [];
     for (let i = 0; i < tileGroups.length; i++) {
         const group = tileGroups[i];
@@ -467,7 +491,7 @@ function buildBatches(tileGroups: number[][]) {
     return { batches, indices: new Uint32Array(indices) };
 }
 
-export function buildSkybox(data: DataView, gameNumber: number): Skybox {
+export function buildSpyroSkybox(data: DataView, gameNumber: number): SpyroSkybox {
     const backgroundColor = [data.getUint8(0), data.getUint8(1), data.getUint8(2)];
     let pointer = 4;
     const partOffsets: number[] = [];
@@ -492,7 +516,7 @@ export function buildSkybox(data: DataView, gameNumber: number): Skybox {
     return { backgroundColor, vertices, colors, faces };
 }
 
-export function buildLevel(data: DataView, textures: TextureStore, gameNumber: number, levelNumber: number): Level {
+export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gameNumber: number, levelNumber: number): SpyroLevel {
     const vertices: number[] = [];
     const colors: number[] = [];
     const stream: LevelStream = {
@@ -540,26 +564,26 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
     function decodeLODPoly(poly: LODPoly | LODPoly2) {
         if (gameNumber === 1) {
             return {
-                v1: (poly.v1 & 63),
-                v2: (poly.v1 >> 6) | ((poly.v2 & 15) << 2),
-                v3: (poly.v2 >> 4) | ((poly.v3 & 3) << 4),
-                v4: (poly.v3 >> 2),
-                c1: (poly.c1 & 63),
-                c2: (poly.c1 >> 6) | ((poly.c2 & 15) << 2),
-                c3: (poly.c2 >> 4) | ((poly.c3 & 3) << 4),
-                c4: (poly.c3 >> 2),
+                v1: (poly.v[0] & 63),
+                v2: (poly.v[0] >> 6) | ((poly.v[1] & 15) << 2),
+                v3: (poly.v[1] >> 4) | ((poly.v[2] & 3) << 4),
+                v4: (poly.v[2] >> 2),
+                c1: (poly.c[0] & 63),
+                c2: (poly.c[0] >> 6) | ((poly.c[1] & 15) << 2),
+                c3: (poly.c[1] >> 4) | ((poly.c[2] & 3) << 4),
+                c4: (poly.c[2] >> 2),
             };
         } else {
             assert(poly instanceof LODPoly2);
             return {
-                v1: (poly.v1 >> 3) | ((poly.v2 & 3) << 5),
-                v2: (poly.v2 >> 2) | ((poly.v3 & 1) << 6),
-                v3: (poly.v3 >> 1),
-                v4: (poly.v4 & 127),
-                c1: (poly.c1 >> 4) | ((poly.c2 & 7) << 4),
-                c2: (poly.c2 >> 3) | ((poly.c3 & 3) << 5),
-                c3: (poly.c3 >> 2) | ((poly.c4 & 1) << 6),
-                c4: (poly.c4 >> 1),
+                v1: (poly.v[0] >> 3) | ((poly.v[1] & 3) << 5),
+                v2: (poly.v[1] >> 2) | ((poly.v[2] & 1) << 6),
+                v3: (poly.v[2] >> 1),
+                v4: (poly.v[3] & 127),
+                c1: (poly.c[0] >> 4) | ((poly.c[1] & 7) << 4),
+                c2: (poly.c[1] >> 3) | ((poly.c[2] & 3) << 5),
+                c3: (poly.c[2] >> 2) | ((poly.c[3] & 1) << 6),
+                c4: (poly.c[3] >> 1),
             };
         }
     }
@@ -595,21 +619,21 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
         }
         const tile = textures.tiles[tileIndex];
         const isTransparent = tile.transparent > 0;
-        const isWater = (gameNumber > 1) ? (waterFlag === 0 && poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0) : false;
+        const isWater = (gameNumber > 1) ? (waterFlag === 0 && poly.s[0] === 0 && poly.s[1] === 0 && poly.s[2] === 0 && poly.s[3] === 0) : false;
         const isLOD = false;
         const opts = { isLOD, isTransparent, isWater };
-        const v1 = vertexOffset + poly.v1;
-        const v2 = vertexOffset + poly.v2;
-        const v3 = vertexOffset + poly.v3;
-        const v4 = vertexOffset + poly.v4;
-        const c1 = colorOffset + poly.c1;
-        const c2 = colorOffset + poly.c2;
-        const c3 = colorOffset + poly.c3;
-        const c4 = colorOffset + poly.c4;
+        const v1 = vertexOffset + poly.v[0];
+        const v2 = vertexOffset + poly.v[1];
+        const v3 = vertexOffset + poly.v[2];
+        const v4 = vertexOffset + poly.v[3];
+        const c1 = colorOffset + poly.c[0];
+        const c2 = colorOffset + poly.c[1];
+        const c3 = colorOffset + poly.c[2];
+        const c4 = colorOffset + poly.c[3];
         let A = UV.TL, B = UV.TR, C = UV.BR, D = UV.BL;
 
+        const isTri = poly.v[0] === poly.v[1];
         if (gameNumber > 1) {
-            const isTri = poly.v1 === poly.v2;
             if (isTri) {
                 const rr = (poly.ii >> 4) & 3;
                 const rot = (tile.rotation - rr) & 3;
@@ -618,7 +642,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
                 [A, B, C, D] = rotated;
             }
         } else {
-            if (poly.v1 === poly.v2) {
+            if (poly.v[0] === poly.v[1]) {
                 const base = [UV.TL, UV.TR, UV.BR, UV.BL];
                 const perms = [[0, 1, 2, 3], [3, 0, 1, 2], [2, 3, 0, 1], [1, 2, 3, 0]];
                 const p = perms[poly.r & 3];
@@ -628,8 +652,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
                 D = base[p[3]];
             }
         }
-
-        const isTri = poly.v1 === poly.v2;
+        
         if (isTri) {
             const inverse = (gameNumber > 1) ? !!(poly.ii & 4) : false;
             if (!inverse) {
@@ -767,7 +790,7 @@ export function buildLevel(data: DataView, textures: TextureStore, gameNumber: n
     };
 }
 
-export function parseTextures(vram: VRAM, textureList: DataView, gameNumber: number): TextureStore {
+export function parseSpyroTextures(vram: VRAM, textureList: DataView, gameNumber: number): SpyroTextureStore {
     const tiles = parseTiles(textureList, gameNumber);
     const tileCount = tiles.length;
     const colors: Uint8Array[] = [];
@@ -835,7 +858,7 @@ export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): 
     return mobys;
 }
 
-export function parseLevelData(data: ArrayBufferSlice): LevelData {
+export function parseSpyroLevelData(data: ArrayBufferSlice): SpyroLevelData {
     let pointer = 0;
     function getUint32() {
         return new Uint32Array(data.arrayBuffer, pointer, 4)[0];
@@ -919,7 +942,7 @@ export function parseLevelData(data: ArrayBufferSlice): LevelData {
     return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
 }
 
-export function parseLevelData2(data: ArrayBufferSlice, gameNumber: number = 2): LevelData {
+export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number = 2): SpyroLevelData {
     let pointer = 0;
     function getUint32() {
         pointer += 4;
@@ -1053,7 +1076,7 @@ export function parseLevelData2(data: ArrayBufferSlice, gameNumber: number = 2):
         }
     }
 
-    // Fourth subfile
+    // fourth subfile
     let subfile4;
     pointer = 24;
     const subfile4Offset = getUint32();
@@ -1094,7 +1117,7 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
     const baseColorIndex = colors.length;
 
     // Header (24)
-    pointer += 8; // skip first 8 bytes
+    pointer += 8;
     const globalY = view.getInt16(pointer, true);
     const globalZ = view.getInt16(pointer + 2, true);
     const vertexCount = view.getUint16(pointer + 4, true);
@@ -1293,19 +1316,19 @@ function buildTile(data: DataView, offset: number, gameNumber: number): Tile {
             tile.s *= 64;
             break;
     }
-    tile.x4 = tile.mainX + tile.s;
-    tile.x3 = tile.xx + tile.s;
-    tile.x1 = tile.x4;
-    tile.x2 = tile.x4 + tile.size;
-    tile.y4 = tile.mainY;
+    tile.x[3] = tile.mainX + tile.s;
+    tile.x[2] = tile.xx + tile.s;
+    tile.x[0] = tile.x[3];
+    tile.x[1] = tile.x[3] + tile.size;
+    tile.y[3] = tile.mainY;
     if ((tile.ss & 16) > 0) {
-        tile.y4 += 256;
+        tile.y[3] += 256;
     }
-    tile.y3 = tile.y4;
-    tile.y1 = tile.y4 + tile.size;
-    tile.y2 = tile.y4 + tile.size;
-    tile.px = (tile.p1 & 31) * 16;
-    tile.py = (tile.p1 >> 6) | (tile.p2 << 2);
+    tile.y[2] = tile.y[3];
+    tile.y[0] = tile.y[3] + tile.size;
+    tile.y[1] = tile.y[3] + tile.size;
+    tile.px = (tile.p[0] & 31) * 16;
+    tile.py = (tile.p[0] >> 6) | (tile.p[1] << 2);
     tile.rotation = ((tile.ff & 127) >> 4) & 7;
     tile.offset = offset - 8;
     if (gameNumber > 1) {
