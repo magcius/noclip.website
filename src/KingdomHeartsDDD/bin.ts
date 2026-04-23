@@ -1,4 +1,4 @@
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DreamDropTextureFormat } from "./texture";
 
@@ -81,9 +81,65 @@ export interface DreamDropObjectInstance {
     rotation: vec3;
 }
 
+export interface DreamDropPAM {
+    animations: DreamDropAnimation[];
+}
+
+interface DreamDropAnimation {
+    name: string;
+    flag: number;
+    framerate: number;
+    interpolateFrameCount: number;
+    loopFrame: number;
+    boneCount: number;
+    frameCount: number;
+    returnFrame: number;
+    boneSRT: AnimationBoneSRT[];
+}
+
+interface AnimationInfo {
+    offset: number;
+    name: string;
+}
+
+interface AnimationSRTFlags {
+    translationX: boolean;
+    translationY: boolean;
+    translationZ: boolean;
+    rotationX: boolean;
+    rotationY: boolean;
+    rotationZ: boolean;
+    scaleX: boolean;
+    scaleY: boolean;
+    scaleZ: boolean;
+}
+
+interface AnimationBoneSRT {
+    translationX?: AnimationData;
+    translationY?: AnimationData;
+    translationZ?: AnimationData;
+    rotationX?: AnimationData;
+    rotationY?: AnimationData;
+    rotationZ?: AnimationData;
+    scaleX?: AnimationData;
+    scaleY?: AnimationData;
+    scaleZ?: AnimationData;
+}
+
+interface AnimationData {
+    minValue: number;
+    maxValue: number;
+    keyframes: AnimationKeyframe[]
+}
+
+interface AnimationKeyframe {
+    frame: number;
+    value: number;
+}
+
 interface PMOSkeleton {
     skinnedBoneCount: number;
-    nStdBone: number;
+    skinWeightCount: number;
     bones: PMOBone[];
 }
 
@@ -123,23 +179,24 @@ export enum DreamDropPMOFlags {
 }
 
 /**
- * Raw model shape for _Kingdom Hearts 3D: Dream Drop Distance_
+ * Model shape (mesh) for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export class DreamDropPMOShape {
     public vertices: Float32Array;
     public colors: Float32Array;
     public uvs: Float32Array;
     public indices: Uint32Array;
-    public primitiveFormat: PMOPrimitiveFormat;
+    public weights?: vec4;
+    public joints?: vec4;
 
-    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public attribute: number) {
+    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public attribute: number, public boneIndices: number[]) {
         this.vertices = new Float32Array(vertexCount * 3);
         this.colors = new Float32Array(vertexCount * 4);
         this.uvs = new Float32Array(vertexCount * 2);
-        this.primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PMOPrimitiveFormat;
 
         const indices = [];
-        switch (this.primitiveFormat) {
+        const primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PMOPrimitiveFormat;
+        switch (primitiveFormat) {
             case PMOPrimitiveFormat.TRIANGLE_STRIP:
                 for (let i = 0; i < this.vertexCount - 2; i++) {
                     if (i % 2 === 0) {
@@ -161,7 +218,7 @@ export class DreamDropPMOShape {
                 }
                 break;
             default:
-                console.warn("Unimplemented primitive format", this.primitiveFormat);
+                console.warn("Unimplemented primitive format", primitiveFormat);
                 break;
         }
         this.indices = new Uint32Array(indices);
@@ -173,8 +230,12 @@ const MAGIC_PMO = 5197136;
 const MAGIC_CTRT = 1414681667;
 const MAGIC_SETBIN = 4411969;
 const MAGIC_OLO = 1330401088;
+const MAGIC_PAM = 5062992;
 const NORMALIZED_SCALE = 32768.0;
+const COLOR_SCALE = 255.0 // standard but might as well
 const UV_SCALE = 2048.0;
+const JOINT_SCALE = 3.0;
+const WEIGHT_SCALE = 128.0;
 
 function getBits(n: number, pos: number, size: number) {
     return (n >> pos) & ((1 << size) - 1);
@@ -459,7 +520,7 @@ export class DreamDropParser {
             const boneCount = this.getUshort();
             this.offset += 2;
             const skinnedBoneCount = this.getUshort();
-            const nStdBone = this.getUshort();
+            const skinWeightCount = this.getUshort();
             const bones: PMOBone[] = Array(boneCount);
             for (let i = 0; i < boneCount; i++) {
                 const index = this.getUshort();
@@ -491,7 +552,7 @@ export class DreamDropParser {
                 );
                 bones[i] = { index, parentIndex, skinnedIndex, jointName, transform, inverseTransform };
             }
-            skeleton = { skinnedBoneCount, nStdBone, bones };
+            skeleton = { skinnedBoneCount, skinWeightCount, bones };
         }
 
         return {
@@ -501,21 +562,149 @@ export class DreamDropParser {
         };
     }
 
+    public parsePAM(): DreamDropPAM {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_PAM) {
+            console.warn("Unknown PAM magic", magic);
+        }
+
+        this.offset = 4;
+        const animationCount = this.getUint32();
+        this.offset += 8;
+
+        const infos: AnimationInfo[] = Array(animationCount);
+        for (let i = 0; i < animationCount; i++) {
+            const offset = this.getUint32();
+            const nameOffset = this.getUint32();
+            const ret = this.offset;
+            this.offset = nameOffset;
+            const name = this.getString(14);
+            this.offset = ret;
+            infos[i] = { offset, name };
+        }
+
+        const animations: DreamDropAnimation[] = Array(animationCount);
+        for (let i = 0; i < animationCount; i++) {
+            this.offset = infos[i].offset;
+            const flag = this.getUshort();
+            const framerate = this.getByte();
+            const interpolateFrameCount = this.getByte();
+            const loopFrame = this.getUshort();
+            const boneCount = this.getByte();
+            this.offset++;
+            const frameCount = this.getUshort();
+            const returnFrame = this.getUshort();
+
+            const srtFlags: number[] = Array(boneCount);
+            for (let j = 0; j < boneCount; j++) {
+                srtFlags[j] = this.getUshort();
+            }
+
+            const boneSRT: AnimationBoneSRT[] = Array(boneCount);
+            for (let j = 0; j < boneCount; j++) {
+                const animationFlags = {
+                    translationX: getBit(srtFlags[j], 0),
+                    translationY: getBit(srtFlags[j], 1),
+                    translationZ: getBit(srtFlags[j], 2),
+                    rotationX: getBit(srtFlags[j], 3),
+                    rotationY: getBit(srtFlags[j], 4),
+                    rotationZ: getBit(srtFlags[j], 5),
+                    scaleX: getBit(srtFlags[j], 6),
+                    scaleY: getBit(srtFlags[j], 7),
+                    scaleZ: getBit(srtFlags[j], 8)
+                };
+                boneSRT[j] = this.parseBoneSRT(animationFlags, frameCount);
+            }
+
+            animations[i] = { name: infos[i].name, flag, framerate, interpolateFrameCount, loopFrame, boneCount, frameCount, returnFrame, boneSRT };
+        }
+
+        return { animations };
+    }
+
+    private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): AnimationBoneSRT {
+        const boneChannel: AnimationBoneSRT = {};
+
+        if (flags.translationX) {
+            boneChannel.translationX = this.parseAnimationData(frameCount);
+        }
+        if (flags.translationY) {
+            boneChannel.translationY = this.parseAnimationData(frameCount);
+        }
+        if (flags.translationZ) {
+            boneChannel.translationZ = this.parseAnimationData(frameCount);
+        }
+
+        if (flags.rotationX) {
+            boneChannel.rotationX = this.parseAnimationData(frameCount);
+        }
+        if (flags.rotationY) {
+            boneChannel.rotationY = this.parseAnimationData(frameCount);
+        }
+        if (flags.rotationZ) {
+            boneChannel.rotationZ = this.parseAnimationData(frameCount);
+        }
+
+        if (flags.scaleX) {
+            boneChannel.scaleX = this.parseAnimationData(frameCount);
+        }
+        if (flags.scaleY) {
+            boneChannel.scaleY = this.parseAnimationData(frameCount);
+        }
+        if (flags.scaleZ) {
+            boneChannel.scaleZ = this.parseAnimationData(frameCount);
+        }
+
+        return boneChannel;
+    }
+
+    private parseAnimationData(frameCount: number): AnimationData {
+        let keyframeCount = 0;
+        const maxValue = this.getFloat();
+        const minValue = this.getFloat();
+        if (frameCount > 255) {
+            keyframeCount = this.getUshort();
+        } else {
+            keyframeCount = this.getByte();
+        }
+        const keyframes: AnimationKeyframe[] = Array(keyframeCount);
+        if (keyframeCount !== 1) {
+            for (let i = 0; i < keyframeCount; i++) {
+                let frameId;
+                let value;
+                if (keyframeCount === frameCount) {
+                    frameId = i;
+                    value = this.getUshort();
+                } else {
+                    if (frameCount > 255) {
+                        frameId = this.getUshort();
+                    } else {
+                        frameId = this.getByte();
+                    }
+                    value = this.getUshort();
+                }
+                keyframes[i] = { frame: frameId, value };
+            }
+        }
+        return { maxValue, minValue, keyframes };
+    }
+
     private parsePMOShape(): DreamDropPMOShape {
         const vertexCount = this.getUshort();
         const textureId = this.getByte();
         const vertexSizeBytes = this.getByte();
         const vertexFlags = this.getInt32();
-        const group = this.getByte();
-        const triangleStripCount = this.getByte();
+        const group = this.getByte(); // ???
+        const triangleStripCount = this.getByte(); // unused by dream drop, might be leftover from bbs?
         const attribute = this.getUshort();
         const boneIndices = Array(8);
         for (let i = 0; i < boneIndices.length; i++) {
             boneIndices[i] = this.getByte();
         }
-        const unkColor = this.getInt32(); // openkh says diffuse, doesn't look like it though
+        const unkColor = this.getInt32(); // openkh says diffuse, not sure about that
 
-        return new DreamDropPMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, attribute);
+        return new DreamDropPMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, attribute, boneIndices);
     }
 
     private parsePMOVertices(shape: DreamDropPMOShape) {
@@ -523,38 +712,36 @@ export class DreamDropParser {
             shape.uvs[i * 2] = this.getShort() / UV_SCALE;
             shape.uvs[(i * 2) + 1] = 1 - this.getShort() / UV_SCALE; // flip
 
-            shape.colors[i * 4] = this.getByte() / 255.0;
-            shape.colors[(i * 4) + 1] = this.getByte() / 255.0;
-            shape.colors[(i * 4) + 2] = this.getByte() / 255.0;
-            shape.colors[(i * 4) + 3] = this.getByte() / 255.0;
+            shape.colors[i * 4] = this.getByte() / COLOR_SCALE;
+            shape.colors[(i * 4) + 1] = this.getByte() / COLOR_SCALE;
+            shape.colors[(i * 4) + 2] = this.getByte() / COLOR_SCALE;
+            shape.colors[(i * 4) + 3] = this.getByte() / COLOR_SCALE;
 
-            // uvs + colors are 8 bytes, so there's shape.vertexSizeBytes - 8 bytes left for other data
-            switch (shape.vertexSizeBytes) {
-                case 14:
-                case 22:
-                case 26:
-                    shape.vertices[i * 3] = this.getShort() / NORMALIZED_SCALE;
-                    shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_SCALE;
-                    shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_SCALE;
-                    if (shape.vertexSizeBytes >= 22) {
-                        this.offset += 8; // skip
-                        if (shape.vertexSizeBytes === 26) {
-                            this.offset += 4; // skip even more
-                        }
-                    }
-                    break;
-                case 20:
-                case 28:
-                    shape.vertices[i * 3] = this.getFloat() / NORMALIZED_SCALE;
-                    shape.vertices[(i * 3) + 1] = this.getFloat() / NORMALIZED_SCALE;
-                    shape.vertices[(i * 3) + 2] = this.getFloat() / NORMALIZED_SCALE;
-                    if (shape.vertexSizeBytes === 28) {
-                        this.offset += 8; // skip
-                    }
-                    break;
-                default:
-                    console.warn("Unimplemented vertex size", shape.vertexSizeBytes);
-                    break;
+            // uvs + colors are 8 bytes, so there's shape.vertexSizeBytes - 8 bytes left for remaining data
+
+            if (shape.vertexSizeBytes === 20 || shape.vertexSizeBytes === 28) {
+                shape.vertices[i * 3] = this.getFloat() / NORMALIZED_SCALE;
+                shape.vertices[(i * 3) + 1] = this.getFloat() / NORMALIZED_SCALE;
+                shape.vertices[(i * 3) + 2] = this.getFloat() / NORMALIZED_SCALE;
+            } else {
+                shape.vertices[i * 3] = this.getShort() / NORMALIZED_SCALE;
+                shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_SCALE;
+                shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_SCALE;
+            }
+            if (shape.vertexSizeBytes >= 22) {
+                shape.weights = vec4.create(); // i dont trust .fromValues to be in the right order...
+                shape.weights[0] = this.getByte() / WEIGHT_SCALE;
+                shape.weights[1] = this.getByte() / WEIGHT_SCALE;
+                shape.weights[2] = this.getByte() / WEIGHT_SCALE;
+                shape.weights[3] = this.getByte() / WEIGHT_SCALE;
+                shape.joints = vec4.create();
+                shape.joints[0] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.joints[1] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.joints[2] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.joints[3] = Math.trunc(this.getByte() / JOINT_SCALE);
+                if (shape.vertexSizeBytes === 26) {
+                    this.offset += 4; // skip, normals?
+                }
             }
         }
     }
