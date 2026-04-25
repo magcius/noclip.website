@@ -6,13 +6,13 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
+import { DreamDropAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropTexture, DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
-import { DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
+import { DREAMDROP_PAM, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
 import { vec3 } from "gl-matrix";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
 
@@ -217,6 +217,7 @@ class Room implements SceneDesc {
         }
 
         const models: Map<string, DreamDropPMO> = new Map();
+        const animations: Map<string, DreamDropAnimation> = new Map();
         const validModels = [...DREAMDROP_VALID_BOSS, ...DREAMDROP_VALID_D_OBJ, ...DREAMDROP_VALID_E_OBJ, ...DREAMDROP_VALID_ENEMY, ...DREAMDROP_VALID_F_OBJ,
             ...DREAMDROP_VALID_GIM, ...DREAMDROP_VALID_HIGH, ...DREAMDROP_VALID_NPC, ...DREAMDROP_VALID_PC, ...DREAMDROP_VALID_WEP];
         for (const set of sets) {
@@ -227,12 +228,17 @@ class Room implements SceneDesc {
                 const subdir = getCharaSubDirectory(instance.name);
                 const pmoFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${instance.name}.pmo`);
                 const pmo = new DreamDropParser(pmoFile).parsePMO(undefined, true, instance.name);
-                pmo.scale = vec3.fromValues(pmo.scaleNum, pmo.scaleNum, pmo.scaleNum);
                 models.set(instance.name, pmo);
+                const a = DREAMDROP_PAM.get(instance.name);
+                if (a) {
+                    const pamFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${a}.pam`);
+                    const pam = new DreamDropParser(pamFile).parsePAM();
+                    animations.set(instance.name, pam.animations[0]);
+                }
             }
         }
 
-        return new Renderer(device, pmp, { sets, models }, config);
+        return new Renderer(device, pmp, { sets, models, animations }, config);
     }
 }
 

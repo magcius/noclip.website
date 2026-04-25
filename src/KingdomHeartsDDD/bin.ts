@@ -85,7 +85,7 @@ export interface DreamDropPAM {
     animations: DreamDropAnimation[];
 }
 
-interface DreamDropAnimation {
+export interface DreamDropAnimation {
     name: string;
     flag: number;
     framerate: number;
@@ -94,7 +94,7 @@ interface DreamDropAnimation {
     boneCount: number;
     frameCount: number;
     returnFrame: number;
-    boneSRT: AnimationBoneSRT[];
+    channels: BoneChannel[];
 }
 
 interface AnimationInfo {
@@ -114,25 +114,19 @@ interface AnimationSRTFlags {
     scaleZ: boolean;
 }
 
-interface AnimationBoneSRT {
-    translationX?: AnimationData;
-    translationY?: AnimationData;
-    translationZ?: AnimationData;
-    rotationX?: AnimationData;
-    rotationY?: AnimationData;
-    rotationZ?: AnimationData;
-    scaleX?: AnimationData;
-    scaleY?: AnimationData;
-    scaleZ?: AnimationData;
+interface BoneChannel {
+    translationX?: DreamDropKeyframe[];
+    translationY?: DreamDropKeyframe[];
+    translationZ?: DreamDropKeyframe[];
+    rotationX?: DreamDropKeyframe[];
+    rotationY?: DreamDropKeyframe[];
+    rotationZ?: DreamDropKeyframe[];
+    scaleX?: DreamDropKeyframe[];
+    scaleY?: DreamDropKeyframe[];
+    scaleZ?: DreamDropKeyframe[];
 }
 
-interface AnimationData {
-    minValue: number;
-    maxValue: number;
-    keyframes: AnimationKeyframe[]
-}
-
-interface AnimationKeyframe {
+export interface DreamDropKeyframe {
     frame: number;
     value: number;
 }
@@ -140,14 +134,14 @@ interface AnimationKeyframe {
 interface PMOSkeleton {
     skinnedBoneCount: number;
     skinWeightCount: number;
-    bones: PMOBone[];
+    bones: DreamDropPMOBone[];
 }
 
-interface PMOBone {
+export interface DreamDropPMOBone {
     index: number;
     parentIndex: number;
     skinnedIndex: number;
-    jointName: string;
+    name: string;
     transform: mat4;
     inverseTransform: mat4;
 }
@@ -186,13 +180,15 @@ export class DreamDropPMOShape {
     public colors: Float32Array;
     public uvs: Float32Array;
     public indices: Uint32Array;
-    public weights?: vec4;
-    public joints?: vec4;
+    public weights: Float32Array;
+    public joints: Uint8Array;
 
     constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public attribute: number, public boneIndices: number[]) {
         this.vertices = new Float32Array(vertexCount * 3);
         this.colors = new Float32Array(vertexCount * 4);
         this.uvs = new Float32Array(vertexCount * 2);
+        this.weights = new Float32Array();
+        this.joints = new Uint8Array();
 
         const indices = [];
         const primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PMOPrimitiveFormat;
@@ -323,6 +319,7 @@ export class DreamDropParser {
             }
             pmos[i] = this.parsePMO(pmoInfo[i]);
             pmos[i].name = `${name}_${i}_${pmos[i].id}`;
+            pmos[i].scaleNum = pmoInfo[i].scale[0];
         }
 
         return { pmos: pmos.filter(p => p !== undefined), ctrts: ctrts.filter(t => t !== undefined) };
@@ -521,7 +518,7 @@ export class DreamDropParser {
             this.offset += 2;
             const skinnedBoneCount = this.getUshort();
             const skinWeightCount = this.getUshort();
-            const bones: PMOBone[] = Array(boneCount);
+            const bones: DreamDropPMOBone[] = Array(boneCount);
             for (let i = 0; i < boneCount; i++) {
                 const index = this.getUshort();
                 this.offset += 2;
@@ -529,7 +526,7 @@ export class DreamDropParser {
                 this.offset += 2;
                 const skinnedIndex = this.getUshort();
                 this.offset += 6;
-                const jointName = this.getString(16);
+                const boneName = this.getString(16);
                 const m1 = Array(16);
                 const m2 = Array(16);
                 for (let j = 0; j < m1.length; j++) {
@@ -550,7 +547,7 @@ export class DreamDropParser {
                     m2[8], m2[9], m2[10], m2[11],
                     m2[12], m2[13], m2[14], m2[15]
                 );
-                bones[i] = { index, parentIndex, skinnedIndex, jointName, transform, inverseTransform };
+                bones[i] = { index, parentIndex, skinnedIndex, name: boneName, transform, inverseTransform };
             }
             skeleton = { skinnedBoneCount, skinWeightCount, bones };
         }
@@ -601,7 +598,7 @@ export class DreamDropParser {
                 srtFlags[j] = this.getUshort();
             }
 
-            const boneSRT: AnimationBoneSRT[] = Array(boneCount);
+            const boneSRT: BoneChannel[] = Array(boneCount);
             for (let j = 0; j < boneCount; j++) {
                 const animationFlags = {
                     translationX: getBit(srtFlags[j], 0),
@@ -617,14 +614,14 @@ export class DreamDropParser {
                 boneSRT[j] = this.parseBoneSRT(animationFlags, frameCount);
             }
 
-            animations[i] = { name: infos[i].name, flag, framerate, interpolateFrameCount, loopFrame, boneCount, frameCount, returnFrame, boneSRT };
+            animations[i] = { name: infos[i].name, flag, framerate, interpolateFrameCount, loopFrame, boneCount, frameCount, returnFrame, channels: boneSRT };
         }
 
         return { animations };
     }
 
-    private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): AnimationBoneSRT {
-        const boneChannel: AnimationBoneSRT = {};
+    private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): BoneChannel {
+        const boneChannel: BoneChannel = {};
 
         if (flags.translationX) {
             boneChannel.translationX = this.parseAnimationData(frameCount);
@@ -659,7 +656,7 @@ export class DreamDropParser {
         return boneChannel;
     }
 
-    private parseAnimationData(frameCount: number): AnimationData {
+    private parseAnimationData(frameCount: number): DreamDropKeyframe[] {
         let keyframeCount = 0;
         const maxValue = this.getFloat();
         const minValue = this.getFloat();
@@ -668,26 +665,26 @@ export class DreamDropParser {
         } else {
             keyframeCount = this.getByte();
         }
-        const keyframes: AnimationKeyframe[] = Array(keyframeCount);
+        const keyframes: DreamDropKeyframe[] = Array(keyframeCount);
         if (keyframeCount !== 1) {
             for (let i = 0; i < keyframeCount; i++) {
-                let frameId;
+                let frame;
                 let value;
                 if (keyframeCount === frameCount) {
-                    frameId = i;
-                    value = this.getUshort();
+                    frame = i;
+                    value = this.getUshort() / NORMALIZED_SCALE;
                 } else {
                     if (frameCount > 255) {
-                        frameId = this.getUshort();
+                        frame = this.getUshort();
                     } else {
-                        frameId = this.getByte();
+                        frame = this.getByte();
                     }
-                    value = this.getUshort();
+                    value = this.getUshort() / NORMALIZED_SCALE;
                 }
-                keyframes[i] = { frame: frameId, value };
+                keyframes[i] = { frame, value: minValue + value * (maxValue - minValue) };
             }
         }
-        return { maxValue, minValue, keyframes };
+        return keyframes.filter(k => k !== undefined);
     }
 
     private parsePMOShape(): DreamDropPMOShape {
@@ -708,6 +705,10 @@ export class DreamDropParser {
     }
 
     private parsePMOVertices(shape: DreamDropPMOShape) {
+        if (shape.vertexSizeBytes >= 22) {
+            shape.weights = new Float32Array(shape.vertexCount * 4);
+            shape.joints = new Uint8Array(shape.vertexCount * 4);
+        }
         for (let i = 0; i < shape.vertexCount; i++) {
             shape.uvs[i * 2] = this.getShort() / UV_SCALE;
             shape.uvs[(i * 2) + 1] = 1 - this.getShort() / UV_SCALE; // flip
@@ -729,16 +730,14 @@ export class DreamDropParser {
                 shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_SCALE;
             }
             if (shape.vertexSizeBytes >= 22) {
-                shape.weights = vec4.create(); // i dont trust .fromValues to be in the right order...
-                shape.weights[0] = this.getByte() / WEIGHT_SCALE;
-                shape.weights[1] = this.getByte() / WEIGHT_SCALE;
-                shape.weights[2] = this.getByte() / WEIGHT_SCALE;
-                shape.weights[3] = this.getByte() / WEIGHT_SCALE;
-                shape.joints = vec4.create();
-                shape.joints[0] = Math.trunc(this.getByte() / JOINT_SCALE);
-                shape.joints[1] = Math.trunc(this.getByte() / JOINT_SCALE);
-                shape.joints[2] = Math.trunc(this.getByte() / JOINT_SCALE);
-                shape.joints[3] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.weights[i * 4] = this.getByte() / WEIGHT_SCALE;
+                shape.weights[(i * 4) + 1] = this.getByte() / WEIGHT_SCALE;
+                shape.weights[(i * 4) + 2] = this.getByte() / WEIGHT_SCALE;
+                shape.weights[(i * 4) + 3] = this.getByte() / WEIGHT_SCALE;
+                shape.joints[i * 4] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.joints[(i * 4) + 1] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.joints[(i * 4) + 2] = Math.trunc(this.getByte() / JOINT_SCALE);
+                shape.joints[(i * 4) + 3] = Math.trunc(this.getByte() / JOINT_SCALE);
                 if (shape.vertexSizeBytes === 26) {
                     this.offset += 4; // skip, normals?
                 }

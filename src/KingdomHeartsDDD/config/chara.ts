@@ -18,3 +18,12 @@ export const DREAMDROP_VALID_NPC = ["n_de010", "n_de01s", "n_de020", "n_de02s", 
 export const DREAMDROP_VALID_PC = ["p_ex010", "p_ex01s", "p_ex020", "p_ex02s", "p_ex030", "p_ex03s", "p_ex040", "p_ex04s", "p_ex150", "p_tl010", "p_tl01s", "p_tl020", "p_tl02s", "p_tl060", "p_tl06s", "p_tl070", "p_tl07s"];
 
 export const DREAMDROP_VALID_WEP = ["w_ex180", "w_ex18s", "w_ex200", "w_ex20s", "w_ex210", "w_ri010", "w_ri011", "w_ri01s", "w_ri020", "w_ri021", "w_ri02s", "w_ri030", "w_ri031", "w_ri03s", "w_ri040", "w_ri041", "w_ri04s", "w_ri050", "w_ri051", "w_ri05s", "w_ri070", "w_ri071", "w_ri07s", "w_ri080", "w_ri081", "w_ri08s", "w_ri090", "w_ri091", "w_ri09s", "w_ri100", "w_ri101", "w_ri10s", "w_ri110", "w_ri111", "w_ri11s", "w_ri120", "w_ri12s", "w_ri130", "w_ri131", "w_ri13s", "w_ri140", "w_ri141", "w_ri14s", "w_ri150", "w_ri151", "w_ri15s", "w_ri160", "w_ri161", "w_ri16s", "w_ri170", "w_ri17s", "w_so010", "w_so011", "w_so01s", "w_so020", "w_so021", "w_so02s", "w_so030", "w_so031", "w_so03s", "w_so040", "w_so041", "w_so04s", "w_so050", "w_so051", "w_so05s", "w_so070", "w_so071", "w_so07s", "w_so080", "w_so081", "w_so08s", "w_so090", "w_so091", "w_so09s", "w_so100", "w_so101", "w_so10s", "w_so110", "w_so111", "w_so11s", "w_so130", "w_so131", "w_so13s", "w_so150", "w_so151", "w_so15s", "w_so160", "w_so161", "w_so16s", "w_so170", "w_so17s"];
+
+/**
+ * Default PMO to PAM mapping for _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export const DREAMDROP_PAM: Map<string, string> = new Map([
+    ["p_ex010", "p_ex010_00001w"],
+    ["b_yt100", "b_yt100_00001e"],
+    ["n_ex010", "n_ex010_00001e"]
+]);
