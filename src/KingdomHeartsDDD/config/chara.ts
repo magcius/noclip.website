@@ -23,7 +23,9 @@ export const DREAMDROP_VALID_WEP = ["w_ex180", "w_ex18s", "w_ex200", "w_ex20s", 
  * Default PMO to PAM mapping for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export const DREAMDROP_PAM: Map<string, string> = new Map([
-    ["p_ex010", "p_ex010_00001w"],
-    ["b_yt100", "b_yt100_00001e"],
-    ["n_ex010", "n_ex010_00001e"]
+    ["p_ex010", "p_ex010_00001w"], // sora
+    ["p_ex020", "p_ex020_00001w"], // riku
+    ["b_yt100", "b_yt100_00001e"], // armored ventus
+    ["n_ex010", "n_ex010_00001e"], // moogle
+    ["b_di120", "b_di120_30210e"], // phantom ursula tentacle
 ]);

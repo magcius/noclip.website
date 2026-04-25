@@ -6,14 +6,13 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DreamDropAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
+import { DreamDropSkeletalAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropTexture, DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_PAM, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
-import { vec3 } from "gl-matrix";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
 
 function getCharaSubDirectory(name: string) {
@@ -92,7 +91,7 @@ class Renderer implements SceneGfx {
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp.pmos, this.textures, objects, this.config);
+        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, this.config);
     }
 
     public createPanels(): Panel[] {
@@ -217,7 +216,7 @@ class Room implements SceneDesc {
         }
 
         const models: Map<string, DreamDropPMO> = new Map();
-        const animations: Map<string, DreamDropAnimation> = new Map();
+        const animations: Map<string, DreamDropSkeletalAnimation> = new Map();
         const validModels = [...DREAMDROP_VALID_BOSS, ...DREAMDROP_VALID_D_OBJ, ...DREAMDROP_VALID_E_OBJ, ...DREAMDROP_VALID_ENEMY, ...DREAMDROP_VALID_F_OBJ,
             ...DREAMDROP_VALID_GIM, ...DREAMDROP_VALID_HIGH, ...DREAMDROP_VALID_NPC, ...DREAMDROP_VALID_PC, ...DREAMDROP_VALID_WEP];
         for (const set of sets) {
@@ -249,6 +248,7 @@ g_ex010 has a weird PMO format with no shapes or materials, fails at reading sha
 g_nd300 also can't be read
 Check if textures have mips
 De-couple raw binary data from processed data like shapes -> vertices to reduce mem usage (no more than a few mb but still)
+Parse TXA
 
 ...and all else. May your heart be your guiding key
 */
@@ -419,7 +419,7 @@ const sceneDescs = [
     new Room("de10", "Petting Plaza"),
     "World Map",
     new Room("wm01", "World Map"),
-    "Treasure Planet", // what could have been...
+    "Treasure Planet",
     new Room("tp01", "The Legacy's Deck"),
     "Unfinished Rooms",
     new Room("di60", "di60 Ocean"),

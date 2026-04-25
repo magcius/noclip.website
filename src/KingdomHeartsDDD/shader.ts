@@ -11,7 +11,7 @@ export class DreamDropShader extends DeviceProgram {
     public static ub_ModelParams = 1;
     public static ub_ShapeParams = 2;
 
-    constructor(attributeCount: number, skinWeightCount: number, boneSRTCount: number,) {
+    constructor(attributeCount: number, boneSRTCount: number,) {
         super();
         this.both = `
 precision highp float;

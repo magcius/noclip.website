@@ -203,7 +203,7 @@ const DEFAULT_SETS: Map<string, number[]> = new Map([
     ["pi04", [1]],
     ["pi02", [1]],
     ["pi03", [1]],
-    ["pi03", [1, 2]],
+    ["pi05", [1, 2]],
     ["pi06", [1]],
     ["pi07", [1]],
     ["pi08", [1]],

@@ -1,14 +1,18 @@
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DreamDropTextureFormat } from "./texture";
+import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 
-// Credit for CTRT/PMP/PMO parsing https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
+// Credit for most of the parsing:
+// https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
+// https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
 
 /**
  * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropPMP {
-    pmos: DreamDropPMO[];
+    // pmp = portable model pack?
+    pmos: PMOInfo[];
     ctrts: DreamDropCTRT[];
 }
 
@@ -21,6 +25,7 @@ interface CTRTInfo {
  * Raw CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropCTRT {
+    // ctrt = ctr texture
     name: string;
     width: number;
     height: number;
@@ -28,38 +33,34 @@ export interface DreamDropCTRT {
     data: ArrayBufferSlice;
 }
 
-interface PMOInfo {
-    position: vec3;
-    rotation: vec3;
-    scale: vec3;
-    offset: number;
-    flags: number;
-    id: number;
-}
-
 /**
  * Raw model for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export interface DreamDropPMO {
+    // pmo = portable model?
     name: string;
-    id: number;
-    position: vec3;
-    rotation: vec3;
-    scale: vec3;
-    scaleNum: number;
+    scale: number;
     flags: number;
-    headerFlags: number;
     bbox: number[];
-    materials: DreamDropPMOMaterial[];
-    shapes: DreamDropPMOShape[];
+    materials: DreamDropMaterial[];
+    shapes: DreamDropShape[];
     ctrts: DreamDropCTRT[];
-    skeleton?: PMOSkeleton;
+    skeleton?: Skeleton;
+}
+
+interface PMOInfo {
+    id: number;
+    flags: number;
+    scale: vec3;
+    rotation: vec3;
+    position: vec3;
+    pmo: DreamDropPMO;
 }
 
 /**
  * Material for a PMO from _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export interface DreamDropPMOMaterial {
+export interface DreamDropMaterial {
     textureOffset: number;
     textureName: string;
     scrollX: number;
@@ -71,6 +72,9 @@ export interface DreamDropSet {
     olos: string[];
 }
 
+/**
+ * Object instances from an OLO file from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export interface DreamDropOLO {
     objects: DreamDropObjectInstance[];
 }
@@ -81,11 +85,15 @@ export interface DreamDropObjectInstance {
     rotation: vec3;
 }
 
+/**
+ * Skeletal animations for a model from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export interface DreamDropPAM {
-    animations: DreamDropAnimation[];
+    // pam = portable animations?
+    animations: DreamDropSkeletalAnimation[];
 }
 
-export interface DreamDropAnimation {
+export interface DreamDropSkeletalAnimation {
     name: string;
     flag: number;
     framerate: number;
@@ -126,27 +134,34 @@ interface BoneChannel {
     scaleZ?: DreamDropKeyframe[];
 }
 
+/**
+ * A skeletal animation keyframe from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
 export interface DreamDropKeyframe {
     frame: number;
     value: number;
 }
 
-interface PMOSkeleton {
+interface Skeleton {
     skinnedBoneCount: number;
     skinWeightCount: number;
-    bones: DreamDropPMOBone[];
+    bones: DreamDropBone[];
 }
 
-export interface DreamDropPMOBone {
+/**
+ * A bone in a skeleton for a model from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export interface DreamDropBone {
     index: number;
     parentIndex: number;
-    skinnedIndex: number;
+    skinnedIndex: number; // unsure how this is used, it's just a sequential number for skinned bones
     name: string;
-    transform: mat4;
-    inverseTransform: mat4;
+    transform: mat4; // relative transform
+    inverseTransform: mat4; // inverse absolute transform
+    decomposedTransform: { scale: vec3, rotation: vec3, translation: vec3 }; // relative, needed to apply animation values to
 }
 
-enum PMOPrimitiveFormat {
+enum PrimitiveFormat {
     POINT,
     LINE,
     LINE_STRIP,
@@ -175,7 +190,7 @@ export enum DreamDropPMOFlags {
 /**
  * Model shape (mesh) for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export class DreamDropPMOShape {
+export class DreamDropShape {
     public vertices: Float32Array;
     public colors: Float32Array;
     public uvs: Float32Array;
@@ -191,9 +206,9 @@ export class DreamDropPMOShape {
         this.joints = new Uint8Array();
 
         const indices = [];
-        const primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PMOPrimitiveFormat;
+        const primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PrimitiveFormat;
         switch (primitiveFormat) {
-            case PMOPrimitiveFormat.TRIANGLE_STRIP:
+            case PrimitiveFormat.TRIANGLE_STRIP:
                 for (let i = 0; i < this.vertexCount - 2; i++) {
                     if (i % 2 === 0) {
                         indices.push(i);
@@ -206,7 +221,7 @@ export class DreamDropPMOShape {
                     }
                 }
                 break;
-            case PMOPrimitiveFormat.TRIANGLE_LIST:
+            case PrimitiveFormat.TRIANGLE_LIST:
                 for (let i = 0; i < this.vertexCount - 2; i += 3) {
                     indices.push(i);
                     indices.push(i + 1);
@@ -221,16 +236,18 @@ export class DreamDropPMOShape {
     }
 }
 
+// uint32 of the text at 0x0
 const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_CTRT = 1414681667;
 const MAGIC_SETBIN = 4411969;
 const MAGIC_OLO = 1330401088;
 const MAGIC_PAM = 5062992;
+
 const NORMALIZED_SCALE = 32768.0;
-const COLOR_SCALE = 255.0 // standard but might as well
+const COLOR_SCALE = 255.0; // standard but might as well
 const UV_SCALE = 2048.0;
-const JOINT_SCALE = 3.0;
+const JOINT_SCALE = 3.0; // why couldn't they just store the actual index? it's only ever 0 to 7...
 const WEIGHT_SCALE = 128.0;
 
 function getBits(n: number, pos: number, size: number) {
@@ -273,8 +290,10 @@ export class DreamDropParser {
         const ctrtOffset = this.getUint32();
 
         this.offset = 0x20;
-        const pmoInfo: PMOInfo[] = Array(pmoCount);
+        const pmoInfos: PMOInfo[] = Array(pmoCount);
+        let infoRet = this.offset;;
         for (let i = 0; i < pmoCount; i++) {
+            this.offset = infoRet;
             const px = this.getFloat();
             const py = this.getFloat();
             const pz = this.getFloat();
@@ -288,41 +307,38 @@ export class DreamDropParser {
             this.offset += 4;
             const flags = this.getUshort();
             const id = this.getUshort();
-            pmoInfo[i] = {
+            infoRet = this.offset;
+            if (pmoOffset === 0) {
+                continue;
+            }
+            const pmo = this.parsePMO(pmoOffset);
+            pmo.name = `${name}_${i}_${id}`;
+            pmoInfos[i] = {
+                id, flags,
+                scale: vec3.fromValues(sx, sy, sz),
                 position: vec3.fromValues(px, py, pz),
                 rotation: vec3.fromValues(rx, ry, rz),
-                scale: vec3.fromValues(sx, sy, sz),
-                offset: pmoOffset, flags, id
+                pmo
             };
         }
 
         this.offset = ctrtOffset;
         const ctrts: (DreamDropCTRT | undefined)[] = Array(ctrtCount);
         if (ctrtOffset > 0) {
-            const info: CTRTInfo[] = Array(ctrtCount);
+            const infos: CTRTInfo[] = Array(ctrtCount);
             for (let i = 0; i < ctrtCount; i++) {
                 const offset = this.getUint32();
                 const name = this.getString(12);
                 this.offset += 16;
-                info[i] = { offset, name };
+                infos[i] = { offset, name };
             }
 
             for (let i = 0; i < ctrtCount; i++) {
-                ctrts[i] = this.parseCTRT(info[i].offset, info[i].name, false);
+                ctrts[i] = this.parseCTRT(infos[i].offset, infos[i].name, false);
             }
         }
 
-        const pmos: DreamDropPMO[] = Array(pmoCount);
-        for (let i = 0; i < pmoCount; i++) {
-            if (pmoInfo[i].offset === 0) {
-                continue;
-            }
-            pmos[i] = this.parsePMO(pmoInfo[i]);
-            pmos[i].name = `${name}_${i}_${pmos[i].id}`;
-            pmos[i].scaleNum = pmoInfo[i].scale[0];
-        }
-
-        return { pmos: pmos.filter(p => p !== undefined), ctrts: ctrts.filter(t => t !== undefined) };
+        return { pmos: pmoInfos.filter(p => p !== undefined), ctrts: ctrts.filter(t => t !== undefined) };
     }
 
     public parseCTRT(offset: number, name: string, allowZeroOffset: boolean = true): DreamDropCTRT | undefined {
@@ -418,11 +434,8 @@ export class DreamDropParser {
         return { objects };
     }
 
-    public parsePMO(info?: PMOInfo, parseCTRT: boolean = false, name: string = ""): DreamDropPMO {
-        if (!info) {
-            info = { offset: 0, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], flags: -1, id: -1 };
-        }
-        this.offset = info.offset;
+    public parsePMO(offset: number = 0, parseCTRT: boolean = false, name: string = ""): DreamDropPMO {
+        this.offset = offset;
         const magic = this.getUint32();
         if (magic !== MAGIC_PMO) {
             console.warn("Unknown PMO magic", magic);
@@ -442,7 +455,7 @@ export class DreamDropParser {
             bbox[i] = this.getFloat();
         }
 
-        const materials: DreamDropPMOMaterial[] = Array(materialCount);
+        const materials: DreamDropMaterial[] = Array(materialCount);
         for (let i = 0; i < materialCount; i++) {
             const textureOffset = this.getUint32();
             const textureName = this.getString(12);
@@ -456,7 +469,7 @@ export class DreamDropParser {
         if (parseCTRT) {
             const ret = this.offset;
             for (const material of materials) {
-                const o = info.offset + material.textureOffset;
+                const o = offset + material.textureOffset;
                 if (o === 0) {
                     continue;
                 }
@@ -482,12 +495,13 @@ export class DreamDropParser {
         // shape names are here, skipping
 
         if (opaqueShapeOffset !== 0) {
-            this.offset = info.offset + opaqueShapeOffset;
+            this.offset = offset + opaqueShapeOffset;
         } else if (translucentShapeOffset !== 0) {
-            this.offset = info.offset + translucentShapeOffset;
+            this.offset = offset + translucentShapeOffset;
         }
 
-        const opaqueShapes: DreamDropPMOShape[] = Array(opaqueShapeCount);
+        // first list is usually all opaque shapes
+        const opaqueShapes: DreamDropShape[] = Array(opaqueShapeCount);
         for (let i = 0; i < opaqueShapeCount; i++) {
             opaqueShapes[i] = this.parsePMOShape();
         }
@@ -495,7 +509,8 @@ export class DreamDropParser {
             this.offset += 24;
         }
 
-        const translucentShapes: DreamDropPMOShape[] = Array(translucentShapeCount);
+        // this second list is usually translucent shapes but not always
+        const translucentShapes: DreamDropShape[] = Array(translucentShapeCount);
         for (let i = 0; i < translucentShapeCount; i++) {
             translucentShapes[i] = this.parsePMOShape();
         }
@@ -503,7 +518,7 @@ export class DreamDropParser {
             this.offset += 24;
         }
 
-        this.offset = info.offset + vertexDataOffset;
+        this.offset = offset + vertexDataOffset;
         for (let i = 0; i < opaqueShapeCount; i++) {
             this.parsePMOVertices(opaqueShapes[i]);
         }
@@ -513,12 +528,12 @@ export class DreamDropParser {
 
         let skeleton;
         if (skeletonOffset > 0) {
-            this.offset = info.offset + skeletonOffset + 8;
+            this.offset = offset + skeletonOffset + 8;
             const boneCount = this.getUshort();
             this.offset += 2;
             const skinnedBoneCount = this.getUshort();
             const skinWeightCount = this.getUshort();
-            const bones: DreamDropPMOBone[] = Array(boneCount);
+            const bones: DreamDropBone[] = Array(boneCount);
             for (let i = 0; i < boneCount; i++) {
                 const index = this.getUshort();
                 this.offset += 2;
@@ -547,14 +562,14 @@ export class DreamDropParser {
                     m2[8], m2[9], m2[10], m2[11],
                     m2[12], m2[13], m2[14], m2[15]
                 );
-                bones[i] = { index, parentIndex, skinnedIndex, name: boneName, transform, inverseTransform };
+                const decomposedTransform = this.decomposeBoneTransform(transform);
+                bones[i] = { index, parentIndex, skinnedIndex, name: boneName, transform, inverseTransform, decomposedTransform };
             }
             skeleton = { skinnedBoneCount, skinWeightCount, bones };
         }
 
         return {
-            name, position: info.position, rotation: info.rotation, scale: info.scale,
-            headerFlags: info.flags, id: info.id, flags, scaleNum: scale, bbox, materials,
+            name, scale, flags, bbox, materials,
             shapes: [...opaqueShapes, ...translucentShapes], ctrts, skeleton
         };
     }
@@ -568,7 +583,11 @@ export class DreamDropParser {
 
         this.offset = 4;
         const animationCount = this.getUint32();
-        this.offset += 8;
+        this.offset += 6;
+        const version = this.getUshort();
+        if (version !== 2) {
+            console.warn("Unimplemented PAM version", version);
+        }
 
         const infos: AnimationInfo[] = Array(animationCount);
         for (let i = 0; i < animationCount; i++) {
@@ -576,12 +595,12 @@ export class DreamDropParser {
             const nameOffset = this.getUint32();
             const ret = this.offset;
             this.offset = nameOffset;
-            const name = this.getString(14);
+            const name = this.getString();
             this.offset = ret;
             infos[i] = { offset, name };
         }
 
-        const animations: DreamDropAnimation[] = Array(animationCount);
+        const animations: DreamDropSkeletalAnimation[] = Array(animationCount);
         for (let i = 0; i < animationCount; i++) {
             this.offset = infos[i].offset;
             const flag = this.getUshort();
@@ -687,7 +706,7 @@ export class DreamDropParser {
         return keyframes.filter(k => k !== undefined);
     }
 
-    private parsePMOShape(): DreamDropPMOShape {
+    private parsePMOShape(): DreamDropShape {
         const vertexCount = this.getUshort();
         const textureId = this.getByte();
         const vertexSizeBytes = this.getByte();
@@ -701,10 +720,10 @@ export class DreamDropParser {
         }
         const unkColor = this.getInt32(); // openkh says diffuse, not sure about that
 
-        return new DreamDropPMOShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, attribute, boneIndices);
+        return new DreamDropShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, attribute, boneIndices);
     }
 
-    private parsePMOVertices(shape: DreamDropPMOShape) {
+    private parsePMOVertices(shape: DreamDropShape) {
         if (shape.vertexSizeBytes >= 22) {
             shape.weights = new Float32Array(shape.vertexCount * 4);
             shape.joints = new Uint8Array(shape.vertexCount * 4);
@@ -739,7 +758,7 @@ export class DreamDropParser {
                 shape.joints[(i * 4) + 2] = Math.trunc(this.getByte() / JOINT_SCALE);
                 shape.joints[(i * 4) + 3] = Math.trunc(this.getByte() / JOINT_SCALE);
                 if (shape.vertexSizeBytes === 26) {
-                    this.offset += 4; // skip, normals?
+                    this.offset += 4;
                 }
             }
         }
@@ -755,13 +774,38 @@ export class DreamDropParser {
         return { name, olos };
     }
 
-    private getString(length: number): string {
-        const n = new Uint8Array(length);
-        for (let i = 0; i < length; i++) {
-            n[i] = this.getByte();
-        }
+    private decomposeBoneTransform(transform: ReadonlyMat4): { scale: vec3, rotation: vec3, translation: vec3 } {
+        const scale = vec3.create();
+        const rotation = vec3.create();
+        const translation = vec3.create();
+        mat4.getScaling(scale, transform);
+        calcEulerAngleRotationFromSRTMatrix(rotation,transform);
+        mat4.getTranslation(translation, transform);
+        return { scale, rotation, translation };
+    }
 
-        return this.textDecoder.decode(n).trim().replaceAll("\x00", "");
+    private getString(length?: number): string {
+        let s = "";
+        if (length) {
+            const n = new Uint8Array(length);
+            for (let i = 0; i < length; i++) {
+                n[i] = this.getByte();
+            }
+            s = this.textDecoder.decode(n);
+        } else {
+            // null-terminated string
+            const n = [];
+            while (true) {
+                const b = this.getByte();
+                if (b === 0 || n.length > 999 || this.offset >= this.view.byteLength) {
+                    break;
+                } else {
+                    n.push(b);
+                }
+            }
+            s = this.textDecoder.decode(new Uint8Array(n));
+        }
+        return s.trim().replaceAll("\x00", "");
     }
 
     private getInt32(): number {

@@ -3,7 +3,7 @@ import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage 
 import { DreamDropCTRT } from "./bin";
 
 /**
- * All possible CTR texture formats for _Kingdom Hearts 3D: Dream Drop Distance_
+ * All possible texture formats for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export enum DreamDropTextureFormat {
     RGBA_8888,
