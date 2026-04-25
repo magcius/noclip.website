@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "./nngfx_enum.js";
-import { BRTI } from "./bntx.js";
+import { BRTI, TextureData } from "./bntx.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture.js";
 import { assert } from "../util.js";
@@ -86,6 +86,11 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
     case ChannelFormat.Bc3:
     case ChannelFormat.Bc4:
     case ChannelFormat.Bc5:
+    case ChannelFormat.Bc6:
+    case ChannelFormat.Bc7:
+    case ChannelFormat.Astc_8x5:
+    case ChannelFormat.Astc_8x6:
+    case ChannelFormat.Astc_8x8:
         return true;
     default:
         return false;
@@ -94,20 +99,36 @@ export function isChannelFormatSupported(channelFormat: ChannelFormat): boolean 
 
 export function getFormatBytesPerBlock(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
-    case ChannelFormat.R8_G8_B8_A8:
-    case ChannelFormat.B8_G8_R8_A8:
-    case ChannelFormat.R11_G11_B10:
-        return 4;
-    case ChannelFormat.Bc1:
-    case ChannelFormat.Bc4:
-    case ChannelFormat.R16_G16_B16_A16:
-        return 8;
-    case ChannelFormat.Bc2:
-    case ChannelFormat.Bc3:
-    case ChannelFormat.Bc5:
-        return 16;
-    default:
-        throw "whoops";
+        case ChannelFormat.R8_G8_B8_A8:
+        case ChannelFormat.B8_G8_R8_A8:
+        case ChannelFormat.R11_G11_B10:
+            return 4;
+        case ChannelFormat.Bc1:
+        case ChannelFormat.Bc4:
+        case ChannelFormat.R16_G16_B16_A16:
+            return 8;
+        case ChannelFormat.Bc2:
+        case ChannelFormat.Bc3:
+        case ChannelFormat.Bc5:
+        case ChannelFormat.Bc6:
+        case ChannelFormat.Bc7:
+        case ChannelFormat.Astc_4x4:
+        case ChannelFormat.Astc_5x4:
+        case ChannelFormat.Astc_5x5:
+        case ChannelFormat.Astc_6x5:
+        case ChannelFormat.Astc_6x6:
+        case ChannelFormat.Astc_8x5:
+        case ChannelFormat.Astc_8x6:
+        case ChannelFormat.Astc_8x8:
+        case ChannelFormat.Astc_10x5:
+        case ChannelFormat.Astc_10x6:
+        case ChannelFormat.Astc_10x8:
+        case ChannelFormat.Astc_10x10:
+        case ChannelFormat.Astc_12x10:
+        case ChannelFormat.Astc_12x12:
+            return 16;
+        default:
+            throw "whoops";
     }
 }
 
@@ -120,11 +141,46 @@ export interface SwizzledSurface {
 }
 
 export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array<ArrayBuffer>> {
-    const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
+    const { buffer, channelFormat, width, height } = swizzledSurface;
     const blockWidth = getFormatBlockWidth(channelFormat);
     const blockHeight = getFormatBlockHeight(channelFormat);
     const bytesPerBlock = getFormatBytesPerBlock(channelFormat);
-    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), blockWidth, blockHeight, bytesPerBlock, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
+    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), width, height, blockWidth, blockHeight, bytesPerBlock) as Uint8Array<ArrayBuffer>;
+}
+
+export function deswizzleMips(width: number, height: number, channelFormat: ChannelFormat, textureData: TextureData): Uint8Array<ArrayBuffer>[] {
+    let combinedLength = 0;
+    textureData.mipBuffers.forEach(buffer => {
+        combinedLength += buffer.byteLength
+    });
+    const combinedBuffer = new Uint8Array(combinedLength);
+    let offset = 0;
+    textureData.mipBuffers.forEach(buffer => {
+        combinedBuffer.set(buffer.createTypedArray(Uint8Array), offset);
+        offset += buffer.byteLength;
+    });
+
+    const blockWidth = getFormatBlockWidth(channelFormat);
+    const blockHeight = getFormatBlockHeight(channelFormat);
+    const bytesPerBlock = getFormatBytesPerBlock(channelFormat);
+
+    const mips = textureData.mipBuffers.length;
+
+    offset = 0;
+    const mipBounds: number[] = Array(mips);
+    for (let mip = 0; mip < mips; mip++) {
+        const size = rust.tegra_deswizzled_size(Math.max(width >>> mip, 1), Math.max(height >>> mip, 1), blockWidth, blockHeight, bytesPerBlock);
+        mipBounds[mip] = size + offset;
+        offset += size;
+    }
+
+    const combinedDeswizzled = rust.tegra_deswizzle(combinedBuffer, width, height, blockWidth, blockHeight, bytesPerBlock, mips);
+
+    const deswizzledMips: Uint8Array<ArrayBuffer>[] = Array(mips);
+    for (let mip = 0; mip < mips; mip++) {
+        deswizzledMips[mip] = combinedDeswizzled.slice(mip === 0 ? 0 : mipBounds[mip - 1], mipBounds[mip]);
+    }
+    return deswizzledMips;
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
@@ -222,22 +278,54 @@ function convertFloatR11_G11_B10(textureEntry: BRTI, pixels: Uint8Array<ArrayBuf
 
 function getChannelFormatString(channelFormat: ChannelFormat): string {
     switch (channelFormat) {
-    case ChannelFormat.Bc1:
-        return 'BC1';
-    case ChannelFormat.Bc3:
-        return 'BC3';
-    case ChannelFormat.Bc4:
-        return 'BC4';
-    case ChannelFormat.Bc5:
-        return 'BC5';
-    case ChannelFormat.R8_G8_B8_A8:
-        return 'R8_G8_B8_A8';
-    case ChannelFormat.R11_G11_B10:
-        return 'R11_G11_B10';
-    case ChannelFormat.R16_G16_B16_A16:
-        return 'R16_G16_B16_A16';
-    default:
-        throw "whoops";
+        case ChannelFormat.Bc1:
+            return 'BC1';
+        case ChannelFormat.Bc3:
+            return 'BC3';
+        case ChannelFormat.Bc4:
+            return 'BC4';
+        case ChannelFormat.Bc5:
+            return 'BC5';
+        case ChannelFormat.Bc6:
+            return 'BC6H';
+        case ChannelFormat.Bc7:
+            return 'BC7';
+        case ChannelFormat.Astc_4x4:
+            return 'ASTC_4x4';
+        case ChannelFormat.Astc_5x4:
+            return 'ASTC_5x4';
+        case ChannelFormat.Astc_5x5:
+            return 'ASTC_5x5';
+        case ChannelFormat.Astc_6x5:
+            return 'ASTC_6x5';
+        case ChannelFormat.Astc_6x6:
+            return 'ASTC_6x6';
+        case ChannelFormat.Astc_8x5:
+            return 'ASTC_8x5';
+        case ChannelFormat.Astc_8x6:
+            return 'ASTC_8x6';
+        case ChannelFormat.Astc_8x8:
+            return 'ASTC_8x8';
+        case ChannelFormat.Astc_10x5:
+            return 'ASTC_10x5';
+        case ChannelFormat.Astc_10x6:
+            return 'ASTC_10x6';
+        case ChannelFormat.Astc_10x8:
+            return 'ASTC_10x8';
+        case ChannelFormat.Astc_10x10:
+            return 'ASTC_10x10';
+        case ChannelFormat.Astc_12x10:
+            return 'ASTC_12x10';
+        case ChannelFormat.Astc_12x12:
+            return 'ASTC_12x12';
+        case ChannelFormat.R8_G8_B8_A8:
+            return 'R8_G8_B8_A8';
+        case ChannelFormat.R11_G11_B10:
+            return 'R11_G11_B10';
+        case ChannelFormat.R16_G16_B16_A16:
+            return 'R16_G16_B16_A16';
+        default:
+            throw "whoops";
     }
 }
 
@@ -249,6 +337,8 @@ function getTypeFormatString(typeFormat: TypeFormat): string {
         return 'SNORM';
     case TypeFormat.Float:
         return 'FLOAT';
+    case TypeFormat.Ufloat:
+        return 'UFLOAT';
     case TypeFormat.UnormSrgb:
         return 'SRGB';
     default:
