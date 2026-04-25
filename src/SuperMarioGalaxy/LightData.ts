@@ -329,7 +329,7 @@ export class LightDataHolder {
             if (this.zoneInfos[i].zoneId === zoneId)
                 return this.zoneInfos[i];
         const zoneName = sceneObjHolder.scenarioData.zoneNames[zoneId];
-        const zoneLightData = sceneObjHolder.sceneDesc.getZoneLightData(sceneObjHolder.modelCache, zoneName);
+        const zoneLightData = sceneObjHolder.sceneLoader.getZoneLightData(sceneObjHolder.modelCache, zoneName);
         const zoneInfo = new LightZoneInfo(zoneId, zoneName, zoneLightData);
         this.zoneInfos.push(zoneInfo);
         return zoneInfo;

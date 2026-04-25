@@ -1,34 +1,27 @@
 
-import { JKRArchive } from '../Common/JSYSTEM/JKRArchive.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
 import * as Viewer from '../viewer.js';
-import { createCsvParser, JMapInfoIter } from './JMapInfo.js';
-import { ModelCache, SMGSceneDescBase } from "./Main.js";
-import { GameBits } from './NameObj.js';
 
-class SMG1SceneDesc extends SMGSceneDescBase {
-    public override pathBase: string = `SuperMarioGalaxy`;
-    public override gameBit = GameBits.SMG1;
-    public getLightData(modelCache: ModelCache): JMapInfoIter {
-        const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
-        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
+export class SMG1SceneDesc implements Viewer.SceneDesc {
+    public id: string;
+    public pathBase: string;
+
+    constructor(public name: string, public galaxyName: string, public scenarioOverride: number | null = null, id: string | null = null) {
+        if (id !== null) {
+            this.id = id;
+        } else {
+            if (this.scenarioOverride !== null)
+                this.id = `${this.galaxyName}${this.scenarioOverride}`;
+            else
+                this.id = this.galaxyName;
+        }
     }
-    public getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter {
-        const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
-        return createCsvParser(lightDataRarc.findFileData(`Light${zoneName}.bcsv`)!);
-    }
-    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): JKRArchive {
-        return modelCache.getArchive(`StageData/${zoneName}.arc`)!;
-    }
-    public getObjNameTable(modelCache: ModelCache): JMapInfoIter {
-        const arc = modelCache.getArchive(`StageData/ObjNameTable.arc`)!;
-        return createCsvParser(arc.findFileData(`ObjNameTable.tbl`)!);
-    }
-    public requestGlobalArchives(modelCache: ModelCache): void {
-        modelCache.requestArchiveData(`ObjectData/LightData.arc`);
-        modelCache.requestArchiveData(`StageData/ObjNameTable.arc`);
-    }
-    public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
-        modelCache.requestArchiveData(`StageData/${zoneName}.arc`);
+
+    public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<Viewer.SceneGfx> {
+        const main = await import("./Main");
+        const loader = new main.SMG1SceneLoader(this);
+        return await loader.createScene(device, sceneContext);
     }
 }
 

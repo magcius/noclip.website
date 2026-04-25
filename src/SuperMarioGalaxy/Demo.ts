@@ -483,11 +483,11 @@ export class DemoDirector extends NameObj {
 
     public getDemoSheetArchiveForZone(sceneObjHolder: SceneObjHolder, zoneId: number): JKRArchive | null {
         if (this.demoSheetArchives[zoneId] === undefined) {
-            if (sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1) {
+            if (sceneObjHolder.sceneLoader.gameBit & GameBits.SMG1) {
                 if (this.demoSheetArchives[0] === undefined)
                     this.demoSheetArchives[0] = assertExists(sceneObjHolder.modelCache.getObjectData('DemoSheet'));
                 this.demoSheetArchives[zoneId] = this.demoSheetArchives[0];
-            } else if (sceneObjHolder.sceneDesc.gameBit & GameBits.SMG2) {
+            } else if (sceneObjHolder.sceneLoader.gameBit & GameBits.SMG2) {
                 const zoneName = sceneObjHolder.scenarioData.zoneNames[zoneId];
                 this.demoSheetArchives[zoneId] = sceneObjHolder.modelCache.getArchive(`StageData/${zoneName}/${zoneName}Demo.arc`);
             } else {

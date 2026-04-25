@@ -56,9 +56,11 @@ import { NPCDirector } from './Actors/NPC.js';
 import { GalaxyMapController } from './Actors/GalaxyMap.js';
 import { KameckBeamHolder, KameckBeamTurtleHolder, KameckFireBallHolder, TakoHeiInkHolder } from './Actors/Enemy.js';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
-import InputManager from '../InputManager.js';
-import { DebugDraw } from '../gfx/helpers/DebugDraw.js';
+import type InputManager from '../InputManager.js';
+import type { DebugDraw } from '../gfx/helpers/DebugDraw.js';
 import { DayInTheLifeOfALumaController } from './Extra.js';
+import type { SMG1SceneDesc } from './Scenes_SuperMarioGalaxy1.js';
+import type { SMG2SceneDesc } from './Scenes_SuperMarioGalaxy2.js';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -165,8 +167,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
 
-        if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
-            this.currentScenarioIndex = this.sceneObjHolder.sceneDesc.scenarioOverride;
+        const scenarioOverride = this.sceneObjHolder.sceneLoader.sceneDesc.scenarioOverride;
+        if (scenarioOverride !== null)
+            this.currentScenarioIndex = scenarioOverride;
 
         this.applyCurrentScenario();
     }
@@ -204,7 +207,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
 
-        const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
+        const galaxyName = this.sceneObjHolder.sceneLoader.sceneDesc.galaxyName;
         const scenarioData = this.sceneObjHolder.scenarioData.scenarioDataIter;
 
         scenarioData.mapRecords((jmp, i) => {
@@ -261,7 +264,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const panels: UI.Panel[] = [];
 
-        if (this.sceneObjHolder.sceneDesc.scenarioOverride === null)
+        if (this.sceneObjHolder.sceneLoader.sceneDesc.scenarioOverride === null)
             panels.push(this.createScenarioPanel());
 
         const renderHacksPanel = this.createRenderHacksPanel();
@@ -1031,7 +1034,7 @@ class ScenarioData {
     public scenarioDataIter: JMapInfoIter;
     public hasCometData: boolean;
 
-    constructor(sceneDesc: SMGSceneDescBase, scenarioArc: RARC.JKRArchive) {
+    constructor(sceneDesc: SMGSceneLoaderBase, scenarioArc: RARC.JKRArchive) {
         const zoneListIter = createCsvParser(scenarioArc.findFileData('ZoneList.bcsv')!);
         this.zoneNames = zoneListIter.mapRecords((iter) => {
             return assertExists(iter.getValueString(`ZoneName`));
@@ -1217,7 +1220,7 @@ class DebugUtils {
 }
 
 export class SceneObjHolder {
-    public sceneDesc: SMGSceneDescBase;
+    public sceneLoader: SMGSceneLoaderBase;
     public modelCache: ModelCache;
     public spawner: SMGSpawner;
 
@@ -1545,7 +1548,7 @@ class SMGSpawner {
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const gameBit = this.sceneObjHolder.sceneDesc.gameBit;
+        const gameBit = this.sceneObjHolder.sceneLoader.gameBit;
 
         const actorTableEntry = getNameObjFactoryTableEntry(objName, gameBit);
         if (actorTableEntry !== null)
@@ -1725,7 +1728,7 @@ class StageDataHolder {
     public localStageDataHolders: StageDataHolder[] = [];
     public placementMtx = mat4.create();
 
-    constructor(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData, public zoneName: string, public zoneId: number, public layerId: LayerId = -1) {
+    constructor(sceneDesc: SMGSceneLoaderBase, modelCache: ModelCache, scenarioData: ScenarioData, public zoneName: string, public zoneId: number, public layerId: LayerId = -1) {
         this.zoneArchive = sceneDesc.getZoneMapArchive(modelCache, zoneName);
         this.createLocalStageDataHolders(sceneDesc, modelCache, scenarioData);
     }
@@ -1825,7 +1828,7 @@ class StageDataHolder {
         }
     }
 
-    public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
+    public createLocalStageDataHolders(sceneDesc: SMGSceneLoaderBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
         for (let i = LayerId.Common; i <= LayerId.LayerMax; i++) {
             const layerDirName = getLayerDirName(i);
             const stageObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/StageObjInfo`);
@@ -1865,20 +1868,11 @@ class StageDataHolder {
     }
 }
 
-export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
-    public id: string;
-    public pathBase: string;
-    public gameBit: GameBits;
+abstract class SMGSceneLoaderBase {
+    public abstract gameBit: GameBits;
+    public abstract pathBase: string;
 
-    constructor(public name: string, public galaxyName: string, public scenarioOverride: number | null = null, id: string | null = null) {
-        if (id !== null) {
-            this.id = id;
-        } else {
-            if (this.scenarioOverride !== null)
-                this.id = `${this.galaxyName}${this.scenarioOverride}`;
-            else
-                this.id = this.galaxyName;
-        }
+    constructor(public sceneDesc: SMG1SceneDesc | SMG2SceneDesc) {
     }
 
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
@@ -1889,7 +1883,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
-        if (this.id === "DayInTheLifeOfALuma") {
+        if (this.sceneDesc.id === "DayInTheLifeOfALuma") {
             new DayInTheLifeOfALumaController(sceneObjHolder);
         }
     }
@@ -1905,7 +1899,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         const renderHelper = new GXRenderHelperGfx(device, context, modelCache.renderCache);
         context.destroyablePool.push(renderHelper);
 
-        const galaxyName = this.galaxyName;
+        const galaxyName = this.sceneDesc.galaxyName;
 
         const scenarioDataFilename = `StageData/${galaxyName}/${galaxyName}Scenario.arc`;
 
@@ -1917,7 +1911,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         modelCache.requestObjectData('NPCData');
 
         const sceneObjHolder = new SceneObjHolder();
-        sceneObjHolder.sceneDesc = this;
+        sceneObjHolder.sceneLoader = this;
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
         sceneObjHolder.viewerInput = context.viewerInput;
@@ -1972,5 +1966,63 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         const renderer = new SMGRenderer(renderHelper, spawner, sceneObjHolder);
         this.setup(context, renderer);
         return renderer;
+    }
+}
+
+export class SMG1SceneLoader extends SMGSceneLoaderBase {
+    public override pathBase: string = `SuperMarioGalaxy`;
+    public override gameBit = GameBits.SMG1;
+    public getLightData(modelCache: ModelCache): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
+        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
+    }
+    public getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
+        return createCsvParser(lightDataRarc.findFileData(`Light${zoneName}.bcsv`)!);
+    }
+    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.JKRArchive {
+        return modelCache.getArchive(`StageData/${zoneName}.arc`)!;
+    }
+    public getObjNameTable(modelCache: ModelCache): JMapInfoIter {
+        const arc = modelCache.getArchive(`StageData/ObjNameTable.arc`)!;
+        return createCsvParser(arc.findFileData(`ObjNameTable.tbl`)!);
+    }
+    public requestGlobalArchives(modelCache: ModelCache): void {
+        modelCache.requestArchiveData(`ObjectData/LightData.arc`);
+        modelCache.requestArchiveData(`StageData/ObjNameTable.arc`);
+    }
+    public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
+        modelCache.requestArchiveData(`StageData/${zoneName}.arc`);
+    }
+}
+
+export class SMG2SceneLoader extends SMGSceneLoaderBase {
+    public override pathBase: string = `SuperMarioGalaxy2`;
+    public override gameBit = GameBits.SMG2;
+    public getLightData(modelCache: ModelCache): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`LightData/LightData.arc`)!;
+        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
+    }
+    public getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`StageData/${zoneName}/${zoneName}Light.arc`)!;
+        return createCsvParser(lightDataRarc.findFileData(`csv/${zoneName}Light.bcsv`)!);
+    }
+    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.JKRArchive {
+        return modelCache.getArchive(`StageData/${zoneName}/${zoneName}Map.arc`)!;
+    }
+    public getObjNameTable(modelCache: ModelCache): JMapInfoIter {
+        const arc = modelCache.getArchive(`SystemData/ObjNameTable.arc`)!;
+        return createCsvParser(arc.findFileData(`ObjNameTable.tbl`)!);
+    }
+    public requestGlobalArchives(modelCache: ModelCache): void {
+        modelCache.requestArchiveData(`LightData/LightData.arc`);
+        modelCache.requestArchiveData(`SystemData/ObjNameTable.arc`);
+    }
+    public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
+        modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Map.arc`);
+        modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Light.arc`);
+        modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Demo.arc`);
+        if (zoneName.startsWith('WorldMap'))
+            modelCache.requestObjectData(zoneName.slice(0, 10));
     }
 }

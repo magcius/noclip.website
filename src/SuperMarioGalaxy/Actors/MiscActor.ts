@@ -9442,7 +9442,7 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
         else
             connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
-        const hasCrystalBox = !!(sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1);
+        const hasCrystalBox = !!(sceneObjHolder.sceneLoader.gameBit & GameBits.SMG1);
 
         const containerTypeArg = fallback(getJMapInfoArg3(infoIter), -1);
         if (containerTypeArg === -1 && hasCrystalBox) {
@@ -9539,7 +9539,7 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
         const modelName = MorphItemObjNeo.getModelName(type);
         sceneObjHolder.modelCache.requestObjectData(modelName);
 
-        const hasCrystalBox = !!(sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1);
+        const hasCrystalBox = !!(sceneObjHolder.sceneLoader.gameBit & GameBits.SMG1);
 
         const containerTypeArg = fallback(getJMapInfoArg3(infoIter), -1);
         if (containerTypeArg === 0) {
