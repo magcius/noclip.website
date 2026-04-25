@@ -58,6 +58,7 @@ import { KameckBeamHolder, KameckBeamTurtleHolder, KameckFireBallHolder, TakoHei
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
 import InputManager from '../InputManager.js';
 import { DebugDraw } from '../gfx/helpers/DebugDraw.js';
+import { DayInTheLifeOfALumaController } from './Extra.js';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1888,6 +1889,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
+        if (this.id === "DayInTheLifeOfALuma") {
+            new DayInTheLifeOfALumaController(sceneObjHolder);
+        }
     }
 
     protected setup(context: SceneContext, renderer: SMGRenderer): void {
