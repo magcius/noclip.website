@@ -8,7 +8,7 @@ import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRangeFloat, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, MatrixAxis, normToLength, randomRangeFloat, saturate, scaleMatrix, setMatrixAxis, setMatrixAxisONB, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
 import { assert, assertExists } from "../util.js";
 import { getRes, XanimePlayer } from "./Animation.js";
 import { AreaObj, isInAreaObj } from "./AreaObj.js";
@@ -950,14 +950,7 @@ export function makeMtxTRFromQuatVec(dst: mat4, q: ReadonlyQuat, translation: Re
 }
 
 export function makeMtxFrontUp(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3): void {
-    const frontNorm = scratchVec3a;
-    const upNorm = scratchVec3b;
-    const side = scratchVec3c;
-    vec3.normalize(frontNorm, front);
-    vec3.cross(side, up, frontNorm);
-    vec3.normalize(side, side);
-    vec3.cross(upNorm, frontNorm, side);
-    setMatrixAxis(dst, side, upNorm, frontNorm);
+    setMatrixAxisONB(dst, front, MatrixAxis.Z, up, MatrixAxis.Y);
 }
 
 export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3, pos: ReadonlyVec3): void {
@@ -966,14 +959,7 @@ export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVe
 }
 
 export function makeMtxUpFront(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3): void {
-    const upNorm = scratchVec3b;
-    const frontNorm = scratchVec3a;
-    const side = scratchVec3c;
-    vec3.normalize(upNorm, up);
-    vec3.cross(side, up, front);
-    vec3.normalize(side, side);
-    vec3.cross(frontNorm, side, upNorm);
-    setMatrixAxis(dst, side, upNorm, frontNorm);
+    setMatrixAxisONB(dst, up, MatrixAxis.Y, front, MatrixAxis.Z);
 }
 
 export function makeMtxUpFrontPos(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3, pos: ReadonlyVec3): void {
@@ -982,36 +968,15 @@ export function makeMtxUpFrontPos(dst: mat4, up: ReadonlyVec3, front: ReadonlyVe
 }
 
 export function makeMtxFrontSide(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3): void {
-    const up = scratchVec3b;
-    const frontNorm = scratchVec3a;
-    const sideNorm = scratchVec3c;
-    vec3.normalize(frontNorm, front);
-    vec3.cross(up, frontNorm, side);
-    vec3.normalize(up, up);
-    vec3.cross(sideNorm, up, frontNorm);
-    setMatrixAxis(dst, sideNorm, up, frontNorm);
+    setMatrixAxisONB(dst, front, MatrixAxis.Z, side, MatrixAxis.X);
 }
 
 export function makeMtxSideUp(dst: mat4, side: ReadonlyVec3, up: ReadonlyVec3): void {
-    const front = scratchVec3b;
-    const sideNorm = scratchVec3a;
-    const upNorm = scratchVec3c;
-    vec3.normalize(sideNorm, side);
-    vec3.cross(front, sideNorm, up);
-    vec3.normalize(front, front);
-    vec3.cross(upNorm, front, sideNorm);
-    setMatrixAxis(dst, sideNorm, upNorm, front);
+    setMatrixAxisONB(dst, side, MatrixAxis.X, up, MatrixAxis.Y);
 }
 
 export function makeMtxSideFront(dst: mat4, side: ReadonlyVec3, front: ReadonlyVec3): void {
-    const up = scratchVec3b;
-    const sideNorm = scratchVec3a;
-    const frontNorm = scratchVec3c;
-    vec3.normalize(sideNorm, side);
-    vec3.cross(up, sideNorm, front);
-    vec3.normalize(up, up);
-    vec3.cross(frontNorm, sideNorm, up);
-    setMatrixAxis(dst, sideNorm, up, frontNorm);
+    setMatrixAxisONB(dst, side, MatrixAxis.Y, front, MatrixAxis.Z);
 }
 
 export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3, pos: ReadonlyVec3): void {

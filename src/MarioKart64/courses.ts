@@ -1,38 +1,37 @@
-import * as Viewer from '../viewer.js';
 import * as F3DEX from "../BanjoKazooie/f3dex.js";
 import * as RDP from '../Common/N64/RDP.js';
 import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
-import { vec3, mat4, vec2, vec4, ReadonlyVec3, ReadonlyVec2 } from 'gl-matrix';
-import { computeModelMatrixSRT, computeModelMatrixT, scaleMatrix, Vec3UnitX, Vec3UnitY, Vec3Zero, clamp, lerp, lerpAngle } from '../MathHelpers.js';
-import { Mk64SkyRenderer, BasicRspRenderer, Mk64RenderLayer } from './render.js';
-import { Light1, MkRSPState } from './f3dex.js';
-import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
+import { mat4, ReadonlyVec2, ReadonlyVec3, vec2, vec3, vec4 } from 'gl-matrix';
+import { getTimeInFrames } from '../AnimationController.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { RSP_Geometry } from '../BanjoKazooie/f3dex.js';
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from '../gfx/platform/GfxPlatform.js';
-import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { NumberHolder } from '../MetroidPrime/particles/base_generator.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { makeMtxFrontUpPos } from '../SuperMarioGalaxy/ActorUtil.js';
-import { CollisionGrid, ObjectCollision } from './collision.js';
-import { Actor, ActorBowsersCastleBush, ActorCactus1, ActorCactus2, ActorCactus3, ActorCow, ActorCrossbuck, ActorFallingRock, ActorFlags, ActorItemBox, ActorJungleTree, ActorLuigiTree, ActorMarioSign, ActorMarioTree, ActorMooMooFarmTree, ActorPalmTree, ActorPeachCastleTree, ActorPiranhaPlant, ActorRoyalRacewayTree, ActorSnowTree, ActorType, ActorWarioSign, ActorWaterBanshee, ActorYoshiEgg, ActorYoshiTree, DebugActor } from './actors.js';
-import { rotatePositionAroundPivot, setShadowSurfaceAngle, calcPitch, stepTowardsAngle, calcTargetAngleY, hashFromValues, kmToSpeed, random_int, random_u16, rotateVectorXY, IsTargetInRangeXZ, calcModelMatrix, crossedTime, IsTargetInRangeXYZ, lerpBinAngle, BinAngleToRad, RadToBinAngle, readActorSpawnData, readPathData, normalizeAngle } from './utils.js';
-import { drawWorldSpaceLine, drawWorldSpaceLocator, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { CameraController, computeViewMatrix } from '../Camera.js';
 import { Color, colorNewFromRGBA8, Green, Yellow } from '../Color.js';
-import { assert, mod } from '../util.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { drawWorldSpaceLine, drawWorldSpaceLocator, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from '../gfx/platform/GfxPlatform.js';
+import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph.js';
-import { TextureHolder, TextureMapping } from '../TextureHolder.js';
-import { Camera, CameraController, computeViewMatrix } from '../Camera.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { CourseId } from './scenes.js';
-import { getTimeInFrames } from '../AnimationController.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { clamp, computeModelMatrixSRT, computeModelMatrixT, lerp, lerpAngle, MatrixAxis, scaleMatrix, setMatrixAxisONB, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { NumberHolder } from '../MetroidPrime/particles/base_generator.js';
 import { getDerivativeBspline, getPointBspline } from '../Spline.js';
 import { interpS16 } from '../StarFoxAdventures/util.js';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { Mk64Anim, Mk64AnimTrack, Mk64Point, dMapSkyColors, Mk64ActorSpawnData, Mk64Cloud, dCourseCpuMaxSeparation, dThwompSpawns150CC, dFireBreathsSpawns, dThwompLights, dDustAngleOffsets, dDustPosOffsets, dFlamePillarSpawnsA, dFlamePillarSpawnsB, dFlamePillarSpawnsC, dSnowmanSpawns, dFlagPoleSpawns, dHedgehogSpawns, dHedgehogPatrolPoints, dCrabSpawns, dDkJungleTorchSpawns, dStaticNeonSpawns, dPenguinPath, dMoleSpawns, ThwompType, dBooPaths, seagullPathList, dCourseData } from './course_data.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { assert, mod } from '../util.js';
+import { Actor, ActorBowsersCastleBush, ActorCactus1, ActorCactus2, ActorCactus3, ActorCow, ActorCrossbuck, ActorFallingRock, ActorFlags, ActorItemBox, ActorJungleTree, ActorLuigiTree, ActorMarioSign, ActorMarioTree, ActorMooMooFarmTree, ActorPalmTree, ActorPeachCastleTree, ActorPiranhaPlant, ActorRoyalRacewayTree, ActorSnowTree, ActorType, ActorWarioSign, ActorWaterBanshee, ActorYoshiEgg, ActorYoshiTree, DebugActor } from './actors.js';
+import { CollisionGrid, ObjectCollision } from './collision.js';
+import { dBooPaths, dCourseCpuMaxSeparation, dCourseData, dCrabSpawns, dDkJungleTorchSpawns, dDustAngleOffsets, dDustPosOffsets, dFireBreathsSpawns, dFlagPoleSpawns, dFlamePillarSpawnsA, dFlamePillarSpawnsB, dFlamePillarSpawnsC, dHedgehogPatrolPoints, dHedgehogSpawns, dMapSkyColors, dMoleSpawns, dPenguinPath, dSnowmanSpawns, dStaticNeonSpawns, dThwompLights, dThwompSpawns150CC, Mk64ActorSpawnData, Mk64Anim, Mk64AnimTrack, Mk64Cloud, Mk64Point, seagullPathList, ThwompType } from './course_data.js';
+import { Light1, MkRSPState } from './f3dex.js';
+import { BasicRspRenderer, Mk64RenderLayer, Mk64SkyRenderer } from './render.js';
+import { CourseId } from './scenes.js';
+import { BinAngleToRad, calcModelMatrix, calcPitch, calcTargetAngleY, crossedTime, hashFromValues, IsTargetInRangeXYZ, IsTargetInRangeXZ, kmToSpeed, lerpBinAngle, normalizeAngle, RadToBinAngle, random_int, random_u16, readActorSpawnData, readPathData, rotatePositionAroundPivot, rotateVectorXY, setShadowSurfaceAngle, stepTowardsAngle } from './utils.js';
 
 export let IS_WIREFRAME: boolean = false;
 export let DELTA_TIME: number = 1.0;
@@ -1701,7 +1700,8 @@ class Entity {
             const right = vec3.normalize(scratchVec3a, vec3.cross(scratchVec3a, unit, up));
             const front = vec3.normalize(scratchVec3b, vec3.cross(scratchVec3b, right, up));
 
-            makeMtxFrontUpPos(dst, front, up, [this.pos[0], this.surfaceHeight + 0.8, this.pos[2]]);
+            setMatrixAxisONB(dst, front, MatrixAxis.Z, up, MatrixAxis.Y);
+            setMatrixTranslation(dst, [this.pos[0], this.surfaceHeight + 0.8, this.pos[2]]);
             scaleMatrix(dst, dst, scale);
         }
     }

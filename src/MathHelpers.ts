@@ -1,5 +1,6 @@
 
 import { mat4, vec3, quat, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
+import { assert } from "./util";
 
 // Misc bits of 3D math.
 
@@ -512,6 +513,40 @@ export function setMatrixTranslation(dst: mat4, v: ReadonlyVec3): void {
     dst[12] = v[0];
     dst[13] = v[1];
     dst[14] = v[2];
+}
+
+// Setting a matrix from two orthonormal basis vectors.
+export enum MatrixAxis {
+    X = 0,
+    Y = 4,
+    Z = 8,
+    Position = 12,
+};
+
+export function setMatrixAxisONB(dst: mat4, v1: ReadonlyVec3, axis1: MatrixAxis, v2: ReadonlyVec3, axis2: MatrixAxis): void {
+    // Compute the third axis.
+    const v1N = scratchVec3a, v2N = scratchVec3b, v3N = scratchVec3c;
+    vec3.normalize(v1N, v1);
+    vec3.cross(v3N, v1N, v2);
+    vec3.normalize(v3N, v3N);
+    vec3.cross(v2N, v3N, v1N);
+
+    // Now set the matrix axes.
+    assert(axis1 !== axis2);
+    // Compute the third axis from the two that aren't set.
+    const axis3 = (axis1 | axis2) ^ 12;
+
+    dst[axis1 + 0] = v1N[0];
+    dst[axis1 + 1] = v1N[1];
+    dst[axis1 + 2] = v1N[2];
+
+    dst[axis2 + 0] = v2N[0];
+    dst[axis2 + 1] = v2N[1];
+    dst[axis2 + 2] = v2N[2];
+
+    dst[axis3 + 0] = v3N[0];
+    dst[axis3 + 1] = v3N[1];
+    dst[axis3 + 2] = v3N[2];
 }
 
 const baseBuffer = new ArrayBuffer(4);
