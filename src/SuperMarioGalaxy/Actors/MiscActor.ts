@@ -18,10 +18,10 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist.js';
 import * as GX from '../../gx/gx_enum.js';
 import { getVertexInputLocation } from '../../gx/gx_material.js';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams, GXTextureMapping } from '../../gx/gx_render.js';
-import { clamp, clampRange, calcEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
+import { clamp, clampRange, calcEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixTranslation, setMatrixAxis } from '../../MathHelpers.js';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
-import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneIndirectMapObjStrongLight, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil.js';
+import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneIndirectMapObjStrongLight, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil.js';
 import { randomRangeVec3 } from "../../MathHelpers.js";
 import { randomRangeInt } from '../../MathHelpers.js';
 import { randomRangeFloat } from '../../MathHelpers.js';
@@ -3442,7 +3442,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     }
 
     protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
-        setMtxAxisXYZ(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
+        setMatrixAxis(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
         setMatrixTranslation(this.modelInstance!.modelMatrix, this.translation);
     }
 }
@@ -3562,7 +3562,7 @@ class CoconutTreeLeaf extends LiveActor {
         vec3.cross(this.axisY, this.axisZ, this.axisX);
         vec3.normalize(this.axisY, this.axisY);
 
-        setMtxAxisXYZ(this.jointMtx, this.axisX, this.axisY, this.axisZ);
+        setMatrixAxis(this.jointMtx, this.axisX, this.axisY, this.axisZ);
     }
 }
 
@@ -5043,7 +5043,7 @@ export class Trapeze extends LiveActor {
 
     private updateStickMtx(): void {
         const point = this.swingRopePoint;
-        setMtxAxisXYZ(this.stickMtx, point.axisX, point.axisY, point.axisZ);
+        setMatrixAxis(this.stickMtx, point.axisX, point.axisY, point.axisZ);
         setMatrixTranslation(this.stickMtx, point.position);
     }
 
@@ -5163,7 +5163,7 @@ export class Creeper extends LiveActor {
         super.control(sceneObjHolder);
 
         const headPoint = this.getHeadPoint();
-        setMtxAxisXYZ(this.creeperFlowerMtx, headPoint.axisX, headPoint.axisY, headPoint.axisZ);
+        setMatrixAxis(this.creeperFlowerMtx, headPoint.axisX, headPoint.axisY, headPoint.axisZ);
         setMatrixTranslation(this.creeperFlowerMtx, headPoint.pos);
     }
 
@@ -7595,7 +7595,7 @@ export class Pole extends LiveActor {
         }
 
         if (!this.noModel) {
-            setMtxAxisXYZ(this.bottomMtx!, this.axisX, this.axisY, this.axisZ);
+            setMatrixAxis(this.bottomMtx!, this.axisX, this.axisY, this.axisZ);
             setMatrixTranslation(this.bottomMtx!, this.translation);
         }
 
@@ -7611,7 +7611,7 @@ export class Pole extends LiveActor {
 
         vec3.scaleAndAdd(this.topPos, this.translation, this.axisY, height);
 
-        setMtxAxisXYZ(this.topMtx!, this.axisX, this.axisY, this.axisZ);
+        setMatrixAxis(this.topMtx!, this.axisX, this.axisY, this.axisZ);
         setMatrixTranslation(this.topMtx!, this.topPos);
     }
 

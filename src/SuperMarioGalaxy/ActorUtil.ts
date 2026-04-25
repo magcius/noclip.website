@@ -949,10 +949,6 @@ export function makeMtxTRFromQuatVec(dst: mat4, q: ReadonlyQuat, translation: Re
     setMatrixTranslation(dst, translation);
 }
 
-export function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3): void {
-    setMatrixAxis(dst, x, y, z);
-}
-
 export function makeMtxFrontUp(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3): void {
     const frontNorm = scratchVec3a;
     const upNorm = scratchVec3b;
@@ -961,7 +957,7 @@ export function makeMtxFrontUp(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3)
     vec3.cross(side, up, frontNorm);
     vec3.normalize(side, side);
     vec3.cross(upNorm, frontNorm, side);
-    setMtxAxisXYZ(dst, side, upNorm, frontNorm);
+    setMatrixAxis(dst, side, upNorm, frontNorm);
 }
 
 export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3, pos: ReadonlyVec3): void {
@@ -977,7 +973,7 @@ export function makeMtxUpFront(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3)
     vec3.cross(side, up, front);
     vec3.normalize(side, side);
     vec3.cross(frontNorm, side, upNorm);
-    setMtxAxisXYZ(dst, side, upNorm, frontNorm);
+    setMatrixAxis(dst, side, upNorm, frontNorm);
 }
 
 export function makeMtxUpFrontPos(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3, pos: ReadonlyVec3): void {
@@ -993,7 +989,7 @@ export function makeMtxFrontSide(dst: mat4, front: ReadonlyVec3, side: ReadonlyV
     vec3.cross(up, frontNorm, side);
     vec3.normalize(up, up);
     vec3.cross(sideNorm, up, frontNorm);
-    setMtxAxisXYZ(dst, sideNorm, up, frontNorm);
+    setMatrixAxis(dst, sideNorm, up, frontNorm);
 }
 
 export function makeMtxSideUp(dst: mat4, side: ReadonlyVec3, up: ReadonlyVec3): void {
@@ -1004,7 +1000,7 @@ export function makeMtxSideUp(dst: mat4, side: ReadonlyVec3, up: ReadonlyVec3): 
     vec3.cross(front, sideNorm, up);
     vec3.normalize(front, front);
     vec3.cross(upNorm, front, sideNorm);
-    setMtxAxisXYZ(dst, sideNorm, upNorm, front);
+    setMatrixAxis(dst, sideNorm, upNorm, front);
 }
 
 export function makeMtxSideFront(dst: mat4, side: ReadonlyVec3, front: ReadonlyVec3): void {
@@ -1015,7 +1011,7 @@ export function makeMtxSideFront(dst: mat4, side: ReadonlyVec3, front: ReadonlyV
     vec3.cross(up, sideNorm, front);
     vec3.normalize(up, up);
     vec3.cross(frontNorm, sideNorm, up);
-    setMtxAxisXYZ(dst, sideNorm, up, frontNorm);
+    setMatrixAxis(dst, sideNorm, up, frontNorm);
 }
 
 export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3, pos: ReadonlyVec3): void {
