@@ -14,7 +14,7 @@ import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color.js";
 import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font.js";
 import { decompress } from "../../Common/Compression/Yaz0.js";
 import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
-import { TDDraw } from "../../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../../gx/DDraw.js";
 import { GX_Program } from "../../gx/gx_material.js";
 import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
 import { projectionMatrixConvertClipSpaceNearZ } from "./ProjectionHelpers.js";

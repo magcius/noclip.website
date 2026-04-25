@@ -14,7 +14,7 @@ import * as GX_Material from '../../gx/gx_material.js';
 import { ColorKind, DrawParams, fillSceneParamsData, GXMaterialHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { computeModelMatrixT, projectionMatrixForCuboid, scaleMatrix } from "../../MathHelpers.js";
-import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
+import { TSDraw } from "../../gx/DDraw.js";
 import { align, assert, readString } from "../../util.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { BTIData } from "./JUTTexture.js";

@@ -13,7 +13,7 @@ import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { isEqualStageName } from "./MiscActor.js";
 import { ViewerRenderInput } from "../../viewer.js";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
-import { TDDraw } from "../DDraw.js";
+import { TDDraw } from "../../gx/DDraw.js";
 import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../../gx/gx_render.js';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder.js';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../../Color.js';

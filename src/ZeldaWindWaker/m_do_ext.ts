@@ -11,7 +11,7 @@ import { assert, nArray } from "../util.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { dKy_GxFog_tevstr_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
 import { Color, colorCopy } from "../Color.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import * as GX from '../gx/gx_enum.js';
 import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";

@@ -26,7 +26,7 @@ import { randomRangeVec3 } from "../../MathHelpers.js";
 import { randomRangeInt } from '../../MathHelpers.js';
 import { randomRangeFloat } from '../../MathHelpers.js';
 import { calcMapGround, CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, getGroundNormal, invalidateCollisionParts, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, validateCollisionParts } from '../Collision.js';
-import { TDDraw, TSDraw } from '../DDraw.js';
+import { TDDraw, TSDraw } from '../../gx/DDraw.js';
 import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo.js';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem.js';
 import { addBaseMatrixFollowTarget } from '../Follow.js';

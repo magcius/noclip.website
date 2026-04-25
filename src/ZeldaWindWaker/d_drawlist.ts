@@ -7,7 +7,7 @@ import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { AABB } from "../Geometry.js";
 import { Vec3UnitX, Vec3UnitY, Vec3Zero, getMatrixAxisZ, projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { DeviceProgram } from "../Program.js";
-import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TSDraw } from "../gx/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";

@@ -9,7 +9,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { computeModelMatrixR, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_get_seacolor } from "./d_kankyo.js";

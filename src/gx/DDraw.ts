@@ -2,12 +2,12 @@
 // Dynamic Draw
 // A helper for all those times that Galaxy just writes triangles raw.
 
-import * as GX from '../gx/gx_enum.js';
-import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist.js';
+import * as GX from './gx_enum.js';
+import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from './gx_displaylist.js';
 import { assert, assertExists, align } from '../util.js';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxInputLayout, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
-import { createInputLayout } from '../gx/gx_render.js';
+import { createInputLayout } from './gx_render.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers.js';
 import { getSystemEndianness, Endianness } from '../endian.js';
 import { ReadonlyVec2, ReadonlyVec3 } from 'gl-matrix';

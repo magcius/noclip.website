@@ -10,7 +10,7 @@ import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_P
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
-import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../../../gx/DDraw.js";
 import { ColorKind, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../../../gx/gx_render.js";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture.js";
 import { getPointHermite } from "../../../Spline.js";
