@@ -28,4 +28,5 @@ export const DREAMDROP_PAM: Map<string, string> = new Map([
     ["b_yt100", "b_yt100_00001e"], // armored ventus
     ["n_ex010", "n_ex010_00001e"], // moogle
     ["b_di120", "b_di120_30210e"], // phantom ursula tentacle
+    ["n_tm010", "n_tm010_00001a"], // mickey (three musketeers)
 ]);

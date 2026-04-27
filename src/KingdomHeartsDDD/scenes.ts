@@ -249,6 +249,7 @@ g_nd300 also can't be read
 Check if textures have mips
 De-couple raw binary data from processed data like shapes -> vertices to reduce mem usage (no more than a few mb but still)
 Parse TXA
+Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
 
 ...and all else. May your heart be your guiding key
 */

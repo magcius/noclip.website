@@ -1,120 +1,7 @@
 export interface DreamDropRoomConfig {
-    skyBoxIds?: number[];
     externalCTT?: string[];
     defaultSets?: number[];
 }
-
-// ids of PMOs by room id that are rendered as the skybox
-// some skyboxes are already big enough with their srt, but most aren't
-// skybox PMOs are almost always at the beginning of the list of PMOs in PMP
-const SKYBOX_IDS: Map<string, number[]> = new Map([
-    ["di01", [48, 47]],
-    ["di02", [0, 1]],
-    ["di03", [43, 44, 45]],
-    ["di05", [0]],
-    ["yt02", [41, 42, 43, 44, 45, 46]],
-    ["yt04", [38, 39, 40, 41, 42]],
-    ["yt06", [4, 5, 6, 7, 8]],
-    ["yt60", [2, 3, 4]],
-    ["tw01", [79, 80, 81, 82]],
-    ["tw02", [21, 22, 23, 97, 98]],
-    ["tw03", [37, 38]],
-    ["tw04", [159]],
-    ["tw05", [204, 269, 270]],
-    ["tw06", [353]],
-    ["tw08", [120, 121, 122, 200, 201]],
-    ["tw09", [105]],
-    ["tw10", [286, 419, 420]],
-    ["tw11", [299]],
-    ["tw12", [99]],
-    ["tw13", [106]],
-    ["tw14", [95, 96]],
-    ["tw60", [0, 1]],
-    ["tw61", [0, 1]],
-    ["tm04", [177, 178]],
-    ["tm05", [0]],
-    ["tm06", [0]],
-    ["tm08", [30]],
-    ["tm09", [0]],
-    ["tm14", [0]],
-    ["tm15", [47]],
-    ["tm60", [0]],
-    ["tm61", [0]],
-    ["fa01", [87, 88, 89]],
-    ["fa02", [0]],
-    ["fa03", [0]],
-    ["fa05", [94]],
-    ["fa06", [0]],
-    ["fa07", [0, 1, 2, 3]],
-    ["fa09", [0, 1, 2, 3, 4, 5, 6]],
-    ["fa10", [148, 149, 150, 151]],
-    ["fa11", [0]],
-    ["fa60", [0]],
-    ["fa61", [0]],
-    ["fa62", [145, 146, 147, 148]],
-    ["pi01", [0, 1, 2]],
-    ["pi02", [68]],
-    ["pi03", [58]],
-    ["pi05", [14, 15, 16, 17]],
-    ["pi11", [88, 89, 90]],
-    ["pi13", [0]],
-    ["pi14", [1]],
-    ["pi15", [149]],
-    ["pi17", [0, 1, 2, 3]],
-    ["pi19", [51]],
-    ["pi60", [4, 5]],
-    ["pi61", [4, 5]],
-    ["rg02", [413, 414]],
-    ["rg03", [377, 378, 379]],
-    ["rg04", [758, 759, 760, 761, 762, 763]],
-    ["rg05", [57]],
-    ["rg06", [456, 457, 458, 459, 460]],
-    ["rg08", [12, 13, 14, 15, 16, 20]],
-    ["nd01", [94]],
-    ["nd02", [97]],
-    ["nd04", [167]],
-    ["nd05", [162]],
-    ["nd07", [80]],
-    ["nd10", [0]],
-    ["nd11", [118, 119, 120]],
-    ["nd12", [0]],
-    ["nd13", [77, 78, 79]],
-    ["nd14", [80]],
-    ["nd15", [119]],
-    ["nd16", [171]],
-    ["nd17", [0, 1, 2]],
-    ["nd18", [0, 1, 2]],
-    ["nd19", [95]],
-    ["nd60", [0]],
-    ["nd61", [0]],
-    ["tl01", [0, 1, 2]],
-    ["tl02", [0, 1, 2]],
-    ["tl06", [61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 62]],
-    ["tl07", [8]],
-    ["tl08", [68, 69]],
-    ["tl09", [32, 33, 34, 35, 36, 37, 38]],
-    ["tl10", [26, 27, 28, 29, 30]],
-    ["tl11", [12, 13, 14, 15]],
-    ["tl15", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]],
-    ["tl16", [12, 13, 14, 15]],
-    ["tl17", [0, 1, 2]],
-    ["tl18", [62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75]],
-    ["tl60", [0]],
-    ["tl61", [0]],
-    ["eh02", [0, 1, 2, 3]],
-    ["eh03", [0]],
-    ["eh12", [0]],
-    ["eh20", [134]],
-    ["eh06", [0, 1, 2, 3, 4]],
-    ["eh07", [115, 116, 117, 118, 119, 120, 121]],
-    ["eh09", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]],
-    ["eh10", [0]],
-    ["eh13", [146]],
-    ["eh14", [10, 62, 63]],
-    ["eh60", [0]],
-    ["eh61", [0]],
-    ["wm01", [11, 12]],
-]);
 
 // for some awful reason, a few rooms have their textures in separate files instead of embedded in the PMP
 const EXTERNAL_CTT: Map<string, string[]> = new Map([
@@ -242,13 +129,12 @@ const DEFAULT_SETS: Map<string, number[]> = new Map([
 ]);
 
 export function getDreamDropRoomConfig(roomId: string): DreamDropRoomConfig | undefined {
-    const skyBoxIds = SKYBOX_IDS.get(roomId);
     const externalCTT = EXTERNAL_CTT.get(roomId);
     const defaultSets = DEFAULT_SETS.get(roomId);
 
-    if (!skyBoxIds && !externalCTT && !defaultSets) {
+    if (!externalCTT && !defaultSets) {
         return undefined;
     }
 
-    return { skyBoxIds, externalCTT, defaultSets };
+    return { externalCTT, defaultSets };
 }

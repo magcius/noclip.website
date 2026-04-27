@@ -67,7 +67,7 @@ void main() {
         if (texColor.a < 0.1) {
             discard;
         }
-        gl_FragColor = texColor * v_Color;
+        gl_FragColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
     } else {
         gl_FragColor = v_Color;
     }

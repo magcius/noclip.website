@@ -41,6 +41,7 @@ export interface DreamDropPMO {
     name: string;
     scale: number;
     flags: number;
+    pmpFlags: number;
     bbox: number[];
     materials: DreamDropMaterial[];
     shapes: DreamDropShape[];
@@ -172,18 +173,52 @@ enum PrimitiveFormat {
 }
 
 /**
- * Blend modes based on a shape's attribute 3rd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ * Depth bias based on a shape's attribute 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export enum DreamDropShapeAttributeBlend {
-    TRANSLUCENT = 2,
-    TRANSLUCENT2 = 3, // unsure what the difference is between 2 and 3, if any
-    ADDITIVE = 4
+export enum DreamDropShapeAttributeDepthBias {
+    SET = 4
 }
 
 /**
- * Values based on a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ * Blend modes based on a shape's attribute 3rd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export enum DreamDropPMOFlags {
+export enum DreamDropShapeAttributeBlend {
+    OPAQUE,
+    OPAQUE2,
+    TRANSLUCENT,
+    TRANSLUCENT2,
+    ADDITIVE
+}
+
+/**
+ * Cull modes based on a shape's attribute 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ * 
+ * Not currently used since they break rooms in Hunchback and Tron, which have a lot of mirrored models.
+ * This might also not be the cull mode nibble at all, but it looks right 90% of the time
+ */
+export enum DreamDropShapeAttributeCullMode {
+    BACK,
+    BACK2,
+    BACK3,
+    BACK4,
+    NONE,
+    NONE2
+}
+
+/**
+ * Render mode from a model's flag 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropModelFlagRenderMode {
+    UNK,
+    SKYBOX,
+    UNK2,
+    UNK3
+}
+
+/**
+ * Billboard setting from a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropModelFlagBillboard {
     BILLBOARD = 4
 }
 
@@ -311,8 +346,7 @@ export class DreamDropParser {
             if (pmoOffset === 0) {
                 continue;
             }
-            const pmo = this.parsePMO(pmoOffset);
-            pmo.name = `${name}_${i}_${id}`;
+            const pmo = this.parsePMO(pmoOffset, false, `${name}_${i}_${id}`, flags);
             pmoInfos[i] = {
                 id, flags,
                 scale: vec3.fromValues(sx, sy, sz),
@@ -434,7 +468,7 @@ export class DreamDropParser {
         return { objects };
     }
 
-    public parsePMO(offset: number = 0, parseCTRT: boolean = false, name: string = ""): DreamDropPMO {
+    public parsePMO(offset: number = 0, parseCTRT: boolean = false, name: string = "", pmpFlags: number = -1): DreamDropPMO {
         this.offset = offset;
         const magic = this.getUint32();
         if (magic !== MAGIC_PMO) {
@@ -569,7 +603,7 @@ export class DreamDropParser {
         }
 
         return {
-            name, scale, flags, bbox, materials,
+            name, scale, flags, pmpFlags, bbox, materials,
             shapes: [...opaqueShapes, ...translucentShapes], ctrts, skeleton
         };
     }

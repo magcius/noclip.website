@@ -1,28 +1,29 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { Destroyable } from "../SceneBase";
 import { ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropPMOFlags, DreamDropMaterial, DreamDropShape, DreamDropShapeAttributeBlend, DreamDropPMP } from "./bin";
+import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropMaterial, DreamDropShape, DreamDropShapeAttributeBlend, DreamDropPMP, DreamDropShapeAttributeCullMode, DreamDropShapeAttributeDepthBias, DreamDropModelFlagRenderMode } from "./bin";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { DreamDropTexture } from "./texture";
-import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, makeSortKey, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { DreamDropRoomConfig } from "./config/room";
 import { Layer } from "../ui";
 import { TextureMapping } from "../TextureHolder";
 import { DreamDropShader } from "./shader";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 
 const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0;
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
-const SCRATCH_SRT = mat4.create();
+const SCRATCH_IDENTITY = mat4.create();
 const SCRATCH_BONE = mat4.create();
 
 /**
@@ -33,7 +34,7 @@ function getShortNibble(n: number, nibble: number): number {
 }
 
 /**
- * Creates shift matrix based on given SRT and `WORLD_SCALE`. Rotation is assumed to be in radians
+ * Returns shift matrix based on given SRT and {@link WORLD_SCALE}. The SRT must be the instance SRT - baked SRT is handled by the model renderer. Rotation is assumed to be in radians
  */
 function computeShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
     const srt = mat4.create();
@@ -44,6 +45,35 @@ function computeShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
     );
     return srt;
 }
+
+function getChannelValue(keyframes: DreamDropKeyframe[] | undefined, frame: number, defaultValue: number): number {
+        if (!keyframes || keyframes.length === 0) {
+            return defaultValue;
+        }
+        if (keyframes.length === 1) {
+            return keyframes[0].value;
+        }
+        let prev = keyframes[0];
+        let next = keyframes[keyframes.length - 1];
+        if (frame <= prev.frame) {
+            return prev.value;
+        }
+        if (frame >= next.frame) {
+            return next.value;
+        }
+        for (let i = 0; i < keyframes.length - 1; i++) {
+            if (keyframes[i].frame <= frame && keyframes[i + 1].frame >= frame) {
+                prev = keyframes[i];
+                next = keyframes[i + 1];
+                break;
+            }
+        }
+        if (prev.frame === next.frame) {
+            return prev.value;
+        }
+        const t = (frame - prev.frame) / (next.frame - prev.frame);
+        return prev.value + (next.value - prev.value) * t;
+    }
 
 export interface DreamDropRoomObjects {
     sets: DreamDropDataSet[];
@@ -87,8 +117,7 @@ export class DreamDropRoomRenderer implements Destroyable {
                     materials[j] = new MaterialInstance(model.materials[j], t, gfxSampler);
                 }
             }
-            const isSkyBox = config && config.skyBoxIds && config.skyBoxIds.includes(info.id);
-            this.parts[i] = new ModelRenderer(cache, model.name, model, materials, undefined, isSkyBox);
+            this.parts[i] = new ModelRenderer(cache, model.name, model, materials);
             this.parts[i].shiftMatrices = [computeShiftMatrix(info.scale, info.rotation, info.position)];
         }
 
@@ -115,7 +144,7 @@ export class DreamDropRoomRenderer implements Destroyable {
                             materials[i] = new MaterialInstance(model.materials[i], t, gfxSampler);
                         }
                     }
-                    const renderer = new ModelRenderer(cache, instance.name, model, materials, objects.animations.get(instance.name), false);
+                    const renderer = new ModelRenderer(cache, instance.name, model, materials, objects.animations.get(instance.name));
                     renderer.shiftMatrices = [computeShiftMatrix([1, 1, 1], instance.rotation, instance.position)];
                     indices.push(this.objects.length);
                     this.objects.push(renderer);
@@ -187,84 +216,77 @@ export class DreamDropRoomRenderer implements Destroyable {
 class ModelRenderer implements Destroyable, Layer {
     public name: string;
     public visible: boolean = true;
-    public bbox: Float32Array;
+    public bboxPoints: Float32Array;
     public shiftMatrices: mat4[] = [];
     private shapes: ShapeRenderer[];
     private isBillboard: boolean;
+    private isSkybox: boolean;
     private currentPAMFrame: number;
     private pamFramerate: number;
-    private lastComputedPAMFrame: number;
     private bones: DreamDropBone[];
-    private boneMatrices: mat4[] = [];
+    private boneMatrices: mat4[][] = [];
 
-    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: MaterialInstance[], private animation?: DreamDropSkeletalAnimation, private isSkyBox: boolean = false) {
-        // console.log(model.name, model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
+    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: MaterialInstance[], private animation?: DreamDropSkeletalAnimation) {
+        // console.log(model.name, model.pmpFlags.toString(16).padStart(4, "0"), model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
         this.name = name;
+        this.isSkybox = model.pmpFlags !== -1 && getShortNibble(model.pmpFlags, 3) === DreamDropModelFlagRenderMode.SKYBOX;
         this.shapes = Array(model.shapes.length);
         for (let i = 0; i < model.shapes.length; i++) {
             const shape = model.shapes[i];
             this.shapes[i] = new ShapeRenderer(
-                cache, shape, model.scale, materials[shape.textureIndex], isSkyBox,
+                cache, shape, model.scale, materials[shape.textureIndex], this.isSkybox,
                 this.animation ? model.skeleton!.bones.length : 0
             );
         }
-        this.bbox = new Float32Array(model.bbox);
-        this.isBillboard = getShortNibble(model.flags, 1) === DreamDropPMOFlags.BILLBOARD;
+        this.bboxPoints = new Float32Array(model.bbox.map(p => p * model.scale));
+        this.isBillboard = getShortNibble(model.flags, 1) === DreamDropModelFlagBillboard.BILLBOARD;
 
         this.currentPAMFrame = 0;
         this.pamFramerate = this.animation ? this.animation.framerate / 1000.0 : 0;
-        this.lastComputedPAMFrame = 0;
         this.bones = this.animation ? model.skeleton!.bones : [];
         if (this.animation) {
-            this.boneMatrices = Array.from({ length: this.bones.length }, () => mat4.create());
+            this.preComputeBoneMatrices();
         }
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
-        let ranAnimation = false;
+        let ranAnimation = this.animation === undefined;
         const template = renderHelper.renderInstManager.pushTemplate();
 
         for (const shiftMatrix of this.shiftMatrices) {
-            if (!this.isSkyBox) {
+            if (!this.isSkybox) {
                 mat4.mul(SCRATCH_MVP, viewerInput.camera.clipFromWorldMatrix, shiftMatrix);
-                if (!this.inView(this.bbox, SCRATCH_MVP)) {
+                if (!this.inView(this.bboxPoints, SCRATCH_MVP)) {
                     continue;
                 }
             }
 
-            if (this.animation && !ranAnimation) {
+            if (!ranAnimation) {
                 this.currentPAMFrame += viewerInput.deltaTime * this.pamFramerate;
-                this.currentPAMFrame %= this.animation.frameCount;
-                const frameInt = Math.trunc(this.currentPAMFrame);
-                if (this.lastComputedPAMFrame !== frameInt) {
-                    this.computeBoneMatrices();
-                    this.lastComputedPAMFrame = frameInt;
-                }
+                this.currentPAMFrame %= this.animation!.frameCount;
                 ranAnimation = true;
             }
 
             let offset = template.allocateUniformBuffer(DreamDropShader.ub_ModelParams, 12 + (12 * this.bones.length));
             const d = template.mapUniformBufferF32(DreamDropShader.ub_ModelParams);
             // u_View (12)
-            if (this.isSkyBox) {
+            if (this.isSkybox) {
                 computeViewMatrixSkybox(SCRATCH_VIEW, viewerInput.camera);
             } else {
                 computeViewMatrix(SCRATCH_VIEW, viewerInput.camera);
             }
             mat4.mul(SCRATCH_VIEW, SCRATCH_VIEW, shiftMatrix);
-            if (this.isBillboard && !this.isSkyBox) {
+            if (this.isBillboard && !this.isSkybox) {
                 calcBillboardMatrix(SCRATCH_VIEW, SCRATCH_VIEW, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
             }
             offset += fillMatrix4x3(d, offset, SCRATCH_VIEW);
-            if (this.bones.length > 0) {
-                // u_BoneSRT (12 * boneCount)
-                for (let i = 0; i < this.bones.length; i++) {
-                    if (this.animation) {
-                        mat4.mul(SCRATCH_BONE, this.boneMatrices[i], this.bones[i].inverseTransform);
-                        offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
-                    } else {
-                        offset += fillMatrix4x3(d, offset, SCRATCH_SRT);
-                    }
+            // u_BoneSRT (12 * boneCount)
+            for (let i = 0; i < this.bones.length; i++) {
+                if (this.animation) {
+                    mat4.mul(SCRATCH_BONE, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)], this.bones[i].inverseTransform);
+                    offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
+                } else {
+                    offset += fillMatrix4x3(d, offset, SCRATCH_IDENTITY);
                 }
             }
 
@@ -315,55 +337,29 @@ class ModelRenderer implements Destroyable, Layer {
         return true;
     }
 
-    private getChannelValue(keyframes: DreamDropKeyframe[] | undefined, frame: number, defaultValue: number): number {
-        if (!keyframes || keyframes.length === 0) {
-            return defaultValue;
-        }
-        if (keyframes.length === 1) {
-            return keyframes[0].value;
-        }
-        let prev = keyframes[0];
-        let next = keyframes[keyframes.length - 1];
-        if (frame <= prev.frame) {
-            return prev.value;
-        }
-        if (frame >= next.frame) {
-            return next.value;
-        }
-        for (let i = 0; i < keyframes.length - 1; i++) {
-            if (keyframes[i].frame <= frame && keyframes[i + 1].frame >= frame) {
-                prev = keyframes[i];
-                next = keyframes[i + 1];
-                break;
-            }
-        }
-        if (prev.frame === next.frame) {
-            return prev.value;
-        }
-        const t = (frame - prev.frame) / (next.frame - prev.frame);
-        return prev.value + (next.value - prev.value) * t;
-    }
-
-    private computeBoneMatrices() {
+    private preComputeBoneMatrices() {
+        this.boneMatrices = Array(this.bones.length);
         for (let i = 0; i < this.bones.length; i++) {
-            const bone = this.bones[i];
-            const frames = this.animation!.channels[bone.index];
-            const { scale, rotation, translation } = bone.decomposedTransform;
-            computeModelMatrixSRT(SCRATCH_BONE,
-                this.getChannelValue(frames.scaleX, this.lastComputedPAMFrame, scale[0]),
-                this.getChannelValue(frames.scaleY, this.lastComputedPAMFrame, scale[1]),
-                this.getChannelValue(frames.scaleZ, this.lastComputedPAMFrame, scale[2]),
-                this.getChannelValue(frames.rotationX, this.lastComputedPAMFrame, rotation[0]),
-                this.getChannelValue(frames.rotationY, this.lastComputedPAMFrame, rotation[1]),
-                this.getChannelValue(frames.rotationZ, this.lastComputedPAMFrame, rotation[2]),
-                this.getChannelValue(frames.translationX, this.lastComputedPAMFrame, translation[0]),
-                this.getChannelValue(frames.translationY, this.lastComputedPAMFrame, translation[1]),
-                this.getChannelValue(frames.translationZ, this.lastComputedPAMFrame, translation[2])
-            );
-            mat4.copy(this.boneMatrices[i], SCRATCH_BONE);
-            if (bone.parentIndex < 0xFFFF) {
-                mat4.mul(this.boneMatrices[i], this.boneMatrices[bone.parentIndex], this.boneMatrices[i]);
+            const boneFrames: mat4[] = Array.from({ length: this.animation!.frameCount }, () => mat4.create());
+            const channel = this.animation!.channels[i];
+            const { scale, rotation, translation } = this.bones[i].decomposedTransform;
+            for (let j = 0; j < this.animation!.frameCount; j++) {
+                computeModelMatrixSRT(boneFrames[j],
+                    getChannelValue(channel.scaleX, j, scale[0]),
+                    getChannelValue(channel.scaleY, j, scale[1]),
+                    getChannelValue(channel.scaleZ, j, scale[2]),
+                    getChannelValue(channel.rotationX, j, rotation[0]),
+                    getChannelValue(channel.rotationY, j, rotation[1]),
+                    getChannelValue(channel.rotationZ, j, rotation[2]),
+                    getChannelValue(channel.translationX, j, translation[0]),
+                    getChannelValue(channel.translationY, j, translation[1]),
+                    getChannelValue(channel.translationZ, j, translation[2])
+                );
+                if (this.bones[i].parentIndex < 0xFFFF) {
+                    mat4.mul(boneFrames[j], this.boneMatrices[this.bones[i].parentIndex][j], boneFrames[j]);
+                }
             }
+            this.boneMatrices[i] = boneFrames;
         }
     }
 }
@@ -391,25 +387,27 @@ class ShapeRenderer implements Destroyable {
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
-    constructor(cache: GfxRenderCache, shape: DreamDropShape, scale: number, private material: MaterialInstance, private isSkyBox: boolean = false, boneCount: number) {
-        const blendByte = getShortNibble(shape.attribute, 2);
-        const isTranslucent = blendByte === DreamDropShapeAttributeBlend.TRANSLUCENT || blendByte === DreamDropShapeAttributeBlend.TRANSLUCENT2;
-        const additiveBlend = blendByte === DreamDropShapeAttributeBlend.ADDITIVE;
+    constructor(cache: GfxRenderCache, shape: DreamDropShape, scale: number, private material: MaterialInstance, private isSkybox: boolean = false, boneCount: number) {
+        const blend = getShortNibble(shape.attribute, 2);
+        const isTranslucent = blend === DreamDropShapeAttributeBlend.TRANSLUCENT || blend === DreamDropShapeAttributeBlend.TRANSLUCENT2;
+        const additiveBlend = blend === DreamDropShapeAttributeBlend.ADDITIVE;
         const transparent = isTranslucent || additiveBlend;
         this.megaStateFlags = {
-            depthWrite: !transparent
+            depthWrite: !isTranslucent,
+            polygonOffset: getShortNibble(shape.attribute, 1) !== DreamDropShapeAttributeDepthBias.SET // think this is right?
         };
         if (transparent) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
                 blendDstFactor: additiveBlend ? GfxBlendFactor.One : GfxBlendFactor.OneMinusSrcAlpha,
             });
         }
-        if (isSkyBox) {
+        if (this.isSkybox) {
             this.megaStateFlags.depthWrite = false;
             this.megaStateFlags.depthCompare = GfxCompareMode.Always;
         }
-        this.sortKey = makeSortKey(transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+        this.sortKey = makeSortKeyOpaque(transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
 
         const inVertexAttributeDescriptors = [
             { location: DreamDropShader.a_Position, bufferIndex: DreamDropShader.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
@@ -451,21 +449,19 @@ class ShapeRenderer implements Destroyable {
 
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setVertexInput(this.gfxInputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        let o = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, 3);
+        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, 3);
         const d = renderInst.mapUniformBufferF32(DreamDropShader.ub_ShapeParams);
+        // u_Scroll (2)
+        d[offset++] = this.material ? this.material.scrollX : 0.0;
+        d[offset++] = this.material ? this.material.scrollY : 0.0;
+        // u_HasTexture (1)
+        d[offset++] = this.material ? 1.0 : 0.0;
 
         if (this.material) {
-            d[o++] = this.material.scrollX;
-            d[o++] = this.material.scrollY;
-            d[o++] = 1.0;
             renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMapping);
-        } else {
-            d[o++] = 0.0;
-            d[o++] = 0.0;
-            d[o++] = 0.0;
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        if (!this.isSkyBox) {
+        if (!this.isSkybox) {
             renderInst.sortKey = this.sortKey;
         }
         renderInst.setDrawCount(this.drawCount);
