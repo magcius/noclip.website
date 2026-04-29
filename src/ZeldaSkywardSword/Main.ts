@@ -16,7 +16,7 @@ import { Destroyable, SceneContext } from '../SceneBase.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
-import { GfxDevice, GfxTexture, } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxFrontFaceMode, GfxTexture, } from '../gfx/platform/GfxPlatform.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { EFB_HEIGHT, EFB_WIDTH, GXMaterialHacks } from '../gx/gx_material.js';
@@ -24,6 +24,7 @@ import { ColorKind, GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../
 import { assert, assertExists, readString } from '../util.js';
 import { EggLightManager } from '../rres/Egg.js';
 import { MDL0Model, MDL0ModelInstance, RRESTextureHolder } from '../rres/render.js';
+import { AABB } from '../Geometry.js';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.1) * ${p.matSource})`,
@@ -37,6 +38,10 @@ interface BaseObj {
     rotX: number;
     rotY: number;
     rotZ: number;
+    sx: number;
+    sy: number;
+    sz: number;
+    id : number;
 }
 
 interface Obj {
@@ -48,9 +53,11 @@ interface Obj {
     rotX: number; // 0x14. Rotation around X.
     rotY: number; // 0x16. Rotation around Y (-0x7FFF maps to -180, 0x7FFF maps to 180)
     rotZ: number; // 0x18. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
-    unk5: number; // 0x1A. Object group perhaps? Tends to be a small number of things...
-    unk6: number; // 0x1B. Object ID perhaps? Counts up...
+    id: number; // 0x1B. Object ID perhaps? Counts up...
     name: string; // 0x1C. Object name. Matched with a table in main.dol, which points to a .rel (DLL), and *that* loads the model.
+    sx: number;
+    sy: number;
+    sz: number;
 }
 
 // "S"calable "OBJ"ect, perhaps?
@@ -66,8 +73,7 @@ interface Sobj {
     rotX: number; // 0x20. Another per-object parameter?
     rotY: number; // 0x22. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
     rotZ: number; // 0x24
-    unk5: number; // 0x26. Object group perhaps? Tends to be a small number of things...
-    unk6: number; // 0x27. Object ID perhaps? Counts up...
+    id: number; // 0x27. Object ID perhaps? Counts up...
     name: string; // 0x28. Object name. Matched with a table in main.dol, which points to a .rel (DLL), and *that* loads the model.
 }
 
@@ -131,8 +137,9 @@ class ModelCache {
 
 enum ZSSPass {
     SKYBOX = 1 << 0,
-    MAIN = 1 << 1,
-    INDIRECT = 1 << 2,
+    STAGE = 1 << 1,
+    MAIN = 1 << 2,
+    INDIRECT = 1 << 3,
 }
 
 class ZSSTextureHolder extends RRESTextureHolder {
@@ -155,12 +162,14 @@ interface ModelToModelNodeBind_Info {
     modelToBindTo : MDL0ModelInstance;
     nodeName : string;
 };
+interface RoomNodeSearchParameters {
+    roomIdx : number;
+    name : string;
+};
 
 class SkywardSwordRenderer implements Viewer.SceneGfx {
     public textureHolder: RRESTextureHolder;
     public animationController: AnimationController;
-    public pastModelNames : string[] = [];
-    public presentModelNames : string[] = [];
     private stageRRES: BRRES.RRES;
     private stageBZS: BZS | null = null;
     private roomBZSes: BZS[] = [];
@@ -170,12 +179,22 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private renderInstListSky = new GfxRenderInstList();
     private renderInstListMain = new GfxRenderInstList();
+    private renderInstListStage = new GfxRenderInstList();
     private renderInstListInd = new GfxRenderInstList();
     private blackTexture: GfxTexture;
     private whiteTexture: GfxTexture;
     public currentLayer : number = 0;
     public layerModels : MDL0ModelInstance[][] = [];
+    public roomModels:  MDL0ModelInstance[][] = [];
     public modelInstances: MDL0ModelInstance[] = [];
+
+    // Past/Present Control
+    public presentModels : MDL0ModelInstance[] = [];
+    public pastModels : MDL0ModelInstance[] = [];
+    public presentNodes : BRRES.MDL0_NodeEntry[] = [];
+    public pastNodes : BRRES.MDL0_NodeEntry[] = [];
+    public pastPresentNodeParameters : RoomNodeSearchParameters[] = [];
+
     public modelBinds: ModelToModelNodeBind_Info[] = [];
     public otherTextureHolders: RRESTextureHolder[] = [];
 
@@ -243,16 +262,18 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             // Load rooms.
             const roomArchivesDir = stageArchive.findDir('rarc');
             if (roomArchivesDir) {
-                for (let j = 0; j < roomArchivesDir.files.length; j++) {
-                    const roomArchiveFile = roomArchivesDir.files[j];
+                for (let roomIdx = 0; roomIdx < roomArchivesDir.files.length; roomIdx++) {
+                    this.roomModels.push([]);
+                    
+                    const roomArchiveFile = roomArchivesDir.files[roomIdx];
                     const roomArchive = U8.parse(roomArchiveFile.buffer);
                     const roomRRES = BRRES.parse(roomArchive.findFileData('g3d/room.brres')!);
-
+                    
                     this.textureHolder.addRRESTextures(device, roomRRES);
-
+                    
                     for (let i = 0; i < roomRRES.mdl0.length && this.currentLayer === 0; i++) {
                         const mdl0 = roomRRES.mdl0[i];
-
+                        
                         const model = this.modelCache.getModel(device, this.renderHelper, mdl0, materialHacks);
                         const modelInstance = new MDL0ModelInstance(this.textureHolder, model, roomArchiveFile.name);
                         // modelInstance.materialInstances.find((mat) => mat.materialData.material.)
@@ -260,20 +281,75 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                         modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA01`);
                         modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA02`);
                         modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA04`);
-                        modelInstance.passMask = ZSSPass.MAIN;
+                        modelInstance.passMask = ZSSPass.STAGE;
+                        this.roomModels[roomIdx].push(modelInstance);
                         this.modelInstances.push(modelInstance);
+                        if (mdl0.name.startsWith('model_obj')) {
+                            modelInstance.passMask = ZSSPass.MAIN;
+                            this.pastModels.push(modelInstance);
+                        }
+
+                        
+
+                        // Lanayru Sand Sea has a "present" decal on top of a past zone.
+                        if (this.stageId === 'F301_1') {
+                            if (mdl0.name === 'model1_s' || mdl0.name === 'model1' || mdl0.name === 'model2')
+                                this.pastModels.push(modelInstance);
+                        } else if (this.stageId === 'F302' && roomIdx === 7) {
+                            if (mdl0.name === 'model0') {
+                                this.presentModels.push(modelInstance);
+                            }
+                        } else if (this.stageId === 'D300') {
+                            if (roomIdx === 2 || roomIdx === 3 || roomIdx === 6) {
+                                if (mdl0.name.startsWith('model0')) {
+                                    this.presentModels.push(modelInstance);
+                                }
+                            }
+                        } else if (this.stageId === 'D300_1') {
+                            if (roomIdx === 8 || roomIdx === 6) {
+                                if (mdl0.name.startsWith('model0')) {
+                                    this.presentModels.push(modelInstance);
+                                }
+                            }
+                         } else if (this.stageId === 'F300_5') {
+                            if (roomIdx === 0) {
+                                if (mdl0.name.startsWith('model0')) {
+                                    this.presentModels.push(modelInstance);
+                                }
+                            }
+                        } else if (this.stageId === 'F301_2') { 
+                            if (mdl0.name.startsWith('model0')) {
+                                this.presentModels.push(modelInstance);
+                            } 
+                        } else if (this.stageId === 'F300_2') { 
+                            if (mdl0.name.startsWith('model0')) {
+                                this.presentModels.push(modelInstance);
+                            } 
+                        } else if (this.stageId === 'F300_3') { 
+                            if (mdl0.name.startsWith('model0')) {
+                                this.presentModels.push(modelInstance);
+                            } 
+                        } else if (this.stageId === 'D003_3') { 
+                            if (mdl0.name.startsWith('model0')) {
+                                this.presentModels.push(modelInstance);
+                            } 
+                        } else if (this.stageId === 'D003_4') { 
+                            if (mdl0.name.startsWith('model0')) {
+                                this.presentModels.push(modelInstance);
+                            } 
+                        }
 
                         // Detail / transparent meshes end with '_s'. Typical depth sorting won't work, we have to explicitly bias.
-                        if (mdl0.name.endsWith('_s'))
+                        if (mdl0.name.endsWith('_s') && this.stageId !== 'F301_1')
                             modelInstance.setSortKeyLayer(GfxRendererLayer.TRANSLUCENT + 1);
                     }
-
 
                     const roomBZS = this.parseBZS(roomArchive.findFileData('dat/room.bzs')!);
                     this.roomBZSes.push(roomBZS);
                     const layout = roomBZS.layouts[t];
                     if (this.layerNums.includes(t))
-                        this.spawnLayout(device, layout);
+                        this.spawnLayout(device, layout, roomIdx);
+
                 }
             }
         }
@@ -303,37 +379,41 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         panels.push(modelsPanel);
 
         // Construct a list of past/present models.
-        const presentModels: MDL0ModelInstance[] = [];
-        const pastModels: MDL0ModelInstance[] = [];
-        for (let i = 0; i < this.modelInstances.length; i++) {
-            const modelInstance = this.modelInstances[i];
-            if (modelInstance.mdl0Model.mdl0.name.startsWith('model_obj'))
-                pastModels.push(modelInstance);
-            else if (this.presentModelNames.includes(modelInstance.mdl0Model.mdl0.name))
-                presentModels.push(modelInstance);
-            else if (this.pastModelNames.includes(modelInstance.mdl0Model.mdl0.name))
-                pastModels.push(modelInstance);
-            // Lanayru Sand Sea has a "present" decal on top of a past zone.
-            if (this.stageId === 'F301_1' && modelInstance.mdl0Model.mdl0.name === 'model1_s')
-                presentModels.push(modelInstance);
+        for (let i = 0; i < this.pastPresentNodeParameters.length; i++) {
+            const param = this.pastPresentNodeParameters[i];
+            const roomMdls = this.roomModels[param.roomIdx];
+            for (let j = 0; j < roomMdls.length; j++) {
+                const node = roomMdls[j].mdl0Model.mdl0.nodes.find((node) => {
+                    return node.name === param.name;
+                });
+                if (node) {
+                    this.presentNodes.push(node);
+                }
+            }
         }
 
-        if (presentModels.length || pastModels.length) {
+        const pastPresentSelectionChange = (index: number) => {
+            const isPresent = (index === 1);
+            for (let i = 0; i < this.presentModels.length; i++)
+                this.presentModels[i].setVisible(isPresent);
+            for (let i = 0; i < this.presentNodes.length; i++)
+                this.presentNodes[i].visible = isPresent;
+            for (let i = 0; i < this.pastModels.length; i++)
+                this.pastModels[i].setVisible(!isPresent);
+            for (let i = 0; i < this.pastNodes.length; i++)
+                this.pastNodes[i].visible = !isPresent;
+            modelsPanel.syncLayerVisibility();
+        };
+
+        if (this.presentModels.length || this.pastModels.length) {
             const presentPanel = new UI.Panel();
             presentPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
             presentPanel.setTitle(UI.SAND_CLOCK_ICON, "Time Stones");
 
             const selector = new UI.SingleSelect();
             selector.setStrings([ 'Past', 'Present' ]);
-            selector.onselectionchange = (index: number) => {
-                const isPresent = (index === 1);
-                for (let i = 0; i < presentModels.length; i++)
-                    presentModels[i].setVisible(isPresent);
-                for (let i = 0; i < pastModels.length; i++)
-                    pastModels[i].setVisible(!isPresent);
-                modelsPanel.syncLayerVisibility();
-            };
-            selector.selectItem(0); // Past
+            selector.onselectionchange = pastPresentSelectionChange;
+            selector.selectItem(0); // Present
             presentPanel.contents.appendChild(selector.elem);
 
             panels.push(presentPanel);
@@ -349,7 +429,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 }
             }
         }
-        if (layerNames.length!=0){
+        if (layerNames.length != 0){
             const layerPanel = new UI.Panel();
             layerPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
             layerPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
@@ -360,7 +440,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 // set other layers non-visible
                 for (let i = 0; i < this.layerModels.length; i++){
                     if (this.layerModels[i].length !== 0)
-                        this.layerModels[i].forEach((mdl)=>mdl.setVisible((i === layerIndecies[index] ) || (i===0)));
+                        this.layerModels[i].forEach((mdl)=>mdl.setVisible((i === layerIndecies[index]) || (i === 0)));
                 }
                 modelsPanel.syncLayerVisibility();
             };
@@ -368,6 +448,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             layerPanel.contents.appendChild(selector.elem);
             panels.push(layerPanel);
         }
+
+        pastPresentSelectionChange(0);
 
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -425,6 +507,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         });
 
         this.preparePass(device, this.renderInstListSky, ZSSPass.SKYBOX, viewerInput);
+        this.preparePass(device, this.renderInstListStage, ZSSPass.STAGE, viewerInput);
         this.preparePass(device, this.renderInstListMain, ZSSPass.MAIN, viewerInput);
         this.preparePass(device, this.renderInstListInd, ZSSPass.INDIRECT, viewerInput);
         this.renderHelper.renderInstManager.popTemplate();
@@ -450,6 +533,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
+                this.renderInstListStage.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
@@ -482,7 +566,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
     private findNode(m: MDL0ModelInstance, name: string): BRRES.MDL0_NodeEntry | undefined {
         return m.mdl0Model.mdl0.nodes.find(node=>node.name===name);
     }
-    private spawnObj(device: GfxDevice, obj: BaseObj, modelMatrix: mat4): void {
+    private spawnObj(device: GfxDevice, obj: BaseObj, modelMatrix: mat4, roomIdx : number | undefined): void {
         // In the actual engine, each obj is handled by a separate .rel (runtime module)
         // which knows the actual layout. The mapping of obj name to .rel is stored in main.dol.
         // We emulate that here.
@@ -497,7 +581,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         'Dowsing', 'ActTag' , 'BtlTg'  , 'V_Clip', 'SpiderL', 'StreamT', 'AutoMes', 'PotSal', 'SwrdPrj', 'GekoTag',
         'GateGnd', 'PlRsTag', 'InsctTg', 'SwTag', 'ColStp', 'NpcStr', 'SnLight', 'LBmaker', 'TgDefea', 'BcZTag', 'TouchTa',
         'AttTag' , 'GkMgTag', 'LtSftS' , 'ClrWall', 'Message', 'DNight', 'NpcInv', 'DieTag', 'Plight', 'TgSound', 'PltChg',
-        'CBomSld', 'CamTag' , 'SwAreaT', 'CharD', 'CharE', 'WoodTag', 'BtlTgC', 'FencePe', 'HeatRst', 'SpkTg2', 'SparkTg',];
+        'CBomSld', 'CamTag' , 'SwAreaT', 'CharD', 'CharE', 'WoodTag', 'BtlTgC', 'FencePe', 'HeatRst', 'SpkTg2', 'SparkTg',
+        'EvfTag', 'TgClay'];
 
         const renderHelper = this.renderHelper;
         const doesModelContainRepeatTexture = (mdl : MDL0Model) => {
@@ -541,6 +626,18 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             return modelRenderer;
         };
+
+        const setModelBBox = (mdl : MDL0ModelInstance, bbox : AABB | null) => {
+            if (mdl.mdl0Model.mdl0.bbox === null && bbox !== null) {
+                mdl.mdl0Model.mdl0.bbox = bbox;
+            }
+        }
+        const calcModelBounds = (mdl : MDL0ModelInstance) => {
+            // TODO(Zeldex72) This should walk through the models
+            //                shapes and min/max verticies
+            console.info(name, 'does not have bbox');
+            return null;
+        }
 
         function staticFrame(frame: number): AnimationController {
             const a = new AnimationController();
@@ -619,10 +716,14 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         if (name === 'chest'){
             const outsideType = (params1 >>> 28) & 0xF;
             const insideType  =  (params1 >>> 16) & 0xF;
+            const bbox = new AABB(-200, -0, -100, 200, 500, 100);
             // Outside Model
-            spawnModelFromNames('Tansu', 'Tansu' + ['A','B','C','D','A'][outsideType]);
-            if (insideType !== 0xF)
-                spawnModelFromNames('TansuInside', 'TansuInside' + ['A','B','C','D','A'][outsideType]);
+            const m = spawnModelFromNames('Tansu', 'Tansu' + ['A','B','C','D','A'][outsideType]);
+            setModelBBox(m,  bbox);
+            if (insideType !== 0xF) {
+                const m = spawnModelFromNames('TansuInside', 'TansuInside' + ['A','B','C','D','A'][outsideType]);
+                setModelBBox(m, bbox);
+            }
         }
         //
         else if (name === 'Vrbox') {
@@ -648,44 +749,49 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             if (doDisplay){
                 if (boxSmallItems.includes(itemId))
-                    spawnOArcModel('TBoxSmallT');
+                    setModelBBox(spawnOArcModel('TBoxSmallT'), new AABB(-38, 0, -70, 38, 110, 35));
                 else if (boxBossItems.includes(itemId))
-                    spawnOArcModel('TBoxBossT');
+                    setModelBBox(spawnOArcModel('TBoxBossT'), new AABB(-90, 0, -140, 90, 170, 60));
                 else if (boxGoddessItems.includes(itemId))
-                    spawnOArcModel('GoddessTBox');
+                    setModelBBox(spawnOArcModel('GoddessTBox'), new AABB(-65, 0, -100, 65, 150, 50));
                 else
-                    spawnOArcModel('TBoxNormalT');
+                    setModelBBox(spawnOArcModel('TBoxNormalT'), new AABB(-65, 0, -100, 65, 150, 45));
             }
         }
         // Freestanding Items
         else if (name === 'Item'){
+            let m : MDL0ModelInstance | null = null;
+            // TODO(Zeldex72): Adjust bbox per item type.
+            // Is not static in game, but calculated based on a complex structure/scale
+            // Default will probably be fine
+            const bbox = new AABB(-100, -100, -100, 100, 100, 100);
             // due to complexity, leaving here
             const itemId = params1 & 0xFF;
             const RUPEE_ITEMS = [2,3,4,32,33]; // gree, blue, red, silver, gold
             //Rupees
             if (RUPEE_ITEMS.includes(itemId)) {
-                const rupeeModel = spawnOArcModel('PutRupee');
-                mat4.scale(rupeeModel.modelMatrix, rupeeModel.modelMatrix, [1.5, 1.5, 1.5]);
+                m = spawnOArcModel('PutRupee');
+                mat4.scale(m.modelMatrix, m.modelMatrix, [1.5, 1.5, 1.5]);
                 let rupeePat = findPAT0(getOArcRRES('PutRupee'), 'Rupee');
                 switch(itemId){
-                    case 2:  rupeeModel.bindPAT0(staticFrame(0), rupeePat); break;
-                    case 3:  rupeeModel.bindPAT0(staticFrame(1), rupeePat); break;
-                    case 4:  rupeeModel.bindPAT0(staticFrame(2), rupeePat); break;
-                    case 32: rupeeModel.bindPAT0(staticFrame(3), rupeePat); break;
-                    case 33: rupeeModel.bindPAT0(staticFrame(4), rupeePat); break;
+                    case 2:  m.bindPAT0(staticFrame(0), rupeePat); break;
+                    case 3:  m.bindPAT0(staticFrame(1), rupeePat); break;
+                    case 4:  m.bindPAT0(staticFrame(2), rupeePat); break;
+                    case 32: m.bindPAT0(staticFrame(3), rupeePat); break;
+                    case 33: m.bindPAT0(staticFrame(4), rupeePat); break;
                 }
             }
             // Small Key
             else if (itemId === 1) {
-                const keyModel = spawnOArcModel('PutKeySmall');
-                mat4.scale(keyModel.modelMatrix, keyModel.modelMatrix, [1.1, 1.1, 1.1]);
+                m = spawnModelFromNames('PutKeySmall', 'PutKeySmallNormal');
+                mat4.scale(m.modelMatrix, m.modelMatrix, [1.1, 1.1, 1.1]);
             }
              // stamina fruit
             else if (itemId === 42) {
                 const gutsRRES = getOArcRRES('PutGuts');
-                const gutsMdl = spawnModel(gutsRRES, 'PutGuts');
+                const m = spawnModel(gutsRRES, 'PutGuts');
                 spawnModel(gutsRRES, 'PutGutsLeaf');
-                gutsMdl.bindSRT0(this.animationController, findSRT0(gutsRRES, 'GutsLight'));
+                m.bindSRT0(this.animationController, findSRT0(gutsRRES, 'GutsLight'));
             }
              // Babies Rattle
             else if (itemId === 160) {
@@ -693,60 +799,72 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             }
             // heart piece
             else if (itemId === 94) {
-                const m = spawnOArcModel('PutHeartKakera');
+                m = spawnOArcModel('PutHeartKakera');
                 scaleModelConstant(m, 1.375);
             }
             // Gratitude Crystal
             else if (itemId === 48) {
-                const m = spawnOArcModel('GetGenki');
+                m = spawnOArcModel('GetGenki');
                 scaleModelConstant(m, 1.7);
                 translateModel(m, [0,30,0]);
             }
             // Normal Heart Item
             else if (itemId === 6) {
-                const m = spawnOArcModel('PutHeart');
+                m = spawnOArcModel('PutHeart');
             }
             else {
                 console.log(`unknown item id: ${itemId}`);
+            }
+
+            if (m !== null) {
+                setModelBBox(m, bbox);
             }
         }
         // Air Vents
         else if (name === 'Wind'){
             const windType = (params1 >>> 3) & 1; // determines the big wind or not
             const windArc = ['FXTornado', 'FXTornadoBoss'][windType];
-            spawnOArcModel(windArc);
+            const m = spawnOArcModel(windArc);
+            setModelBBox(m, new AABB(-180, -50, -180, 180, 180, 180));
         }
         // Water Vents
         else if (name === 'Wind03'){
             const waterSpoutRRES = getOArcRRES('WindSc00');
-            let mdl = spawnModel(waterSpoutRRES, 'FX_WaterShaft');
-            mdl.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_WaterShaft_in'));
-            mdl.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_WaterShaft'));
+            let m = spawnModel(waterSpoutRRES, 'FX_WaterShaft');
+            m.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_WaterShaft_in'));
+            m.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_WaterShaft'));
 
-            mdl = spawnModel(waterSpoutRRES, 'FX_WaterShaftTop');
-            mdl.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_WaterShaftTop_in'));
-            mdl.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_WaterShaftTop'));
-            mat4.translate(mdl.modelMatrix, mdl.modelMatrix, [0, 100, 0]);
-            mat4.scale(mdl.modelMatrix, mdl.modelMatrix, [1, 0.08, 1]);
+            m = spawnModel(waterSpoutRRES, 'FX_WaterShaftTop');
+            m.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_WaterShaftTop_in'));
+            m.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_WaterShaftTop'));
+            mat4.translate(m.modelMatrix, m.modelMatrix, [0, 100, 0]);
+            mat4.scale(m.modelMatrix, m.modelMatrix, [1, 0.08, 1]);
+
+            setModelBBox(m, new AABB(-180, -50, -180, 180, 180, 180));
         }
         // Lava Vents
         else if (name === 'Wind02'){
             const waterSpoutRRES = getOArcRRES('FXLava');
-            let mdl = spawnModel(waterSpoutRRES, 'FX_LavaShaft');
-            mdl.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_LavaShaft_Loop'));
-            mdl.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_LavaShaft_Loop'));
+            const m = spawnModel(waterSpoutRRES, 'FX_LavaShaft');
+            m.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_LavaShaft_Loop'));
+            m.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_LavaShaft_Loop'));
 
-            // mdl = spawnModel(waterSpoutRRES, 'FX_WaterShaftTop');
-            // mdl.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_WaterShaftTop_in'));
-            // mdl.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_WaterShaftTop'));
-            mat4.translate(mdl.modelMatrix, mdl.modelMatrix, [0, -200, 0]);
-            // mat4.scale(mdl.modelMatrix, mdl.modelMatrix, [1, 0.08, 1]);
+            // const m = spawnModel(waterSpoutRRES, 'FX_WaterShaftTop');
+            // m.bindCHR0(this.animationController, findCHR0(waterSpoutRRES, 'FX_WaterShaftTop_in'));
+            // m.bindSRT0(this.animationController, findSRT0(waterSpoutRRES, 'FX_WaterShaftTop'));
+            mat4.translate(m.modelMatrix, m.modelMatrix, [0, -200, 0]);
+            // mat4.scale(m.modelMatrix, m.modelMatrix, [1, 0.08, 1]);
+
+            setModelBBox(m, new AABB(-180, -200, -180, 180, 1600, 180));
         }
         // Moldroms
         else if (name === 'ESpark'){
+            const bbox = new AABB(-100, -100, -100, 100, 100, 100);
             const sparkRRES = getOArcRRES('MoldWorm');
             const sparkMdl = spawnModel(sparkRRES, 'MoldWormHead');
             sparkMdl.bindCHR0(this.animationController, findCHR0(sparkRRES, "HeadWait"));
+            setModelBBox(sparkMdl, bbox);
+            
             let shift : number = -50;
             let start = shift;
             for (let i = 0; i < 3; i++){
@@ -754,13 +872,18 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 mat4.translate(bodySeg.modelMatrix, bodySeg.modelMatrix, [0, 0, start]);
                 bodySeg.bindCHR0(this.animationController, findCHR0(sparkRRES, "BodyWalk"));
                 start+=shift;
+                setModelBBox(bodySeg, bbox);
             }
             const tailSeg = spawnModel(sparkRRES, 'MoldWormTail');
             mat4.translate(tailSeg.modelMatrix, tailSeg.modelMatrix, [0, 0, start]);
             tailSeg.bindCHR0(this.animationController, findCHR0(sparkRRES, 'TailWait'));
+            setModelBBox(tailSeg, bbox);
         }
         // Vines, Ropes, and TightRopes
         else if (name === 'IvyRope'){
+            // TODO(Zeldex72): Rope bbox is calculate based on its length
+            //                 Setting to 100 as default for now
+            const bbox = new AABB();
             // Ropes
             const ropeSubtype = params1 & 0xF;
             if (ropeSubtype < 3 || ropeSubtype === 4){
@@ -775,9 +898,18 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 // Common Dummy bti
             }
             if (ropeSubtype === 7){
-                spawnOArcModel('RopeTerry');
+                const distance = 100;
+                bbox.set(-distance, -distance, -distance, distance, 100, distance);
+
+                const m = spawnOArcModel('RopeTerry');
+                setModelBBox(m, bbox);
+
             } else if (ropeSubtype === 4) {
-                spawnModelFromNames('GrassCoil', 'GrassCoilCut'); // Can be switched to cut variant
+                const distance = 100;
+                bbox.set(-distance, -distance, -distance, distance, 100, distance);
+
+                const m = spawnModelFromNames('GrassCoil', 'GrassCoilCut'); // Can be switched to cut variant
+                setModelBBox(m, bbox);
             }
         }
         // Puzzle Stoppers on Isle of Songs Puzzle
@@ -794,6 +926,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const tz = ringDist * Math.sin(-rotateY);
             translateModel(stopperMdl, [tx, 0, tz]);
             rotateModel(stopperMdl, [0, rotateY, 0]);
+  
+            setModelBBox(stopperMdl, calcModelBounds(stopperMdl));
         }
         // Main Isle of Song mechanism, spawns the pusher, and rotating islands
         else if (name === 'UtaMain'){
@@ -802,8 +936,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             rotateModel(mainMechaMdl, [0,Math.PI,0]);
             for (let i = 0; i < 3; i++)
             {
-                const ringRotation = [0,0,0][i] * -5461;
-                // const ringRotation = [8,9,1][i];
+                // const ringRotation = [0,0,0][i] * -5461;
+                const ringRotation = [8,9,1][i]* -5461;
                 const mdl = spawnOArcModel('IslPuzSmallIslet');
                 const mdl2 = spawnOArcModel('IslPuzIslet00');
                 const ringDist = i*400 + 700;
@@ -814,11 +948,17 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 translateModel(mdl, [ringDist*xDir, 0, ringDist*zDir]);
                 translateModel(mdl2, [isletDist*xDir, 0, isletDist*zDir]);
                 rotateModel(mdl, [0, rotateY, 0]);
-                rotateModel(mdl, [0, rotateY+Math.PI/2, 0]);
+                rotateModel(mdl2, [0, rotateY+Math.PI/2, 0]);
+
+                setModelBBox(mdl, calcModelBounds(mdl));
+                setModelBBox(mdl2, calcModelBounds(mdl2));
             }
+
+            setModelBBox(mainMechaMdl, calcModelBounds(mainMechaMdl));
         }
         // Dungeon Doors
         else if (name === 'TstShtr'){
+            const bbox = new AABB(240, -40, -50, 240, 440, 50);
             const doorType = (params1 >>> 4) & 0x3f;
             let isLocked  = ((rotx & 0x00FF) !== 0xFF);
             let isLocked2 = ((rotx & 0xFF00) !== 0xFF);
@@ -828,24 +968,26 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             let   lockedModelName  = 'ShutterFencedFence0' + [doorType];
             const doorRRES = getOArcRRES(doorModelArcName);
            if (doorType === 2){ // Time Variants
-                spawnModel(doorRRES, doorModelName+'N');
-                spawnModel(doorRRES, doorModelName+'T');
+                setModelBBox(spawnModel(doorRRES, doorModelName+'N'), bbox);
+                setModelBBox(spawnModel(doorRRES, doorModelName+'T'), bbox);
                 if ((isLocked || isLocked2) && isLockedWithKey !== 2) {
-                    spawnModel(doorRRES, lockedModelName+'N');
-                    spawnModel(doorRRES, lockedModelName+'T');
+                    setModelBBox(spawnModel(doorRRES, lockedModelName+'N'), bbox);
+                    setModelBBox(spawnModel(doorRRES, lockedModelName+'T'), bbox);
                 }
            } else {
-                spawnModel(doorRRES, doorModelName);
+               setModelBBox(spawnModel(doorRRES, doorModelName), bbox);
                 if ((isLocked || isLocked2) && ![2,5].includes(isLockedWithKey)) {
-                    spawnModel(doorRRES, lockedModelName);
+                    setModelBBox(spawnModel(doorRRES, lockedModelName), bbox);
                 }
            }
            if ((isLocked || isLocked2) && [2].includes(isLockedWithKey)){
                 const mdl = spawnOArcModel('LockSmall');
                 mat4.translate(mdl.modelMatrix, mdl.modelMatrix, [0,150,0]);
                 mat4.rotateX(mdl.modelMatrix, mdl.modelMatrix, Math.PI/2);
+                setModelBBox(mdl, bbox);
            }
         } else if (name === 'DoorBs'){
+            const bbox = new AABB(-400, -0, -70, 400, 800, 160);
             // TODO : The boss door is applied to a base bossdoor model. Simply adding the animation doesnt work
             const dungeonNum = params1 & 0x3F;
             const dungeonIdx = [0,1,2,0,1,2][dungeonNum];
@@ -857,6 +999,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             const bossDoorAnim = spawnOArcModel('DoorBoss');
             bossDoorAnim.bindRRESAnimations(this.animationController, getOArcRRES("DoorBoss"), "DoorBoss_Open");
+            setModelBBox(bossDoorAnim, bbox);
             // Spawn Keyhole
             if (dungeonNum !== 3) // Ancient Cistern
             {
@@ -876,11 +1019,20 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 this.modelBinds.push({model: lockR, modelToBindTo: bossDoorAnim, nodeName: "LockR"})
                 this.modelBinds.push({model: holeL, modelToBindTo: bossDoorAnim, nodeName: "KeyholeL"})
                 this.modelBinds.push({model: holeR, modelToBindTo: bossDoorAnim, nodeName: "KeyholeR"})
+                setModelBBox(doorL, bbox);
+                setModelBBox(doorR, bbox);
+                setModelBBox(lockL, bbox);
+                setModelBBox(lockR, bbox);
+                setModelBBox(holeL, bbox);
+                setModelBBox(holeR, bbox);
+                if (dungeonNum === 2) {
+                    this.pastModels.push(doorL, doorR, lockL, lockR, holeL, holeR);
+                }
             }
             else {
                 // Cistern is *Special*
-                spawnModelFromNames('BossLockD101', 'BossLockD101');
-
+                const m = spawnModelFromNames('BossLockD101', 'BossLockD101');
+                setModelBBox(m, bbox);
             }
             if (dungeonNum === 2) { // LMF present doors....
                 let doorL, doorR, lockL, lockR, holeL, holeR : MDL0ModelInstance;
@@ -893,24 +1045,19 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 // Spawn Keyhole
                 holeL = spawnModelFromNames(keyHoleModel, keyHoleModel+'LN');
                 holeR = spawnModelFromNames(keyHoleModel, keyHoleModel+'RN');
-                this.pastModelNames.push(bossDoorModel+'L');
-                this.pastModelNames.push(bossDoorModel+'R');
-                this.pastModelNames.push(bossLockModel+'L');
-                this.pastModelNames.push(bossLockModel+'R');
-                this.pastModelNames.push(keyHoleModel+'L');
-                this.pastModelNames.push(keyHoleModel+'R');
-                this.presentModelNames.push(bossDoorModel+'NL');
-                this.presentModelNames.push(bossDoorModel+'NR');
-                this.presentModelNames.push(bossLockModel+'LN');
-                this.presentModelNames.push(bossLockModel+'RN');
-                this.presentModelNames.push(keyHoleModel+'LN');
-                this.presentModelNames.push(keyHoleModel+'RN');
+                this.presentModels.push(doorL, doorR, lockL, lockR, holeL, holeR);
                 this.modelBinds.push({model: doorL, modelToBindTo: bossDoorAnim, nodeName: "DoorBossL"})
                 this.modelBinds.push({model: doorR, modelToBindTo: bossDoorAnim, nodeName: "DoorBossR"})
                 this.modelBinds.push({model: lockL, modelToBindTo: bossDoorAnim, nodeName: "LockL"})
                 this.modelBinds.push({model: lockR, modelToBindTo: bossDoorAnim, nodeName: "LockR"})
                 this.modelBinds.push({model: holeL, modelToBindTo: bossDoorAnim, nodeName: "KeyholeL"})
                 this.modelBinds.push({model: holeR, modelToBindTo: bossDoorAnim, nodeName: "KeyholeR"})
+                setModelBBox(doorL, bbox);
+                setModelBBox(doorR, bbox);
+                setModelBBox(lockL, bbox);
+                setModelBBox(lockR, bbox);
+                setModelBBox(holeL, bbox);
+                setModelBBox(holeR, bbox);
             }
         // The Big Lily Pads
         } else if (name === 'Lotus'){
@@ -920,17 +1067,23 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const padModel = spawnOArcModel(lilyPadOarc);
             if (isUpsideDown)
                 rotateModel(padModel, [0,0,Math.PI]);
-
+            setModelBBox(padModel, calcModelBounds(padModel));
         // Chu Chus -> need texture overriding for the different kinds
         } else if (name === 'ESm'){
             const smRRES = getOArcRRES('Sm');
             const variant = params1 & 0xF;
             const frame = [0,3,2,0,3,2,1][variant];
-            const chuModel = spawnModel(smRRES, 'sm');
-            chuModel.bindPAT0(staticFrame(frame), findPAT0(smRRES, 'sm'));
-            chuModel.bindCHR0(this.animationController, findCHR0(smRRES, 'awa'));
+            const m = spawnModel(smRRES, 'sm');
+            m.bindPAT0(staticFrame(frame), findPAT0(smRRES, 'sm'));
+            m.bindCHR0(this.animationController, findCHR0(smRRES, 'awa'));
+
+            const min = -200 / obj.sx;
+            const max = 200 / obj.sx;
+
+            setModelBBox(m, new AABB(min, min, min, max, 250 / obj.sx, max));
         // Bocoblins
         } else if (name === 'EBc'){
+            const bbox = new AABB(-150, -200, -150, 150, 200, 150);
             const bcRRES = getOArcRRES('Bc');
             const variant = (params1>>>0)&3;
             const bokoConfig = (params1>>24)&0xF;
@@ -939,16 +1092,21 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             let bcName = ['BocoburinG', 'BocoburinM', 'BocoburinB'][color];
             if (bokoConfig === 9)
                 bcName = ['BocoburinG', 'Bocoburin_A', 'BocoburinB'][color];
+            if (bokoConfig === 2) {
+                bbox.set(-350, -200, -350, 350, 200, 350);
+            }
             const mdl = spawnModel(bcRRES, bcName);
             mdl.bindPAT0(this.animationController, findPAT0(bcRRES, `Bocoburin${['G','A','B'][color]}Wink`));
             mdl.bindCHR0(this.animationController, findCHR0(bcRRES, 'wait'));
             scaleModelConstant(mdl, 1.1);
+            setModelBBox(mdl, bbox);
             let weaponIdx = -1;
             // Weapon
             if (bokoConfig === 9) {
                 // Bow
                 const bowMdl = spawnModel(bcRRES, color === 0 ? 'BocoburinGBow' : 'bow');
                 this.modelBinds.push({model: bowMdl, modelToBindTo: mdl, nodeName: 'hand_L'})
+                setModelBBox(bowMdl, bbox);
             } else if (color === 0) {
                 weaponIdx = 4;
             } else if (color === 2) {
@@ -962,18 +1120,21 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 const weaponMdl = spawnModel(bcRRES, 'BocoburinRantan');
                 this.modelBinds.push({model: weaponMdl, modelToBindTo: mdl, nodeName: 'hand_R'})
                 mdl.bindCHR0(this.animationController, findCHR0(bcRRES, 'Rwait'));
+                setModelBBox(weaponMdl, bbox);
             }
             if (weaponIdx !== -1)
             {
                 const weaponName = `Bocoburin${['SwordA', 'Stick', 'BSword','GSword'][weaponIdx-1]}`;
                 const weaponMdl = spawnModel(bcRRES, weaponName);
                 this.modelBinds.push({model: weaponMdl, modelToBindTo: mdl, nodeName: 'hand_R'})
+                setModelBBox(weaponMdl, bbox);
             }
             // Headpiece
             if (variant !== 0 && color !== 0)
             {
                 const headcloth = spawnModel(bcRRES, `Bocoburin${['M','M','B'][color]}Headcloth`);
                 this.modelBinds.push({model: headcloth, modelToBindTo: mdl, nodeName: 'head'})
+                setModelBBox(headcloth, bbox);
             }
             // Belt item
             const beltItem = ["None", 'Horn', 'Key'][(params1 >>> 2) & 3];
@@ -982,10 +1143,12 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 if (beltItem === 'Key') {
                     const keyMdl = spawnModel(bcRRES, "KeySmall");
                     this.modelBinds.push({model: keyMdl, modelToBindTo: mdl, nodeName: 'pipe_loc'})
+                    setModelBBox(keyMdl, bbox);
                 }
                 else {
                     const pipemdl = spawnModel(bcRRES, "BocoburinPipe");
                     this.modelBinds.push({model: pipemdl, modelToBindTo: mdl, nodeName: 'pipe_loc'})
+                    setModelBBox(pipemdl, bbox);
                 }
             }
         }
@@ -997,25 +1160,45 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const mdl = spawnModel(godMarkRRES, 'GodsMark');
             mdl.bindSRT0(staticFrame([0,1,2][type]), findSRT0(godMarkRRES, 'GodsMark'));
             mdl.bindCLR0(this.animationController, clrType);
+            setModelBBox(mdl, new AABB(-300, 500, -2600, 300, 1100, -2200));
         }
         // Bushes
         else if (name === 'OcGrs') {
+            const bbox = new AABB(-50, -10, -50, 50, 100, 50);
             const type = (params1 >>> 0) & 0xF;
             const arc = ['GrassOcta', 'GrassRollGrow', 'GrassGerm', 'GrassMain'][type];
             const mdl2 = ['GrassOctaCut', 'GrassRollCut', 'GrassGermCut', 'GrassMainCut'][type];
-            spawnOArcModel(arc); // main Bush
-            spawnModelFromNames(arc, mdl2); // The stem
+            const bushMdl = spawnOArcModel(arc); // main Bush
+            const stemMdl = spawnModelFromNames(arc, mdl2); // The stem
+            setModelBBox(bushMdl, bbox);
+            setModelBBox(stemMdl, bbox);
         }
         //  Grass things in faron
         else if (name === 'Gcoil') {
-            spawnOArcModel('GrassCoilNormal');
+            const m = spawnOArcModel('GrassCoilNormal');
+            setModelBBox(m, new AABB(-100, -50, -100, 100, 200, 200));
         }
         // Big Flags around skyloft (like hanging from bazaar)
         else if (name === 'Flag') {
-            console.info('Revist Flag Later'); // There are Purple ones and big ones need rotation
             const type = (params1 >>> 0) & 0xF;
             const model = ['FlagA', 'FlagA', 'FlagB', 'FlagB', 'BigSail', 'BigSail'][type];
-            spawnOArcModel(model);
+            
+            const rres = getOArcRRES(model)
+            const m = spawnOArcModel(model);
+
+            if (type === 1) {
+                rotateModel(m, [0, 0, Math.PI / 2]);
+            }
+            else if (type === 2 || type === 3) {
+                const srt = findSRT0(rres, 'FlagB');
+
+                if (type === 2) {
+                    m.bindSRT0(staticFrame(0), srt);
+                } else {
+                    m.bindSRT0(staticFrame(1), srt);
+                }
+            }
+            setModelBBox(m, new AABB(-800, -500, -250, 250, 500, 250));
         }
         // Small Trees, requires segments and more scaling weirdness
         else if (name === 'Bamboo') {
@@ -1041,101 +1224,155 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         else if (name === 'IslLOD') {
             const type = params1&0xF;
             const model = name+['A','B','C','D','E'][type];
-            spawnOArcModel(model);
+            const m = spawnOArcModel(model);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Low Poly Loftwings flying around skyloft
-        else if (name === 'BrdMob' ) {
-            const arcMdl = getOArcRRES('BirdLOD');
-            const chr = findCHR0(arcMdl, 'BirdLOD_Glide');
-            console.info('Revisit BrdMob Later');
-        }
+        // else if (name === 'BrdMob') {
+        //     const arcMdl = getOArcRRES('BirdLOD');
+        //     const chr = findCHR0(arcMdl, 'BirdLOD_Glide');
+        //     console.info('Revisit BrdMob Later');
+        // }
         // Wood Signs
-        else if (name === 'Kanban' ) {
+        else if (name === 'Kanban') {
             const m = spawnModelFromNames('Kanban', 'KanbanA');
             translateModel(m, [0,100,0]);
+            setModelBBox(m, new AABB(-220, -100, -220, 220, 160, 220));
         }
         // Practice Slash Logs
         else if (name === 'SliceLg') {
+            const bbox = new AABB(-300, -50, -300, 300, 350, 300);
             const type = params1  & 0xF;
             const logName = 'PracticeWood'+['A','B','C','D','CR','F'][type];
-            spawnModelFromNames('PracticeWood', logName+'1');
-            spawnModelFromNames('PracticeWood', logName+'2');
+            setModelBBox(spawnModelFromNames('PracticeWood', logName+'1'), bbox);
+            setModelBBox(spawnModelFromNames('PracticeWood', logName+'2'), bbox);
         }
         // Cloud Barrier for each pillar - Temporarily using Some other effect untily JPA support
         else if (name === 'LightLi') {
-            const m = spawnOArcModel('FXLightShaft');
-            scaleModel(m, [5,1,5]);
-            console.info('Add Effect for LightLi')
+            // const m = spawnOArcModel('FXLightShaft');
+            // scaleModel(m, [5,1,5]);
+            // console.info('Add Effect for LightLi')
         }
         // Player Bird (Crimson Loftwing)
         else if (name === 'PyBird') {
             const m = spawnModelFromNames('Bird_Link', 'BirdLink');
             m.bindCHR0(this.animationController, findCHR0(getOArcRRES('BirdAnm'), 'Glide'));
+            setModelBBox(m, new AABB(-1800, -1500, -1500, 1800, 1500, 1500));
         }
         // Item Shop (Rupin) Owner mother
         else if (name === 'NpcDoMo') {
             const rres = getOArcRRES('DouguyaMother');
             const m = spawnModel(rres, 'DouguyaMother');
             m.bindCHR0(this.animationController, findCHR0(rres, 'DouguyaMother_wait'));
+            setModelBBox(m, new AABB(-100, -100, -100, 100, 200, 100));
         }
         // The shield bash practice log
-        else if (name === 'GuardLg' ) {
+        else if (name === 'GuardLg') {
+            const bbox = new AABB(-100, -100, -100, 100, 500, 100);
             const m = spawnModelFromNames('PracticeWood', 'PracticeWoodE'); // Log
             scaleModelConstant(m, 1.2);
             translateModel(m, [100,200,40]);
             const m2 = spawnModelFromNames('PracticeWood', 'RopeBase'); // Rope on Top
             m2.modelMatrix = mat4.create();
-            console.info('Create String for GuardLg');
+            setModelBBox(m, bbox);
+            setModelBBox(m2, bbox);
+
+            console.warn('Incomplete:', name, 'connecting rope not implemented');
         }
         // Water on Skyloft
         else if (name === 'CityWtr') {
-            spawnModelFromNames('Stage', 'StageF000Water0');
-            spawnModelFromNames('Stage', 'StageF000Water1');
-            spawnModelFromNames('Stage', 'StageF000Water2');
+            const bbox = new AABB(3000, -8600, -10500, 12300, 4300, 3400);
+            const wtr0 = spawnModelFromNames('Stage', 'StageF000Water0');
+            const wtr1 = spawnModelFromNames('Stage', 'StageF000Water1');
+            const wtr2 = spawnModelFromNames('Stage', 'StageF000Water2');
+            setModelBBox(wtr0, bbox);
+            setModelBBox(wtr1, bbox);
+            setModelBBox(wtr2, bbox);
         }
         // Gravestones
         else if (name === 'Grave') {
-            spawnModelFromNames('Stage', 'StageF000Grave')
+            const m = spawnModelFromNames('Stage', 'StageF000Grave')
+            setModelBBox(m, new AABB(-100, -0, -100, 100, 200, 100));
         }
         //Shed Door to demon
         else if (name === 'Shed') {
-            spawnModelFromNames('Stage', 'StageF000Shed')
+            const m = spawnModelFromNames('Stage', 'StageF000Shed')
+            setModelBBox(m, new AABB(-115, -0, -10, 115, 260, 10));
         }
         // Windmills for the light Tower
         else if (name === 'Windmil') {
-            spawnModelFromNames('Stage', 'StageF000Windmill')
+            const m = spawnModelFromNames('Stage', 'StageF000Windmill')
+            setModelBBox(m, new AABB(-150, -150, -100, 150, 150, 100));
         }
         // Ropes with pinwheels and such
-        else if (name === 'Blade'  ) {
-            spawnModelFromNames('Stage', 'StageF000Blade')
+        else if (name === 'Blade') {
+            const m = spawnModelFromNames('Stage', 'StageF000Blade')
+            // Purposely ignored... Game sets to -0, 0 but that cant be right
+            // setModelBBox(m, new AABB(-0, -0, -0, 0, 0, 0));
         }
         // Harp area for the Thuderhead opening
-        else if (name === 'LHHarp' ) {
+        else if (name === 'LHHarp') {
             const m = spawnModelFromNames('Stage', 'StageF000Harp');
             rotateModel(m, [0, -9.5/12*Math.PI, 0]);
+            if (this.stageId === 'S000') {
+                translateModel(m, [0, -600, 0]);
+            } else {
+                // rotateModel(m, [0, 0.8 * Math.PI, 0])
+            }
+            setModelBBox(m, new AABB(-460, -60, -460, 460, 610, 460));
         }
         // Sunlight in harp area
         else if (name === 'LHLight'){
-            spawnModelFromNames('Stage', 'StageF000Light');
+            // Skipping due to duplicate with SnLight showing twice in two directions
+            // spawnModelFromNames('Stage', 'StageF000Light');
         }
         else if (name === 'SnLight'){
-            spawnModelFromNames('Stage', 'StageF000Light');
+            const m = spawnModelFromNames('Stage', 'StageF000Light');
+            setModelBBox(m, new AABB(-200, -100, -200, 200, 600, 500));
         }
         // Gates on Skyloft that block doors
-        else if (name === 'DmtGate'){
+        else if (name === 'DmtGate'){ 
+            const bbox = new AABB();
             const type = (params1>>> 8) & 0xF;
-            const typeName = ['StageF000Gate', 'StageF000GodDoor', 'StageF000Shutter', 'StageF400Gate'][type];
-            const m = spawnModelFromNames('Stage', typeName);
-            console.info('Revist DmtGate');
+            const typeName = ['StageF000Gate', 'StageF000GodDoor', 'StageF000Shutter', 'StageF400Gate'][type & 0x3];
+            
+            // Gate Variants
+            if (type === 0 || type === 3) {
+                bbox.set(-400, -0, -50, 400, 600, 250);
+                const m0 = spawnModelFromNames('Stage', typeName);
+                const m1 = spawnModelFromNames('Stage', typeName);
+
+                translateModel(m0, [-217, 0, 0])
+                rotateModel(m0, [0,  -Math.PI/2, 0])
+
+                translateModel(m1, [217, 0, 0])
+                rotateModel(m1, [0, -Math.PI/2, 0])
+
+                setModelBBox(m0, bbox);
+                setModelBBox(m1, bbox);
+            } else {
+                if (type === 1) {
+                    bbox.set(-50, -0, -100, 500, 500, 100);
+                } else {
+                    bbox.set(-250, -0, -50, 250, 400, 50);
+                }
+                const m = spawnModelFromNames('Stage', typeName);
+                setModelBBox(m, bbox);
+            }
         }
         // Pumpkins
-        else if (name === 'Pumpkin'){
-            spawnModelFromNames('Pumpkin', 'Pumpkin');
-            spawnModelFromNames('Pumpkin', 'Turu');
+        // Pumpkins for Pumpkin Archery Minigame
+        else if (name === 'Pumpkin' || name === 'PmpknDe'){
+            const bbox = new AABB(-50, -50, -50, 50, 50, 50);
+            const pumpkin = spawnModelFromNames('Pumpkin', 'Pumpkin');
+            const leaves = spawnModelFromNames('Pumpkin', 'Turu');
+            setModelBBox(pumpkin, bbox);
+            setModelBBox(leaves, bbox);
         }
         // Heart Flowers
         else if (name === 'Heartf'){
-            spawnModelFromNames('FlowerHeart', 'FlowerHeart');
+            const m = spawnModelFromNames('FlowerHeart', 'FlowerHeart');
+            setModelBBox(m, new AABB(-50, -0, -50, 50, 100, 50));
         }
         // Chairs -> some are invisible for some reason...
         else if (name === 'Char'){
@@ -1149,7 +1386,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         else if (name === 'Uground'){
             const type = params1&0xFF;
             const typeName = 'MoleGround'+['S','M','L','Sn','Sl','Sr','Mn','Ml','Mr','Ln'][type];
-            spawnOArcModel(typeName);
+            const m = spawnOArcModel(typeName);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Underground Obstacles
         else if (name === 'BlockUg'){
@@ -1160,93 +1398,143 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         }
         // Skyloft in the sky perspective
         else if (name === 'City') {
-            spawnModelFromNames('IslF000', 'IslF000');
-            spawnModelFromNames('IslF000', 'IslF000_s');
-            spawnModelFromNames('IslF000', 'IslF000Water0');
+            const bbox = new AABB(-10000, -10000, -23000, 13000, 10000, 8000);
+            const m0 = spawnModelFromNames('IslF000', 'IslF000');
+            const m1 = spawnModelFromNames('IslF000', 'IslF000_s');
+            const m2 = spawnModelFromNames('IslF000', 'IslF000Water0');
+            m1.passMask = ZSSPass.INDIRECT;
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
+            setModelBBox(m2, bbox);
         }
         // Island with Bamboo minigame
         else if (name === 'IslBamb') {
-            spawnModelFromNames('IslBamb', 'IslBamb');
-            spawnModelFromNames('IslBamb', 'IslBamb_s');
+            const bbox = new AABB(-2400, -1600, -2300, 2400, 3900, 2400);
+            const m0 = spawnModelFromNames('IslBamb', 'IslBamb');
+            const m1 = spawnModelFromNames('IslBamb', 'IslBamb_s');
+            m1.passMask = ZSSPass.INDIRECT;
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Beetles sky island
         else if (name === 'IslTery') {
-            spawnModelFromNames('IslTerry', 'IslTerry');
+            const bbox = new AABB(-1600, -1500, -1600, 1700, 1500, 1600);
+            setModelBBox(spawnModelFromNames('IslTerry', 'IslTerry'), bbox);
         }
         // LumpPumpkin
         else if (name === 'PumpBar') {
-            spawnModelFromNames('IslBar', 'IslBar');
+            const bbox = new AABB(-2790, -1450, -8270, 2880, 2120, 1370);
+            setModelBBox(spawnModelFromNames('IslBar', 'IslBar'), bbox);
         }
         // THe ring on Fun Fun Island
         else if (name === 'RouletR') {
-            spawnModelFromNames('IslRouRot', 'IslRouRot');
+            const m = spawnModelFromNames('IslRouRot', 'IslRouRot');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Main Fun Fun island
         else if (name === 'RouletC') {
-            spawnModelFromNames('IslRouMain', 'IslRouMain');
-            spawnModelFromNames('IslRouMain', 'IslRouMain_s');
+            const m0 = spawnModelFromNames('IslRouMain', 'IslRouMain');
+            const m1 = spawnModelFromNames('IslRouMain', 'IslRouMain_s');
+            m1.passMask = ZSSPass.INDIRECT;
+            setModelBBox(m0, calcModelBounds(m0));
+            setModelBBox(m1, calcModelBounds(m1));
         }
         // dig spots
         else if (name === 'FrmLand') {
-            spawnModelFromNames('MoundShovelD', 'MoundShovelD00');
+            const bbox = new AABB(-100, -0, -100, 100, 100, 100);
+            const m = spawnModelFromNames('MoundShovelD', 'MoundShovelD00');
+            setModelBBox(m, bbox);
         }
         // Boss Koloktos Pillars
         else if (name === 'AsuraP') {
+            const bbox = new AABB(-150, -0, -150, 150, 1200, 150);
             for (let i = 0; i < 6; i++){
                 const type = 'BreakPillar'+['A','B','C','D','E','F'][i];
                 const m = spawnModelFromNames('BreakPillar', type);
                 translateModel(m, [0, i*200, 0]);
+                setModelBBox(m, bbox);
             }
         }
         // Boss Koloktos
         else if (name === 'BAsura') {
             const m = spawnOArcModel('Asura');
             const rres = getOArcRRES('Asura');
+            const baseAnm = findCHR0(rres, 'DodaiAWait00');
+            const waitAnm = findCHR0(rres, 'BWait00');
             m.bindCHR0(this.animationController, findCHR0(rres, 'BWait00'));
             m.bindSRT0(this.animationController, findSRT0(rres, 'Wait00'));
+            console.warn('Fix', name, '- Weird with the arm segments');
         }
         // Bomb Flower
         else if (name === 'Bombf') {
-            spawnModelFromNames('FlowerBomb', 'LeafBomb');
-            spawnModelFromNames('Alink', 'EquipBomb');
+            const bbox = new AABB(-80, -50, -80, 80, 60, 80);
+            const m = spawnModelFromNames('FlowerBomb', 'LeafBomb');
+            setModelBBox(m, bbox);
+
+            // Not adding BBox for now. Unsure if it has one lol
+            spawnModelFromNames('Alink', 'EquipBomb'); 
         }
         // Spikes in ancient cistern
         else if (name === 'Spike') {
-            spawnModelFromNames('SpikeD101', 'SpikeD101');
+            const bbox = new AABB(-10, -250, -480, 80, 260, 490);
+            const m = spawnModelFromNames('SpikeD101', 'SpikeD101');
+            setModelBBox(m, bbox);
         }
         // Whirlpool cork
         else if (name === 'PlCock') {
-            spawnModelFromNames('WaterD101', 'PoolCockD101');
+            const bbox = new AABB(-300, -100, -300, 300, 100, 300);
+            const m = spawnModelFromNames('WaterD101', 'PoolCockD101');
+            setModelBBox(m, bbox);
         }
         // Whirlpool
         else if (name === 'Vortex') {
-            spawnModelFromNames('WaterD101', 'SpiralWaterD101');
+            // const bbox = new AABB(-1000, -50, -1000, 1000, 200, 1000);
+            const m = spawnModelFromNames('WaterD101', 'SpiralWaterD101');
+            // setModelBBox(m, bbox);
+            console.warn(name, 'does not have bbox');
         }
         // Shutter for water
         else if (name === 'ShtrWtr') {
-            spawnModelFromNames('ShutterWaterD101', 'ShutterWaterD101');
+            const bbox = new AABB(-100, -400, -400, 100, 400, 400);
+            const m = spawnModelFromNames('ShutterWaterD101', 'ShutterWaterD101');
+            setModelBBox(m, bbox);
         }
         // Birdge from Whip Lever
         else if (name === 'BridgeS') {
-            spawnModelFromNames('BridgeD101', 'BridgeD101');
+            const bbox = new AABB(-5600, 550, 100, -4000, 1000, 1950);
+            const m = spawnModelFromNames('BridgeD101', 'BridgeD101');
+            setModelBBox(m, bbox);
         }
         // Roll pillars for vines TODO: add rotation
         else if (name === 'rpiller'){
             const type = (params1 >>> 28) & 0xF;
             const typeName = 'SpinPillarD101'+['A','A','B','C','A','B','C'][type];
-            spawnModelFromNames('SpinPillarD101', typeName);
+            const m = spawnModelFromNames('SpinPillarD101', typeName);
+            if (type === 1 || type === 4) {
+                setModelBBox(m, new AABB(-450, -100, -450, 450, 2000, 450));
+            } else if (type === 2 || type === 5) {
+                setModelBBox(m, new AABB(-850, -100, -850, 850, 2000, 850));
+            } else if (type === 3 || type === 6) {
+                setModelBBox(m, new AABB(-1300, -100, -1300, 1300, 2000, 1300));
+            } else {
+                console.warn(name, "Invalid BBOX for type", type);
+            }
         }
         // DoorsF300
         else if (name === 'Door') {
+            const bbox = new AABB(-1300, -50, -1000, 1300, 100, 1000);
             const type = params1&0x3f;
             const arcName = 'Door'+['A00','A01','C00','C01','B00','E','A02','F','H'][type];
             if (type === 5) {
-                spawnModelFromNames(arcName, 'DoorE_N');
-                spawnModelFromNames(arcName, 'DoorE_T');
-                this.pastModelNames.push('DoorE_T');
-                this.presentModelNames.push('DoorE_N');
+                const m0 = spawnModelFromNames(arcName, 'DoorE_N');
+                const m1 = spawnModelFromNames(arcName, 'DoorE_T');
+                this.pastModels.push(m1);
+                this.presentModels.push(m0);
+                setModelBBox(m0, bbox);
+                setModelBBox(m1, bbox);
             } else {
-                spawnOArcModel(arcName);
+                const m = spawnOArcModel(arcName);
+                setModelBBox(m, bbox);
             }
         }
         // Bombable Rocks
@@ -1254,89 +1542,123 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const type = (params1 >>> 8) & 0xFF;
             const arcName = ['TeniCrystalRockSc','BRockHole00','BRockWall','BRockDoor00','BRockR01','BrokenRockWallD200','LavaBRock','BRockWall','BRockCrystal','BRockF202','BRockRail','F300BrokenRockWall','F300BrokenRockWall','BWallAF200','BWallBF200','BWallF210','BRockStopA','BRockHole00','BWallD201','BRockWall',][type];
             const modelName = ['TeniCrystalRockScA','BRockHole00A','BRockWall00A','BRockDoor00A','BRockR01A','BrokenRockWallD200','LavaBRockA','BRockWall00A','BRockCrystalA','BRockF202A','BRockRailA','F300BrokenRockWall_00','F300BrokenRockWall_01','BWallAF200','BWallBF200','BWallF210','BRockStopAA','BRockHole01A','BWallD201','BRockWall00A',][type];
-            spawnModelFromNames(arcName, modelName);
-        }
-        // Mushrooms
-        else if (name === 'Kinoko' || name === 'SKinoko'){
-            const type = params1 & 0x3;
-            const arcName = 'Mushroom' + ['A','B','C','D'][type];
-            spawnOArcModel(arcName);
+            const m = spawnModelFromNames(arcName, modelName);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Island with spiral charge rocks
         else if (name === 'IslTreB') {
-            spawnOArcModel('IslTreI');
-            spawnOArcModel('IslTreIRock');
+            const bbox = new AABB(-1200, -1200, -1100, 1200, 1600, 1200);
+            const m0 = spawnOArcModel('IslTreI');
+            const m1 = spawnOArcModel('IslTreIRock');
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Islands in the Sky
         else if (name === 'IslTrea') {
+            const bbox = new AABB(-1850, -2050, -1900, 1950, 2500, 1850);
             const type = params1 & 0xF;
             const typeName = 'IslTre'+['A','B','C','D','E','F','G','H'][type];
-            spawnOArcModel(typeName);
+            const m = spawnOArcModel(typeName);
+            setModelBBox(m, bbox);
             if (type === 2){
-                spawnModelFromNames(typeName, typeName+'Water00');
-                spawnModelFromNames(typeName, typeName+'Water01');
+                const w0 = spawnModelFromNames(typeName, typeName+'Water00');
+                const w1 = spawnModelFromNames(typeName, typeName+'Water01');
+                setModelBBox(w0, bbox);
+                setModelBBox(w1, bbox);
             }
         }
         // Rocks in the Sky
         else if (name === 'RockSky') {
             const type = params1 & 0xF;
             const typeName = 'RockSky'+['A','B','C','D',][type];
-            spawnOArcModel(typeName);
+            const m = spawnOArcModel(typeName);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Digging holes for mitts
         else if (name === 'InHole') {
-            spawnModelFromNames('MoundShovelB', 'MoundShovelB');
-            spawnModelFromNames('MoundShovelB', 'HoleShovelB');
+            const bbox = new AABB(-100, -300, -100, 100, 300, 100);
+            const m0 = spawnModelFromNames('MoundShovelB', 'MoundShovelB');
+            const m1 = spawnModelFromNames('MoundShovelB', 'HoleShovelB');
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Walltulas
         else if (name === 'EWs') {
+            const bbox = new AABB(-150, -0, -150, 150, 150, 150);
             const m = spawnOArcModel('StalWall');
             m.bindCHR0(this.animationController, findCHR0(getOArcRRES('StalWall'), 'wait00'));
             scaleModelConstant(m, 0.5);
             rotateModel(m, [Math.PI/2, 0, 0]);
+            setModelBBox(m, bbox);
         }
         // Scrapper
         else if (name === 'NpcSlFl') {
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const m = spawnOArcModel('DesertRobot');
             m.bindCHR0(this.animationController,
-                findCHR0(getOArcRRES('DesertRobot_Sal'), 'DesertRobot_Sal_Fly'));
+            findCHR0(getOArcRRES('DesertRobot_Sal'), 'DesertRobot_Sal_Fly'));
+            setModelBBox(m, bbox);
         }
         // Musasabi Tag spawns the little circle animals when diving
-        else if (name === 'MssbTag') {
-            const m = spawnOArcModel('DesertMusasabi');
-            const rres = getOArcRRES('DesertMusasabi');
-            m.bindCHR0(this.animationController, findCHR0(rres, 'DesertMusasabi_dive_loop'));
-            m.bindPAT0(staticFrame(0), findPAT0(rres, 'DesertMusasabi'));
-            scaleModelConstant(m, 0.0001);
-        }
+        // else if (name === 'MssbTag') {
+        //     const m = spawnOArcModel('DesertMusasabi');
+        //     const rres = getOArcRRES('DesertMusasabi');
+        //     m.bindCHR0(this.animationController, findCHR0(rres, 'DesertMusasabi_dive_loop'));
+        //     m.bindPAT0(staticFrame(0), findPAT0(rres, 'DesertMusasabi'));
+        //     scaleModelConstant(m, 0.0001);
+        // }
         // Gossip Stones (Harp Hints)
         else if (name === 'HrpHint') {
+            const bbox = new AABB(-120, -0, -100, 120, 200, 100);
             const type = (params1>>>0x18) & 0x1;
-            spawnOArcModel(['GossipStone', 'ShiekahStone'][type]);
+            const m = spawnOArcModel(['GossipStone', 'ShiekahStone'][type]);
+            setModelBBox(m, bbox);
         }
         // Little Pots
         else if (name === 'Tubo') {
-            spawnModelFromNames('Tubo', 'Tubo0'+['0','1'][params1&1]);
+            const bbox = new AABB(-100, -40, -100, 100, 180, 100);
+            const m = spawnModelFromNames('Tubo', 'Tubo0'+['0','1'][params1&1]);
+            setModelBBox(m, bbox);
         }
         // Big Pots
         else if (name === 'BigTubo') {
-            spawnOArcModel('TuboBig');
+            const bbox = new AABB(-70, -10, -70, 70, 140, 70)
+            const m = spawnOArcModel('TuboBig');
+            setModelBBox(m, bbox);
+        }
+        // Barrels
+        else if (name === 'Barrel') {
+            const bbox = new AABB(-55, -10, -55, 55, 150, 55);
+            const type = (params1>>>0)&0xF;
+            const modelName = type === 1 ? 'BarrelBomb' : 'Barrel';
+            const m = spawnOArcModel(modelName);
+            setModelBBox(m, bbox);
+            if (type === 1) {
+                this.pastModels.push(m);
+            }
+        }
+        // Loftwing Trap
+        else if (name === 'TrpBrdW') {
+            console.log("Revist TrpBrdW");
+            // Should Spawn 4 boards and do some maths to set them
+            spawnModelFromNames('BirdTrap', "BirdTrapBoard");
         }
         // Bird Statues
         else if (name === 'saveObj') {
-            spawnOArcModel('SaveObject'+['B','A','C'][(params1>>>8)&0xF]);
+            const m = spawnOArcModel('SaveObject'+['B','A','C'][(params1>>>8)&0xF]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Knight Leader
         else if (name === 'NpcKnld') {
-            const arcName = 'Lord';
-            const rres = getOArcRRES(arcName);
-            const m = spawnOArcModel(arcName);
+            const bbox = new AABB(-280, -10, -280, 280, 390, 180);
+            const rres = getOArcRRES('Lord');
+            const m = spawnOArcModel('Lord');
             const swordMdl = spawnModel(rres, "SwordLord");
             this.modelBinds.push({ model: swordMdl, modelToBindTo: m, nodeName: "SwordH"});
-            translateModel(m, [0,18,0]);
-            const chr = mergeCHR0(rres, 'Lord_wait', 'Lord_F_wait');
             m.bindRRESAnimations(this.animationController, rres, 'Lord_wait');
-            m.bindCHR0(this.animationController, chr);
+            m.bindCHR0(this.animationController, mergeCHR0(rres, 'Lord_wait', 'Lord_F_wait'));
+            translateModel(m, [0,18,0]);
+            setModelBBox(m, bbox);
         }
         // moveable lava in Eldin
         else if (name === 'UDLava') {
@@ -1348,161 +1670,222 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             if (type === 0) {
                 translateModel(m, [0, 175, 0]);
             }
+            // No bbox, usually always loaded I guess.
         }
         // Goddess Cubes
         else if (name === 'GodCube') {
+            const bbox = new AABB(-100, 0, -100, 100, 200, 100);
             const doDisplay = (params1>>>24) & 0x1;
-            if (doDisplay === 0)
-                spawnOArcModel('GoddessCube');
+            if (doDisplay === 0) {
+                const m = spawnOArcModel('GoddessCube');
+                setModelBBox(m, bbox);
+            }
         }
         // Thunderhead Cloud Dome
         else if (name === 'CmCloud') {
             const type = params1&0x1;
             const typeName = 'F020Cloud'+['','Inside'][type];
-            spawnModelFromNames(typeName,typeName);
-            spawnModelFromNames(typeName,typeName+'_s');
+            const m0 = spawnModelFromNames(typeName,typeName);
+            const m1 = spawnModelFromNames(typeName,typeName+'_s');
+            m1.passMask = ZSSPass.INDIRECT;
+            setModelBBox(m0, calcModelBounds(m0));
+            setModelBBox(m1, calcModelBounds(m1));
         }
         // Paintings of Groose And Batreaux
         else if (name === 'Paint') {
-            spawnModelFromNames('Paint', 'Paint'+['A','B'][params1&1]);
+            const m = spawnModelFromNames('Paint', 'Paint'+['A','B'][params1&1]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Groose's sandbag
         else if (name === 'Sandbag') {
-            spawnOArcModel('DecoC');
+            const bbox = new AABB(-50, -400, -50, 50, 50, 50);
+            const m = spawnOArcModel('DecoC');
+            setModelBBox(m, bbox);
         }
         // Clawshot Targets
         else if (name === 'ClawSTg') {
-            spawnOArcModel('ShotMark');
+            const bbox = new AABB(-100, -100, -50, 100, 100, 50);
+            const m = spawnOArcModel('ShotMark');
+            setModelBBox(m, bbox);
         }
-        // Under Cloud sTuff
+        // Under Cloud stuff
         else if (name === 'UdCloud') {
-            spawnOArcModel('F020UnderCloud');
+            const bbox = new AABB(-550000, -30000, -500000, 500000, -10000, 500000);
+            const m = spawnOArcModel('F020UnderCloud');
+            setModelBBox(m, bbox);
         }
         // Viewing Platform in Faron
         else if (name === 'ObjBld') {
-            spawnOArcModel('DowsingZoneE300');
+            const m = spawnOArcModel('DowsingZoneE300');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Faron water
         else if (name === 'WtrF100') {
+            const bbox = new AABB(-1400, -100, 6300, 12500, 1800, 17300);
             const rres = getOArcRRES('WaterF100');
-            spawnModel(rres, 'model0');
-            spawnModel(rres, 'model1');
-            spawnModel(rres, 'model2');
-            spawnModel(rres, 'model3');
+            const m0 = spawnModel(rres, 'model0');
+            const m1 = spawnModel(rres, 'model1');
+            const m2 = spawnModel(rres, 'model2');
+            const m3 = spawnModel(rres, 'model3');
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
+            setModelBBox(m2, bbox);
+            setModelBBox(m3, bbox);
         }
         // Eldins lava
         else if (name === 'LavF200') {
-            spawnModelFromNames('LavaF200', 'LavaF200');
-            spawnModelFromNames('LavaF200', 'LavaF200_s');
+            const m0 = spawnModelFromNames('LavaF200', 'LavaF200');
+            const m1 = spawnModelFromNames('LavaF200', 'LavaF200_s');
+            m1.passMask = ZSSPass.INDIRECT;
+            // No bbox, Always loaded
         }
         // bug island
         else if (name === 'IslIns') {
-            spawnModelFromNames('IslIns', 'IslIns');
-            spawnModelFromNames('IslIns', 'IslInsWater00');
-            spawnModelFromNames('IslIns', 'IslInsWater01');
+            const bbox = new AABB(-4700, -2500, -3000, 3300, 1800, 2400);
+            const m0 = spawnModelFromNames('IslIns', 'IslIns');
+            const m1 = spawnModelFromNames('IslIns', 'IslInsWater00');
+            const m2 = spawnModelFromNames('IslIns', 'IslInsWater01');
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
+            setModelBBox(m2, bbox);
         }
         // Mogma left over ground spec
         else if (name === 'MoSoil') {
-            spawnModelFromNames('MogumaMud', 'MogumaMud');
+            const bbox = new AABB(-100, -0, -100, 100, 100, 100);
+            const m = spawnModelFromNames('MogumaMud', 'MogumaMud');
+            setModelBBox(m, bbox);
         }
         // farmland
         else if (name === 'Soil') {
-            spawnModelFromNames('MoundShovel', 'MoundShovel');
+            const bbox = new AABB(-100, -10, -100, 100, 50, 100);
+            const m = spawnModelFromNames('MoundShovel', 'MoundShovel');
+            setModelBBox(m, bbox);
         }
         // Main platform for isle of songs puzzle
         else if (name === 'PzlLand') {
-            spawnModelFromNames('IslPuz', 'IslPuz');
+            const m = spawnModelFromNames('IslPuz', 'IslPuz');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Island for Pumpkin soup (Has rainbow)
         else if (name === 'IslNusi') {
-            spawnModelFromNames('IslNusi', 'IslNusi');
-            spawnModelFromNames('IslNusi', 'IslNusi_s');
+            const bbox = new AABB(-4000, -1200, -2700, 4800, 3400, 1700);
+            const m0 = spawnModelFromNames('IslNusi', 'IslNusi');
+            const m1 = spawnModelFromNames('IslNusi', 'IslNusi_s');
+            m1.passMask = ZSSPass.INDIRECT;
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Stone tablets with Text
         else if (name === 'KanbanS') {
-            spawnModelFromNames('KanbanStone', 'KanbanStone');
+            const m = spawnOArcModel('KanbanStone');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Wooden logs in Faron
         else if (name === 'Log') {
-            spawnModelFromNames('Log', 'Log');
+            const m = spawnOArcModel('Log');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Beehives and bees
         else if (name === 'Bee') {
             const m = spawnModelFromNames('Bee', 'home');
             translateModel(m, [0,-100,0]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Isle of Songs puzzle switch
         else if (name === 'SwDir') {
-            spawnModelFromNames('SwichThree', 'SwitchThree');
+            const bbox = new AABB(-150, -0, -75, 150, 200, 75);
+            const m = spawnModelFromNames('SwichThree', 'SwitchThree');
+            setModelBBox(m, bbox);
         }
         // Isle of songs main building
         else if (name === 'Utajima') {
-            spawnModelFromNames('IslSon', 'IslSon');
-            spawnModelFromNames('IslSon', 'IslSon_s');
+            const m0 = spawnModelFromNames('IslSon', 'IslSon');
+            const m1 = spawnModelFromNames('IslSon', 'IslSon_s');
+            m1.passMask = ZSSPass.INDIRECT;
+            setModelBBox(m0, calcModelBounds(m0));
+            setModelBBox(m1, calcModelBounds(m1));
         }
-        // snad piles
+        // Sand piles
         else if (name === 'vmSand') {
-            spawnModelFromNames('SandHill', 'SandHill');
+            const bbox = new AABB(-60 * obj.sx, -50, -60 * obj.sz, 60 * obj.sx, 60 * obj.sy, 60 * obj.sz);
+            const m = spawnOArcModel('SandHill');
+            setModelBBox(m, bbox);
+            this.presentModels.push(m);
         }
         // Wooden Boxes
         else if (name === 'Kibako') {
-            spawnModelFromNames('KibakoHang', 'KibakoHang');
+            const hanging = (params1&0xF) === 1;
+            const m = spawnOArcModel('KibakoHang');
+            if (hanging) {
+                setModelBBox(m, new AABB(-750, -800, -250, 100, 200, 1000));
+            } else {
+                setModelBBox(m, new AABB(-250, -100, -250, 250, 200, 250));
+            }
         }
         // The Stones to use to go to Skywkeep
         else if (name === 'ToD3Stn') {
-            spawnModelFromNames('BirdObjD3', 'BirdObjD3A');
+            const m = spawnModelFromNames('BirdObjD3', 'BirdObjD3A');
+            setModelBBox(m, calcModelBounds(m));
         }
         // The lever in beetles shop
         else if (name === 'TerrSw') {
-            spawnModelFromNames('TerrySwitch', 'TerrySwitchi');
+            const m = spawnModelFromNames('TerrySwitch', 'TerrySwitchi');
+            setModelBBox(m, calcModelBounds(m));
         }
         // The trapdoor in Beetles shop
         else if (name === 'TerrHol') {
-            spawnModelFromNames('TerryOtoshiana', 'TerryOtoshiana');
+            const m = spawnOArcModel('TerryOtoshiana');
+            setModelBBox(m, calcModelBounds(m));
         }
         // The mechanism in beetles shop
         else if (name === 'TerrGmk') {
             const rres = getOArcRRES('TerryGimmick');
             rres.vis0 = []; // Hack as Vis0 seems broken
-            spawnModel(rres, 'TerryGimmick');
+            const m = spawnModel(rres, 'TerryGimmick');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Beedles Shop
         else if (name === 'Tshop') {
             const rres = getOArcRRES('TerryShop');
             if (this.stageId === 'F020') // turns it off at night
                 rres.chr0 = [];
-            const m  = spawnModel(rres, 'TerryShop');
-            spawnModel(rres, 'TerryBell');
-            spawnModel(rres, 'TerryHaguruma_g');
+            const m0 = spawnModel(rres, 'TerryShop');
+            const m1 = spawnModel(rres, 'TerryBell');
+            const m2 = spawnModel(rres, 'TerryHaguruma_g');
+            setModelBBox(m0, calcModelBounds(m0));
+            setModelBBox(m1, calcModelBounds(m1));
+            setModelBBox(m2, calcModelBounds(m2));
         }
         else if (name === 'ShpSmpl') {
+            const bbox = new AABB(-20, -0, -20, 20, 90, 20);
             const type = params1&0x7F;
             let m : MDL0ModelInstance | null;
             if (![9,10,11,12,13,14,15,16,17,18,19,28,29,30,31,32,33,34].includes(type)){
                 let arcModelPair : string[] | null;
                 let translateY = 37.0;
                 switch(type) {
-                    case 0: arcModelPair = ['GetArrow', 'GetArrowBundle']; translateY = 34; break;
-                    case 1: arcModelPair = ['GetBombSet', 'GetBombSet']; translateY = 22; break;
-                    case 2: arcModelPair = ['GetShieldWood', 'GetShieldWood']; translateY = 40; break;
-                    case 3: arcModelPair = ['GetShieldIron', 'GetShieldIron']; translateY = 36; break;
-                    case 4: arcModelPair = ['GetShieldHoly', 'GetShieldHoly']; translateY = 40; break;
-                    case 5: arcModelPair = ['GetSeedSet', 'GetSeedSet']; translateY = 22; break;
-                    case 6: arcModelPair = ['GetSpareSeedA', 'GetSpareSeedA']; translateY = 23; break;
-                    case 7: arcModelPair = ['GetSpareQuiverA', 'GetSpareQuiverA']; translateY = 30; break;
-                    case 8: arcModelPair = ['GetSpareBombBagA', 'GetSpareBombBagA']; translateY = 27; break;
-                    case 20: arcModelPair = ['GetPouchB', 'GetPorchB']; break;
-                    case 21: arcModelPair = ['GetPouchB', 'GetPorchB']; break;
-                    case 22: arcModelPair = ['GetPouchB', 'GetPorchB']; break;
-                    case 23: arcModelPair = ['GetHeartKakera', 'GetHeartKakera']; break;
-                    case 24: arcModelPair = ['GetSparePurse', 'GetSparePurse']; break;
-                    case 25: arcModelPair = ['GetNetA', 'GetNetA']; break;
-                    case 26: arcModelPair = ['GetMedal', 'GetMedalLife']; break;
-                    case 27: arcModelPair = ['GetMedal', 'GetMedalReturn']; break;
+                    case  0: arcModelPair = ['GetArrow',            'GetArrowBundle'    ]; translateY = 34; break;
+                    case  1: arcModelPair = ['GetBombSet',          'GetBombSet'        ]; translateY = 22; break;
+                    case  2: arcModelPair = ['GetShieldWood',       'GetShieldWood'     ]; translateY = 40; break;
+                    case  3: arcModelPair = ['GetShieldIron',       'GetShieldIron'     ]; translateY = 36; break;
+                    case  4: arcModelPair = ['GetShieldHoly',       'GetShieldHoly'     ]; translateY = 40; break;
+                    case  5: arcModelPair = ['GetSeedSet',          'GetSeedSet'        ]; translateY = 22; break;
+                    case  6: arcModelPair = ['GetSpareSeedA',       'GetSpareSeedA'     ]; translateY = 23; break;
+                    case  7: arcModelPair = ['GetSpareQuiverA',     'GetSpareQuiverA'   ]; translateY = 30; break;
+                    case  8: arcModelPair = ['GetSpareBombBagA',    'GetSpareBombBagA'  ]; translateY = 27; break;
+                    case 20: arcModelPair = ['GetPouchB',           'GetPorchB'         ]; break;
+                    case 21: arcModelPair = ['GetPouchB',           'GetPorchB'         ]; break;
+                    case 22: arcModelPair = ['GetPouchB',           'GetPorchB'         ]; break;
+                    case 23: arcModelPair = ['GetHeartKakera',      'GetHeartKakera'    ]; break;
+                    case 24: arcModelPair = ['GetSparePurse',       'GetSparePurse'     ]; break;
+                    case 25: arcModelPair = ['GetNetA',             'GetNetA'           ]; break;
+                    case 26: arcModelPair = ['GetMedal',            'GetMedalLife'      ]; break;
+                    case 27: arcModelPair = ['GetMedal',            'GetMedalReturn'    ]; break;
                 }
                 const m = spawnModelFromNames(arcModelPair![0], arcModelPair![1]);
                 translateModel(m, [0, translateY, 0]);
                 scaleModelConstant(m, 1.7);
+                setModelBBox(m, bbox);
             }
         }
         // Npc Salesman -> subtypes per
@@ -1550,32 +1933,40 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 const chr = mergeCHR0(rres, 'MedicineHusband_wait', 'MedicineHusband_F_wait');
                 m.bindCHR0(this.animationController, chr);
             }
+            // no bbox set
         }
         // Fire TODO -> put fire effect in when JPA is implemented
         else if (name === 'Fire') {
+            const bbox = new AABB(-70, -50, -70, 70, 200, 70);
             const type = params1 & 0xF;
-            if (type !== 1){
+            if (type !== 1) {
                 const arcName = 'Candle0'+['0','0','1','2'][type];
                 const modelName = 'Candle'+['','','01','02'][type];
-                spawnModelFromNames(arcName, modelName);
+                const m = spawnModelFromNames(arcName, modelName);
+                setModelBBox(m, bbox);
             }
             console.info('Revist Fire Later');
         }
         // Gondos Repair object, theres also a B variant
         else if (name === 'JunkRep') {
-            spawnModelFromNames('Junk', 'JunkRepairobject');
+            const bbox = new AABB(-30, -0, -20, 30, 120, 20);
+            const m = spawnModelFromNames('Junk', 'JunkRepairobject');
+            setModelBBox(m, bbox);
         }
         // Chef NPC in bazaar
         else if (name === 'NpcChef'){
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const rres = getOArcRRES('Chef');
             const chr = mergeCHR0(rres, 'Chef_wait', 'Chef_F_wait');
             spawnModel(rres, 'ChefPot');
             const m = spawnModel(rres, 'Chef');
             m.bindCHR0(this.animationController, chr);
             m.bindSRT0(this.animationController, findSRT0(rres, 'Chef_wait'));
+            setModelBBox(m, bbox);
         }
         // Place for stone tablets in goddess statue
         else if (name === 'SndStn') {
+            const bbox = new AABB(-75, -15, -75, 75, 105, 75);
             const rres = getOArcRRES('LithographyStand');
             const stand = spawnModel(rres, 'LithographyStand');
             const emerald = spawnModel(rres, 'SekibanMapADemo');
@@ -1588,33 +1979,47 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             this.modelBinds.push({model:    ruby, modelToBindTo: stand, nodeName: "locator_B"});
             this.modelBinds.push({model:   amber, modelToBindTo: stand, nodeName: "locator_C"});
             this.modelBinds.push({model:   crest, modelToBindTo: stand, nodeName: "SetGS"});
+            setModelBBox(stand, bbox);
+            setModelBBox(emerald, bbox);
+            setModelBBox(ruby, bbox);
+            setModelBBox(amber, bbox);
+            setModelBBox(crest, bbox);
         }
         // Batreaux Human
         else if (name === 'NpcAkuH') {
+            const bbox = new AABB(-150, -50, -150, 150, 300, 150);
             const m = spawnOArcModel('DevilB');
             const chr = mergeCHR0(getOArcRRES('Devil'), 'Devil_wait', 'Devil_F_wait');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
         // bigger dude chilling in bazaar... Called SoManD what other way to describe
         else if (name === 'NpcSMnD') {
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const rres = getOArcRRES('SoManD');
             const m = spawnOArcModel('SoManD');
             const chr = mergeCHR0(rres, 'SoManD_wait', 'SoManD_F_wait');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
         // Other older dude sitting in bazaar
         else if (name === 'NpcSMnE') {
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const rres = getOArcRRES('SoManE');
             const m = spawnOArcModel('SoManE');
             const chr = mergeCHR0(rres, 'SoManE_wait', 'SoManE_F_wait');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
         // Broken Robot in bazaar
         else if (name === 'NpcSlRp') {
-            spawnOArcModel('DesertRobotN');
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
+            const m = spawnOArcModel('DesertRobotN');
+            setModelBBox(m, bbox);
         }
         // Keese
         else if (name === 'EKs') {
+            const bbox = new AABB(-250, -800, -250, 250, 250, 250);
             const type = params1&0x7;
             const arcName = ['Kiesu','Kiesu_fire','Kiesu_electric','KiesuDevil'][type];
             const mdlName = ['kiesu','F_kiesu','EKiesu','DKiesu'][type];
@@ -1622,172 +2027,433 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             m.bindPAT0(this.animationController, findPAT0(getOArcRRES(arcName), 'blink_1'));
             m.bindCHR0(this.animationController, findCHR0(getOArcRRES('Kiesu_anime'), 'fly'));
             translateModel(m, [0,-30,0]);
+            setModelBBox(m, bbox);
         }
         // Sword Pedestal
         else if (name === 'SwrdSt') {
-            spawnOArcModel(['SwordSeal','SwordGrd'][params1&1]);
+            const bbox = new AABB(-75, -10, -75, 75, 200, 75);
+            const m = spawnOArcModel(['SwordSeal','SwordGrd'][params1&1]);
+            setModelBBox(m, bbox);
         }
         // Goddess Crest (Switch Sword Beam)
         else if (name === 'SwSB') {
+            const bbox = new AABB(-100, -50, -50, 100, 55, 50);
             const m = spawnOArcModel('GoddessSymbolSc');
             translateModel(m, [0,90,0]);
+            setModelBBox(m, bbox);
         }
         // Chandelier
         else if (name === 'Chandel') {
-            spawnModelFromNames('Stage', 'StageF011rChanAft');
+            const bbox = new AABB(-400, -1500, -400, 400, 100, 400);
+            const m = spawnModelFromNames('Stage', 'StageF011rChanAft');
+            setModelBBox(m, bbox);
         }
         // Pumpkin Master (Pumm)
         else if (name === 'NpcPma') {
+            const bbox = new AABB(-200, -100, -200, 200, 300, 200);
             const rres = getOArcRRES('PumpkinMaster');
             const m = spawnModel(rres, 'PumpkinMaster');
             const chr = mergeCHR0(rres, 'PumpkinMaster_wait', 'PumpkinMaster_F_wait');
             m.bindRRESAnimations(this.animationController, rres, 'PumpkinMaster');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
+        // Fledge - Pumpkin Archery Minigame
+        else if (name === 'NpcPcs') {
+            const bbox = new AABB(-100, -10, -100, 100, 200, 100);
+            const rres = getOArcRRES('FriendA');
+            const m = spawnModel(rres, 'FriendA');
+            const chr = mergeCHR0(rres, 'FriendA_wait', 'FriendA_F_wait');
+            m.bindRRESAnimations(this.animationController, rres, 'FriendA');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+        }
+        // NPCs on Skyloft Bridge during layer 10
+        else if (name === 'NpcDoML') {
+            const bbox = new AABB(-250, -100, -300, 200, 200, 200);
+            const rres = getOArcRRES('DouguyaMotherLOD');
+            const m = spawnModel(rres, 'DouguyaMotherLOD');
+            const chr = mergeCHR0(rres, 'DouguyaMotherLOD_wait', 'DouguyaMotherLOD_F_wait');
+            m.bindRRESAnimations(this.animationController, rres, 'DouguyaMotherLOD');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+        }
+        else if (name === 'NpcJkML') {
+            const bbox = new AABB(-200, -100, -200, 200, 200, 200);
+            const rres = getOArcRRES('JunkMotherLOD');
+            const m = spawnModel(rres, 'JunkMotherLOD');
+            const chr = mergeCHR0(rres, 'JunkMotherLOD_wait', 'JunkMotherLOD_F_wait');
+            m.bindRRESAnimations(this.animationController, rres, 'JunkMotherLOD');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+        }
+        else if (name === 'NpcSAML') {
+            const bbox = new AABB(-200, -100, -200, 200, 200, 200);
+            const rres = getOArcRRES('SenpaiAMotherLOD');
+            const m = spawnModel(rres, 'SenpaiAMotherLOD');
+            const chr = mergeCHR0(rres, 'SenpaiAMotherLOD_wait', 'SenpaiAMotherLOD_F_wait');
+            m.bindRRESAnimations(this.animationController, rres, 'SenpaiAMotherLOD');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+        }
+        // Boy who bonks into tree for Bug
+        else if (name === 'NpcSoBo') {
+            const bbox = new AABB(-100, -50, -100, 100, 200, 100);
+            const rres = getOArcRRES('SoBoyA');
+            const m = spawnModel(rres, 'SoBoyA');
+            const chr = mergeCHR0(rres, 'SoBoyA_wait', 'SoBoyA_F_wait');
+            m.bindRRESAnimations(this.animationController, rres, 'SoBoyA');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+        }
+        // Orielle
+        else if (name === 'NpcSowo') {
+            const bbox = new AABB(-185, -10, -185, 185, 260, 185);
+            const rres = getOArcRRES('SoWoManA');
+            const m = spawnModel(rres, 'SoWomanA');
+            const chr = mergeCHR0(rres, 'SoWomanA_wait', 'SoWomanA_F_wait');
+            m.bindRRESAnimations(this.animationController, rres, 'SoWoManA');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+        }
+        // Zelda
+        else if (name === 'NpcZld') {
+            const bbox = new AABB(-200, -100, -200, 200, 300, 200);
+            const body_rres = getOArcRRES('Zelda');
+            const body_mdl = spawnModel(body_rres, 'Zelda_body'); 
+            
+            const face_rres = getOArcRRES('Zelda_face');
+            const face_mdl = spawnModel(face_rres, 'Zelda_face'); 
+            
+            const hair_rres = getOArcRRES('Zelda_hair');
+            const hair_mdl = spawnModel(hair_rres, 'Zelda_hair'); 
+
+            const handl_rres = getOArcRRES('Zelda_handL');
+            const handl_mdl = spawnModel(handl_rres, 'Zelda_handL'); 
+
+            const handr_rres = getOArcRRES('Zelda_handR');
+            const handr_mdl = spawnModel(handr_rres, 'Zelda_handR'); 
+
+            setModelBBox(face_mdl, bbox);
+            setModelBBox(body_mdl, bbox);
+            setModelBBox(hair_mdl, bbox);
+            setModelBBox(handl_mdl, bbox);
+            setModelBBox(handr_mdl, bbox);
+
+            this.modelBinds.push({ model: face_mdl, modelToBindTo: body_mdl, nodeName: "Head"});
+            this.modelBinds.push({ model: hair_mdl, modelToBindTo: body_mdl, nodeName: "Head"});
+            this.modelBinds.push({ model: handl_mdl, modelToBindTo: body_mdl, nodeName: "HandL"});
+            this.modelBinds.push({ model: handr_mdl, modelToBindTo: body_mdl, nodeName: "HandR"});
+            
+            // Bind All default Anms
+            body_mdl.bindRRESAnimations(this.animationController, body_rres, 'Zelda');
+            face_mdl.bindRRESAnimations(this.animationController, face_rres, 'Zelda');
+            hair_mdl.bindRRESAnimations(this.animationController, hair_rres, 'Zelda');
+            handl_mdl.bindRRESAnimations(this.animationController, handl_rres, 'Zelda');
+            handr_mdl.bindRRESAnimations(this.animationController, handr_rres, 'Zelda'); 
+            
+            // Zelda Caring for Loftwing
+            if (this.stageId === 'F000' && this.currentLayer === 1 && obj.id === 0xFDC5) {
+                body_mdl.bindRRESAnimations(this.animationController, body_rres, 'Zelda_care');
+                face_mdl.bindRRESAnimations(this.animationController, face_rres, 'Zelda_face_F_care');
+                hair_mdl.bindRRESAnimations(this.animationController, hair_rres, 'Zelda_care_Hair');
+                handl_mdl.bindRRESAnimations(this.animationController, handl_rres, 'Zelda_care_HandL');
+                handr_mdl.bindRRESAnimations(this.animationController, handr_rres, 'Zelda_care_HandR');
+            }
+            // Default to override on Wait
+            else {
+                body_mdl.bindRRESAnimations(this.animationController, body_rres, 'Zelda_wait');
+                face_mdl.bindRRESAnimations(this.animationController, face_rres, 'Zelda_face_F_wait');
+                hair_mdl.bindRRESAnimations(this.animationController, hair_rres, 'Zelda_wait_Hair');
+                handl_mdl.bindRRESAnimations(this.animationController, handl_rres, 'Zelda_wait_HandL');
+                handr_mdl.bindRRESAnimations(this.animationController, handr_rres, 'Zelda_wait_HandR');
+            }
+        }
+        // Zelda's Loftiwng
+        else if (name === 'NpcBdz') {
+            const bbox = new AABB(-300, -0, -300, 300, 200, 300);
+            const m = spawnModelFromNames('BirdZelda', 'BirdZelda');
+            setModelBBox(m, bbox);
+            if (this.stageId === 'F000') {
+                if (this.currentLayer === 10) {
+                    m.bindCHR0(this.animationController, findCHR0(getOArcRRES('BirdAnm'), 'Glide'));
+                } else if (this.currentLayer === 1) {
+                    m.bindCHR0(this.animationController, findCHR0(getOArcRRES('BirdAnm'), 'Down'));
+                }
+            }
+        }
+        // Pipit
+        else if (name === 'NpcSenp') {
+            const bbox = new AABB(-260, -10, -260, 260, 350, 260);
+            const rres = getOArcRRES('SenpaiA');
+            const m = spawnModel(rres, 'SenpaiA');
+            const chr = mergeCHR0(rres, 'SenpaiA_wait', 'SenpaiA_F_wait');
+
+            const sword_mdl = spawnModel(rres, 'SwordSenpaiA');
+            this.modelBinds.push({ model: sword_mdl, modelToBindTo: m, nodeName: "SwordW"});
+
+            m.bindRRESAnimations(this.animationController, rres, 'SenpaiA');
+            m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+            setModelBBox(sword_mdl, bbox);
+        }
+        // Knight on Loftwing to rescue link when falling off island
+        // else if (name === 'NpcResc') {
+        //      console.log("Revisit NpcResc");
+        // }
+        // // Birds
+        // else if (name === 'NpcBird') {
+        //     console.log("Revisit NpcBird");
+        // }
         // Random Npcs
         else if (name === 'NpcSma2') {
-            console.log(this.currentLayer);
+            const bbox = new AABB(-150, -100, -150, 150, 300, 150);
             const m = spawnOArcModel('SoManB');
             m.bindCHR0(this.animationController, findCHR0(getOArcRRES('SoManB_sit'),'SoManB_sit_wait'));
+            setModelBBox(m, bbox);
         }
         else if (name === 'NpcSma3') {
-            console.log(this.currentLayer);
+            const bbox = new AABB(-150, -100, -150, 150, 300, 150);
             const m = spawnOArcModel('SoManC');
             if (this.stageId !== 'F000')
                 m.bindCHR0(this.animationController, findCHR0(getOArcRRES('SoManC_sit'),'SoManC_sit_wait'));
             else
                 m.bindCHR0(this.animationController, findCHR0(getOArcRRES('SoManC_stand'),'SoManC_stand_wait'));
+            setModelBBox(m, bbox);
         }
         // Little Girl
         else if (name === 'NpcSoG') {
+            const bbox = new AABB(-100, -10, -100, 100, 150, 100);
             const rres = getOArcRRES('SoGirl');
             const m = spawnOArcModel('SoGirl');
             const chr = mergeCHR0(rres, 'SoGirl_wait', 'SoGirl_F_wait');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
         // Eye Dude
         else if (name === 'NpcSha') {
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const rres = getOArcRRES('Uranaiya');
             const m = spawnOArcModel('Uranaiya');
             const chr = mergeCHR0(rres, 'Uranaiya_wait', 'Uranaiya_F_wait');
             const pat = findPAT0(rres, 'Uranaiya');
             m.bindCHR0(this.animationController, chr);
             m.bindPAT0(this.animationController, pat);
+            setModelBBox(m, bbox);
         }
         // Crystal Ball
-        else if (name === 'DivCrst') { // This will need to be moved later
-            const m = spawnOArcModel('F004rCrystalWell');
+        else if (name === 'DivCrst') {
+            const bbox = new AABB(-50, -50, -50, 50, 50, 50);
+            const type = params1&0xF;
+            if (!(this.stageId === 'F013r' && this.currentLayer === 0)) {
+                const m = spawnOArcModel('F004rCrystalWell');
+                if (this.stageId === 'F200') {
+                    scaleModel(m, [2, 2, 2]);
+                }
+                setModelBBox(m, bbox);
+            }
         }
         // Pipets mom
         else if (name === 'NpcSAMo') {
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const rres = getOArcRRES('SenpaiAMother');
             const m = spawnOArcModel('SenpaiAMother');
             const chr = mergeCHR0(rres, 'SenpaiAMother_wait', 'SenpaiAMother_F_wait');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
         // Dust Piles
         else if (name === 'VacuDst') {
-            spawnModelFromNames('Stage', 'VacuumDust')
+            const m = spawnModelFromNames('Stage', 'VacuumDust')
+            translateModel(m, [0, 1, 0]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Dust Piles
         else if (name === 'VacuDsP') {
             const type = params1&0xF;
-            spawnModelFromNames('Stage', 'StageVacDusParts'+['A','B','C','D','E'][type]);
+            const m = spawnModelFromNames('Stage', 'StageVacDusParts'+['A','B','C','D','E'][type]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Pink Key Parella
         else if (name === 'NpcSui') {
+            const bbox = new AABB(-50, -10, -50, 50, 150, 50);
             const m = spawnOArcModel('SuiseiBoss');
             m.bindCHR0(this.animationController, findCHR0(getOArcRRES('Suisei_motion'), 'Suisei_motion_wait'));
+            setModelBBox(m, bbox);
         }
         // Parallela
         else if (name === 'NpcSuiS' || name === 'NpcSuiN') {
+            const bbox = new AABB(-50, -10, -50, 50, 150, 50);
             const m = spawnOArcModel('Suisei');
             m.bindCHR0(this.animationController, findCHR0(getOArcRRES('Suisei_motion'), 'Suisei_motion_wait'));
+            setModelBBox(m, bbox);
         }
         // Water nuts
         else if (name === 'WatrIga'){
-            spawnOArcModel('NeedleBallWater');
+            const bbox = new AABB(-80, -560, -60, 80, 60, 60);
+            const m = spawnOArcModel('NeedleBallWater');
+            setModelBBox(m, bbox);
         }
         // Whip Swing things
         else if (name === 'TPole'){
-            spawnOArcModel('WhipBar');
+            const bbox = new AABB(-0, -120, -110, 500, 140, 110);
+            const m = spawnOArcModel('WhipBar');
+            setModelBBox(m, bbox);
         }
         // The horizontal spin switches for the whip
         else if (name === 'BulbSW'){
-            spawnOArcModel('SwitchValve');
+            const bbox = new AABB(-100, -170, -100, 100, 100, 100);
+            const m = spawnOArcModel('SwitchValve');
+            setModelBBox(m, bbox);
         }
         // Vertixal whip levers
         else if (name === 'sw_whip'){
-            spawnOArcModel('SwitchWhip');
+            const bbox = new AABB(-300, -0, -100, 300, 400, 100);
+            const m = spawnOArcModel('SwitchWhip');
+            setModelBBox(m, bbox);
         }
         // StalMaster (jannon :D )
         else if (name === 'ESf4') {
+            const bbox = new AABB(-200, -75, -200, 200, 250, 200);
             const rres = getOArcRRES('Sf4');
             const m = spawnModel(rres, 'Stalfos4');
+            const mA = spawnModel(rres, 'Sf4SwordA');
+            const mB = spawnModel(rres, 'Sf4SwordB');
+            const mC = spawnModel(rres, 'Sf4SwordC');
+            const mD = spawnModel(rres, 'Sf4SwordD');
+
+            this.modelBinds.push({ model: mA, modelToBindTo: m, nodeName: "loc_SwordA"});
+            this.modelBinds.push({ model: mB, modelToBindTo: m, nodeName: "loc_SwordB"});
+            this.modelBinds.push({ model: mC, modelToBindTo: m, nodeName: "loc_SwordC"});
+            this.modelBinds.push({ model: mD, modelToBindTo: m, nodeName: "loc_SwordD"});
+
             m.bindCHR0(this.animationController, findCHR0(rres, 'Wait'));
             scaleModelConstant(m, 1.3);
+            setModelBBox(m, bbox);
+            setModelBBox(mA, bbox);
+            setModelBBox(mB, bbox);
+            setModelBBox(mC, bbox);
+            setModelBBox(mD, bbox);
         }
         // Direction Switches
         else if (name === 'SwDir2') {
+            const bbox = new AABB(-100, -10, -100, 100, 250, 100);
             const m = spawnOArcModel('SwitchDirect');
             rotateModel(m, [Math.PI/2, 0,0]);
             translateModel(m, [0,150,-100]);
+            setModelBBox(m, bbox);
         }
         // Wall Switches (the bar where you can usually run up the wall)
         else if (name === 'SwWall') {
-            spawnOArcModel('SwitchWall');
+            const bbox = new AABB(-100, -50, -50, 100, 50, 50);
+            const m = spawnOArcModel('SwitchWall');
+            setModelBBox(m, bbox);
         }
         // Cursed Bokos
         else if (name === 'EBcZ') {
+            const bbox = new AABB(-150, -150, -150, 150, 250, 230);
             const rres = getOArcRRES('Bocoburin_Z');
             const m = spawnModel(rres, 'bocoburin_Z');
             m.bindCHR0(this.animationController, findCHR0(rres, 'wait0'));
+            setModelBBox(m, bbox);
         }
         // Tower Hands
         else if (name === 'TowerHa') {
+            const bbox = new AABB(-1000, 0, -600, 1000, 1000, 1000);
             const m = spawnOArcModel('TowerHandD101');
-            if (params1&1)
-                rotateModel(m, [0, Math.PI, 0]);
+            if (params1&1) {
+                // Need to mirror the hand
+                scaleModel(m, [-1, 1, 1]);
+                m.shapeInstances.forEach((shp) => {
+                    shp.materialInstance.materialHelper.megaStateFlags.frontFace = GfxFrontFaceMode.CCW;
+                });
+            }
+            setModelBBox(m, bbox);
         }
         // Tower Gears
         else if (name === 'TGrD101') {
-            spawnOArcModel('TowerGearD101');
+            const m = spawnOArcModel('TowerGearD101');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Furnix
         else if (name === 'EHidory') {
+            const bbox = new AABB(-270, -1000, -600, 270, 200, 1000);
             const rres = getOArcRRES('Hidory');
             const m = spawnModel(rres, 'Hidory');
             m.bindCHR0(this.animationController, findCHR0(rres, 'hovering'));
+            setModelBBox(m, bbox);
         }
         // Staltula
         else if (name === 'Est') {
+            const bbox = new AABB(-100, -100, -100, 100, 200, 100);
             const rres = getOArcRRES('Staltula');
             const m = spawnModel(rres, 'Stalchula');
             m.bindCHR0(this.animationController, findCHR0(rres, 'Wait'));
+            setModelBBox(m, bbox);
+        }
+        // Remlits
+        else if (name === 'ERemly') {
+            const bbox = new AABB(-150, -700, -150, 150, 150, 150);
+            const rres = getOArcRRES('Remly');
+            const m = spawnModel(rres, 'Remly'); 
+            m.bindCHR0(this.animationController, findCHR0(rres, 'RemlySleep'));
+            m.bindPAT0(this.animationController, findPAT0(rres, 'RemlyWink'));
+            setModelBBox(m, bbox);
         }
         // Waterfalls in Ancient Cistern
         else if (name === 'wfall') {
+            let bbox = new AABB();
             const type = (params1 >>> 28) & 0xF
             if (type !== 0){
+                if (type === 1) {
+                    bbox.set(-500, -1700, -1200, 500, 1700, 1200);
+                } else if (type === 2) {   
+                    bbox.set(-500, -1000, -2200, 500, 1000, 2200);
+                } else if (type === 3) {   
+                    bbox.set(-600, -700, -400, 600, 600, 1000);
+                }
                 const rres = getOArcRRES('WaterfallD101');
-                spawnModel(rres, 'WaterfallD101'+['A','B','C'][type-1]);
+                const m = spawnModel(rres, 'WaterfallD101'+['A','B','C'][type-1]);
+                if (type === 1) {
+                    m.bindCLR0(staticFrame(0), findCLR0(rres, "WaterfallD101A"));
+                }
+                else if (type === 3) {
+                    m.bindSRT0(this.animationController, findSRT0(rres, "WaterfallD101C_Out"));
+                }
+                setModelBBox(m, bbox);
             }
         }
-        // Rope Maybe
-        else if (name === 'SpiderL') {
-            console.info('Revisit SpiderL');
+        else if (name === "FrtTree") {
+            const type = params1 & 0xFF;
+            if (type === 0) {
+                const bbox = new AABB(-400, -0, -400, 400, 800, 400);
+                const m = spawnModelFromNames('Stage', 'StageF302Wood');
+                this.presentModels.push(m);
+                setModelBBox(m, bbox)
+            } else {
+                const bbox = new AABB(-700, -0, -700, 700, 1200, 700);
+                const m = spawnModelFromNames('Stage', 'StageF402Wood');
+                setModelBBox(m, bbox)
+            };
         }
         // Fruit
         else if (name === 'fruit') {
-            spawnOArcModel('FruitA');
+            let bbox = new AABB();
+            const type = params1 & 0xFF;
+            if (type === 0) {
+                bbox.set(-400, -0, -400, 400, 800, 400);
+            } else {
+                bbox.set(-700, -0, -700, 700, 1200, 700);
+            }
+            const m = spawnOArcModel('FruitA');
+            setModelBBox(m, bbox);
         }
         // Sunlight beams in Faron
         else if (name === 'Light00') {
-            spawnOArcModel('Light00');
-        }
-        else if (name === 'Bubble') {
-            const rres = getOArcRRES('BubbleHole');
-            console.info('Revisit Bubble');
+            // This actor is technically supported for DowsingZoneE300, 
+            // but that variant doesnt exist ever.
+            const m = spawnOArcModel('Light00');
+            setModelBBox(m, calcModelBounds(m));
         }
         // End Boss Doors to Springs
         else if (name === 'SldDoor') {
@@ -1795,17 +2461,22 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const m = spawnModel(rres, 'ShutterBoss');
             const animRres = getOArcRRES('SBAnm');
             m.bindCLR0(this.animationController, findCLR0(animRres, 'ShutterBossSealWink'));
+            setModelBBox(m, calcModelBounds(m));
         }
         // Skulls that can spawn drops
         else if (name === 'skull') {
-            spawnModelFromNames('Skull', 'BocoBone02');
+            const bbox = new AABB(-50, -10, -50, 50, 70, 50);
+            const m = spawnModelFromNames('Skull', 'BocoBone02');
+            setModelBBox(m, bbox);
         }
         // Lotus Flowers
         else if (name === 'LtsFlwr') {
+            const bbox = new AABB(-150, -50, -150, 200, 100, 150);
             const type = params1&1;
             const arc = ['LotusFlower','LotusSeed'][type];
             const mdl = ['LotusFlower', 'LotusSeedCut'][type];
-            spawnModelFromNames(arc, mdl);
+            const m = spawnModelFromNames(arc, mdl);
+            setModelBBox(m, bbox);
         }
         // Water Logs
         else if (name === 'LogWtr') {
@@ -1813,28 +2484,40 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const m = spawnOArcModel(['LogFloat','LogStep'][type]);
             if (type === 1)
                 translateModel(m, [0,500,0]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Cistern Boss Door
         else if (name === 'BDrD101') {
-            spawnOArcModel('DoorBossD101');
-            const m = spawnOArcModel('DoorBossD101');
-            rotateModel(m, [Math.PI, 0, Math.PI]);
+            const bbox = new AABB(-1300, -50, -1000, 1300, 100, 1000);
+            const m0 = spawnOArcModel('DoorBossD101');
+            const m1 = spawnOArcModel('DoorBossD101');
+            rotateModel(m1, [Math.PI, 0, Math.PI]);
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Cistern Tower
         else if (name === 'ftower') {
-            spawnOArcModel('TowerD101');
+            const bbox = new AABB(-1500, -2500, -1400, 1500, 6000, 1800);
+            const m = spawnOArcModel('TowerD101');
+            setModelBBox(m, bbox);
         }
         // Crystal Switches
         else if (name === 'Swhit') {
+            const bbox = new AABB(-150, -90, -65, 150, 300, 65);
             const rres = getOArcRRES('SwitchHit');
-            spawnModel(rres, 'SwitchHitBase');
-            const m = spawnModel(rres, 'SwitchHit');
-            m.bindSRT0(this.animationController, findSRT0(rres, 'SwitchHit_kirari'));
+            const m0 = spawnModel(rres, 'SwitchHitBase');
+            const m1 = spawnModel(rres, 'SwitchHit');
+            m1.bindSRT0(this.animationController, findSRT0(rres, 'SwitchHit_kirari'));
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Wooden Boards to break
         else if (name === 'WdBoard') {
-            spawnModelFromNames('BreakBoard', 'BreakBoardA');
-            spawnModelFromNames('BreakBoard', 'BreakBoardB');
+            const bbox = new AABB(-210, -10, -40, 210, 410, 40);
+            const m0 = spawnModelFromNames('BreakBoard', 'BreakBoardA');
+            const m1 = spawnModelFromNames('BreakBoard', 'BreakBoardB');
+            setModelBBox(m0, bbox);
+            setModelBBox(m1, bbox);
         }
         // Water Surface
         else if (name === 'WaterSf'){
@@ -1846,6 +2529,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 translateModel(m , [0,500,0]);
                 translateModel(m1, [0,500,0]);
             }
+            setModelBBox(m, calcModelBounds(m));
         }
         // Small Goddess Statues
         else if (name === 'SngGS') {
@@ -1854,33 +2538,37 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const node = this.findNode(statue, 'SetGS')!;
             mat4.translate(node.modelMatrix, node.modelMatrix, [0, 90, 0]);
             this.modelBinds.push({model: crest, modelToBindTo: statue, nodeName: 'SetGS'});
+            setModelBBox(statue, calcModelBounds(statue));
+            setModelBBox(crest, calcModelBounds(crest));
         }
         // Ancient Jwls (Treasure)
         else if (name === 'AncJwls'){
+            const bbox = new AABB(-50, -50, -50, 50, 50, 50);
             const type = params1 & 0xF;
             const arcName = 'GetSozai'+['H','G','P'][type];
             const m = spawnOArcModel(arcName);
             const scale = [2,2,1.365][type];
             scaleModelConstant(m, scale);
-        }
-        // Rope for blocks in air
-        else if (name === 'BlkRope'){
-            console.info('Revisit BlkRope');
+            setModelBBox(m, bbox);
         }
         // Iron Fences
         else if (name === 'FenceIr') {
             const type = (params1>>>16)&1;
-            spawnOArcModel('FenceIron'+['','Small'][type]);
+            const m = spawnOArcModel('FenceIron'+['','Small'][type]);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Octarock
         else if (name === 'EOr') {
+            const bbox = new AABB(-80, -80, -80, 80, 80, 80);
             const rres = getOArcRRES('Or');
             spawnModel(rres, 'octarock_hole');
             const m = spawnModel(rres, 'octarock');
             m.bindCHR0(this.animationController, findCHR0(rres, 'wait'));
+            setModelBBox(m, bbox);
         }
         // Dungeon Doors Entrances
         else if (name === 'DoorDun') {
+            const bbox = new AABB(-600, -0, -300, 600, 600, 300);
             const type = params1 & 0xF;
             const arcName = ['Entrance1B', 'DoorGate', 'Entrance1A', 'DoorWater'][type];
             const mdlName = ['Entrance1B', 'DoorGate_Open', 'Entrance1A', 'DoorWater'][type];
@@ -1888,53 +2576,73 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const rres = getOArcRRES(arcName);
             const m = spawnModel(rres, mdlName);
             m.bindCHR0(this.animationController, findCHR0(rres, chrName));
+            setModelBBox(m, bbox);
         }
         // Carryable Stones
         else if (name === 'CyStone') {
+            const bbox = new AABB(-30, -30, -30, 30, 30, 30);
             const type = params1 & 0xF;
             const arcName = ['RockCarrySmall','RockCarryMiddle','RockCarryMiddle','Syako_egg'][type];
             const mdlName = ['RockSmall','RockMiddle','RockMiddle','SyakoEgg'][type];
             const m = spawnModelFromNames(arcName, mdlName);
             if (type === 1 || type === 2)
                 translateModel(m, [0,75,0]);
+
+            if (type === 1) {
+                bbox.set(-70, -70, -70, 70, 70, 70);
+            } else if (type === 2) {
+                bbox.set(-95, -95, -95, 95, 95, 95);
+            }
+            setModelBBox(m, bbox);
         }
         // Little spikey balls
         else if (name === 'RopeIga'){
+            const bbox = new AABB(-50, -50, -50, 50, 50, 50);
             const m = spawnOArcModel('NeedleBall');
             translateModel(m, [0,15,0]);
+            setModelBBox(m, bbox);
         }
         // Froaks
         else if (name === 'EGeko'){
+            const bbox = new AABB(-50, -50, -50, 50, 50, 50);
             const rres = getOArcRRES('Geko');
             const m = spawnModel(rres, 'Geko');
             const chr = findCHR0(rres,'run');
             const pat = findPAT0(rres, 'GekoWink');
             m.bindCHR0(this.animationController, chr);
             m.bindPAT0(this.animationController, pat);
+            setModelBBox(m, bbox);
         }
         // Deku Baba
         else if (name === 'Ehb') {
+            const bbox0 = new AABB(-100, -100, -100, 100, 100, 100);
+            const bbox1 = new AABB(-200, -200, -200, 200, 200, 200);
             const type = (params1 >> 3) & 0x3;
             const rres = getOArcRRES('Degubaba');
             const m0 = spawnModel(rres, 'degubaba_leaf');
             const newAnim = staticFrame([0, 0, 1, 1][type]);
-            const m = spawnModel(rres, 'degubaba_head');
+            const m1 = spawnModel(rres, 'degubaba_head');
             m0.bindPAT0(newAnim, findPAT0(rres, 'degubaba_leaf'));
-            m.bindPAT0(newAnim, findPAT0(rres, 'degubaba_head'));
+            m1.bindPAT0(newAnim, findPAT0(rres, 'degubaba_head'));
             rotateModel(m0, [-Math.PI/2, 0, 0]);
             m0.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
-            rotateModel(m, [-Math.PI/2, 0, 0]);
-            m.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
+            rotateModel(m1, [-Math.PI/2, 0, 0]);
+            m1.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
+            setModelBBox(m0, bbox0);
+            setModelBBox(m1, bbox1);
         }
         // The Wall of water to keep you in bounds in Flooded Faron
         // Water Shield
         else if (name === 'WtrShld'){
-            spawnOArcModel('WaterWallF103');
+            const bbox = new AABB(-12000, -2000, -14000, 12000, 11000, 12000);
+            const m = spawnOArcModel('WaterWallF103');
             console.info('Look Into WtrShld rendering (cuts off on angles)');
+            setModelBBox(m, bbox);
         }
         // Various Kikwis
         // Bucha
         else if (name === 'NpcKyuE') {
+            const bbox = new AABB(-300, -60, -250, 300, 400, 500);
             const rres = getOArcRRES('ForestManOld');
             const m = spawnModel(rres, 'ForestManOld');
             const chr = findCHR0(rres, 'ForestManOld_wait');
@@ -1944,9 +2652,12 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             leaf.bindPAT0(staticFrame(0), findPAT0(leafrres, 'ForestManLeaf'));
             this.modelBinds.push({model: leaf, modelToBindTo: m, nodeName: "Tail"});
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
+            setModelBBox(leaf, bbox);
         }
         // Machi
         else if (name === 'Npckyu1') {
+            const bbox = new AABB(-510, -10, -510, 510, 730, 510);
             const rres = getOArcRRES('ForestMan');
             const body = spawnModel(rres, 'ForestMan');
             const eyes = spawnModel(rres, 'ForestManEyeA');
@@ -1960,16 +2671,23 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             body.bindCHR0(this.animationController, chr);
             this.modelBinds.push({model: eyes, modelToBindTo: body, nodeName: "Head"});
             this.modelBinds.push({model: hair, modelToBindTo: body, nodeName: "Hair"});
+            setModelBBox(body, bbox);
+            setModelBBox(eyes, bbox);
+            setModelBBox(hair, bbox);
+            setModelBBox(leaf, bbox);
         }
         // Yerbal
         else if (name === 'NpcKyuW') {
+            const bbox = new AABB(-230, -10, -230, 230, 315, 230);
             const rres = getOArcRRES('ForestManWiz');
             const m = spawnModel(rres, 'ForestManWiz');
             const chr = findCHR0(rres, 'ForestManWiz_wait');
             m.bindCHR0(this.animationController, chr);
+            setModelBBox(m, bbox);
         }
         // Oolo
         else if (name === 'NpcOKyu') {
+            const bbox = new AABB(-510, -10, -510, 510, 730, 510);
             const rres = getOArcRRES('ForestMan');
             const body = spawnModel(rres, 'ForestMan');
             const eyes = spawnModel(rres, 'ForestManEyeC');
@@ -1983,9 +2701,14 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             body.bindCHR0(this.animationController, chr);
             this.modelBinds.push({model: eyes, modelToBindTo: body, nodeName: "Head"});
             this.modelBinds.push({model: hair, modelToBindTo: body, nodeName: "Hair"});
+            setModelBBox(body, bbox);
+            setModelBBox(eyes, bbox);
+            setModelBBox(hair, bbox);
+            setModelBBox(leaf, bbox);
         }
         // Lopsa
         else if (name === 'Npckyu3') {
+            const bbox = new AABB(-510, -10, -510, 510, 730, 510);
             const rres = getOArcRRES('ForestMan');
             const body = spawnModel(rres, 'ForestMan');
             const eyes = spawnModel(rres, 'ForestManEyeB');
@@ -1999,9 +2722,14 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             body.bindCHR0(this.animationController, chr);
             this.modelBinds.push({model: eyes, modelToBindTo: body, nodeName: "Head"});
             this.modelBinds.push({model: hair, modelToBindTo: body, nodeName: "Hair"});
+            setModelBBox(body, bbox);
+            setModelBBox(eyes, bbox);
+            setModelBBox(hair, bbox);
+            setModelBBox(leaf, bbox);
         }
         // Erla
         else if (name === 'Npckyu4') {
+            const bbox = new AABB(-510, -10, -510, 510, 730, 510);
             const rres = getOArcRRES('ForestMan');
             const body = spawnModel(rres, 'ForestMan');
             const eyes = spawnModel(rres, 'ForestManEyeD');
@@ -2018,63 +2746,80 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             if (this.stageId === 'F103'){
                 translateModel(body, [0,58,0]);
             }
+            setModelBBox(body, bbox);
+            setModelBBox(eyes, bbox);
+            // setModelBBox(hair, bbox);
+            setModelBBox(leaf, bbox);
         }
         // Eldin Volcano Eruption Smoke
         else if (name === 'Smoke') {
             const type = params1&0x3;
             spawnOArcModel(['SmokeF200', 'SmokeF202'][type]);
+            // no bbox
         }
         // Raise And Lowerable floors (magma rocks?)
         else if (name === 'SnkFlrF') {
             const type = params1 & 0xF;
             const arcName = (type !== 3) ? 'SinkRock' : 'FWRockA';
             const mdlName = ['SinkRockC', 'SinkRockB', 'SinkRockA', 'FWRockA'][type];
-            spawnModelFromNames(arcName, mdlName);
+            const m = spawnModelFromNames(arcName, mdlName);
+            setModelBBox(m, calcModelBounds(m));
         }
         // Eldin Wooden Towers
         else if (name === 'TowerB') {
+            const bbox = new AABB(-800, -1000, -1500, 800, 1700, 750);
             const type = (params1 >>> 16) & 0xF;
             const arcName = ['TowerBomb', 'TowerLight'][type];
             const mdlName = ['TowerBomb01', 'TowerLight'][type];
             const rres = getOArcRRES(arcName);
-            spawnModel(rres, 'TowerBomb00'); // Little Legs
-            const  m = spawnModel(rres, mdlName); // Main Tower
+            const legs = spawnModel(rres, 'TowerBomb00'); // Little Legs
+            const m = spawnModel(rres, mdlName); // Main Tower
             const chr = findCHR0(rres, 'Falldown');
             if ((params1&0xFF) === 0xFF)
                 m.bindCHR0(this.animationController, chr);
             if (type === 1){
                 const m2 = spawnModel(rres, 'FX_TowerLight');
                 m2.bindCLR0(this.animationController, findCLR0(rres, 'FX_TowerLight'));
+                setModelBBox(m2, bbox);
             }
+            setModelBBox(legs, bbox);
+            setModelBBox(m, bbox);
         }
         // Propeller
         else if (name === 'Propera') {
+            const bbox = new AABB(-150, 150, -150, 150, -150, 150);
             const m = spawnOArcModel('Pinwheel');
             rotateModel(m, [-Math.PI/2, 0, 0]);
+            setModelBBox(m, bbox);
         }
         // Pyrup Shells
         else if (name === 'EHidoS') {
+            const bbox = new AABB(-200, -100, -200, 200, 200, 200);
             const type = ((params1&0xF) !== 0x0) ? 'BoneA' : 'BoneB';
-            spawnModelFromNames('HidokariS', type);
-
+            const m = spawnModelFromNames('HidokariS', type);
+            setModelBBox(m, bbox);
         }
         // Boulders
         else if (name === 'RolRock') {
             const decideType = (params1 >>> 12) & 0xF;
             let type = decideType;
+            let m;
             if (decideType === 0xb) type = 6;
             if ([9,10].includes(type)) type = 4;
-            if ([0,4].includes(type)) spawnOArcModel('RockRollA');
-            else spawnOArcModel('RockRollB');
+            if ([0,4].includes(type)) m = spawnOArcModel('RockRollA');
+            else m = spawnOArcModel('RockRollB');
+            setModelBBox(m, calcModelBounds(m));
         }
         // Bone Bridges
         else if (name === 'BrgBn') {
-            spawnOArcModel('BoneBridge');
+            const m = spawnOArcModel('BoneBridge');
+            setModelBBox(m, new AABB(-1000, -100, -400, 0, 150, 320));
         }
         // Extendable Bridges
         else if (name === 'BridgeB') {
             const m = spawnOArcModel('BridgeSwitch');
             translateModel(m, [0, 0, 800]);
+            setModelBBox(m, new AABB(-210, -110, -10, 210, 10, 1080));
         }
         // Floor Switches
         else if (name === 'Sw') {
@@ -2082,10 +2827,24 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const arcName = 'SwitchStep'+['A','B','B'][type];
             const m = spawnOArcModel(arcName);
             scaleModel(m, [1 ,0.8, 1]);
+            setModelBBox(m, new AABB(-90, -10, -90, 90, 70, 90));
         }
         // Fences in Eldin
         else if (name === 'FenceBk') {
-            spawnOArcModel('FenceBoko');
+            const m = spawnOArcModel('FenceBoko');
+            setModelBBox(m, new AABB(-210, -10, -20, 210, 340, 20));
+        }
+        // Closed Bazaar entrances
+        else if (name === 'MoleCvr') {
+            const bbox = new AABB(-1900, -1100, -5500, 100, 1700, -1800);
+            const m = spawnModelFromNames('Stage', "StageF000MallCover");
+            setModelBBox(m, bbox);
+        }
+        // Skyloft Bell
+        else if (name === 'Bell') {
+            const bbox = new AABB(-160, -320, -160, 160, 10, 160);
+            const m = spawnModelFromNames('Stage', "StageF000Bell");
+            setModelBBox(m, bbox);
         }
         // Mogmas
         else if (name === 'NpcMoN') {
@@ -2099,120 +2858,162 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             m.bindCHR0(this.animationController, chr);
             const hair = spawnModel(rres, 'Moguma_hair'+['A','B','C','D','E','F','G'][type]);
             this.modelBinds.push({model: hair, modelToBindTo: m, nodeName: 'Head'});
+            setModelBBox(m, new AABB(-100, -10, -100, 100, 250, 100));
+            setModelBBox(hair, new AABB(-100, -10, -100, 100, 250, 100));
         }
         // Mogmas
         else if (name === 'NpcMoT2') {
+            const bbox = new AABB(-100, -10, -100, 100, 200, 100);
             const rres = getOArcRRES('MogumaDungeonB');
             const m = spawnModel(rres, 'MogumaDungeonB');
             const chr = mergeCHR0(getOArcRRES('MogumaDungeon_motion'), 'MogumaDungeon_motion_wait', 'MogumaDungeon_motion_F_wait');
             m.bindCHR0(this.animationController, chr);
             // translateModel(m, [0,-75,0]);
+            setModelBBox(m, bbox);
         }
         else if (name === 'NpcMoT') {
+            const bbox = new AABB(-100, -10, -100, 100, 200, 100);
             const rres = getOArcRRES('MogumaDungeonA');
             const m = spawnModel(rres, 'MogumaDungeonA');
             const chr = mergeCHR0(getOArcRRES('MogumaDungeon_motion'), 'MogumaDungeon_motion_wait', 'MogumaDungeon_motion_F_wait');
             m.bindCHR0(this.animationController, chr);
             // translateModel(m, [0,-75,0]);
+            setModelBBox(m, bbox);
         }
         // Old Mogma
         else if (name === 'NpcMoEl') {
+            const bbox = new AABB(-100, -0, -100, 100, 200, 100);
             const rres = getOArcRRES('MogumaOld');
             const m = spawnModel(rres, 'MogumaOld');
             // const chr = mergeCHR0(getOArcRRES('Moguma'), 'Moguma_wait', 'Moguma_F_wait');
             // m.bindCHR0(this.animationController, chr);
             translateModel(m, [0,-75,0]);
+            setModelBBox(m, bbox);
         }
         else if (name === 'EHidoK') {
+            const bbox = new AABB(-200, -100, -200, 200, 200, 200);
             const rres = getOArcRRES('Hidokari');
             const m = spawnModel(rres, 'Hidokari');
             m.bindRRESAnimations(this.animationController, rres, 'WaitA');
+            setModelBBox(m, bbox);
         }
         // Beedle
         else if (name === 'NpcTer') {
-            // on skyloft nighat layer
+            // on skyloft night layer
             const rres = getOArcRRES('Terry');
             const m = spawnModel(rres, 'Terry');
             if (params1&1){
                 const chr = mergeCHR0(rres, 'Terry_waitA', 'Terry_F_default');
                 m.bindCHR0(this.animationController, chr);
-                spawnModel(rres, 'Terry_Log');
+                setModelBBox(m, new AABB(-140, -0, -120, 1400, 205, 130)); 
+                setModelBBox(spawnModel(rres, 'Terry_Log'), new AABB(-140, -0, -120, 1400, 205, 130));
             }
             // In Shop
             else {
-                const chr = mergeCHR0(rres, 'Terry_cycleC', 'Terry_F_default');
+                const chr = mergeCHR0(rres, 'Terry_cycleB', 'Terry_F_default');
                 m.bindCHR0(this.animationController, chr);
+                setModelBBox(m, new AABB(-80, -0, -30, 80, 200, 80));
                 const m2 = spawnModel(rres, 'TerryBicycle');
                 m2.bindCHR0(this.animationController, findCHR0(rres, 'TerryBicycle_cycle'));
-
+                setModelBBox(m2, new AABB(-20, -0, -70, 20, 90, 80));
             }
-
         }
         // Beedles Bike
         else if (name === 'TerBike') {
             const rres = getOArcRRES('Terry');
-            const m2 = spawnModel(rres, 'TerryBicycle');
-            // m2.bindCHR0(this.animationController, findCHR0(rres, 'TerryBicycle_cycle'));
+            const m = spawnModel(rres, 'TerryBicycle');
+            m.bindCHR0(this.animationController, findCHR0(rres, 'TerryBicycle_cycle'));
+            setModelBBox(m, new AABB(-20, -0, -70, 20, 90, 80));
         }
         // Goddess Statue
         else if (name === "IslMegm") {
+            const bbox = new AABB(-5000, -5000, -23000, 5000, 10000, -9000);
             const rres = getOArcRRES(['F000Megami', 'F000LastDungeon'][params1 & 0x3]);
             const m = spawnModel(rres, ['F000Megami', 'F000LastDungeon'][params1 & 0x3]);
             const m2 = spawnModel(rres, ['F000Megami_s', 'F000LastDungeon_s'][params1 & 0x3]);
+            setModelBBox(m, bbox);
+            setModelBBox(m2, bbox);
+            m2.passMask = ZSSPass.INDIRECT;
         }
         // Mushrooms
-        else if (name === 'KinokoA') { spawnOArcModel('MushroomA'); }
-        else if (name === 'KinokoB') { spawnOArcModel('MushroomB'); }
-        else if (name === 'KinokoC') { spawnOArcModel('MushroomC'); }
-        else if (name === 'KinokoD') { spawnOArcModel('MushroomD'); }
+        else if (name === 'Kinoko' || name === 'SKinoko'){
+            const type = params1 & 0x3;
+            const arcName = 'Mushroom' + ['A','B','C','D'][type];
+            const m = spawnOArcModel(arcName);
+            switch (type) {
+                case 0: setModelBBox(m, new AABB(-150, -30, -150, 150, 250, 150)); break;
+                case 1: setModelBBox(m, new AABB(-100, -30, -100, 100, 250, 100)); break;
+                case 2: setModelBBox(m, new AABB(-100, -30, -100, 100, 350, 100)); break;
+                case 3: setModelBBox(m, new AABB(-100, -30, -100, 100, 250, 100)); break;
+            }
+        }
+        else if (name === 'KinokoA') {
+            const m = spawnOArcModel('MushroomA');
+            setModelBBox(m, new AABB(-150, -30, -150, 150, 250, 150));
+        }
+        else if (name === 'KinokoB') {
+            const m = spawnOArcModel('MushroomB');
+            setModelBBox(m, new AABB(-100, -30, -100, 100, 250, 100));
+        }
+        else if (name === 'KinokoC') {
+            const m = spawnOArcModel('MushroomC');
+            setModelBBox(m, new AABB(-100, -30, -100, 100, 350, 100));
+        }
+        else if (name === 'KinokoD') {
+            const m = spawnOArcModel('MushroomD');
+            setModelBBox(m, new AABB(-100, -30, -100, 100, 250, 100));
+        }
         // Various Chairs
-        else if (name === 'CharA') { spawnOArcModel(name); }
-        else if (name === 'CharB') { spawnOArcModel(name); }
-        else if (name === 'CharC') { spawnOArcModel(name); }
+        else if (['CharA', 'CharB', 'CharC'].includes(name)) { 
+            setModelBBox(spawnOArcModel(name), new AABB(-60, 0, -60, 60, 160, 60));
+        }
         // Various Plants
-        else if (name === 'PltA00' ) { spawnOArcModel(name); }
-        else if (name === 'PltA01' ) { spawnOArcModel(name); }
-        else if (name === 'PltA02' ) { spawnOArcModel(name); }
-        else if (name === 'PltB00' ) { spawnOArcModel(name); }
-        else if (name === 'PltB01' ) { spawnOArcModel(name); }
-        else if (name === 'PltB02' ) { spawnOArcModel(name); }
-        else if (name === 'PlntB'  ) { spawnOArcModel(name); }
-        else if (name === 'PlntA01') { spawnOArcModel(name); }
-        else if (name === 'PlntA00') { spawnOArcModel(name); }
-        else if (name === 'PlntC01') { spawnOArcModel(name); }
-        else if (name === 'PlntC00') { spawnOArcModel(name); }
+        else if (
+            ['PltA00','PltA01','PltA02','PltB00','PltB01','PltB02',
+             'PlntB','PlntA01','PlntA00','PlntC01','PlntC00'].includes(name)
+        ) {
+            setModelBBox(spawnOArcModel(name), new AABB(-50, -10, -50, 50, 100, 50));
+        }
         // Various Cups
-        else if (name === 'CupA00')  { spawnOArcModel(name); }
-        else if (name === 'CupA01')  { spawnOArcModel(name); }
-        else if (name === 'CupA02')  { spawnOArcModel(name); }
-        else if (name === 'CupB00')  { spawnOArcModel(name); }
-        else if (name === 'CupB01')  { spawnOArcModel(name); }
-        else if (name === 'CupB02')  { spawnOArcModel(name); }
-        // Flower Vases?
-        else if (name === 'FlvsA' )  { spawnOArcModel(name); }
-        else if (name === 'FlvsB' )  { spawnOArcModel(name); }
-        else if (name === 'FlvsC' )  { spawnOArcModel(name); }
+        else if (['CupA00','CupA01','CupA02','CupB00','CupB01','CupB02'].includes(name)) {
+            setModelBBox(spawnOArcModel(name), new AABB(-50, -10, -50, 50, 100, 50));
+        }
+        // Flower Vases
+        else if (['FlvsA','FlvsB','FlvsC'].includes(name)) {
+            setModelBBox(spawnOArcModel(name), new AABB(-50, -10, -50, 50, 100, 50));
+        }
         // Various Lamps
         else if (name === 'RoLight') { spawnOArcModel('F004rRotationLight'); }
-        else if (name === 'LampA' )  { spawnOArcModel(name); }
-        else if (name === 'LampB' )  { spawnOArcModel(name); }
-        else if (name === 'LampC' )  { spawnOArcModel(name); }
-        else if (name === 'LampD' )  { spawnOArcModel(name); }
-        else if (name === 'LampE' )  { spawnModelFromNames(name, name+'Glass'); spawnModelFromNames(name, name+'Hook'); }
-        else if (name === 'LampF' )  { spawnModelFromNames(name, name+'Glass'); spawnModelFromNames(name, name+'Hook'); }
+        else if (['LampA','LampB','LampC','LampD'].includes(name)) {
+            setModelBBox(spawnOArcModel(name), new AABB(-100, -400, -100, 100, 50, 100));
+        }
+        else if (['LampE','LampF'].includes(name)) {
+            const bbox = new AABB(-100, -400, -100, 100, 50, 100);
+            setModelBBox(spawnModelFromNames(name, name+'Glass'), bbox);
+            setModelBBox(spawnModelFromNames(name, name+'Hook'), bbox);
+        }
         // Various Decorations
-        else if (name === 'DecoA' )  { spawnOArcModel(name); }
-        else if (name === 'DecoB' )  { spawnOArcModel(name); }
+        else if (name === 'DecoA')  { spawnOArcModel(name); }
+        else if (name === 'DecoB')  { spawnOArcModel(name); }
+        else if (name === 'ObjBg') {
+            const objId = (params1>>>4) & 0x7F;
+            if (roomIdx !== undefined){
+                this.pastPresentNodeParameters.push(
+                    {roomIdx, name: `obj${objId}`}
+                )
+            } else {
+                console.warn(name, 'Not within Room');
+            }
+        }
         // No models
         else if (!NO_MODEL_LIST.includes(name)) {
-
             console.warn("Unknown object" , name, "Layer:", this.currentLayer);
         }
     }
 
     // TODO(Zeldex) : Move the matrix (scaling, rotation, translation) operations to spawn object
     //              Reason: The game sometimes opts to ignore them and will reuse the fields for parameters
-    private spawnLayout(device: GfxDevice, layout: RoomLayout): void {
+    private spawnLayout(device: GfxDevice, layout: RoomLayout, roomIdx : number | undefined = undefined): void {
         const q = quat.create();
 
         const modelMatrix = mat4.create();
@@ -2238,7 +3039,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             quat.fromEuler(q, rotationX, rotationY, rotationZ);
             mat4.fromRotationTranslation(modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
 
-            this.spawnObj(device, obj, modelMatrix);
+            this.spawnObj(device, obj, modelMatrix, roomIdx);
         }
 
         // Scalable objects...
@@ -2258,7 +3059,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             }
 
             if(['ESm'].includes(obj.name)){
-                let rotationZ = 0;
                 if (scaleX === 4) {
                     scaleX = 1.2;
                     scaleY = 1.2;
@@ -2276,9 +3076,12 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                     scaleY = 0.8;
                     scaleZ = 0.8;
                 }
-                rotationZ = 180;
-            }
 
+                if (1 === ((obj.unk1>>>4) & 0xF)) {
+                    rotationX = 180;
+                }
+                rotationZ = 0;
+            }
 
             if (obj.name === "Bamboo")
             {
@@ -2292,7 +3095,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             mat4.fromRotationTranslationScale(modelMatrix, q, [obj.tx, obj.ty, obj.tz], [scaleX, scaleY, scaleZ]);
 
-            this.spawnObj(device, obj, modelMatrix);
+            this.spawnObj(device, obj, modelMatrix, roomIdx);
         }
     }
 
@@ -2338,10 +3141,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const rotX = view.getInt16(offs + 0x14);
             const rotY = view.getInt16(offs + 0x16);
             const rotZ = view.getInt16(offs + 0x18);
-            const unk5 = view.getUint8(offs + 0x1A);
-            const unk6 = view.getUint8(offs + 0x1B);
+            const id = view.getUint16(offs + 0x1A);
             const name = readString(buffer, offs + 0x1C, 0x08, true);
-            return { unk1, unk2, tx, ty, tz, rotX, rotY, rotZ, unk5, unk6, name };
+            return { unk1, unk2, tx, ty, tz, rotX, rotY, rotZ, id, name, sx: 1, sy: 1, sz: 1 };
         }
 
         function parseSobj(offs: number): Sobj {
@@ -2355,11 +3157,10 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const sz = view.getFloat32(offs + 0x1C);
             const rotX = view.getInt16(offs + 0x20);
             const rotY = view.getUint16(offs + 0x22);
-            const rotZ = view.getUint16(offs + 0x22);
-            const unk5 = view.getUint8(offs + 0x26);
-            const unk6 = view.getUint8(offs + 0x27);
+            const rotZ = view.getUint16(offs + 0x22)
+            const id = view.getUint16(offs + 0x26);
             const name = readString(buffer, offs + 0x28, 0x08, true);
-            return { unk1, unk2, tx, ty, tz, sx, sy, sz, rotX, rotY, rotZ, unk5, unk6, name };
+            return { unk1, unk2, tx, ty, tz, sx, sy, sz, rotX, rotY, rotZ, id, name };
         }
 
         const layoutsChunk = assertExists(roomChunkTable.find((chunk) => chunk.name === 'LAY '));
