@@ -19,10 +19,15 @@ interface LevelStream {
     indicesLOD: number[][];
 }
 
+interface TextureHeader {
+    mid: TileDefinition,
+    cor: TileDefinition[]
+}
+
 export interface SpyroTextureStore {
     textures: GfxTexture[];
-    colors: Uint8Array[];
-    tiles: Tile[];
+    colors: Uint8Array[][];
+    headers: TextureHeader[];
 }
 
 export interface SpyroDrawCall {
@@ -71,7 +76,7 @@ export interface MobyInstance {
     classId: number;
 }
 
-class Tile {
+class TileDefinition {
     mainX: number;
     mainY: number;
     p: vec2;
@@ -87,7 +92,6 @@ class Tile {
     y: vec4 = vec4.create();
     rotation: number = 0;
     s: number = 0;
-    offset: number = 0;
     f: boolean = false;
     transparent: number = 0;
 
@@ -209,85 +213,6 @@ class Polygon {
     }
 }
 
-// Moby structs from the decompile
-// These are 99% correct so far. Still need to figure out vertices, indices, UVs, etc.
-
-class MobyModel {
-    numAnimations: number;
-    dataOffset: number;
-    animations: MobyAnimation[] = [];
-    constructor(view: DataView) {
-        this.numAnimations = view.getInt32(0, true);
-        this.dataOffset = view.getUint32(0x34, true);
-        if (this.numAnimations < 16 && this.numAnimations > 0 && this.dataOffset < 100000) {
-            for (let i = 0; i < this.numAnimations; i++) {
-                const offset = view.getUint32(0x38 + (4 * i), true);
-                this.animations.push(new MobyAnimation(view, offset, this.dataOffset));
-            }
-        }
-    }
-}
-
-class MobyAnimation {
-    numFrames: number;
-    numColors: number;
-    isSpyroAnimation: number;
-    scale: number;
-    shortEncodeShift: number;
-    radius: number;
-    vertexCountHigh: number;
-    vertexCountLow: number;
-    depthScale: number;
-    progressPerTick: number;
-    animationVerticesOffset: number;
-    facesOffset: number;
-    colorsOffset: number;
-    lowPolyFacesOffset: number;
-    lowPolyColorsOffset: number;
-    frames: MobyAnimationFrame[] = [];
-    constructor(view: DataView, offset: number, public modelDataOffset: number) {
-        this.numFrames = view.getInt16(offset, true);
-        this.numColors = view.getUint16(offset + 2, true);
-        this.isSpyroAnimation = view.getUint8(offset + 4);
-        this.scale = view.getUint8(offset + 5);
-        this.shortEncodeShift = view.getUint8(offset + 6);
-        this.radius = view.getUint8(offset + 7);
-        this.vertexCountHigh = view.getUint8(offset + 8);
-        this.vertexCountLow = view.getUint8(offset + 9);
-        this.depthScale = view.getUint8(offset + 11);
-        this.progressPerTick = view.getUint8(offset + 12);
-        this.animationVerticesOffset = view.getUint32(offset + 16, true);
-        this.facesOffset = view.getUint32(offset + 20, true);
-        this.colorsOffset = view.getUint32(offset + 24, true);
-        this.lowPolyFacesOffset = view.getUint32(offset + 28, true);
-        this.lowPolyColorsOffset = view.getUint32(offset + 32, true);
-        for (let i = 0; i < this.numFrames; i++) {
-            const frame = new MobyAnimationFrame(view, offset + 36 + (i * 8));
-            // frame.vertices = this.getVerticesForFrame(view, frame);
-            this.frames.push(frame);
-        }
-    }
-}
-
-class MobyAnimationFrame {
-    vertexOffset: number;
-    collisionModelIndex: number;
-    frameSound: number;
-    vertexColorOffset: number;
-    shadow: number;
-    shortOffset: number;
-    // vertices: number[] = [];
-    constructor(view: DataView, offset: number) {
-        const bitfield = view.getUint32(offset, true);
-        this.vertexOffset = bitfield & 0x1FFFFF;
-        this.collisionModelIndex = (bitfield >> 21) & 0x07;
-        this.frameSound = (bitfield >> 24) & 0xFF;
-        this.vertexColorOffset = view.getUint16(offset + 4, true);
-        this.shadow = view.getUint8(offset + 6);
-        this.shortOffset = view.getUint8(offset + 7);
-    }
-}
-
 const VRAM_SIZE = 524288; // 512 KB and some change
 export class VRAM {
     private data: Uint16Array;
@@ -335,10 +260,10 @@ export const SPYRO_TILE_SCROLL_MAP: Record<number, Record<number, number[]>> = {
     }
 };
 
-function applyTileRotationRGBA(rgba: Uint8Array, tile: Tile, size: number = 32): Uint8Array {
+function applyTileRotationRGBA(rgba: Uint8Array, tile: TileDefinition, size: number, gameNumber: number): Uint8Array {
     let rotatedRGBA = rgba;
 
-    function rotate90(src: Uint8Array): Uint8Array {
+    function turn(src: Uint8Array): Uint8Array {
         const dest = new Uint8Array(src.length);
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
@@ -353,7 +278,7 @@ function applyTileRotationRGBA(rgba: Uint8Array, tile: Tile, size: number = 32):
         return dest;
     }
 
-    function mirrorX(src: Uint8Array): Uint8Array {
+    function mirror(src: Uint8Array): Uint8Array {
         const dest = new Uint8Array(src.length);
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
@@ -368,29 +293,52 @@ function applyTileRotationRGBA(rgba: Uint8Array, tile: Tile, size: number = 32):
         return dest;
     }
 
+    function flip(src: Uint8Array): Uint8Array {
+        const dest = new Uint8Array(src.length);
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const s = (y * size + x) * 4;
+                const d = ((size - 1 - y) * size + x) * 4;
+                dest[d + 0] = src[s + 0];
+                dest[d + 1] = src[s + 1];
+                dest[d + 2] = src[s + 2];
+                dest[d + 3] = src[s + 3];
+            }
+        }
+        return dest;
+    }
+
     switch (tile.rotation) {
-        case 0: // normal
+        case 1:
+            rotatedRGBA = mirror(flip(turn(rotatedRGBA)));
             break;
-        case 1: // rotate 90 left
-            rotatedRGBA = rotate90(rotatedRGBA);
+        case 2:
+            if (gameNumber === 1) {
+                rotatedRGBA = turn(turn(rotatedRGBA));
+            } else {
+                rotatedRGBA = mirror(flip(rotatedRGBA));
+            }
             break;
-        case 2: // rotate 90 right
-            rotatedRGBA = rotate90(rotate90(rotate90(rotatedRGBA)));
+        case 3:
+            if (gameNumber === 1) {
+                rotatedRGBA = mirror(flip(rotatedRGBA));
+            } else {
+                rotatedRGBA = turn(turn(rotatedRGBA));
+            }
             break;
-        case 3: // rotate 180
-            rotatedRGBA = rotate90(rotate90(rotatedRGBA));
+        case 4:
+            rotatedRGBA = mirror(turn(rotatedRGBA));
             break;
-        case 5: // mirror
-            rotatedRGBA = mirrorX(rotatedRGBA);
+        case 5:
+            rotatedRGBA = mirror(rotatedRGBA);
             break;
-        case 4: // mirror + 90 left
-            rotatedRGBA = rotate90(mirrorX(rotatedRGBA));
+        case 6:
+            rotatedRGBA = flip(turn(rotatedRGBA));
             break;
-        case 6: // mirror + 90 right
-            rotatedRGBA = rotate90(rotate90(rotate90(mirrorX(rotatedRGBA))));
+        case 7:
+            rotatedRGBA = flip(rotatedRGBA);
             break;
-        case 7: // mirror + 180
-            rotatedRGBA = rotate90(rotate90(mirrorX(rotatedRGBA)));
+        default:
             break;
     }
 
@@ -414,7 +362,7 @@ function readColorLookupTable(vram: VRAM, px: number, py: number, n: number): [n
     return clut;
 }
 
-function decodeTileToRGBA(vram: VRAM, tile: Tile, width: number = tile.size, height: number = tile.size): Uint8Array {
+function decodeTileToRGBA(vram: VRAM, tile: TileDefinition, width: number = tile.size, height: number = tile.size): Uint8Array {
     let x4 = tile.x[3];
     const y4 = tile.y[3];
     if (tile.m === 4) {
@@ -525,7 +473,7 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
         vertices: [], colors: [], uvs: [],
         indicesGround: [], indicesTransparent: [], indicesLOD: []
     };
-    const tileCount = textures.tiles.length;
+    const tileCount = textures.headers.length;
     const invalidTile: boolean[] = [];
     const waterIndices: number[] = [];
     const UV = { TL: [0, 1], TR: [1, 1], BR: [1, 0], BL: [0, 0], ZERO: [0, 0] };
@@ -536,11 +484,11 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
         stream.indicesTransparent[i] = [];
         stream.indicesLOD[i] = [];
     }
-    for (let i = 0; i < textures.tiles.length; i++) {
+    for (let i = 0; i < textures.headers.length; i++) {
         let b = true;
         const rgba = textures.colors[i];
-        for (let i = 0; i < rgba.length; i += 4) {
-            if (rgba[i] !== 0 || rgba[i + 1] !== 0 || rgba[i + 2] !== 0) {
+        for (let i = 0; i < rgba[0].length; i += 4) {
+            if (rgba[0][i] !== 0 || rgba[0][i + 1] !== 0 || rgba[0][i + 2] !== 0) {
                 b = false;
                 break;
             }
@@ -619,7 +567,7 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
         if (tileIndex < 0 || tileIndex >= tileCount) {
             return;
         }
-        const tile = textures.tiles[tileIndex];
+        const tile = textures.headers[tileIndex].mid;
         const isTransparent = tile.transparent > 0;
         const isWater = (gameNumber > 1) ? (waterFlag === 0 && poly.s[0] === 0 && poly.s[1] === 0 && poly.s[2] === 0 && poly.s[3] === 0) : false;
         const isLOD = false;
@@ -654,7 +602,7 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
                 D = base[p[3]];
             }
         }
-        
+
         if (isTri) {
             const inverse = (gameNumber > 1) ? !!(poly.ii & 4) : false;
             if (!inverse) {
@@ -798,18 +746,26 @@ export function buildSpyroLevel(data: DataView, textures: SpyroTextureStore, gam
 }
 
 export function parseSpyroTextures(vram: VRAM, textureList: DataView, gameNumber: number): SpyroTextureStore {
-    const tiles = parseTiles(textureList, gameNumber);
-    const tileCount = tiles.length;
-    const colors: Uint8Array[] = [];
-    for (let i = 0; i < tileCount; i++) {
-        const tile = tiles[i];
-        let rgba = decodeTileToRGBA(vram, tile, tile.size, tile.size);
-        if (gameNumber == 1) {
-            rgba = applyTileRotationRGBA(rgba, tile, tile.size);
+    const headers = parseTextureHeaders(textureList, gameNumber);
+    const colors: Uint8Array[][] = Array(headers.length);
+    const tiles: TileDefinition[] = Array(headers.length);
+    for (let i = 0; i < headers.length; i++) {
+        const corners: Uint8Array[] = Array(4);
+        for (let j = 0; j < 4; j++) {
+            corners[j] = applyTileRotationRGBA(
+                decodeTileToRGBA(vram, headers[i].cor[j]), headers[i].cor[j], headers[i].cor[j].size, gameNumber
+            );
         }
-        colors.push(rgba);
+        colors[i] = [];
+        colors[i].push(combineCorners(corners[0], corners[1], corners[2], corners[3], 32));
+        colors[i].push(applyTileRotationRGBA(
+            decodeTileToRGBA(vram, headers[i].mid), headers[i].mid, headers[i].mid.size, gameNumber)
+        );
+        const tile = headers[i].cor[0];
+        tile.size = 64;
+        tiles[i] = tile;
     }
-    return { textures: [], colors, tiles };
+    return { textures: [], colors, headers };
 }
 
 export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): MobyInstance[] {
@@ -918,33 +874,6 @@ export function parseSpyroLevelData(data: ArrayBufferSlice): SpyroLevelData {
     if (pointer + subfile4Size < data.byteLength) {
         subfile4 = data.subarray(pointer, subfile4Size);
     }
-
-    // pointer = 0x50;
-    // const modelOffsets: number[] = [];
-    // for (let i = 0; i < 64; i++) {
-    //     const offset = getUint32();
-    //     pointer += 4;
-    //     if (offset === 0 || offset === 0xFFFFFFFF) break;
-    //     modelOffsets.push(offset);
-    // }
-
-    // const mobyModels = [];
-    // for (let i = 0; i < modelOffsets.length; i++) {
-    //     const start = modelOffsets[i];
-    //     const end = (i < modelOffsets.length - 1) ? modelOffsets[i + 1] : subfile4Offset;
-    //     mobyModels.push({
-    //         view: data.slice(start, end).createDataView()
-    //     });
-    // }
-
-    // const mobyModelObjects = [];
-    // for (let i = 0; i < mobyModels.length - 1; i++) {
-    //     const model = mobyModels[i];
-    //     const mm = new MobyModel(model.view);
-    //     if (mm.numAnimations > 0 && mm.dataOffset > 0 && mm.dataOffset < 100000) {
-    //         mobyModelObjects.push(mm);
-    //     }
-    // }
 
     return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
 }
@@ -1099,20 +1028,63 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number 
     return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, grounds, sky, subfile4 };
 }
 
-function parseTiles(data: DataView, gameNumber: number): Tile[] {
-    const tiles: Tile[] = [];
+function combineCorners(topLeft: Uint8Array, topRight: Uint8Array, bottomLeft: Uint8Array, bottomRight: Uint8Array, size: number): Uint8Array {
+    const combined: number[] = [];
+    const rowWidth = size * 4;
+    for (let i = 0; i < size; i++) {
+        const start = i * rowWidth;
+        const end = start + rowWidth;
+        combined.push(...topLeft.slice(start, end));
+        combined.push(...topRight.slice(start, end));
+    }
+    for (let i = 0; i < size; i++) {
+        const start = i * rowWidth;
+        const end = start + rowWidth;
+        combined.push(...bottomLeft.slice(start, end));
+        combined.push(...bottomRight.slice(start, end));
+    }
+    return new Uint8Array(combined);
+}
+
+function parseTextureHeaders(data: DataView, gameNumber: number): TextureHeader[] {
     const count = data.getUint32(4, true);
+    const headers = new Array(count);
     let offset = 8;
-    for (let i = 0; i < count; i++) {
-        offset += 8;
-        const tile = buildTile(data, offset, gameNumber);
-        offset += 8;
-        tiles.push(tile);
-        if (gameNumber > 1) {
-            offset += 32; // skip unused groups
+    if (gameNumber === 1) {
+        // starts with lod-mid header pairs
+        for (let i = 0; i < count; i++) {
+            offset += 8; // skip lod header (it's always the same???)
+            const mid = buildTile(data, offset, gameNumber);
+            offset += 8;
+            headers[i] = { mid, cor: [] };
+        }
+        // jump to high-res groups
+        offset = 8 + (16 * count);
+        for (let i = 0; i < count; i++) {
+            offset += 8; // skip "spr" header
+            const cor: TileDefinition[] = Array(4);
+            for (let j = 0; j < 4; j++) {
+                cor[j] = buildTile(data, offset, gameNumber);
+                offset += 8;
+            }
+            offset += 8 * 16; // skip "sm" headers, same as cor?
+            headers[i].cor = cor;
+        }
+    } else {
+        // sequential headers of lod-mid-cor
+        for (let i = 0; i < count; i++) {
+            offset += 8; // skip lod
+            const mid = buildTile(data, offset, gameNumber);
+            offset += 8;
+            const cor: TileDefinition[] = Array(4);
+            for (let j = 0; j < 4; j++) {
+                cor[j] = buildTile(data, offset, gameNumber);
+                offset += 8;
+            }
+            headers[i] = { mid, cor };
         }
     }
-    return tiles;
+    return headers;
 }
 
 function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
@@ -1282,8 +1254,8 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
     }
 }
 
-function buildTile(data: DataView, offset: number, gameNumber: number): Tile {
-    const tile = new Tile(data, offset);
+function buildTile(data: DataView, offset: number, gameNumber: number): TileDefinition {
+    const tile = new TileDefinition(data, offset);
     if ((tile.ff & 14) > 0 || (tile.ss & 8) === 0) {
         tile.f = true;
     }
@@ -1337,7 +1309,6 @@ function buildTile(data: DataView, offset: number, gameNumber: number): Tile {
     tile.px = (tile.p[0] & 31) * 16;
     tile.py = (tile.p[0] >> 6) | (tile.p[1] << 2);
     tile.rotation = ((tile.ff & 127) >> 4) & 7;
-    tile.offset = offset - 8;
     if (gameNumber > 1) {
         if ((tile.ff & 128) > 0) {
             tile.transparent = 1 + ((tile.ss & 127) >> 5);

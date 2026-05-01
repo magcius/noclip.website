@@ -127,20 +127,20 @@ export class SpyroLevelRenderer {
     constructor(cache: GfxRenderCache, level: SpyroLevel, private mobyInstances: MobyInstance[]) {
         const device = cache.device;
         this.gameNumber = level.game;
-        this.tileCount = level.textures.tiles.length;
+        this.tileCount = level.textures.headers.length;
         this.textures = new Array(this.tileCount);
         for (let i = 0; i < this.tileCount; i++) {
             const rgba = level.textures.colors[i];
-            const tile = level.textures.tiles[i];
             const texture = device.createTexture({
-                width: tile.size, height: tile.size,
-                numLevels: 1, pixelFormat: GfxFormat.U8_RGBA_NORM,
+                width: 64, height: 64,
+                numLevels: 2,
+                pixelFormat: GfxFormat.U8_RGBA_NORM,
                 usage: GfxTextureUsage.Sampled,
                 dimension: GfxTextureDimension.n2D,
                 depthOrArrayLayers: 1
             });
             device.setResourceName(texture, `tile_${i}`);
-            device.uploadTextureData(texture, 0, [rgba]);
+            device.uploadTextureData(texture, 0, rgba);
             this.textures[i] = texture;
         }
 

@@ -17,7 +17,8 @@ TODO
     Re-write rendering setup, clean up bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
-    Some moby instances aren't detected for regular levels when they should be 
+    Some moby instances aren't detected for regular levels when they should be
+    More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
 
     Spyro 1
         Transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
