@@ -532,7 +532,7 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
         }
     }
 
-    const groundIB = buildBatches(stream.indicesGround, waterIndices);
+    const groundIB = buildBatches(stream.indicesGround);
     const transparentIB = buildBatches(stream.indicesTransparent, waterIndices);
     const lodIB = buildBatches(stream.indicesLOD);
 
