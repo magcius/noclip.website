@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { parseSpyroTextures, buildSpyroLevel, buildSpyroSkybox, SpyroSkybox, SpyroLevel, parseMobyInstances, MobyInstance, parseSpyroLevelData, parseSpyroLevelData2 } from "./bin.js"
+import { parseSpyroTextures, buildSpyroLevel, buildSpyroSkybox, SpyroSkybox, SpyroLevel, parseMobyInstances, SpyroMobyInstance, parseSpyroLevelData, parseSpyroLevelData2 } from "./bin.js"
 import { SpyroLevelRenderer, SpyroSkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -21,8 +21,7 @@ TODO
     More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
 
     Spyro 1
-        Transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
-            Can't tell how these work, the tile index of the polygons doesn't match what's being rendered
+        Figure out edges of "water" in Gnasty's Loot, Icy Flight or Twilight Harbor
         
     Spyro 2
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
@@ -39,6 +38,7 @@ Nice to have
     Remove hardcoded tile scrolling and read dynamically from level data (tile indices and speed)
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
     Back-face culling toggle. Winding order is not consistent in the game, so this would require a lot of work
+        There might be a cull mode per ground part, need to check (why though?). But it's definitely not always one mode
     Figure out a way to correctly render LOD and MDL polys at the same time without overlap
         This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
 */
@@ -51,13 +51,13 @@ class Renderer implements SceneGfx {
     private skyboxRenderer: SpyroSkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: SpyroLevel, skybox: SpyroSkybox, private mobyInstances: MobyInstance[]) {
+    constructor(device: GfxDevice, level: SpyroLevel, skybox: SpyroSkybox, private mobyInstances: SpyroMobyInstance[]) {
         this.renderHelper = new GfxRenderHelper(device);
         this.levelRenderer = new SpyroLevelRenderer(this.renderHelper.renderCache, level, this.mobyInstances);
         this.skyboxRenderer = new SpyroSkyboxRenderer(this.renderHelper.renderCache, skybox);
         this.clearColor = skybox.backgroundColor.map(c => c / 255);
         const viewerTextures = [];
-        for (const t of this.levelRenderer.textures) {
+        for (const t of this.levelRenderer.gfxTextures) {
             viewerTextures.push({ gfxTexture: t });
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);
@@ -206,8 +206,13 @@ class SpyroScene3 implements SceneDesc {
     }
 }
 
+// all subfile/level ids are 1-based from the NSTC versions and v1.1 of Spyro 3
 const id = "Spyro1";
 const name = "Spyro the Dragon";
+const id2 = "Spyro2";
+const name2 = "Spyro 2: Ripto's Rage!";
+const id3 = "Spyro3";
+const name3 = "Spyro: Year of the Dragon";
 const sceneDescs = [
     "Artisans",
     new SpyroScene(11, "Artisans"),
@@ -277,9 +282,6 @@ const sceneDescs = [
     new SpyroScene(101, "Twilight Harbor (Flyover)"),
     new SpyroScene(100, "Gnasty Gnorc (Flyover)")
 ];
-
-const id2 = "Spyro2";
-const name2 = "Spyro 2: Ripto's Rage!";
 const sceneDescs2 = [
     "Summer Forest",
     new SpyroScene2(16, "Summer Forest"),
@@ -327,9 +329,6 @@ const sceneDescs2 = [
     new SpyroScene2(92, "What?! YOU AGAIN!"),
     new SpyroScene2(94, "Come on Sparx!")
 ];
-
-const id3 = "Spyro3";
-const name3 = "Spyro: Year of the Dragon";
 const sceneDescs3 = [
     "Sunrise Spring",
     new SpyroScene3(98, "Sunrise Spring"),

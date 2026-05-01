@@ -7,13 +7,14 @@ import { GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platf
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { SpyroSkybox, SpyroLevel, MobyInstance, SPYRO_TILE_SCROLL_MAP, SpyroDrawCall } from "./bin";
+import { SpyroSkybox, SpyroLevel, SpyroMobyInstance, SPYRO_TILE_SCROLL_MAP, SpyroDrawCall } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { Destroyable } from "../SceneBase";
+import { computeViewMatrixSkybox } from "../Camera";
 
 class Shader extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -86,7 +87,6 @@ void main() {
     }
 }
 
-
 const BRIGHTNESS_OPAQUE = 1.9;
 const BRIGHTNESS_TRANSPARENT = 1.0;
 const MOBY_POS_SCALE = 1.0 / 16.0;
@@ -102,7 +102,6 @@ const NOCLIP_SPACE_CORRECTION = mat4.fromValues(
 );
 const SCRATCH_CLIP = mat4.create();
 const SCRATCH_SKY_VIEW = mat4.create();
-const SCRATCH_SKY_PROJ = mat4.create();
 const SCRATCH_MOBY_POS = vec3.create();
 const SCRATCH_MOBY_ROT = vec3.create();
 
@@ -110,9 +109,8 @@ export class SpyroLevelRenderer {
     public showMobys: boolean = false;
     public useLOD: boolean = false;
     public showTextures: boolean = true;
-    public cullMode: GfxCullMode = GfxCullMode.None;
-    public textures: GfxTexture[] = [];
-    private program: GfxProgram;
+    public gfxTextures: GfxTexture[] = [];
+    private gfxProgram: GfxProgram;
     private gfxSampler: GfxSampler;
     private indexBufferDescriptors: GfxIndexBufferDescriptor[];
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
@@ -124,11 +122,11 @@ export class SpyroLevelRenderer {
     private gameNumber: number;
     private scrollFlags: number[];
 
-    constructor(cache: GfxRenderCache, level: SpyroLevel, private mobyInstances: MobyInstance[]) {
+    constructor(cache: GfxRenderCache, level: SpyroLevel, private mobyInstances: SpyroMobyInstance[]) {
         const device = cache.device;
         this.gameNumber = level.game;
         this.tileCount = level.textures.headers.length;
-        this.textures = new Array(this.tileCount);
+        this.gfxTextures = new Array(this.tileCount);
         for (let i = 0; i < this.tileCount; i++) {
             const rgba = level.textures.colors[i];
             const texture = device.createTexture({
@@ -141,7 +139,7 @@ export class SpyroLevelRenderer {
             });
             device.setResourceName(texture, `tile_${i}`);
             device.uploadTextureData(texture, 0, rgba);
-            this.textures[i] = texture;
+            this.gfxTextures[i] = texture;
         }
 
         this.scrollFlags = Array(this.tileCount).fill(0.0);
@@ -153,7 +151,7 @@ export class SpyroLevelRenderer {
             }
         }
 
-        this.program = cache.createProgram(new Shader());
+        this.gfxProgram = cache.createProgram(new Shader());
         this.gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
@@ -186,7 +184,7 @@ export class SpyroLevelRenderer {
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
                 { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 8,  frequency: GfxVertexBufferFrequency.PerVertex }
+                { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex }
             ],
             indexBufferFormat: GfxFormat.U32_R
         });
@@ -195,7 +193,7 @@ export class SpyroLevelRenderer {
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderInstManager.pushTemplate();
-        template.setGfxProgram(this.program);
+        template.setGfxProgram(this.gfxProgram);
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
@@ -205,7 +203,7 @@ export class SpyroLevelRenderer {
         mat4.mul(SCRATCH_CLIP, viewerInput.camera.clipFromWorldMatrix, NOCLIP_SPACE_CORRECTION);
         offs += fillMatrix4x4(d, offs, SCRATCH_CLIP);
         // u_Time (1)
-        d[offs++] = viewerInput.time * 0.001 * (this.gameNumber === 1 ? 2.6 : 2);
+        d[offs++] = viewerInput.time * 0.001 * (this.gameNumber === 1 ? 2.6 : 2); // lazy way to hardcode speed for now
         // u_LOD (1)
         d[offs++] = (this.useLOD) || !this.showTextures ? 1.0 : 0.0;
 
@@ -237,7 +235,6 @@ export class SpyroLevelRenderer {
             d[offs++] = this.scrollFlags[batch.tileIndex];
 
             const megaState = renderInst.getMegaStateFlags();
-            megaState.cullMode = this.cullMode;
             if (additiveBlend) {
                 megaState.depthWrite = false;
                 setAttachmentStateSimple(megaState, {
@@ -247,7 +244,7 @@ export class SpyroLevelRenderer {
                 });
             }
             renderInst.setMegaStateFlags(megaState);
-            renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.textures[batch.tileIndex], gfxSampler: this.gfxSampler }]);
+            renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.gfxTextures[batch.tileIndex], gfxSampler: this.gfxSampler }]);
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, indexBuffer);
             renderInst.setDrawCount(batch.indexCount, batch.indexOffset);
 
@@ -285,7 +282,7 @@ export class SpyroLevelRenderer {
         for (const d of this.vertexBufferDescriptors) {
             device.destroyBuffer(d.buffer);
         }
-        for (const tex of this.textures) {
+        for (const tex of this.gfxTextures) {
             device.destroyTexture(tex);
         }
     }
@@ -330,7 +327,7 @@ void main() {
 export class SpyroSkyboxRenderer implements Destroyable {
     private drawCount: number;
     private gfxInputLayout: GfxInputLayout;
-    private program: GfxProgram;
+    private gfxProgram: GfxProgram;
     private megaStateFlags: GfxMegaStateDescriptor;
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
@@ -349,8 +346,8 @@ export class SpyroSkyboxRenderer implements Destroyable {
                 expandedIndex.push(i++);
             }
         }
-        this.program = cache.createProgram(new SkyboxShader());
-        this.megaStateFlags = makeMegaState({ cullMode: GfxCullMode.None, depthCompare: GfxCompareMode.Always, depthWrite: false}, defaultMegaState);
+        this.gfxProgram = cache.createProgram(new SkyboxShader());
+        this.megaStateFlags = makeMegaState({ cullMode: GfxCullMode.None, depthCompare: GfxCompareMode.Always, depthWrite: false }, defaultMegaState);
         this.gfxInputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
@@ -374,7 +371,7 @@ export class SpyroSkyboxRenderer implements Destroyable {
         const renderInstManager = renderHelper.renderInstManager;
         const renderInst = renderInstManager.newRenderInst();
 
-        renderInst.setGfxProgram(this.program);
+        renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setBindingLayouts(BINDING_LAYOUTS_SKY);
         renderInst.setUniformBuffer(renderHelper.uniformBuffer);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -382,12 +379,9 @@ export class SpyroSkyboxRenderer implements Destroyable {
         let offs = renderInst.allocateUniformBuffer(SkyboxShader.ub_SceneParams, 16);
         const d = renderInst.mapUniformBufferF32(SkyboxShader.ub_SceneParams);
         // u_Clip (16)
-        mat4.copy(SCRATCH_SKY_VIEW, viewerInput.camera.viewMatrix);
-        SCRATCH_SKY_VIEW[12] = 0;
-        SCRATCH_SKY_VIEW[13] = 0;
-        SCRATCH_SKY_VIEW[14] = 0;
-        mat4.mul(SCRATCH_SKY_PROJ, viewerInput.camera.projectionMatrix, SCRATCH_SKY_VIEW);
-        mat4.mul(SCRATCH_CLIP, SCRATCH_SKY_PROJ, NOCLIP_SPACE_CORRECTION);
+        computeViewMatrixSkybox(SCRATCH_SKY_VIEW, viewerInput.camera);
+        mat4.mul(SCRATCH_CLIP, viewerInput.camera.projectionMatrix, SCRATCH_SKY_VIEW);
+        mat4.mul(SCRATCH_CLIP, SCRATCH_CLIP, NOCLIP_SPACE_CORRECTION);
         offs += fillMatrix4x4(d, offs, SCRATCH_CLIP);
 
         renderInst.setVertexInput(this.gfxInputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
