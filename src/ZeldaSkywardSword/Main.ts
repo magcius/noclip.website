@@ -3014,13 +3014,15 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 }
             }
             const mainObjName = `model_obj${objId}`;
-            const detailObjName = mainObjName+'_s';
-            const m0 = spawnModel(roomRRES, `model_obj${objId}`);
-            if (roomRRES.mdl0.find((model) => model.name === detailObjName)) {
-                const m1 = spawnModel(roomRRES, `model_obj${objId}_s`);
-                m0.addChild(m1);
+            if (roomRRES.mdl0.find((model) => model.name === mainObjName)) {
+                const m0 = spawnModel(roomRRES, mainObjName);
+                const detailObjName = mainObjName+'_s';
+                if (roomRRES.mdl0.find((model) => model.name === detailObjName)) {
+                    const m1 = spawnModel(roomRRES, detailObjName);
+                    m0.addChild(m1);
+                }
+                m0.setTime(ZSSTime.PAST);
             }
-            m0.setTime(ZSSTime.PAST);
         }
         // No models
         else if (!NO_MODEL_LIST.includes(name)) {
