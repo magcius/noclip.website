@@ -1,22 +1,21 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { Destroyable } from "../SceneBase";
 import { ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropMaterial, DreamDropShape, DreamDropShapeAttributeBlend, DreamDropPMP, DreamDropShapeAttributeCullMode, DreamDropShapeAttributeDepthBias, DreamDropModelFlagRenderMode } from "./bin";
+import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropMaterial, DreamDropShape, DreamDropShapeAttributeBlend, DreamDropPMP, DreamDropShapeAttributeDepthBias, DreamDropModelFlagRenderMode, DreamDropTXA, DreamDropTextureAnimation } from "./bin";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { DreamDropTexture } from "./texture";
-import { GfxRendererLayer, makeSortKey, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { DreamDropRoomConfig } from "./config/room";
 import { Layer } from "../ui";
 import { TextureMapping } from "../TextureHolder";
 import { DreamDropShader } from "./shader";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 
 const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0;
@@ -47,33 +46,33 @@ function computeShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
 }
 
 function getChannelValue(keyframes: DreamDropKeyframe[] | undefined, frame: number, defaultValue: number): number {
-        if (!keyframes || keyframes.length === 0) {
-            return defaultValue;
-        }
-        if (keyframes.length === 1) {
-            return keyframes[0].value;
-        }
-        let prev = keyframes[0];
-        let next = keyframes[keyframes.length - 1];
-        if (frame <= prev.frame) {
-            return prev.value;
-        }
-        if (frame >= next.frame) {
-            return next.value;
-        }
-        for (let i = 0; i < keyframes.length - 1; i++) {
-            if (keyframes[i].frame <= frame && keyframes[i + 1].frame >= frame) {
-                prev = keyframes[i];
-                next = keyframes[i + 1];
-                break;
-            }
-        }
-        if (prev.frame === next.frame) {
-            return prev.value;
-        }
-        const t = (frame - prev.frame) / (next.frame - prev.frame);
-        return prev.value + (next.value - prev.value) * t;
+    if (!keyframes || keyframes.length === 0) {
+        return defaultValue;
     }
+    if (keyframes.length === 1) {
+        return keyframes[0].value;
+    }
+    let prev = keyframes[0];
+    let next = keyframes[keyframes.length - 1];
+    if (frame <= prev.frame) {
+        return prev.value;
+    }
+    if (frame >= next.frame) {
+        return next.value;
+    }
+    for (let i = 0; i < keyframes.length - 1; i++) {
+        if (keyframes[i].frame <= frame && keyframes[i + 1].frame >= frame) {
+            prev = keyframes[i];
+            next = keyframes[i + 1];
+            break;
+        }
+    }
+    if (prev.frame === next.frame) {
+        return prev.value;
+    }
+    const t = (frame - prev.frame) / (next.frame - prev.frame);
+    return prev.value + (next.value - prev.value) * t;
+}
 
 export interface DreamDropRoomObjects {
     sets: DreamDropDataSet[];
@@ -97,7 +96,7 @@ export class DreamDropRoomRenderer implements Destroyable {
     private setIndices: number[];
     private allSetIndices: number[][];
 
-    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: DreamDropTexture[], objects: DreamDropRoomObjects, config: DreamDropRoomConfig | undefined) {
+    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: DreamDropTexture[], objects: DreamDropRoomObjects, txas: DreamDropTXA[], config: DreamDropRoomConfig | undefined) {
         const gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
@@ -111,13 +110,23 @@ export class DreamDropRoomRenderer implements Destroyable {
             const info = pmp.pmos[i];
             const model = info.pmo;
             const materials: MaterialInstance[] = Array(model.materials.length);
+            const modelTXAs: DreamDropTXA[] = [];
             for (let j = 0; j < model.materials.length; j++) {
-                const t = textures.find(texture => texture.name === model.materials[j].textureName);
-                if (t) {
+                if (!model.materials[j]) {
+                    continue;
+                }
+                const t = textures.filter(texture => texture.name.startsWith(model.materials[j].textureName));
+                if (t.length > 0) {
                     materials[j] = new MaterialInstance(model.materials[j], t, gfxSampler);
+                    for (const txa of txas) {
+                        if (txa.textureName === model.materials[j].textureName) {
+                            modelTXAs.push(txa);
+                            break;
+                        }
+                    }
                 }
             }
-            this.parts[i] = new ModelRenderer(cache, model.name, model, materials);
+            this.parts[i] = new ModelRenderer(cache, model.name, model, materials, modelTXAs);
             this.parts[i].shiftMatrices = [computeShiftMatrix(info.scale, info.rotation, info.position)];
         }
 
@@ -138,13 +147,23 @@ export class DreamDropRoomRenderer implements Destroyable {
                     instanceRenderer.shiftMatrices.push(computeShiftMatrix([1, 1, 1], instance.rotation, instance.position));
                 } else {
                     const materials: MaterialInstance[] = Array(model.materials.length);
-                    for (let i = 0; i < model.materials.length; i++) {
-                        const t = textures.find(texture => texture.name === model.materials[i].textureName);
-                        if (t) {
-                            materials[i] = new MaterialInstance(model.materials[i], t, gfxSampler);
+                    const modelTXAs: DreamDropTXA[] = [];
+                    for (let k = 0; k < model.materials.length; k++) {
+                        if (!model.materials[k]) {
+                            continue;
+                        }
+                        const t = textures.filter(texture => texture.name.startsWith(model.materials[k].textureName));
+                        if (t.length > 0) {
+                            materials[k] = new MaterialInstance(model.materials[k], t, gfxSampler);
+                            for (const txa of txas) {
+                                if (txa.textureName === model.materials[k].textureName) {
+                                    modelTXAs.push(txa);
+                                    break;
+                                }
+                            }
                         }
                     }
-                    const renderer = new ModelRenderer(cache, instance.name, model, materials, objects.animations.get(instance.name));
+                    const renderer = new ModelRenderer(cache, instance.name, model, materials, modelTXAs, objects.animations.get(instance.name));
                     renderer.shiftMatrices = [computeShiftMatrix([1, 1, 1], instance.rotation, instance.position)];
                     indices.push(this.objects.length);
                     this.objects.push(renderer);
@@ -219,6 +238,7 @@ class ModelRenderer implements Destroyable, Layer {
     public bboxPoints: Float32Array;
     public shiftMatrices: mat4[] = [];
     private shapes: ShapeRenderer[];
+    private hasTXA: boolean;
     private isBillboard: boolean;
     private isSkybox: boolean;
     private currentPAMFrame: number;
@@ -226,15 +246,29 @@ class ModelRenderer implements Destroyable, Layer {
     private bones: DreamDropBone[];
     private boneMatrices: mat4[][] = [];
 
-    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: MaterialInstance[], private animation?: DreamDropSkeletalAnimation) {
-        // console.log(model.name, model.pmpFlags.toString(16).padStart(4, "0"), model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
+    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: MaterialInstance[], txas: DreamDropTXA[], private animation?: DreamDropSkeletalAnimation) {
+        // console.log(model.name, model.pmpFlags.toString(16).padStart(4, "0"), "-", model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
         this.name = name;
-        this.isSkybox = model.pmpFlags !== -1 && getShortNibble(model.pmpFlags, 3) === DreamDropModelFlagRenderMode.SKYBOX;
+        const modeNibble = getShortNibble(model.pmpFlags, 3);
+        this.isSkybox = model.pmpFlags !== -1 && (modeNibble === DreamDropModelFlagRenderMode.SKYBOX || modeNibble === DreamDropModelFlagRenderMode.SKYBOX2);
         this.shapes = Array(model.shapes.length);
         for (let i = 0; i < model.shapes.length; i++) {
             const shape = model.shapes[i];
+            let txa = undefined;
+            for (const t of txas) {
+                const a = t.animations[t.defaultAnimationIndex];
+                if (!a) {
+                    continue;
+                }
+                if (materials[shape.textureIndex]) {
+                    if (materials[shape.textureIndex].name === t.textureName && a.frames.length > 0) {
+                        txa = a;
+                        break;
+                    }
+                }
+            }
             this.shapes[i] = new ShapeRenderer(
-                cache, shape, model.scale, materials[shape.textureIndex], this.isSkybox,
+                cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox,
                 this.animation ? model.skeleton!.bones.length : 0
             );
         }
@@ -242,6 +276,8 @@ class ModelRenderer implements Destroyable, Layer {
         this.isBillboard = getShortNibble(model.flags, 1) === DreamDropModelFlagBillboard.BILLBOARD;
 
         this.currentPAMFrame = 0;
+        this.hasTXA = txas.length > 0;
+        if (this.hasTXA) console.log(name, ...txas);
         this.pamFramerate = this.animation ? this.animation.framerate / 1000.0 : 0;
         this.bones = this.animation ? model.skeleton!.bones : [];
         if (this.animation) {
@@ -251,6 +287,7 @@ class ModelRenderer implements Destroyable, Layer {
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
         let ranAnimation = this.animation === undefined;
+        let ranTXA = !this.hasTXA;
         const template = renderHelper.renderInstManager.pushTemplate();
 
         for (const shiftMatrix of this.shiftMatrices) {
@@ -291,8 +328,9 @@ class ModelRenderer implements Destroyable, Layer {
             }
 
             for (const shape of this.shapes) {
-                shape.prepareToRender(renderHelper);
+                shape.prepareToRender(renderHelper, viewerInput, ranTXA);
             }
+            ranTXA = true;
         }
 
         renderHelper.renderInstManager.popTemplate();
@@ -365,36 +403,45 @@ class ModelRenderer implements Destroyable, Layer {
 }
 
 class MaterialInstance {
+    public name: string;
     public scrollX: number;
     public scrollY: number;
-    public textureMapping: TextureMapping[];
+    public textureMappings: TextureMapping[][];
 
-    constructor(material: DreamDropMaterial, texture: DreamDropTexture, gfxSampler: GfxSampler) {
+    constructor(material: DreamDropMaterial, textures: DreamDropTexture[], gfxSampler: GfxSampler) {
+        this.name = textures[0].name;
         this.scrollX = material.scrollX;
         this.scrollY = material.scrollY;
-        this.textureMapping = [new TextureMapping()];
-        this.textureMapping[0].gfxTexture = texture.gfxTexture;
-        this.textureMapping[0].gfxSampler = gfxSampler;
+        this.textureMappings = [];
+        for (const texture of textures) {
+            const tm = new TextureMapping();
+            tm.gfxTexture = texture.gfxTexture;
+            tm.gfxSampler = gfxSampler;
+            this.textureMappings.push([tm]);
+        }
     }
 }
 
 class ShapeRenderer implements Destroyable {
     public sortKey: number;
     private drawCount: number;
+    private hasTXA: boolean;
+    private currentTXAFrame: number = 0;
+    private txaIndices: number[] = [];
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private gfxInputLayout: GfxInputLayout;
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
-    constructor(cache: GfxRenderCache, shape: DreamDropShape, scale: number, private material: MaterialInstance, private isSkybox: boolean = false, boneCount: number) {
+    constructor(cache: GfxRenderCache, shape: DreamDropShape, scale: number, private material: MaterialInstance, txa?: DreamDropTextureAnimation, private isSkybox: boolean = false, boneCount: number = 0) {
         const blend = getShortNibble(shape.attribute, 2);
         const isTranslucent = blend === DreamDropShapeAttributeBlend.TRANSLUCENT || blend === DreamDropShapeAttributeBlend.TRANSLUCENT2;
-        const additiveBlend = blend === DreamDropShapeAttributeBlend.ADDITIVE;
+        const additiveBlend = blend === DreamDropShapeAttributeBlend.ADDITIVE || blend === DreamDropShapeAttributeBlend.ADDITIVE2;
         const transparent = isTranslucent || additiveBlend;
         this.megaStateFlags = {
-            depthWrite: !isTranslucent,
-            polygonOffset: getShortNibble(shape.attribute, 1) !== DreamDropShapeAttributeDepthBias.SET // think this is right?
+            depthWrite: !transparent,
+            polygonOffset: getShortNibble(shape.attribute, 1) !== DreamDropShapeAttributeDepthBias.SET // need to look at this again...
         };
         if (transparent) {
             setAttachmentStateSimple(this.megaStateFlags, {
@@ -433,6 +480,21 @@ class ShapeRenderer implements Destroyable {
             this.vertexBufferDescriptors.push({ buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, shape.weights.buffer), byteOffset: 0 });
             this.vertexBufferDescriptors.push({ buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(shape.joints.map(j => shape.boneIndices[j])).buffer), byteOffset: 0 });
         }
+        if (txa) {
+            if (txa.frames.length === 1) {
+                // treat the txa as flipping between two textures for an equal time (give or take 1 frame)
+                const f = txa.frames[0].displayFrames === 0 ? 5 : txa.frames[0].displayFrames;
+                this.txaIndices.push(...Array(f).fill(-1));
+                this.txaIndices.push(...Array(f).fill(0));
+            } else {
+                for (let i = 0; i < txa.frames.length; i++) {
+                    const frame = txa.frames[i];
+                    const n = Array(frame.displayFrames === 0 ? 5 : frame.displayFrames).fill(i - 1);
+                    this.txaIndices.push(...n);
+                }
+            }
+        }
+        this.hasTXA = txa !== undefined;
 
         this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount));
         this.gfxInputLayout = cache.createInputLayout({
@@ -444,7 +506,7 @@ class ShapeRenderer implements Destroyable {
         this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shape.indices.buffer), byteOffset: 0 };
     }
 
-    public prepareToRender(renderHelper: GfxRenderHelper) {
+    public prepareToRender(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, ranTXA: boolean) {
         const renderInst = renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setGfxProgram(this.gfxProgram);
@@ -458,7 +520,15 @@ class ShapeRenderer implements Destroyable {
         d[offset++] = this.material ? 1.0 : 0.0;
 
         if (this.material) {
-            renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMapping);
+            if (this.hasTXA) {
+                if (!ranTXA) {
+                    this.currentTXAFrame += viewerInput.deltaTime * FRAME_TIME;
+                    this.currentTXAFrame %= this.txaIndices.length;
+                }
+                renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[1 + this.txaIndices[Math.trunc(this.currentTXAFrame)]]);
+            } else {
+                renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[0]);
+            }
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
         if (!this.isSkybox) {

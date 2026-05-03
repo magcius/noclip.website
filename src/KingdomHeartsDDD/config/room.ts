@@ -1,6 +1,7 @@
 export interface DreamDropRoomConfig {
     externalCTT?: string[];
     defaultSets?: number[];
+    hasTXA: boolean;
 }
 
 // for some awful reason, a few rooms have their textures in separate files instead of embedded in the PMP
@@ -128,13 +129,17 @@ const DEFAULT_SETS: Map<string, number[]> = new Map([
     ["eh14", [1]],
 ]);
 
+const TXA = ["tw02", "tw03", "tw04", "tw07", "tm03", "tm04", "tm07", "tm13", "tm16", "tl06", "tl15", "tl18", "rg08",
+    "pi07", "pi08", "pi10", "pi11", "pi13", "pi18", "nd03", "nd06", "nd08", "nd15", "fa03", "fa05", "fa06", "fa07",
+    "fa09", "eh09", "di05"];
+
 export function getDreamDropRoomConfig(roomId: string): DreamDropRoomConfig | undefined {
     const externalCTT = EXTERNAL_CTT.get(roomId);
     const defaultSets = DEFAULT_SETS.get(roomId);
 
-    if (!externalCTT && !defaultSets) {
+    if (!externalCTT && !defaultSets && !TXA.includes(roomId)) {
         return undefined;
     }
 
-    return { externalCTT, defaultSets };
+    return { externalCTT, defaultSets, hasTXA: TXA.includes(roomId) };
 }

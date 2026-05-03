@@ -162,6 +162,24 @@ export interface DreamDropBone {
     decomposedTransform: { scale: vec3, rotation: vec3, translation: vec3 }; // relative, needed to apply animation values to
 }
 
+export interface DreamDropTXA {
+    name: string;
+    textureName: string;
+    defaultAnimationIndex: number;
+    animations: DreamDropTextureAnimation[];
+}
+
+export interface DreamDropTextureAnimation {
+    name: string;
+    frames: TXAFrame[];
+}
+
+interface TXAFrame {
+    displayFrames: number; // amount of frames to show the texture, assumed to be in terms of 30 FPS
+    num2: number; // always zero?
+    data: ArrayBufferSlice;
+}
+
 enum PrimitiveFormat {
     POINT,
     LINE,
@@ -170,56 +188,6 @@ enum PrimitiveFormat {
     TRIANGLE_STRIP,
     TRIANGLE_FAN,
     QUAD
-}
-
-/**
- * Depth bias based on a shape's attribute 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropShapeAttributeDepthBias {
-    SET = 4
-}
-
-/**
- * Blend modes based on a shape's attribute 3rd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropShapeAttributeBlend {
-    OPAQUE,
-    OPAQUE2,
-    TRANSLUCENT,
-    TRANSLUCENT2,
-    ADDITIVE
-}
-
-/**
- * Cull modes based on a shape's attribute 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- * 
- * Not currently used since they break rooms in Hunchback and Tron, which have a lot of mirrored models.
- * This might also not be the cull mode nibble at all, but it looks right 90% of the time
- */
-export enum DreamDropShapeAttributeCullMode {
-    BACK,
-    BACK2,
-    BACK3,
-    BACK4,
-    NONE,
-    NONE2
-}
-
-/**
- * Render mode from a model's flag 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropModelFlagRenderMode {
-    UNK,
-    SKYBOX,
-    UNK2,
-    UNK3
-}
-
-/**
- * Billboard setting from a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropModelFlagBillboard {
-    BILLBOARD = 4
 }
 
 /**
@@ -271,13 +239,70 @@ export class DreamDropShape {
     }
 }
 
-// uint32 of the text at 0x0
+/**
+ * Depth bias based on a shape's attribute 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropShapeAttributeDepthBias {
+    SET = 4
+}
+
+/**
+ * Blend modes based on a shape's attribute 3rd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropShapeAttributeBlend {
+    OPAQUE,
+    OPAQUE2,
+    TRANSLUCENT,
+    TRANSLUCENT2,
+    ADDITIVE,
+    ADDITIVE2
+}
+
+/**
+ * Cull modes based on a shape's attribute 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ * 
+ * Not currently used since they break rooms in Hunchback and Tron, which have a lot of mirrored models.
+ * This might also not be the cull mode nibble at all, but it looks right 90% of the time
+ */
+export enum DreamDropShapeAttributeCullMode {
+    BACK,
+    BACK2,
+    BACK3,
+    BACK4,
+    NONE,
+    NONE2
+}
+
+/**
+ * Render mode from a model's flag 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropModelFlagRenderMode {
+    UNK,
+    SKYBOX,
+    UNK2,
+    UNK3,
+    UNK4,
+    SKYBOX2,
+    UNK6,
+    UNK7,
+    BACKGROUND, // not used but "background" geometry has this value
+}
+
+/**
+ * Billboard setting from a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export enum DreamDropModelFlagBillboard {
+    BILLBOARD = 4
+}
+
+// uint32 at 0x0
 const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_CTRT = 1414681667;
 const MAGIC_SETBIN = 4411969;
 const MAGIC_OLO = 1330401088;
 const MAGIC_PAM = 5062992;
+const MAGIC_TXA = 4282452;
 
 const NORMALIZED_SCALE = 32768.0;
 const COLOR_SCALE = 255.0; // standard but might as well
@@ -294,8 +319,7 @@ function getBit(n: number, pos: number) {
 }
 
 function getBitsRange32(value: number, start: number = 0, length: number = 1): number {
-    let bit = value << 32 - (start + length);
-    return bit >> 32 - length;
+    return (value << 32 - (start + length)) >> 32 - length;
 }
 
 /**
@@ -671,6 +695,64 @@ export class DreamDropParser {
         }
 
         return { animations };
+    }
+
+    public parseTXA(ctrts: DreamDropCTRT[]): DreamDropTXA[] {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_TXA) {
+            console.warn("Unknown TXA magic", magic);
+        }
+        this.offset += 2;
+        const count = this.getUshort();
+        this.offset += 8;
+
+        const txas: DreamDropTXA[] = Array(count);
+        for (let i = 0; i < count; i++) {
+            const name = this.getString(16);
+            const textureName = this.getString(24);
+            this.offset += 8;
+            const animationCount = this.getShort();
+            const defaultAnimationIndex = this.getShort();
+            const animationOffset = this.getUint32();
+
+            const ret1 = this.offset;
+            const animations: DreamDropTextureAnimation[] = Array(animationCount);
+            this.offset = animationOffset;
+            for (let j = 0; j < animationCount; j++) {
+                const animationName = this.getString(16);
+                this.offset += 2;
+                const frameCount = this.getShort();
+                const frameOffset = this.getUint32();
+
+                const ret2 = this.offset;
+                const frames: TXAFrame[] = [];
+                this.offset = frameOffset;
+                for (let k = 0; k < frameCount; k++) {
+                    const dataOffset = this.getUint32();
+                    const num1 = this.getShort();
+                    const num2 = this.getShort();
+                    this.offset += 4;
+                    if (dataOffset === 0) {
+                        continue;
+                    }
+                    const ctrt = ctrts.find(t => t.name === textureName);
+                    if (!ctrt || dataOffset + ctrt.data.byteLength > this.buffer.byteLength) {
+                        continue;
+                    }
+                    const data = this.buffer.slice(dataOffset, dataOffset + ctrt.data.byteLength);
+                    frames.push({ displayFrames: num1, num2, data });
+                }
+
+                this.offset = ret2;
+                animations[j] = { name: animationName, frames };
+            }
+
+            this.offset = ret1;
+            txas[i] = { name, textureName, defaultAnimationIndex, animations };
+        }
+
+        return txas;
     }
 
     private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): BoneChannel {

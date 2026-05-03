@@ -29,4 +29,10 @@ export const DREAMDROP_PAM: Map<string, string> = new Map([
     ["n_ex010", "n_ex010_00001e"], // moogle
     ["b_di120", "b_di120_30210e"], // phantom ursula tentacle
     ["n_tm010", "n_tm010_00001a"], // mickey (three musketeers)
+    ["b_de020", "b_de020_00001e"], // spellican
 ]);
+
+/**
+ * List of PMOs with TXAs of the same name from _Kingdom Hearts 3D: Dream Drop Distance_
+ */
+export const DREAMDROP_TXA = ["g_fa100", "g_tw390", "g_tw520"];

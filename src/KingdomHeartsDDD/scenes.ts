@@ -6,13 +6,13 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
+import { DreamDropSkeletalAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP, DreamDropTXA } from "./bin";
 import { DreamDropTexture, DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
-import { DREAMDROP_PAM, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
+import { DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
 
 function getCharaSubDirectory(name: string) {
@@ -68,10 +68,24 @@ class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: DreamDropRoomObjects, private config: DreamDropRoomConfig | undefined) {
-        const ctrts = pmp.ctrts;
+    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: DreamDropRoomObjects, txas: DreamDropTXA[], private config?: DreamDropRoomConfig) {
+        const ctrts = [...pmp.ctrts];
         for (const model of objects.models.values()) {
             ctrts.push(...model.ctrts);
+        }
+        for (const txa of txas) {
+            const ctrt = ctrts.find(t => t.name === txa.textureName)!;
+            const animation = txa.animations[txa.defaultAnimationIndex];
+            if (!animation) {
+                continue;
+            }
+            for (let i = 0; i < animation.frames.length; i++) {
+                ctrts.push({
+                    name: `${ctrt.name}_${animation.name}_${i}`,
+                    format: ctrt.format, width: ctrt.width, height: ctrt.height,
+                    data: animation.frames[i].data
+                });
+            }
         }
 
         this.textures = Array(ctrts.length);
@@ -88,10 +102,11 @@ class Renderer implements SceneGfx {
                 extraInfo: new Map([["Format", `${DreamDropTextureFormat[this.textures[i].format]}`]])
             };
         }
+        viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, this.config);
+        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, txas, this.config);
     }
 
     public createPanels(): Panel[] {
@@ -170,7 +185,8 @@ class Room implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const pmpFile = await context.dataFetcher.fetchData(`${pathBase}/map/${this.id.substring(0, 2) + "_" + this.id.substring(2, 4)}.pmp`);
+        const pmpName = this.id.substring(0, 2) + "_" + this.id.substring(2, 4);
+        const pmpFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.pmp`);
         const pmp = new DreamDropParser(pmpFile).parsePMP(this.id);
 
         const config = getDreamDropRoomConfig(this.id);
@@ -182,6 +198,12 @@ class Room implements SceneDesc {
                     pmp.ctrts.push(ctrt);
                 }
             }
+        }
+
+        const txas: DreamDropTXA[] = [];
+        if (config && config.hasTXA) {
+            const txaFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.txa`);
+            txas.push(...new DreamDropParser(txaFile).parseTXA(pmp.ctrts));
         }
 
         const sets: DreamDropDataSet[] = [];
@@ -228,16 +250,21 @@ class Room implements SceneDesc {
                 const pmoFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${instance.name}.pmo`);
                 const pmo = new DreamDropParser(pmoFile).parsePMO(undefined, true, instance.name);
                 models.set(instance.name, pmo);
-                const a = DREAMDROP_PAM.get(instance.name);
-                if (a) {
-                    const pamFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${a}.pam`);
+                if (DREAMDROP_PAM.has(instance.name) && !animations.has(instance.name)) {
+                    const pamFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${DREAMDROP_PAM.get(instance.name)}.pam`);
                     const pam = new DreamDropParser(pamFile).parsePAM();
                     animations.set(instance.name, pam.animations[0]);
                 }
             }
         }
+        for (const model of models.values()) {
+            if (DREAMDROP_TXA.includes(model.name)) {
+                const txaFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${getCharaSubDirectory(model.name)}/${model.name}.txa`);
+                txas.push(...new DreamDropParser(txaFile).parseTXA(model.ctrts));
+            }
+        }
 
-        return new Renderer(device, pmp, { sets, models, animations }, config);
+        return new Renderer(device, pmp, { sets, models, animations }, txas, config);
     }
 }
 
@@ -246,12 +273,14 @@ TODO
 
 g_ex010 has a weird PMO format with no shapes or materials, fails at reading shape offsets
 g_nd300 also can't be read
-Check if textures have mips
-De-couple raw binary data from processed data like shapes -> vertices to reduce mem usage (no more than a few mb but still)
-Parse TXA
 Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
+Some skeletal animations might use hermite interpolation. Linear interpolation is assumed and some animations look wrong with it
+    b_de060 and b_de140 for examples
+TXAs need cleanup and the functionality to animate opacity between frames like in the game
+Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
+Figure out other ways level objects are loaded besides OLO (e.g. world map g objects)
 
-...and all else. May your heart be your guiding key
+May your heart be your guiding key
 */
 
 // Adapted room names from https://openkh.dev/ddd/dictionary/worlds.html and TCRF
@@ -292,13 +321,13 @@ const sceneDescs = [
     new Room("nd09", "Court of Miracles"),
     new Room("nd11", "Bridge"),
     new Room("nd18", "Bridge (Burning)"),
+    new Room("nd13", "Windmill"),
+    new Room("nd17", "Windmill (Burning)"),
     new Room("nd12", "Outskirts"),
     new Room("nd05", "Graveyard Gate"),
     new Room("nd07", "Old Graveyard"),
     new Room("nd06", "Tunnels"),
     new Room("nd08", "Catacombs"),
-    new Room("nd13", "Windmill"),
-    new Room("nd17", "Windmill (Burning)"),
     new Room("nd60", "Dive (Sora)"),
     new Room("nd61", "Dive (Riku)"),
     "The Grid", // tl = tron legacy
@@ -343,21 +372,21 @@ const sceneDescs = [
     new Room("pi60", "Dive (Sora)"),
     new Room("pi61", "Dive (Riku)"),
     "Country of the Musketeers", // tm = the three musketeers
+    new Room("tm08", "Training Yard (Day)"),
+    new Room("tm15", "Training Yard (Night)"),
     new Room("tm01", "The Opéra (Sora)"),
     new Room("tm17", "The Opéra (Riku)"),
     new Room("tm02", "Grand Lobby"),
     new Room("tm03", "Theatre"),
     new Room("tm16", "Theatre"),
+    new Room("tm10", "Green Room"),
+    new Room("tm11", "Machine Room"),
+    new Room("tm12", "Backstage"),
     new Room("tm04", "Mont Saint-Michel"),
     new Room("tm05", "Tower Road"),
     new Room("tm06", "Tower"),
     new Room("tm07", "Dungeon"),
-    new Room("tm08", "Training Yard (Day)"),
-    new Room("tm15", "Training Yard (Night)"),
     new Room("tm09", "Shore"),
-    new Room("tm10", "Green Room"),
-    new Room("tm11", "Machine Room"),
-    new Room("tm12", "Backstage"),
     new Room("tm13", "Cell"),
     new Room("tm14", "Mountain Road"),
     new Room("tm60", "Dive (Sora)"),
