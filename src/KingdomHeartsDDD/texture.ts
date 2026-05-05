@@ -1,5 +1,4 @@
 import { decodeTexture, TextureFormat } from "../Common/CTR/pica_texture";
-import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { DreamDropCTRT } from "./bin";
 
 /**
@@ -20,26 +19,6 @@ export enum DreamDropTextureFormat {
     A4, // unused
     ETC1,
     ETC1A4
-}
-
-/**
- * Processed texture for _Kingdom Hearts 3D: Dream Drop Distance_. Uploaded to device upon creation
- */
-export class DreamDropTexture {
-    public gfxTexture: GfxTexture;
-
-    constructor(device: GfxDevice, public name: string, public format: DreamDropTextureFormat, width: number, height: number, data: Uint8Array) {
-        const gfxTexture = device.createTexture({
-            width, height,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            usage: GfxTextureUsage.Sampled,
-            dimension: GfxTextureDimension.n2D,
-            depthOrArrayLayers: 1, numLevels: 1
-        });
-        device.setResourceName(gfxTexture, name);
-        device.uploadTextureData(gfxTexture, 0, [data]);
-        this.gfxTexture = gfxTexture;
-    }
 }
 
 /**

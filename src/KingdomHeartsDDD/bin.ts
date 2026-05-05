@@ -2,6 +2,7 @@ import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DreamDropTextureFormat } from "./texture";
 import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
+import { LuxMaterial, LuxModel, LuxModelInfo, LuxPMP, LuxShape, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
 
 // Credit for most of the parsing:
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
@@ -10,9 +11,7 @@ import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 /**
  * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export interface DreamDropPMP {
-    // pmp = portable model pack?
-    pmos: PMOInfo[];
+export interface DreamDropPMP extends LuxPMP {
     ctrts: DreamDropCTRT[];
 }
 
@@ -36,36 +35,11 @@ export interface DreamDropCTRT {
 /**
  * Raw model for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export interface DreamDropPMO {
-    // pmo = portable model?
-    name: string;
-    scale: number;
-    flags: number;
-    pmpFlags: number;
-    bbox: number[];
-    materials: DreamDropMaterial[];
+export interface DreamDropPMO extends LuxModel {
+    materials: LuxMaterial[];
     shapes: DreamDropShape[];
     ctrts: DreamDropCTRT[];
     skeleton?: Skeleton;
-}
-
-interface PMOInfo {
-    id: number;
-    flags: number;
-    scale: vec3;
-    rotation: vec3;
-    position: vec3;
-    pmo: DreamDropPMO;
-}
-
-/**
- * Material for a PMO from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export interface DreamDropMaterial {
-    textureOffset: number;
-    textureName: string;
-    scrollX: number;
-    scrollY: number;
 }
 
 export interface DreamDropSet {
@@ -162,24 +136,6 @@ export interface DreamDropBone {
     decomposedTransform: { scale: vec3, rotation: vec3, translation: vec3 }; // relative, needed to apply animation values to
 }
 
-export interface DreamDropTXA {
-    name: string;
-    textureName: string;
-    defaultAnimationIndex: number;
-    animations: DreamDropTextureAnimation[];
-}
-
-export interface DreamDropTextureAnimation {
-    name: string;
-    frames: TXAFrame[];
-}
-
-interface TXAFrame {
-    displayFrames: number; // amount of frames to show the texture, assumed to be in terms of 30 FPS
-    num2: number; // always zero?
-    data: ArrayBufferSlice;
-}
-
 enum PrimitiveFormat {
     POINT,
     LINE,
@@ -193,7 +149,7 @@ enum PrimitiveFormat {
 /**
  * Model shape (mesh) for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export class DreamDropShape {
+export class DreamDropShape implements LuxShape {
     public vertices: Float32Array;
     public colors: Float32Array;
     public uvs: Float32Array;
@@ -247,18 +203,6 @@ export enum DreamDropShapeAttributeDepthBias {
 }
 
 /**
- * Blend modes based on a shape's attribute 3rd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropShapeAttributeBlend {
-    OPAQUE,
-    OPAQUE2,
-    TRANSLUCENT,
-    TRANSLUCENT2,
-    ADDITIVE,
-    ADDITIVE2
-}
-
-/**
  * Cull modes based on a shape's attribute 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
  * 
  * Not currently used since they break rooms in Hunchback and Tron, which have a lot of mirrored models.
@@ -271,21 +215,6 @@ export enum DreamDropShapeAttributeCullMode {
     BACK4,
     NONE,
     NONE2
-}
-
-/**
- * Render mode from a model's flag 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropModelFlagRenderMode {
-    UNK,
-    SKYBOX,
-    UNK2,
-    UNK3,
-    UNK4,
-    SKYBOX2,
-    UNK6,
-    UNK7,
-    BACKGROUND, // not used but "background" geometry has this value
 }
 
 /**
@@ -326,11 +255,11 @@ function getBitsRange32(value: number, start: number = 0, length: number = 1): n
  * Binary parser for _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export class DreamDropParser {
-    private view: DataView;
-    private offset: number;
-    private textDecoder: TextDecoder;
+    protected view: DataView;
+    protected offset: number;
+    protected textDecoder: TextDecoder;
 
-    constructor(private buffer: ArrayBufferSlice) {
+    constructor(protected buffer: ArrayBufferSlice) {
         this.view = this.buffer.createDataView();
         this.offset = 0;
         this.textDecoder = new TextDecoder("utf-8");
@@ -349,7 +278,7 @@ export class DreamDropParser {
         const ctrtOffset = this.getUint32();
 
         this.offset = 0x20;
-        const pmoInfos: PMOInfo[] = Array(pmoCount);
+        const pmoInfos: LuxModelInfo[] = Array(pmoCount);
         let infoRet = this.offset;;
         for (let i = 0; i < pmoCount; i++) {
             this.offset = infoRet;
@@ -513,7 +442,7 @@ export class DreamDropParser {
             bbox[i] = this.getFloat();
         }
 
-        const materials: DreamDropMaterial[] = Array(materialCount);
+        const materials: LuxMaterial[] = Array(materialCount);
         for (let i = 0; i < materialCount; i++) {
             const textureOffset = this.getUint32();
             const textureName = this.getString(12);
@@ -697,7 +626,7 @@ export class DreamDropParser {
         return { animations };
     }
 
-    public parseTXA(ctrts: DreamDropCTRT[]): DreamDropTXA[] {
+    public parseTXA(ctrts: DreamDropCTRT[]): LuxTXA[] {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_TXA) {
@@ -707,7 +636,7 @@ export class DreamDropParser {
         const count = this.getUshort();
         this.offset += 8;
 
-        const txas: DreamDropTXA[] = Array(count);
+        const txas: LuxTXA[] = Array(count);
         for (let i = 0; i < count; i++) {
             const name = this.getString(16);
             const textureName = this.getString(24);
@@ -717,7 +646,7 @@ export class DreamDropParser {
             const animationOffset = this.getUint32();
 
             const ret1 = this.offset;
-            const animations: DreamDropTextureAnimation[] = Array(animationCount);
+            const animations: LuxTextureAnimation[] = Array(animationCount);
             this.offset = animationOffset;
             for (let j = 0; j < animationCount; j++) {
                 const animationName = this.getString(16);
@@ -726,7 +655,7 @@ export class DreamDropParser {
                 const frameOffset = this.getUint32();
 
                 const ret2 = this.offset;
-                const frames: TXAFrame[] = [];
+                const frames: LuxTXAFrame[] = [];
                 this.offset = frameOffset;
                 for (let k = 0; k < frameCount; k++) {
                     const dataOffset = this.getUint32();
@@ -900,7 +829,7 @@ export class DreamDropParser {
         return { scale, rotation, translation };
     }
 
-    private getString(length?: number): string {
+    protected getString(length?: number): string {
         let s = "";
         if (length) {
             const n = new Uint8Array(length);
@@ -924,37 +853,37 @@ export class DreamDropParser {
         return s.trim().replaceAll("\x00", "");
     }
 
-    private getInt32(): number {
+    protected getInt32(): number {
         const n = this.view.getInt32(this.offset, true);
         this.offset += 4;
         return n;
     }
 
-    private getUint32(): number {
+    protected getUint32(): number {
         const n = this.view.getUint32(this.offset, true);
         this.offset += 4;
         return n;
     }
 
-    private getFloat(): number {
+    protected getFloat(): number {
         const n = this.view.getFloat32(this.offset, true);
         this.offset += 4;
         return n;
     }
 
-    private getShort(): number {
+    protected getShort(): number {
         const n = this.view.getInt16(this.offset, true);
         this.offset += 2;
         return n;
     }
 
-    private getUshort(): number {
+    protected getUshort(): number {
         const n = this.view.getUint16(this.offset, true);
         this.offset += 2;
         return n;
     }
 
-    private getByte(): number {
+    protected getByte(): number {
         const n = this.view.getUint8(this.offset);
         this.offset += 1;
         return n;

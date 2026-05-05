@@ -112,6 +112,7 @@ import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_KingdomHeartsDDD from './KingdomHeartsDDD/scenes.js';
+import * as Scenes_KingdomHeartsBBS from './KingdomHeartsDDD/scenes_bbs.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -141,6 +142,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     "Development",
     Scenes_Example.sceneGroup,
     Scenes_KingdomHeartsDDD.sceneGroup,
+    Scenes_KingdomHeartsBBS.sceneGroup,
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,

@@ -6,14 +6,15 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP, DreamDropTXA } from "./bin";
-import { DreamDropTexture, DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
+import { DreamDropSkeletalAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
+import { DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
+import { LuxTexture, LuxTXA } from "./lux";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -64,11 +65,11 @@ function getPrettyDataSetName(name: string) {
 class Renderer implements SceneGfx {
     public textureHolder: TextureHolder;
     private roomRenderer: DreamDropRoomRenderer;
-    private textures: DreamDropTexture[];
+    private textures: LuxTexture[];
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: DreamDropRoomObjects, txas: DreamDropTXA[], private config?: DreamDropRoomConfig) {
+    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: DreamDropRoomObjects, txas: LuxTXA[], private config?: DreamDropRoomConfig) {
         const ctrts = [...pmp.ctrts];
         for (const model of objects.models.values()) {
             ctrts.push(...model.ctrts);
@@ -91,7 +92,7 @@ class Renderer implements SceneGfx {
         this.textures = Array(ctrts.length);
         for (let i = 0; i < ctrts.length; i++) {
             const pixels = decodeDreamDropCTRT(ctrts[i]);
-            const t = new DreamDropTexture(device, ctrts[i].name, ctrts[i].format, ctrts[i].width, ctrts[i].height, pixels);
+            const t = new LuxTexture(device, ctrts[i].name, ctrts[i].format, ctrts[i].width, ctrts[i].height, pixels);
             this.textures[i] = t;
         }
 
@@ -200,7 +201,7 @@ class Room implements SceneDesc {
             }
         }
 
-        const txas: DreamDropTXA[] = [];
+        const txas: LuxTXA[] = [];
         if (config && config.hasTXA) {
             const txaFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.txa`);
             txas.push(...new DreamDropParser(txaFile).parseTXA(pmp.ctrts));

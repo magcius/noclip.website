@@ -1,21 +1,20 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { Destroyable } from "../SceneBase";
 import { ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropMaterial, DreamDropShape, DreamDropShapeAttributeBlend, DreamDropPMP, DreamDropShapeAttributeDepthBias, DreamDropModelFlagRenderMode, DreamDropTXA, DreamDropTextureAnimation } from "./bin";
+import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropShape, DreamDropPMP, DreamDropShapeAttributeDepthBias } from "./bin";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
-import { DreamDropTexture } from "./texture";
 import { GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { DreamDropRoomConfig } from "./config/room";
 import { Layer } from "../ui";
-import { TextureMapping } from "../TextureHolder";
 import { DreamDropShader } from "./shader";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
+import { LuxMaterialInstance, LuxModelFlagRenderMode, LuxShapeAttributeBlend, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 
 const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0;
@@ -96,7 +95,7 @@ export class DreamDropRoomRenderer implements Destroyable {
     private setIndices: number[];
     private allSetIndices: number[][];
 
-    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: DreamDropTexture[], objects: DreamDropRoomObjects, txas: DreamDropTXA[], config: DreamDropRoomConfig | undefined) {
+    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: DreamDropRoomObjects, txas: LuxTXA[], config: DreamDropRoomConfig | undefined) {
         const gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
@@ -108,16 +107,16 @@ export class DreamDropRoomRenderer implements Destroyable {
         this.parts = Array(pmp.pmos.length);
         for (let i = 0; i < pmp.pmos.length; i++) {
             const info = pmp.pmos[i];
-            const model = info.pmo;
-            const materials: MaterialInstance[] = Array(model.materials.length);
-            const modelTXAs: DreamDropTXA[] = [];
+            const model = info.pmo as DreamDropPMO;
+            const materials: LuxMaterialInstance[] = Array(model.materials.length);
+            const modelTXAs: LuxTXA[] = [];
             for (let j = 0; j < model.materials.length; j++) {
                 if (!model.materials[j]) {
                     continue;
                 }
                 const t = textures.filter(texture => texture.name.startsWith(model.materials[j].textureName));
                 if (t.length > 0) {
-                    materials[j] = new MaterialInstance(model.materials[j], t, gfxSampler);
+                    materials[j] = new LuxMaterialInstance(model.materials[j], t, gfxSampler);
                     for (const txa of txas) {
                         if (txa.textureName === model.materials[j].textureName) {
                             modelTXAs.push(txa);
@@ -146,15 +145,15 @@ export class DreamDropRoomRenderer implements Destroyable {
                 if (instanceRenderer) {
                     instanceRenderer.shiftMatrices.push(computeShiftMatrix([1, 1, 1], instance.rotation, instance.position));
                 } else {
-                    const materials: MaterialInstance[] = Array(model.materials.length);
-                    const modelTXAs: DreamDropTXA[] = [];
+                    const materials: LuxMaterialInstance[] = Array(model.materials.length);
+                    const modelTXAs: LuxTXA[] = [];
                     for (let k = 0; k < model.materials.length; k++) {
                         if (!model.materials[k]) {
                             continue;
                         }
                         const t = textures.filter(texture => texture.name.startsWith(model.materials[k].textureName));
                         if (t.length > 0) {
-                            materials[k] = new MaterialInstance(model.materials[k], t, gfxSampler);
+                            materials[k] = new LuxMaterialInstance(model.materials[k], t, gfxSampler);
                             for (const txa of txas) {
                                 if (txa.textureName === model.materials[k].textureName) {
                                     modelTXAs.push(txa);
@@ -246,11 +245,11 @@ class ModelRenderer implements Destroyable, Layer {
     private bones: DreamDropBone[];
     private boneMatrices: mat4[][] = [];
 
-    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: MaterialInstance[], txas: DreamDropTXA[], private animation?: DreamDropSkeletalAnimation) {
+    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: LuxMaterialInstance[], txas: LuxTXA[], private animation?: DreamDropSkeletalAnimation) {
         // console.log(model.name, model.pmpFlags.toString(16).padStart(4, "0"), "-", model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
         this.name = name;
         const modeNibble = getShortNibble(model.pmpFlags, 3);
-        this.isSkybox = model.pmpFlags !== -1 && (modeNibble === DreamDropModelFlagRenderMode.SKYBOX || modeNibble === DreamDropModelFlagRenderMode.SKYBOX2);
+        this.isSkybox = model.pmpFlags !== -1 && (modeNibble === LuxModelFlagRenderMode.SKYBOX || modeNibble === LuxModelFlagRenderMode.SKYBOX2);
         this.shapes = Array(model.shapes.length);
         for (let i = 0; i < model.shapes.length; i++) {
             const shape = model.shapes[i];
@@ -402,26 +401,6 @@ class ModelRenderer implements Destroyable, Layer {
     }
 }
 
-class MaterialInstance {
-    public name: string;
-    public scrollX: number;
-    public scrollY: number;
-    public textureMappings: TextureMapping[][];
-
-    constructor(material: DreamDropMaterial, textures: DreamDropTexture[], gfxSampler: GfxSampler) {
-        this.name = textures[0].name;
-        this.scrollX = material.scrollX;
-        this.scrollY = material.scrollY;
-        this.textureMappings = [];
-        for (const texture of textures) {
-            const tm = new TextureMapping();
-            tm.gfxTexture = texture.gfxTexture;
-            tm.gfxSampler = gfxSampler;
-            this.textureMappings.push([tm]);
-        }
-    }
-}
-
 class ShapeRenderer implements Destroyable {
     public sortKey: number;
     private drawCount: number;
@@ -434,10 +413,10 @@ class ShapeRenderer implements Destroyable {
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
-    constructor(cache: GfxRenderCache, shape: DreamDropShape, scale: number, private material: MaterialInstance, txa?: DreamDropTextureAnimation, private isSkybox: boolean = false, boneCount: number = 0) {
+    constructor(cache: GfxRenderCache, shape: DreamDropShape, scale: number, private material: LuxMaterialInstance, txa?: LuxTextureAnimation, private isSkybox: boolean = false, boneCount: number = 0) {
         const blend = getShortNibble(shape.attribute, 2);
-        const isTranslucent = blend === DreamDropShapeAttributeBlend.TRANSLUCENT || blend === DreamDropShapeAttributeBlend.TRANSLUCENT2;
-        const additiveBlend = blend === DreamDropShapeAttributeBlend.ADDITIVE || blend === DreamDropShapeAttributeBlend.ADDITIVE2;
+        const isTranslucent = blend === LuxShapeAttributeBlend.TRANSLUCENT || blend === LuxShapeAttributeBlend.TRANSLUCENT2;
+        const additiveBlend = blend === LuxShapeAttributeBlend.ADDITIVE || blend === LuxShapeAttributeBlend.ADDITIVE2;
         const transparent = isTranslucent || additiveBlend;
         this.megaStateFlags = {
             depthWrite: !transparent,
