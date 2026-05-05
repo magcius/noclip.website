@@ -6,7 +6,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { Destroyable } from "../SceneBase";
 import { ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropKeyframe, DreamDropObjectInstance, DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropShape, DreamDropPMP, DreamDropShapeAttributeDepthBias } from "./bin";
+import { DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropShape, DreamDropPMP, DreamDropShapeAttributeDepthBias } from "./bin";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -14,7 +14,7 @@ import { DreamDropRoomConfig } from "./config/room";
 import { Layer } from "../ui";
 import { DreamDropShader } from "./shader";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { LuxMaterialInstance, LuxModelFlagRenderMode, LuxShapeAttributeBlend, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { LuxKeyframe, LuxMaterialInstance, LuxModelFlagRenderMode, LuxObjectSet, LuxShapeAttributeBlend, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 
 const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0;
@@ -44,7 +44,7 @@ function computeShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
     return srt;
 }
 
-function getChannelValue(keyframes: DreamDropKeyframe[] | undefined, frame: number, defaultValue: number): number {
+function getChannelValue(keyframes: LuxKeyframe[] | undefined, frame: number, defaultValue: number): number {
     if (!keyframes || keyframes.length === 0) {
         return defaultValue;
     }
@@ -74,14 +74,9 @@ function getChannelValue(keyframes: DreamDropKeyframe[] | undefined, frame: numb
 }
 
 export interface DreamDropRoomObjects {
-    sets: DreamDropDataSet[];
+    sets: LuxObjectSet[];
     models: Map<string, DreamDropPMO>;
-    animations: Map<string, DreamDropSkeletalAnimation>;
-}
-
-export interface DreamDropDataSet {
-    name: string;
-    instances: DreamDropObjectInstance[];
+    animations: Map<string, LuxSkeletalAnimation>;
 }
 
 /**
@@ -90,7 +85,7 @@ export interface DreamDropDataSet {
 export class DreamDropRoomRenderer implements Destroyable {
     public parts: ModelRenderer[];
     public objects: ModelRenderer[];
-    public sets: DreamDropDataSet[];
+    public sets: LuxObjectSet[];
     public selectedSetIndices: number[];
     private setIndices: number[];
     private allSetIndices: number[][];
@@ -245,7 +240,7 @@ class ModelRenderer implements Destroyable, Layer {
     private bones: DreamDropBone[];
     private boneMatrices: mat4[][] = [];
 
-    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: LuxMaterialInstance[], txas: LuxTXA[], private animation?: DreamDropSkeletalAnimation) {
+    constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: LuxMaterialInstance[], txas: LuxTXA[], private animation?: LuxSkeletalAnimation) {
         // console.log(model.name, model.pmpFlags.toString(16).padStart(4, "0"), "-", model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
         this.name = name;
         const modeNibble = getShortNibble(model.pmpFlags, 3);
@@ -267,7 +262,7 @@ class ModelRenderer implements Destroyable, Layer {
                 }
             }
             this.shapes[i] = new ShapeRenderer(
-                cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox,
+                cache, shape as DreamDropShape, model.scale, materials[shape.textureIndex], txa, this.isSkybox,
                 this.animation ? model.skeleton!.bones.length : 0
             );
         }

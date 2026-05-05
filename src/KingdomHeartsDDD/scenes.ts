@@ -6,15 +6,15 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DreamDropSkeletalAnimation, DreamDropObjectInstance, DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
-import { DreamDropTextureFormat, decodeDreamDropCTRT } from "./texture";
+import { DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
+import { CTRTexture, CTRTFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { DreamDropDataSet, DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
+import { DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
-import { LuxTexture, LuxTXA } from "./lux";
+import { LuxObjectSet, LuxOLOInstance, LuxSkeletalAnimation, LuxTexture, LuxTXA } from "./lux";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -92,7 +92,7 @@ class Renderer implements SceneGfx {
         this.textures = Array(ctrts.length);
         for (let i = 0; i < ctrts.length; i++) {
             const pixels = decodeDreamDropCTRT(ctrts[i]);
-            const t = new LuxTexture(device, ctrts[i].name, ctrts[i].format, ctrts[i].width, ctrts[i].height, pixels);
+            const t = new CTRTexture(device, ctrts[i].name, ctrts[i].width, ctrts[i].height, pixels, ctrts[i].format);
             this.textures[i] = t;
         }
 
@@ -100,7 +100,7 @@ class Renderer implements SceneGfx {
         for (let i = 0; i < this.textures.length; i++) {
             viewerTextures[i] = {
                 gfxTexture: this.textures[i].gfxTexture,
-                extraInfo: new Map([["Format", `${DreamDropTextureFormat[this.textures[i].format]}`]])
+                extraInfo: new Map([["Format", `${CTRTFormat[(this.textures[i] as CTRTexture).format]}`]])
             };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
@@ -207,12 +207,12 @@ class Room implements SceneDesc {
             txas.push(...new DreamDropParser(txaFile).parseTXA(pmp.ctrts));
         }
 
-        const sets: DreamDropDataSet[] = [];
+        const sets: LuxObjectSet[] = [];
         if (!DREAMDROP_INVALID_SETDATA.includes(this.id)) {
             const setDataFile = await context.dataFetcher.fetchData(`${pathBase}/setdata/${this.id}set.bin`);
             const setData = new DreamDropParser(setDataFile).parseSetData();
             for (const set of setData) {
-                const instances: DreamDropObjectInstance[] = [];
+                const instances: LuxOLOInstance[] = [];
                 for (const oloName of set.olos) {
                     if (!DREAMDROP_VALID_OLO.has(this.id) || !DREAMDROP_VALID_OLO.get(this.id)!.includes(oloName)) {
                         continue;
@@ -239,7 +239,7 @@ class Room implements SceneDesc {
         }
 
         const models: Map<string, DreamDropPMO> = new Map();
-        const animations: Map<string, DreamDropSkeletalAnimation> = new Map();
+        const animations: Map<string, LuxSkeletalAnimation> = new Map();
         const validModels = [...DREAMDROP_VALID_BOSS, ...DREAMDROP_VALID_D_OBJ, ...DREAMDROP_VALID_E_OBJ, ...DREAMDROP_VALID_ENEMY, ...DREAMDROP_VALID_F_OBJ,
             ...DREAMDROP_VALID_GIM, ...DREAMDROP_VALID_HIGH, ...DREAMDROP_VALID_NPC, ...DREAMDROP_VALID_PC, ...DREAMDROP_VALID_WEP];
         for (const set of sets) {
@@ -280,6 +280,7 @@ Some skeletal animations might use hermite interpolation. Linear interpolation i
 TXAs need cleanup and the functionality to animate opacity between frames like in the game
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
 Figure out other ways level objects are loaded besides OLO (e.g. world map g objects)
+Clean up class/interface names
 
 May your heart be your guiding key
 */

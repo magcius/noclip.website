@@ -108,20 +108,9 @@ function getBitsRange32(value: number, start: number = 0, length: number = 1): n
     return ((value << (32 - (start + length))) >>> 0) >>> (32 - length);
 }
 
-export class BBSShape implements LuxShape {
-    public vertices: Float32Array;
-    public colors: Float32Array;
-    public uvs: Float32Array;
-    public indices: Uint32Array;
-    public weights: Float32Array;
-    public joints: Uint8Array;
-
-    constructor(vertexCount: number, triStripValues: number[], flags: ShapeFlags, public textureIndex: number, public attribute: number, public boneIndices: number[]) {
-        this.vertices = new Float32Array(vertexCount * 3);
-        this.colors = new Float32Array(vertexCount * 4);
-        this.uvs = new Float32Array(vertexCount * 2);
-        this.weights = new Float32Array();
-        this.joints = new Uint8Array();
+export class BBSShape extends LuxShape {
+    constructor(vertexCount: number, textureIndex: number, attribute: number, boneIndices: number[], triStripValues: number[], flags: ShapeFlags) {
+        super(vertexCount, textureIndex, attribute, boneIndices);
 
         const indices = [];
         if (triStripValues.length > 0) {
@@ -377,7 +366,7 @@ export class BBSParser extends DreamDropParser {
             }
 
             const ret = this.offset;
-            const shape = new BBSShape(vertexCount, triStripValues, flags, textureIndex, attribute, boneIndices);
+            const shape = new BBSShape(vertexCount, textureIndex, attribute, boneIndices, triStripValues, flags);
             const w = flags.skinWeightCount + 1;
             shape.weights = new Float32Array(vertexCount * w);
             for (let i = 0; i < vertexCount; i++) {

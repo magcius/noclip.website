@@ -1,7 +1,6 @@
 import { vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
-import { DreamDropTextureFormat } from "./texture";
 import { TextureMapping } from "../TextureHolder";
 
 // shared code between DDD and BBS, herein prefixed with "Lux"
@@ -40,16 +39,24 @@ export interface LuxModelInfo {
     pmo: LuxModel;
 }
 
-export interface LuxShape {
-    vertices: Float32Array;
-    colors: Float32Array;
-    uvs: Float32Array;
-    indices: Uint32Array;
-    weights: Float32Array;
-    joints: Uint8Array;
-    attribute: number;
-    textureIndex: number;
-    boneIndices: number[];
+export interface LuxDataSet {
+    name: string;
+    olos: string[];
+}
+
+export interface LuxObjectSet {
+    name: string;
+    instances: LuxOLOInstance[];
+}
+
+export interface LuxOLO {
+    objects: LuxOLOInstance[];
+}
+
+export interface LuxOLOInstance {
+    name: string;
+    position: vec3;
+    rotation: vec3;
 }
 
 export interface LuxModel {
@@ -66,6 +73,39 @@ export interface LuxMaterial {
     textureName: string;
     scrollX: number;
     scrollY: number;
+}
+
+export interface LuxPAM {
+    animations: LuxSkeletalAnimation[];
+}
+
+export interface LuxSkeletalAnimation {
+    name: string;
+    flag: number;
+    framerate: number;
+    interpolateFrameCount: number;
+    loopFrame: number;
+    boneCount: number;
+    frameCount: number;
+    returnFrame: number;
+    channels: LuxBoneChannel[];
+}
+
+export interface LuxBoneChannel {
+    translationX?: LuxKeyframe[];
+    translationY?: LuxKeyframe[];
+    translationZ?: LuxKeyframe[];
+    rotationX?: LuxKeyframe[];
+    rotationY?: LuxKeyframe[];
+    rotationZ?: LuxKeyframe[];
+    scaleX?: LuxKeyframe[];
+    scaleY?: LuxKeyframe[];
+    scaleZ?: LuxKeyframe[];
+}
+
+export interface LuxKeyframe {
+    frame: number;
+    value: number;
 }
 
 export interface LuxTXA {
@@ -89,7 +129,7 @@ export interface LuxTXAFrame {
 export class LuxTexture {
     public gfxTexture: GfxTexture;
 
-    constructor(device: GfxDevice, public name: string, public format: DreamDropTextureFormat, width: number, height: number, data: Uint8Array) {
+    constructor(device: GfxDevice, public name: string, public width: number, public height: number, data: Uint8Array) {
         const gfxTexture = device.createTexture({
             width, height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -100,6 +140,24 @@ export class LuxTexture {
         device.setResourceName(gfxTexture, name);
         device.uploadTextureData(gfxTexture, 0, [data]);
         this.gfxTexture = gfxTexture;
+    }
+}
+
+export class LuxShape {
+    public vertices: Float32Array;
+    public colors: Float32Array;
+    public uvs: Float32Array;
+    public indices: Uint32Array;
+    public weights: Float32Array;
+    public joints: Uint8Array;
+
+    constructor(public vertexCount: number, public textureIndex: number, public attribute: number, public boneIndices: number[]) {
+        this.vertices = new Float32Array(vertexCount * 3);
+        this.colors = new Float32Array(vertexCount * 4);
+        this.uvs = new Float32Array(vertexCount * 2);
+        this.weights = new Float32Array();
+        this.joints = new Uint8Array();
+        this.indices = new Uint32Array();
     }
 }
 

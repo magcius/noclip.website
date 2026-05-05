@@ -8,10 +8,10 @@ import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { LAYER_ICON, LayerPanel, Panel } from "../ui";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { BBSParser, BBSPMP } from "./bin_bbs";
+import { BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
 import { LuxTexture } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
-import { decodeBBSTIM2 } from "./texture_bbs";
+import { decodeBBSTIM2, TIM2Texture } from "./texture_bbs";
 
 class Renderer implements SceneGfx {
     public textureHolder: TextureHolder;
@@ -23,14 +23,14 @@ class Renderer implements SceneGfx {
     constructor(device: GfxDevice, pmp: BBSPMP) {
         this.textures = Array(pmp.tims.length);
         for (let i = 0; i < pmp.tims.length; i++) {
-            const { rgba, width, height } = decodeBBSTIM2(pmp.tims[i].data);
-            const t = new LuxTexture(device, pmp.tims[i].name, 0, width, height, rgba);
+            const { rgba, width, height, format } = decodeBBSTIM2(pmp.tims[i].data);
+            const t = new TIM2Texture(device, pmp.tims[i].name, width, height, rgba, format);
             this.textures[i] = t;
         }
 
         const viewerTextures: ViewerTexture[] = Array(this.textures.length);
         for (let i = 0; i < this.textures.length; i++) {
-            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture };
+            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture, extraInfo: new Map([["Format", `${BBSPixelFormat[(this.textures[i] as TIM2Texture).format]}`]]) };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
@@ -103,18 +103,17 @@ const id = "KHBBS";
 const name = "Kingdom Hearts Birth by Sleep";
 const sceneDescs = [
     "Land of Departure",
-    new Room("DP01", "Forecourt"),
-    new Room("DP14", "Forecourt"),
-    new Room("DP08", "Forecourt (Day)"),
+    new Room("DP01", "Forecourt (Day)"),
     new Room("DP07", "Forecourt (Night)"),
+    new Room("DP14", "Forecourt (No Lights)"),
+    new Room("DP08", "Forecourt (Broken)"),
     new Room("DP02", "Great Hall"),
-    new Room("DP09", "Great Hall"),
+    new Room("DP09", "Great Hall (Broken)"),
     new Room("DP03", "Ventus's Room"),
-    new Room("DP04", "Ventus's Room"),
+    new Room("DP04", "Ventus's Room (Night)"),
     new Room("DP05", "Mountain Path"),
-    new Room("DP16", "Mountain Path (Night)"),
+    new Room("DP16", "Mountain Path"),
     new Room("DP06", "Summit"),
-    new Room("DP10", "Ruins"),
     new Room("DP15", "Ruins (Night)"),
     new Room("DP11", "Chamber of Waking"),
     new Room("DP12", "Castle Oblivion"),
@@ -135,8 +134,8 @@ const sceneDescs = [
     "Castle of Dreams",
     new Room("CD01", "Cinderella's Room"),
     new Room("CD02", "Mousehole"),
-    new Room("CD03", "Wardrobe Room"),
-    new Room("CD13", "Wardrobe Room"),
+    new Room("CD03", "Wardrobe Room (Messy)"),
+    new Room("CD13", "Wardrobe Room (Organized)"),
     new Room("CD04", "Entrance"),
     new Room("CD05", "The Chateau"),
     new Room("CD06", "Forest"),
@@ -176,6 +175,8 @@ const sceneDescs = [
     new Room("RG01", "Outer Garden"),
     new Room("RG02", "Entryway"),
     new Room("RG03", "Central Square"),
+    new Room("RG13", "Central Square (Night)"),
+    new Room("RG14", "Central Square (Boss)"),
     new Room("RG04", "Aqueduct"),
     new Room("RG05", "Castle Town"),
     new Room("RG06", "Reactor"),
@@ -185,8 +186,6 @@ const sceneDescs = [
     new Room("RG10", "Front Doors"),
     new Room("RG11", "Purification Facility"),
     new Room("RG12", "Outer Gardens"),
-    new Room("RG13", "Central Square"),
-    new Room("RG14", "Central Square (Boss)"),
     "Olympus Coliseum", // he = hercules
     new Room("HE01", "Coliseum Gates"),
     new Room("HE02", "Vestibule"),
@@ -208,12 +207,12 @@ const sceneDescs = [
     new Room("LS11", "Outer Space"),
     new Room("LS12", "Ship Corridor"),
     new Room("LS13", "Lanes Between"),
-    new Room("LS14", "Bay Access"),
+    // new Room("LS14", "Bay Access"),
     "Destiny Islands",
-    new Room("DI01", "Island Beach"),
-    new Room("DI02", "Island Beach"),
-    new Room("DI03", "Island Beach"),
-    new Room("DI04", "Main Island Beach"),
+    new Room("DI01", "Beach (Day)"),
+    new Room("DI02", "Beach (Evening)"),
+    new Room("DI03", "Beach (Night)"),
+    new Room("DI04", "Main Island"),
     "Neverland", // pp = peter pan
     new Room("PP01", "Cove"),
     new Room("PP02", "Cliff"),
@@ -229,40 +228,40 @@ const sceneDescs = [
     new Room("PP12", "Skull Rock: Entrance"),
     new Room("PP13", "Skull Rock: Cavern"),
     new Room("PP14", "Night Sky"),
-    "Disney Town", // dc = disney characters?
+    "Disney Town", // dc = disney castle
     new Room("DC01", "Library"),
-    new Room("DC02", "Main Plaza"),
+    new Room("DC02", "Main Plaza"), // toon town real?
     new Room("DC03", "Fruitball Court"),
-    new Room("DC04", "Racecourse A"),
+    new Room("DC14", "Fruitball (Minigame)"),
+    new Room("DC13", "Ice Cream (Minigame)"),
     new Room("DC05", "Raceway"),
-    new Room("DC06", "Gizmo Gallery"),
-    new Room("DC07", "Pete's Rec Room"),
+    new Room("DC04", "Racecourse A"),
     new Room("DC08", "Racecourse B"),
     new Room("DC09", "Racecourse C"),
     new Room("DC10", "Racecourse D"),
+    new Room("DC06", "Gizmo Gallery"),
+    new Room("DC07", "Pete's Rec Room"),
     new Room("DC11", "Lanes Between"),
-    new Room("DC12", "Raceway Registration"),
-    new Room("DC13", "Ice Cream"),
-    new Room("DC14", "Fruitball"),
+    // new Room("DC12", "Raceway Registration"),
     "Keyblade Graveyard",
     new Room("KG01", "Badlands"),
+    new Room("KG56", "Badlands"),
     new Room("KG02", "Seat of War"),
     new Room("KG03", "Twister Trench"),
-    new Room("KG04", "Eye of the Storm"),
-    new Room("KG05", "Eye of the Storm"),
-    new Room("KG06", "Eye of the Storm"),
+    new Room("KG04", "Eye of the Storm (Blue)"),
+    new Room("KG05", "Eye of the Storm (Pink)"),
+    new Room("KG06", "Eye of the Storm (Green)"),
     new Room("KG07", "Fissure"),
-    new Room("KG08", "Keyblade Graveyard"),
-    new Room("KG09", "Keyblade Graveyard"),
-    new Room("KG10", "Keyblade Graveyard"),
-    new Room("KG11", "Will's Cage"),
-    new Room("KG12", "Keyblade Graveyard"),
+    new Room("KG08", "Keyblade Graveyard (Empty)"),
+    new Room("KG09", "Keyblade Graveyard (Kingdom Hearts)"),
+    new Room("KG12", "Keyblade Graveyard (Kingdom Hearts)"),
+    new Room("KG10", "Keyblade Graveyard (Top of the Plateau)"),
+    new Room("KG55", "Keyblade Graveyard (Top of the Plateau)"),
+    new Room("KG11", "Lingering Will Arena"),
     new Room("KG50", "Ventus's Mind"),
     new Room("KG51", "Ventus's Mind"),
-    new Room("KG52", "Ventus's Mind"),
+    // new Room("KG52", "Ventus's Mind"),
     new Room("KG53", "Sora's Mind"),
-    new Room("KG55", "Keyblade Graveyard"),
-    new Room("KG56", "Badlands"),
     "Mirage Arena", // vs = versus?
     new Room("VS01", "Hub"),
     new Room("VS02", "Coliseum"),

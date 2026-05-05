@@ -1,12 +1,13 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DreamDropTextureFormat } from "./texture";
 import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
-import { LuxMaterial, LuxModel, LuxModelInfo, LuxPMP, LuxShape, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
+import { LuxBoneChannel, LuxDataSet, LuxKeyframe, LuxMaterial, LuxModel, LuxModelInfo, LuxOLO, LuxOLOInstance, LuxPAM, LuxPMP, LuxShape, LuxSkeletalAnimation, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
+import { CTRTFormat } from "./texture";
 
 // Credit for most of the parsing:
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
+// Some things had to be tweaked or fixed here, but mostly the same
 
 /**
  * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
@@ -28,7 +29,7 @@ export interface DreamDropCTRT {
     name: string;
     width: number;
     height: number;
-    format: DreamDropTextureFormat;
+    format: CTRTFormat;
     data: ArrayBufferSlice;
 }
 
@@ -37,47 +38,8 @@ export interface DreamDropCTRT {
  */
 export interface DreamDropPMO extends LuxModel {
     materials: LuxMaterial[];
-    shapes: DreamDropShape[];
     ctrts: DreamDropCTRT[];
     skeleton?: Skeleton;
-}
-
-export interface DreamDropSet {
-    name: string;
-    olos: string[];
-}
-
-/**
- * Object instances from an OLO file from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export interface DreamDropOLO {
-    objects: DreamDropObjectInstance[];
-}
-
-export interface DreamDropObjectInstance {
-    name: string;
-    position: vec3;
-    rotation: vec3;
-}
-
-/**
- * Skeletal animations for a model from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export interface DreamDropPAM {
-    // pam = portable animations?
-    animations: DreamDropSkeletalAnimation[];
-}
-
-export interface DreamDropSkeletalAnimation {
-    name: string;
-    flag: number;
-    framerate: number;
-    interpolateFrameCount: number;
-    loopFrame: number;
-    boneCount: number;
-    frameCount: number;
-    returnFrame: number;
-    channels: BoneChannel[];
 }
 
 interface AnimationInfo {
@@ -95,26 +57,6 @@ interface AnimationSRTFlags {
     scaleX: boolean;
     scaleY: boolean;
     scaleZ: boolean;
-}
-
-interface BoneChannel {
-    translationX?: DreamDropKeyframe[];
-    translationY?: DreamDropKeyframe[];
-    translationZ?: DreamDropKeyframe[];
-    rotationX?: DreamDropKeyframe[];
-    rotationY?: DreamDropKeyframe[];
-    rotationZ?: DreamDropKeyframe[];
-    scaleX?: DreamDropKeyframe[];
-    scaleY?: DreamDropKeyframe[];
-    scaleZ?: DreamDropKeyframe[];
-}
-
-/**
- * A skeletal animation keyframe from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export interface DreamDropKeyframe {
-    frame: number;
-    value: number;
 }
 
 interface Skeleton {
@@ -149,20 +91,9 @@ enum PrimitiveFormat {
 /**
  * Model shape (mesh) for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export class DreamDropShape implements LuxShape {
-    public vertices: Float32Array;
-    public colors: Float32Array;
-    public uvs: Float32Array;
-    public indices: Uint32Array;
-    public weights: Float32Array;
-    public joints: Uint8Array;
-
-    constructor(public vertexCount: number, public textureIndex: number, public vertexSizeBytes: number, public vertexFlags: number, public attribute: number, public boneIndices: number[]) {
-        this.vertices = new Float32Array(vertexCount * 3);
-        this.colors = new Float32Array(vertexCount * 4);
-        this.uvs = new Float32Array(vertexCount * 2);
-        this.weights = new Float32Array();
-        this.joints = new Uint8Array();
+export class DreamDropShape extends LuxShape {
+    constructor(vertexCount: number, textureIndex: number, attribute: number, boneIndices: number[], public vertexSizeBytes: number, vertexFlags: number) {
+        super(vertexCount, textureIndex, attribute, boneIndices);
 
         const indices = [];
         const primitiveFormat = getBitsRange32(vertexFlags, 28, 4) as PrimitiveFormat;
@@ -340,7 +271,7 @@ export class DreamDropParser {
                 this.offset += 4;
                 const dataSize = this.getUint32();
                 this.offset += 4;
-                const format = this.getUint32() as DreamDropTextureFormat;
+                const format = this.getUint32() as CTRTFormat;
                 const width = this.getUshort();
                 const height = this.getUshort();
                 const data = this.buffer.slice(offset + dataOffset, offset + dataOffset + dataSize);
@@ -350,7 +281,7 @@ export class DreamDropParser {
         return undefined;
     }
 
-    public parseSetData(): DreamDropSet[] {
+    public parseSetData(): LuxDataSet[] {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_SETBIN) {
@@ -360,7 +291,7 @@ export class DreamDropParser {
         const setCount = this.getUshort();
         this.offset = 0x10;
 
-        const sets: DreamDropSet[] = Array(setCount);
+        const sets: LuxDataSet[] = Array(setCount);
         for (let i = 0; i < setCount; i++) {
             this.offset = 0x10 + (32 * i) + 4;
             const setOffset = this.getUint32();
@@ -372,7 +303,7 @@ export class DreamDropParser {
         return sets.filter(s => !s.name.includes("evt"));
     }
 
-    public parseOLO(): DreamDropOLO {
+    public parseOLO(): LuxOLO {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_OLO) {
@@ -387,7 +318,7 @@ export class DreamDropParser {
         // for (let i = 0; i < objectCount; i++) {
         //     objectNames[i] = this.getString(16);
         // }
-        const objects: DreamDropObjectInstance[] = [];
+        const objects: LuxOLOInstance[] = [];
 
         this.offset = 0x30;
         const groupCount = this.getUint32();
@@ -561,7 +492,7 @@ export class DreamDropParser {
         };
     }
 
-    public parsePAM(): DreamDropPAM {
+    public parsePAM(): LuxPAM {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_PAM) {
@@ -587,7 +518,7 @@ export class DreamDropParser {
             infos[i] = { offset, name };
         }
 
-        const animations: DreamDropSkeletalAnimation[] = Array(animationCount);
+        const animations: LuxSkeletalAnimation[] = Array(animationCount);
         for (let i = 0; i < animationCount; i++) {
             this.offset = infos[i].offset;
             const flag = this.getUshort();
@@ -604,7 +535,7 @@ export class DreamDropParser {
                 srtFlags[j] = this.getUshort();
             }
 
-            const boneSRT: BoneChannel[] = Array(boneCount);
+            const boneSRT: LuxBoneChannel[] = Array(boneCount);
             for (let j = 0; j < boneCount; j++) {
                 const animationFlags = {
                     translationX: getBit(srtFlags[j], 0),
@@ -684,8 +615,8 @@ export class DreamDropParser {
         return txas;
     }
 
-    private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): BoneChannel {
-        const boneChannel: BoneChannel = {};
+    private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): LuxBoneChannel {
+        const boneChannel: LuxBoneChannel = {};
 
         if (flags.translationX) {
             boneChannel.translationX = this.parseAnimationData(frameCount);
@@ -720,7 +651,7 @@ export class DreamDropParser {
         return boneChannel;
     }
 
-    private parseAnimationData(frameCount: number): DreamDropKeyframe[] {
+    private parseAnimationData(frameCount: number): LuxKeyframe[] {
         let keyframeCount = 0;
         const maxValue = this.getFloat();
         const minValue = this.getFloat();
@@ -729,7 +660,7 @@ export class DreamDropParser {
         } else {
             keyframeCount = this.getByte();
         }
-        const keyframes: DreamDropKeyframe[] = Array(keyframeCount);
+        const keyframes: LuxKeyframe[] = Array(keyframeCount);
         if (keyframeCount !== 1) {
             for (let i = 0; i < keyframeCount; i++) {
                 let frame;
@@ -756,8 +687,7 @@ export class DreamDropParser {
         const textureId = this.getByte();
         const vertexSizeBytes = this.getByte();
         const vertexFlags = this.getInt32();
-        const group = this.getByte(); // ???
-        const triangleStripCount = this.getByte(); // unused by dream drop, might be leftover from bbs?
+        this.offset += 2;
         const attribute = this.getUshort();
         const boneIndices = Array(8);
         for (let i = 0; i < boneIndices.length; i++) {
@@ -765,7 +695,7 @@ export class DreamDropParser {
         }
         const unkColor = this.getInt32(); // openkh says diffuse, not sure about that
 
-        return new DreamDropShape(vertexCount, textureId, vertexSizeBytes, vertexFlags, attribute, boneIndices);
+        return new DreamDropShape(vertexCount, textureId, attribute, boneIndices, vertexSizeBytes, vertexFlags);
     }
 
     private parsePMOVertices(shape: DreamDropShape) {
@@ -809,7 +739,7 @@ export class DreamDropParser {
         }
     }
 
-    private parseSet(oloOffset: number, name: string): DreamDropSet {
+    private parseSet(oloOffset: number, name: string): LuxDataSet {
         this.offset = oloOffset + 6;
         const oloCount = this.getUshort();
         const olos: string[] = Array(oloCount);
