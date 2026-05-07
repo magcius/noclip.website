@@ -1,7 +1,7 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
-import { LuxBoneChannel, LuxDataSet, LuxKeyframe, LuxMaterial, LuxModel, LuxModelInfo, LuxOLO, LuxOLOInstance, LuxPAM, LuxPMP, LuxShape, LuxSkeletalAnimation, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
+import { LuxBone, LuxBoneChannel, LuxDataSet, LuxKeyframe, LuxMaterial, LuxModel, LuxModelInfo, LuxOLO, LuxOLOInstance, LuxPAM, LuxPMP, LuxShape, LuxSkeletalAnimation, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
 import { CTRTFormat } from "./texture";
 
 // Credit for most of the parsing:
@@ -39,7 +39,6 @@ export interface DreamDropCTRT {
 export interface DreamDropPMO extends LuxModel {
     materials: LuxMaterial[];
     ctrts: DreamDropCTRT[];
-    skeleton?: Skeleton;
 }
 
 interface AnimationInfo {
@@ -57,25 +56,6 @@ interface AnimationSRTFlags {
     scaleX: boolean;
     scaleY: boolean;
     scaleZ: boolean;
-}
-
-interface Skeleton {
-    skinnedBoneCount: number;
-    skinWeightCount: number;
-    bones: DreamDropBone[];
-}
-
-/**
- * A bone in a skeleton for a model from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export interface DreamDropBone {
-    index: number;
-    parentIndex: number;
-    skinnedIndex: number; // unsure how this is used, it's just a sequential number for skinned bones
-    name: string;
-    transform: mat4; // relative transform
-    inverseTransform: mat4; // inverse absolute transform
-    decomposedTransform: { scale: vec3, rotation: vec3, translation: vec3 }; // relative, needed to apply animation values to
 }
 
 enum PrimitiveFormat {
@@ -451,7 +431,7 @@ export class DreamDropParser {
             this.offset += 2;
             const skinnedBoneCount = this.getUshort();
             const skinWeightCount = this.getUshort();
-            const bones: DreamDropBone[] = Array(boneCount);
+            const bones: LuxBone[] = Array(boneCount);
             for (let i = 0; i < boneCount; i++) {
                 const index = this.getUshort();
                 this.offset += 2;
@@ -749,7 +729,7 @@ export class DreamDropParser {
         return { name, olos };
     }
 
-    private decomposeBoneTransform(transform: ReadonlyMat4): { scale: vec3, rotation: vec3, translation: vec3 } {
+    protected decomposeBoneTransform(transform: ReadonlyMat4): { scale: vec3, rotation: vec3, translation: vec3 } {
         const scale = vec3.create();
         const rotation = vec3.create();
         const translation = vec3.create();

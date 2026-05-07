@@ -1,7 +1,9 @@
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { DreamDropParser } from "./bin";
-import { LuxModel, LuxModelInfo, LuxPMP, LuxShape } from "./lux";
+import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPMP, LuxShape } from "./lux";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+
+// Credit: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
 
 const MAGIC_ARC = 4411969;
 const MAGIC_PMP = 5262672;
@@ -61,6 +63,7 @@ export interface BBSPMP extends LuxPMP {
 
 export interface BBSModel extends LuxModel {
     textureNames: string[];
+    tims: TIM2[];
 }
 
 interface TIM2Info {
@@ -109,7 +112,7 @@ function getBitsRange32(value: number, start: number = 0, length: number = 1): n
 }
 
 export class BBSShape extends LuxShape {
-    constructor(vertexCount: number, textureIndex: number, attribute: number, boneIndices: number[], triStripValues: number[], flags: ShapeFlags) {
+    constructor(vertexCount: number, textureIndex: number, attribute: number, boneIndices: number[], triStripValues: number[], flags: ShapeFlags, public weightCount: number) {
         super(vertexCount, textureIndex, attribute, boneIndices);
 
         const indices = [];
@@ -153,31 +156,33 @@ export class BBSShape extends LuxShape {
 
 export class BBSParser extends DreamDropParser {
     public parsePMPFromARC(): BBSPMP | undefined {
-        this.offset = 0;
-        const magic = this.getUint32();
-        if (magic !== MAGIC_ARC) {
-            console.warn("Unknown ARC magic", magic);
-        }
-
-        this.offset += 2;
-        const count = this.getShort();
-        this.offset += 8;
-        const entries: ArcEntry[] = Array(count);
-        for (let i = 0; i < count; i++) {
-            const dirPointer = this.getUint32();
-            const offset = this.getInt32();
-            const size = this.getInt32();
-            this.offset += 4;
-            const name = this.getString(16);
-            entries[i] = { dirPointer, offset, size, name };
-        }
-
-        const pmpEntry = entries.find(e => e.name.toLowerCase().includes(".pmp"));
-        if (!pmpEntry || pmpEntry?.dirPointer !== 0) {
-            console.warn("Could not find PMP entry in ARC", entries);
+        const entries = this.parseARC();
+        const pmpEntry = entries.find(e => e.name.toLowerCase().includes(".pmp") && e.dirPointer === 0);
+        if (!pmpEntry) {
             return undefined;
         } else {
             return this.getPMP(pmpEntry.offset);
+        }
+    }
+
+    public parseOLOFromARC(): LuxOLO[] {
+        const entries = this.parseARC();
+        const oloEntries = entries.filter(e => e.name.toLowerCase().includes(".olo") && e.dirPointer === 0);
+        const olos: LuxOLO[] = [];
+        for (let olo of oloEntries) {
+            olos.push(new DreamDropParser(this.buffer.slice(olo.offset, olo.offset + olo.size)).parseOLO());
+        }
+        return olos;
+    }
+
+    public parsePMOFromARC(name: string): BBSModel | undefined {
+        const entries = this.parseARC();
+        const pmoEntry = entries.find(e => e.name.toLowerCase().includes(".pmo") && e.name.startsWith(name) && e.dirPointer === 0);
+        if (!pmoEntry) {
+            return undefined;
+        } else {
+            this.offset = pmoEntry.offset;
+            return this.getPMO(name, -1, true);
         }
     }
 
@@ -213,6 +218,10 @@ export class BBSParser extends DreamDropParser {
             totalSize, clutSize, imageSize, headerSize, clutColorCount, pictureFormat, mipCount, clutType, imageType, width, height,
             dataOffset: this.offset, pixelFormat: this.convertPixelFormat(imageType), clutFormat: this.convertPixelFormat(clutType & 7)
         };
+    }
+
+    public parseModel(name: string): BBSModel {
+        return this.getPMO(name, -1, true);
     }
 
     private getPMP(start: number): BBSPMP {
@@ -281,7 +290,7 @@ export class BBSParser extends DreamDropParser {
         return { pmos: pmos.filter(p => p.pmo !== undefined), tims: tims.filter(t => t !== undefined) };
     }
 
-    private getPMO(name: string, pmpFlags: number): BBSModel {
+    private getPMO(name: string, pmpFlags: number, readTextures: boolean = false): BBSModel {
         const start = this.offset;
         const magic = this.getUint32();
         if (magic !== MAGIC_PMO) {
@@ -303,10 +312,11 @@ export class BBSParser extends DreamDropParser {
         }
 
         const textureNames = Array(textureCount);
+        const textureOffsets = Array(textureCount);
         for (let i = 0; i < textureCount; i++) {
-            this.offset += 4;
+            textureOffsets[i] = this.getUint32();
             textureNames[i] = this.getString(12);
-            this.offset += 16;
+            this.offset += 16; // scroll x and y could be here?
         }
 
         const shapes: BBSShape[] = [];
@@ -319,7 +329,62 @@ export class BBSParser extends DreamDropParser {
             shapes.push(...this.getShapes(skeletonOffset !== 0));
         }
 
-        return { name, scale, flags, pmpFlags, bbox, shapes, textureNames };
+        const tims: TIM2[] = [];
+        if (readTextures) {
+            for (let i = 0; i < textureCount; i++) {
+                if (textureOffsets[i] === 0) {
+                    continue;
+                }
+                this.offset = start + textureOffsets[i] + 16;
+                const size = this.getUint32();
+                const data = this.buffer.slice(start + textureOffsets[i], start + textureOffsets[i] + size - 16);
+                tims.push({ name: textureNames[i], scrollX: 0, scrollY: 0, data });
+            }
+        }
+
+        let skeleton;
+        if (skeletonOffset !== 0) {
+            this.offset = start + skeletonOffset + 8;
+            const boneCount = this.getUshort();
+            this.offset += 2;
+            const skinnedBoneCount = this.getUshort();
+            const skinWeightCount = this.getUshort();
+            const bones: LuxBone[] = Array(boneCount);
+            for (let i = 0; i < boneCount; i++) {
+                const index = this.getUshort();
+                this.offset += 2;
+                const parentIndex = this.getUshort();
+                this.offset += 2;
+                const skinnedIndex = this.getUshort();
+                this.offset += 6;
+                const boneName = this.getString(16);
+                const m1 = Array(16);
+                const m2 = Array(16);
+                for (let j = 0; j < m1.length; j++) {
+                    m1[j] = this.getFloat();
+                }
+                for (let j = 0; j < m1.length; j++) {
+                    m2[j] = this.getFloat();
+                }
+                const transform = mat4.fromValues(
+                    m1[0], m1[1], m1[2], m1[3],
+                    m1[4], m1[5], m1[6], m1[7],
+                    m1[8], m1[9], m1[10], m1[11],
+                    m1[12], m1[13], m1[14], m1[15]
+                );
+                const inverseTransform = mat4.fromValues(
+                    m2[0], m2[1], m2[2], m2[3],
+                    m2[4], m2[5], m2[6], m2[7],
+                    m2[8], m2[9], m2[10], m2[11],
+                    m2[12], m2[13], m2[14], m2[15]
+                );
+                const decomposedTransform = this.decomposeBoneTransform(transform);
+                bones[i] = { index, parentIndex, skinnedIndex, name: boneName, transform, inverseTransform, decomposedTransform };
+            }
+            skeleton = { skinnedBoneCount, skinWeightCount, bones };
+        }
+
+        return { name, scale, flags, pmpFlags, bbox, shapes, skeleton, textureNames, tims };
     }
 
     private getShapes(hasSkeleton: boolean): BBSShape[] {
@@ -350,6 +415,11 @@ export class BBSParser extends DreamDropParser {
                 primitive: getBitsRange32(vertexFlags, 28, 4) as PrimitiveType
             };
 
+            if (flags.vertexFormat === CoordinateFormat.NO_VERTEX) {
+                console.warn("Shape has a non-zero vertex count but no vertices!");
+                break;
+            }
+
             const boneIndices: number[] = Array(8).fill(-1);
             if (hasSkeleton) {
                 for (let i = 0; i < boneIndices.length; i++) {
@@ -366,9 +436,12 @@ export class BBSParser extends DreamDropParser {
             }
 
             const ret = this.offset;
-            const shape = new BBSShape(vertexCount, textureIndex, attribute, boneIndices, triStripValues, flags);
             const w = flags.skinWeightCount + 1;
-            shape.weights = new Float32Array(vertexCount * w);
+            const shape = new BBSShape(vertexCount, textureIndex, attribute, boneIndices, triStripValues, flags, w);
+
+            // weights/joints padded to 8 since there can be up to 8 per vertex
+            shape.weights = new Float32Array(vertexCount * 8);
+            shape.joints = new Uint8Array(vertexCount * 8);
             for (let i = 0; i < vertexCount; i++) {
                 const ret2 = this.offset;
                 let incAmount = 0;
@@ -377,18 +450,23 @@ export class BBSParser extends DreamDropParser {
                     for (let j = 0; j < w; j++) {
                         switch (flags.weightFormat) {
                             case CoordinateFormat.NORMALIZED_8_BITS:
-                                shape.weights[(i * w) + j] = this.getByte() / NORMALIZED_8_SCALE;
+                                shape.weights[(i * 8) + j] = this.getByte() / NORMALIZED_8_SCALE;
                                 break;
                             case CoordinateFormat.NORMALIZED_16_BITS:
-                                shape.weights[(i * w) + j] = this.getUshort() / NORMALIZED_16_SCALE;
+                                shape.weights[(i * 8) + j] = this.getUshort() / NORMALIZED_16_SCALE;
                                 break;
                             case CoordinateFormat.FLOAT_32_BITS:
-                                shape.weights[(i * w) + j] = this.getFloat();
+                                shape.weights[(i * 8) + j] = this.getFloat();
                             default:
                                 console.warn("Unimplemented weight format", flags.weightFormat);
-                                shape.weights[(i * w) + j] = 0;
+                                shape.weights[(i * 8) + j] = 0;
                                 break;
                         }
+                        shape.joints[(i * 8) + j] = boneIndices[j];
+                    }
+                    for (let j = w; j < 8; j++) {
+                        shape.weights[(i * 8) + j] = 0.0;
+                        shape.joints[(i * 8) + j] = 0;
                     }
                 }
 
@@ -431,39 +509,28 @@ export class BBSParser extends DreamDropParser {
                         case ColorFormat.BGR_5650_16BITS:
                             {
                                 const c = this.getUshort();
-                                // const r = c & 0x1F;
-                                // const g = (c >> 5) & 0x3F;
-                                // const b = (c >> 11) & 0x1F;
-                                shape.colors[i * 4] = 0xFF;//(r << 3) | (r >> 2);
-                                shape.colors[(i * 4) + 1] = 0xFF;//(g << 2) | (g >> 4);
-                                shape.colors[(i * 4) + 2] = 0xFF;//(b << 3) | (b >> 2);
-                                shape.colors[(i * 4) + 3] = 0xFF;//0xFF;
+                                shape.colors[i * 4] = 0xFF;
+                                shape.colors[(i * 4) + 1] = 0xFF;
+                                shape.colors[(i * 4) + 2] = 0xFF;
+                                shape.colors[(i * 4) + 3] = 0xFF;
                             }
                             break;
                         case ColorFormat.ABGR_5551_16BITS:
                             {
                                 const c = this.getUshort();
-                                // const r = c & 0x1F;
-                                // const g = (c >> 5) & 0x1F;
-                                // const b = (c >> 10) & 0x1F;
-                                // const a = (c >> 15) & 1;
-                                shape.colors[i * 4] = 0xFF;//(r << 3) | (r >> 2);
-                                shape.colors[(i * 4) + 1] = 0xFF;//(g << 3) | (g >> 2);
-                                shape.colors[(i * 4) + 2] = 0xFF;//(b << 3) | (b >> 2);
-                                shape.colors[(i * 4) + 3] = 0xFF;//a;
+                                shape.colors[i * 4] = 0xFF;
+                                shape.colors[(i * 4) + 1] = 0xFF;
+                                shape.colors[(i * 4) + 2] = 0xFF;
+                                shape.colors[(i * 4) + 3] = 0xFF;
                             }
                             break;
                         case ColorFormat.ABGR_4444_16BITS:
                             {
                                 const c = this.getUshort();
-                                // const r = c & 0x0F;
-                                // const g = (c >> 4) & 0x0F;
-                                // const b = (c >> 8) & 0x0F;
-                                // const a = (c >> 12) & 0x0F;
-                                shape.colors[i * 4] = 0xFF;//(r << 4) | r;
-                                shape.colors[(i * 4) + 1] = 0xFF;//(g << 4) | g;
-                                shape.colors[(i * 4) + 2] = 0xFF;//(b << 4) | b;
-                                shape.colors[(i * 4) + 3] = 0xFF;//(a << 4) | a;
+                                shape.colors[i * 4] = 0xFF;
+                                shape.colors[(i * 4) + 1] = 0xFF;
+                                shape.colors[(i * 4) + 2] = 0xFF;
+                                shape.colors[(i * 4) + 3] = 0xFF;
                             }
                             break;
                         case ColorFormat.ABGR_8888_32BITS:
@@ -480,6 +547,14 @@ export class BBSParser extends DreamDropParser {
                 shape.colors[(i * 4) + 1] /= COLOR_SCALE;
                 shape.colors[(i * 4) + 2] /= COLOR_SCALE;
                 shape.colors[(i * 4) + 3] /= COLOR_SCALE;
+                // temp workaround for skeletoned mesh colors being inconsistent (???) 
+                // this still doesn't fix some models, idk how since the colors are forced to be white?
+                if (hasSkeleton) {
+                    shape.colors[i * 4] = 1.0;
+                    shape.colors[(i * 4) + 1] = 1.0;
+                    shape.colors[(i * 4) + 2] = 1.0;
+                    shape.colors[(i * 4) + 3] = 1.0;
+                }
 
                 switch (flags.vertexFormat) {
                     case CoordinateFormat.NORMALIZED_8_BITS:
@@ -490,9 +565,9 @@ export class BBSParser extends DreamDropParser {
                     case CoordinateFormat.NORMALIZED_16_BITS:
                         incAmount = (2 - ((this.offset - ret2) & 1)) & 1;
                         this.offset += incAmount;
-                        shape.vertices[i * 3] = this.getUshort() / NORMALIZED_16_SCALE;
-                        shape.vertices[(i * 3) + 1] = this.getUshort() / NORMALIZED_16_SCALE;
-                        shape.vertices[(i * 3) + 2] = this.getUshort() / NORMALIZED_16_SCALE;
+                        shape.vertices[i * 3] = this.getShort() / NORMALIZED_16_SCALE;
+                        shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_16_SCALE;
+                        shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_16_SCALE;
                         break;
                     case CoordinateFormat.FLOAT_32_BITS:
                         incAmount = (4 - ((this.offset - ret2) & 3)) & 3;
@@ -519,6 +594,27 @@ export class BBSParser extends DreamDropParser {
         }
 
         return shapes;
+    }
+
+    private parseARC(): ArcEntry[] {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_ARC) {
+            console.warn("Unknown ARC magic", magic);
+        }
+        this.offset += 2;
+        const count = this.getShort();
+        this.offset += 8;
+        const entries: ArcEntry[] = Array(count);
+        for (let i = 0; i < count; i++) {
+            const dirPointer = this.getUint32();
+            const offset = this.getInt32();
+            const size = this.getInt32();
+            this.offset += 4;
+            const name = this.getString(16);
+            entries[i] = { dirPointer, offset, size, name };
+        }
+        return entries;
     }
 
     private convertPixelFormat(value: number): BBSPixelFormat {

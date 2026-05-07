@@ -6,7 +6,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { Destroyable } from "../SceneBase";
 import { ViewerRenderInput } from "../viewer";
-import { DreamDropPMO, DreamDropBone, DreamDropModelFlagBillboard, DreamDropShape, DreamDropPMP, DreamDropShapeAttributeDepthBias } from "./bin";
+import { DreamDropPMO, DreamDropModelFlagBillboard, DreamDropShape, DreamDropPMP, DreamDropShapeAttributeDepthBias } from "./bin";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -14,7 +14,7 @@ import { DreamDropRoomConfig } from "./config/room";
 import { Layer } from "../ui";
 import { DreamDropShader } from "./shader";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { LuxKeyframe, LuxMaterialInstance, LuxModelFlagRenderMode, LuxObjectSet, LuxShapeAttributeBlend, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { LuxBone, LuxKeyframe, LuxMaterialInstance, LuxModelFlagRenderMode, LuxObjectSet, LuxShapeAttributeBlend, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 
 const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0;
@@ -237,7 +237,7 @@ class ModelRenderer implements Destroyable, Layer {
     private isSkybox: boolean;
     private currentPAMFrame: number;
     private pamFramerate: number;
-    private bones: DreamDropBone[];
+    private bones: LuxBone[];
     private boneMatrices: mat4[][] = [];
 
     constructor(cache: GfxRenderCache, name: string, model: DreamDropPMO, materials: LuxMaterialInstance[], txas: LuxTXA[], private animation?: LuxSkeletalAnimation) {

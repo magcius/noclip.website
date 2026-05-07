@@ -5,13 +5,73 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
-import { LAYER_ICON, LayerPanel, Panel } from "../ui";
+import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
-import { LuxTexture } from "./lux";
-import { BBSRoomRenderer } from "./render_bbs";
+import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
+import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON } from "./config/arc";
+import { BBS_VALID_PRESET_ARC } from "./config/setdata_bbs";
+import { LuxObjectSet, LuxOLOInstance, LuxTexture } from "./lux";
+import { BBSRoomObjects, BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, TIM2Texture } from "./texture_bbs";
+
+function getCharaSubDirectory(name: string) {
+    switch (name.substring(0, 1).toLowerCase()) {
+        case "b":
+            return "BOSS";
+        case "m":
+            return "ENEMY";
+        case "f":
+            return "F_OBJ";
+        case "g":
+            return "GIMMICK";
+        case "h":
+            return "HIGH";
+        case "n":
+            return "NPC";
+        case "p":
+            return "PC";
+        case "w":
+            return "WEP";
+        default:
+            throw `Unknown chara prefix for \"${name}\"`;
+    }
+}
+
+function getArcSubDirectory(name: string) {
+    switch (name.substring(0, 1).toLowerCase()) {
+        case "b":
+            return "boss";
+        case "m":
+            return "enemy";
+        case "g":
+            return "gimmick";
+        case "n":
+            return "npc";
+        case "p":
+        case "x":
+            return "pc";
+        case "w":
+            return "weapon";
+        default:
+            throw `Unknown chara prefix for \"${name}\"`;
+    }
+}
+
+function getPrettyDataSetName(name: string) {
+    const n = name.toLowerCase();
+    if (n.endsWith("aq")) {
+        return "Objects (Aqua)";
+    } else if (n.endsWith("ex")) {
+        return "Objects (EX)";
+    } else if (n.endsWith("te")) {
+        return "Objects (Terra)";
+    } else if (n.endsWith("ve")) {
+        return "Objects (Ventus)";
+    } else {
+        return name;
+    }
+}
 
 class Renderer implements SceneGfx {
     public textureHolder: TextureHolder;
@@ -20,11 +80,15 @@ class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: BBSPMP) {
-        this.textures = Array(pmp.tims.length);
-        for (let i = 0; i < pmp.tims.length; i++) {
-            const { rgba, width, height, format } = decodeBBSTIM2(pmp.tims[i].data);
-            const t = new TIM2Texture(device, pmp.tims[i].name, width, height, rgba, format);
+    constructor(device: GfxDevice, pmp: BBSPMP, objects: BBSRoomObjects) {
+        const tims = [...pmp.tims];
+        for (const model of objects.models.values()) {
+            tims.push(...model.tims);
+        }
+        this.textures = Array(tims.length);
+        for (let i = 0; i < tims.length; i++) {
+            const { rgba, width, height, format } = decodeBBSTIM2(tims[i].data);
+            const t = new TIM2Texture(device, tims[i].name, width, height, rgba, format);
             this.textures[i] = t;
         }
 
@@ -35,14 +99,31 @@ class Renderer implements SceneGfx {
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures);
+        this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects);
     }
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer.parts]);
+        layersPanel.setLayers([...this.roomRenderer.parts, ...this.roomRenderer.objects]);
         layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
-        return [layersPanel];
+
+        const setPanel = new Panel();
+        setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        setPanel.setTitle(EYE_ICON, "Object Sets");
+        const setNames = this.roomRenderer.sets.map(s => getPrettyDataSetName(s.name));
+        const select = new MultiSelect();
+        select.setStrings(setNames);
+        select.onitemchanged = (index: number, v: boolean) => {
+            this.roomRenderer.onSetChanged(index, v);
+        };
+        if (setNames.length > 0) {
+            select.setItemSelected(0, true);
+        } else {
+            setPanel.setVisible(false);
+        }
+        setPanel.contents.appendChild(select.elem);
+
+        return [setPanel, layersPanel];
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -93,8 +174,65 @@ class Room implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         device.checkForLeaks();
         const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${this.id}.arc`);
-        const pmp = new BBSParser(arcFile).parsePMPFromARC();
-        return new Renderer(device, pmp!);
+        const pmp = new BBSParser(arcFile).parsePMPFromARC()!;
+
+        const sets: LuxObjectSet[] = [];
+        for (const presetArcName of BBS_VALID_PRESET_ARC.filter(a => a.startsWith(this.id))) {
+            const presetFile = await context.dataFetcher.fetchData(`${pathBase}/arc/preset/${presetArcName}.arc`);
+            const olos = new BBSParser(presetFile).parseOLOFromARC();
+            const instances: LuxOLOInstance[] = [];
+            for (const olo of olos) {
+                instances.push(...olo.objects);
+            }
+            if (instances.length > 0) {
+                sets.push({ name: presetArcName, instances });
+            }
+        }
+
+        const models: Map<string, BBSModel> = new Map();
+        const validModels = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
+        for (const set of sets) {
+            for (const instance of set.instances) {
+                if (models.has(instance.name)) {
+                    continue;
+                }
+                let invalid = true;
+                let check2 = false;
+                let arcName = "";
+                for (const v of validModels) {
+                    let n = instance.name.toLowerCase().startsWith("p") ? 3 : 5;
+                    if (instance.name.substring(0, n).toLowerCase() === v.substring(0, n).toLowerCase()) {
+                        invalid = false;
+                        arcName = v;
+                        break;
+                    }
+                }
+                if (invalid) {
+                    check2 = true;
+                } else {
+                    const subdir = getArcSubDirectory(instance.name);
+                    const modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
+                    const pmo = new BBSParser(modelArcFile).parsePMOFromARC(instance.name);
+                    if (!pmo) {
+                        check2 = true;
+                    } else {
+                        models.set(instance.name, pmo);
+                    }
+                }
+                if (check2) {
+                    const subdir = getCharaSubDirectory(instance.name);
+                    const u = instance.name.toUpperCase();
+                    const modelFile = await context.dataFetcher.fetchData(`${pathBase}/CHARA/${subdir}/${u.substring(0, 5)}/${u.substring(5).substring(0, 2)}/${u}.pmo`, { allow404: true });
+                    if (modelFile.byteLength === 0) {
+                        continue;
+                    }
+                    const pmo = new BBSParser(modelFile).parseModel(instance.name);
+                    models.set(instance.name, pmo);
+                }
+            }
+        }
+
+        return new Renderer(device, pmp, { sets, models });
     }
 }
 
@@ -191,8 +329,8 @@ const sceneDescs = [
     new Room("HE02", "Vestibule"),
     new Room("HE03", "West Bracket"),
     new Room("HE04", "East Bracket"),
+    new Room("HE06", "East Bracket (Night)"),
     new Room("HE05", "Town Near Thebes"), // yes it's really called that...
-    new Room("HE06", "East Bracket"),
     "Deep Space", // ls = lilo & stitch
     new Room("LS01", "Prison Block"),
     new Room("LS02", "Turo Transporter"),
@@ -245,21 +383,21 @@ const sceneDescs = [
     // new Room("DC12", "Raceway Registration"),
     "Keyblade Graveyard",
     new Room("KG01", "Badlands"),
-    new Room("KG56", "Badlands"),
+    new Room("KG56", "Badlands (Boss)"),
     new Room("KG02", "Seat of War"),
     new Room("KG03", "Twister Trench"),
     new Room("KG04", "Eye of the Storm (Blue)"),
     new Room("KG05", "Eye of the Storm (Pink)"),
     new Room("KG06", "Eye of the Storm (Green)"),
     new Room("KG07", "Fissure"),
-    new Room("KG08", "Keyblade Graveyard (Empty)"),
+    new Room("KG08", "Keyblade Graveyard"),
     new Room("KG09", "Keyblade Graveyard (Kingdom Hearts)"),
-    new Room("KG12", "Keyblade Graveyard (Kingdom Hearts)"),
-    new Room("KG10", "Keyblade Graveyard (Top of the Plateau)"),
+    new Room("KG12", "Keyblade Graveyard (Kingdom Hearts) (Boss)"),
     new Room("KG55", "Keyblade Graveyard (Top of the Plateau)"),
-    new Room("KG11", "Lingering Will Arena"),
+    new Room("KG10", "Keyblade Graveyard (Top of the Plateau) (Boss)"),
+    new Room("KG11", "Will's Cage (Boss)"),
     new Room("KG50", "Ventus's Mind"),
-    new Room("KG51", "Ventus's Mind"),
+    new Room("KG51", "Ventus's Mind (Boss)"),
     // new Room("KG52", "Ventus's Mind"),
     new Room("KG53", "Sora's Mind"),
     "Mirage Arena", // vs = versus?

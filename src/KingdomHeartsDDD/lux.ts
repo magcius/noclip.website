@@ -1,4 +1,4 @@
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { TextureMapping } from "../TextureHolder";
@@ -66,6 +66,23 @@ export interface LuxModel {
     pmpFlags: number;
     bbox: number[];
     shapes: LuxShape[];
+    skeleton?: LuxSkeleton;
+}
+
+interface LuxSkeleton {
+    skinnedBoneCount: number;
+    skinWeightCount: number;
+    bones: LuxBone[];
+}
+
+export interface LuxBone {
+    index: number;
+    parentIndex: number;
+    skinnedIndex: number; // unsure how this is used, it's just a sequential number for skinned bones
+    name: string;
+    transform: mat4; // relative transform
+    inverseTransform: mat4; // inverse absolute transform
+    decomposedTransform: { scale: vec3, rotation: vec3, translation: vec3 }; // relative, needed to apply animation values to
 }
 
 export interface LuxMaterial {
