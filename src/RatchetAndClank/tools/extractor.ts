@@ -8,7 +8,7 @@ import { DataViewExt } from "../DataViewExt.ts";
 import { readLevelCoreHeader } from "../bin-index.ts";
 import { WadDecompressor } from "../decompress.ts";
 import { assert } from '../../util.ts';
-import { load } from '../loader.ts';
+import { LevelResources, load } from '../loader.ts';
 
 const encoder = new TextEncoder();
 
@@ -107,7 +107,7 @@ for (const levelSectors of tableOfContents.levelSectors) {
     await extractLevelFile(`level_{}.json`, new DataViewExt(encoder.encode(JSON.stringify(metaFile)).buffer, { littleEndian: true }));
 
     // test parsing everything
-    const resources = {
+    const resources: LevelResources = {
         levelCoreHeader: null,
         gameplayHeader: null,
         levelSettings: null,
@@ -115,7 +115,7 @@ for (const levelSectors of tableOfContents.levelSectors) {
         grindPaths: null,
         directionLights: null,
         pointLights: null,
-        collision: null,
+        collisionGetter: null,
         tfrags: null,
         tfragTextures: null,
         tieTextures: null,

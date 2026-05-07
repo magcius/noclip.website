@@ -366,6 +366,7 @@ class RatchetAndClank1Scene implements SceneGfx {
         const cameraPosition = vec3.create();
         mat4.getTranslation(cameraPosition, viewerInput.camera.worldMatrix);
         const isOrtho = viewerInput.camera.isOrthographic;
+        const cameraFrustum = viewerInput.camera.frustum;
 
         let lodSetting = this.settings.lodSetting;
         if (isOrtho && lodSetting === -1) lodSetting = 0; // always treat dynamic lod as high lod in ortho view
@@ -438,7 +439,7 @@ class RatchetAndClank1Scene implements SceneGfx {
                 if (!instances) continue;
                 const geometriesByLod = this.getOrCreateTieGeometry(oClass);
                 if (!geometriesByLod) continue;
-                this.renderers.tie.renderTie(this.renderInstList, geometriesByLod, tieClass, instances, tieTextureMappings, cameraPosition, lodSetting, lodBias, this.instanceDataBuffer);
+                this.renderers.tie.renderTie(this.renderInstList, geometriesByLod, tieClass, instances, tieTextureMappings, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
             }
         }
 
@@ -469,7 +470,7 @@ class RatchetAndClank1Scene implements SceneGfx {
                 if (!instances) continue;
                 const geometry = this.getOrCreateShrubGeometry(oClass);
                 if (!geometry) continue;
-                this.renderers.shrub.renderShrub(this.renderInstList, geometry, instances, atlasTextures, cameraPosition, lodSetting, lodBias, this.instanceDataBuffer);
+                this.renderers.shrub.renderShrub(this.renderInstList, geometry, instances, atlasTextures, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
             }
         }
 

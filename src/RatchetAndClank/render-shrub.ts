@@ -13,6 +13,7 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ShrubInstance } from "./bin-gameplay";
+import { Frustum } from "../Geometry";
 
 export class ShrubProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -121,7 +122,7 @@ export class ShrubGeometry {
     private vertexBuffer: GfxBuffer;
     private vertexCount: number;
 
-    constructor(private cache: GfxRenderCache, private shrub: ShrubClass, private textureIndices: number[]) {
+    constructor(private cache: GfxRenderCache, public shrub: ShrubClass, private textureIndices: number[]) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 // per vertex
@@ -313,7 +314,7 @@ export class ShrubRenderer {
         this.shrubProgram = renderHelper.renderCache.createProgram(new ShrubProgram());
     }
 
-    renderShrub(renderInstList: GfxRenderInstList, shrubGeometry: ShrubGeometry, shrubInstances: ShrubInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
+    renderShrub(renderInstList: GfxRenderInstList, shrubGeometry: ShrubGeometry, shrubInstances: ShrubInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
         type ShrubDrawInstance = { objectMatrix: mat4, directionalLights: number[], rgb: { r: number, g: number, b: number }, lodAlpha: number };
         const shrubInstancesToDraw: ShrubDrawInstance[] = [];
         for (let i = 0; i < shrubInstances.length; i++) {
@@ -338,9 +339,9 @@ export class ShrubRenderer {
             if (lodAlpha <= 0) continue;
 
             // this is much slower than doing nothing because of the jumps into rust
-            // // find bounding sphere and frustum cull
+            // find bounding sphere and frustum cull
             // const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
-            // if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * shrubClass.header.scale * objectScale)) {
+            // if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * shrubGeometry.shrub.header.scale * objectScale)) {
             //     continue;
             // }
 

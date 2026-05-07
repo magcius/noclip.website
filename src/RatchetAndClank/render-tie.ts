@@ -12,6 +12,7 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { mat4, vec3 } from "gl-matrix";
 import { TieInstance } from "./bin-gameplay";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { Frustum } from "../Geometry";
 
 export class TieProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -342,8 +343,7 @@ export class TieRenderer {
         this.tieProgram = renderHelper.renderCache.createProgram(new TieProgram());
     }
 
-    renderTie(renderInstList: GfxRenderInstList, tieGeometriesByLod: (TieGeometry | null)[], tieClass: TieClass, tieInstanceBatch: TieInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
-
+    renderTie(renderInstList: GfxRenderInstList, tieGeometriesByLod: (TieGeometry | null)[], tieClass: TieClass, tieInstanceBatch: TieInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
 
         type TieDrawInstance = { objectMatrix: mat4, directionLights: number[], rgbasRow: number, lodMorphFactor: number };
         const tieInstancesToDrawByLod: TieDrawInstance[][] = [[], [], []];
@@ -384,7 +384,7 @@ export class TieRenderer {
             if (modelLodLevel === 1 && !hasLod1) { modelLodLevel = 0; lodMorphFactor = 0; }
 
             // this is much slower than doing nothing
-            // // find bounding sphere and frustum cull
+            // find bounding sphere and frustum cull
             // const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
             // if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * tieClass.scale * objectScale)) {
             //     continue;
