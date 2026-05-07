@@ -44,6 +44,7 @@
     "build:BanjoKazooie": "cd src/BanjoKazooie/tools && tsx extractor.ts",
     "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "build:Fez": "cd src/Fez/tools && tsx extractor.ts",
+    "build:LocoRoco": "cd src/LocoRoco/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit"
   },

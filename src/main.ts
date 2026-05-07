@@ -111,6 +111,7 @@ import * as Scenes_Spyro from './Spyro/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
+import * as Scenes_LocoRoco from './LocoRoco/Scenes.js'
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -264,6 +265,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
     Scenes_TopGearRally.sceneGroup,
+    Scenes_LocoRoco.sceneGroup,
 ];
 
 enum SaveStatesAction {
