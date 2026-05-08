@@ -12,10 +12,10 @@ import { FakeTextureHolder } from "../TextureHolder";
 import { TieGeometry, TieProgram, TieRenderer } from "./render-tie";
 import { CameraController } from "../Camera";
 import { LevelResources, load, loadFilesFromNetwork } from "./loader";
-import { createMegaBuffer, MegaBuffer, noclipSpaceFromRatchetSpace, lineChainToLineSegments } from "./utils";
+import { createMegaBuffer, MegaBuffer, noclipSpaceFromRatchetSpace, lineChainToLineSegments, GN } from "./utils";
 import { TfragGeometry, TfragRenderer } from "./render-tfrag";
 import { ShrubGeometry, ShrubRenderer } from "./render-shrub";
-import { colorNewFromRGBA, OpaqueBlack, White } from "../Color";
+import { Blue, colorNewFromRGBA, OpaqueBlack, White } from "../Color";
 import { SkyGeometry, SkyRenderer } from "./render-sky";
 import { RatchetShaderLib } from "./shader-lib";
 import { createGfxTextureForPaletteTexture, createTextureAtlases, createTieRgbaTexture, TextureAtlases } from "./textures";
@@ -23,9 +23,9 @@ import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
 
-const pathBase = (gameNumber: number) => `RatchetAndClank${gameNumber}`;
+const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
-class RatchetAndClank1Scene implements SceneGfx {
+class RatchetAndClankScene implements SceneGfx {
     private renderHelper: GfxRenderHelper;
 
     private renderInstList = new GfxRenderInstList();
@@ -76,7 +76,7 @@ class RatchetAndClank1Scene implements SceneGfx {
     private instanceDataBuffer: MegaBuffer;
     private instanceDataBufferCache: GfxDynamicBufferCache;
 
-    constructor(private sceneContext: SceneContext, public gameNumber: number, public levelNumber: number) {
+    constructor(private sceneContext: SceneContext, public gn: GN, public levelNumber: number, public chunkNumber: number | null) {
         this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
         const cache = this.renderHelper.renderCache;
 
@@ -149,8 +149,8 @@ class RatchetAndClank1Scene implements SceneGfx {
         this.instanceDataBuffer = createMegaBuffer(cache.device, "Instance Data", 1024 * 1024);
         this.instanceDataBufferCache = new GfxDynamicBufferCache(cache.device);
 
-        const filePromises = loadFilesFromNetwork(sceneContext.dataFetcher, `${pathBase(this.gameNumber)}/level_${this.levelNumber}`);
-        load(this.levelResources, filePromises).then(() => {
+        const filePromises = loadFilesFromNetwork(sceneContext.dataFetcher, `${pathBase(this.gn)}/level_${this.levelNumber}`, this.chunkNumber);
+        load(this.gn, this.chunkNumber, this.levelResources, filePromises).then(() => {
             if (IS_DEVELOPMENT) console.log(this);
         }).catch((e) => {
             console.error(`Error loading level:`, e);
@@ -638,11 +638,27 @@ class RatchetAndClank1SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
-        return new RatchetAndClank1Scene(sceneContext, 1, this.levelNumber);
+        return new RatchetAndClankScene(sceneContext, 1, this.levelNumber, null);
     }
 }
 
-export const sceneGroup: SceneGroup = {
+class RatchetAndClank2SceneDesc implements SceneDesc {
+    id: string;
+
+    constructor(public levelNumber: number, public chunkNumber: number | null, public name: string) {
+        if (chunkNumber === null) {
+            this.id = String(levelNumber);
+        } else {
+            this.id = `${levelNumber}_${chunkNumber}`;
+        }
+    }
+
+    public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
+        return new RatchetAndClankScene(sceneContext, 2, this.levelNumber, this.chunkNumber);
+    }
+}
+
+export const sceneGroup1: SceneGroup = {
     id: "RatchetAndClank1",
     name: "Ratchet & Clank",
     sceneDescs: [
@@ -665,5 +681,51 @@ export const sceneGroup: SceneGroup = {
         new RatchetAndClank1SceneDesc(16, "Gadgetron Site, Kalebo III"),
         new RatchetAndClank1SceneDesc(17, "Drek's Fleet, Veldin Orbit"),
         new RatchetAndClank1SceneDesc(18, "Kyzil Plateau, Veldin"),
+    ],
+};
+
+export const sceneGroup2: SceneGroup = {
+    id: "RatchetAndClank2",
+    name: "Ratchet & Clank: Going Commando",
+    sceneDescs: [
+        new RatchetAndClank2SceneDesc(0, null, "Flying Lab, Aranos (Tutorial)"),
+        new RatchetAndClank2SceneDesc(1, 0, "Megacorp Outlet, Oozla"),
+        new RatchetAndClank2SceneDesc(1, 1, "Megacorp Outlet, Oozla (Secret boss)"),
+        new RatchetAndClank2SceneDesc(25, null, "Wupash Nebula (Space)"),
+        new RatchetAndClank2SceneDesc(2, 0, "Maktar Resort, Maktar Nebula"),
+        new RatchetAndClank2SceneDesc(2, 1, "Maktar Resort, Maktar Nebula (Arena)"),
+        new RatchetAndClank2SceneDesc(26, null, "Jamming Array, Maktar Nebula"),
+        new RatchetAndClank2SceneDesc(3, null, "Megapolis, Endako"),
+        new RatchetAndClank2SceneDesc(4, 0, "Vukovar Canyon, Barlow"),
+        new RatchetAndClank2SceneDesc(4, 1, "Vukovar Canyon, Barlow (Race)"),
+        new RatchetAndClank2SceneDesc(5, null, "Thug Rendezvous, Feltzin System (Space)"),
+        new RatchetAndClank2SceneDesc(6, null, "Canal City, Notak"),
+        new RatchetAndClank2SceneDesc(24, null, "Slip Cognito's Ship Shack"),
+        new RatchetAndClank2SceneDesc(7, 0, "Frozen Base, Siberius"),
+        new RatchetAndClank2SceneDesc(7, 1, "Frozen Base, Siberius (Chase sequence)"),
+        new RatchetAndClank2SceneDesc(8, 0, "Mining Area, Tabora (Tunnel)"),
+        new RatchetAndClank2SceneDesc(8, 1, "Mining Area, Tabora"),
+        new RatchetAndClank2SceneDesc(9, null, "Testing Facility, Dobbo"),
+        new RatchetAndClank2SceneDesc(22, null, "Dobbo Orbit (Giant Clank)"),
+        new RatchetAndClank2SceneDesc(10, null, "Deep Space Disposal, Hrugis Cloud (Space)"),
+        new RatchetAndClank2SceneDesc(11, 0, "Megacorp Games, Joba"),
+        new RatchetAndClank2SceneDesc(11, 1, "Megacorp Games, Joba (Race & Arena)"),
+        new RatchetAndClank2SceneDesc(12, null, "Megacorp Armory, Todano"),
+        new RatchetAndClank2SceneDesc(13, null, "Silver City, Boldan"),
+        new RatchetAndClank2SceneDesc(14, null, "Flying Lab, Aranos"),
+        new RatchetAndClank2SceneDesc(15, null, "Thugs-4-Less Fleet, Gorn (Space)"),
+        new RatchetAndClank2SceneDesc(16, null, "Thug HQ, Snivelak"),
+        new RatchetAndClank2SceneDesc(17, null, "Distribution Facility, Smolg"),
+        new RatchetAndClank2SceneDesc(18, null, "Allgon City, Damosel"),
+        new RatchetAndClank2SceneDesc(23, null, "Damosel Orbit (Giant Clank)"),
+        new RatchetAndClank2SceneDesc(19, 0, "Tundor Wastes, Grelbin"),
+        new RatchetAndClank2SceneDesc(19, 1, "Tundor Wastes, Grelbin (Glider)"),
+        new RatchetAndClank2SceneDesc(19, 2, "Tundor Wastes, Grelbin (Hypnomatic)"),
+        new RatchetAndClank2SceneDesc(20, 0, "Protopet Factory, Yeedil"),
+        new RatchetAndClank2SceneDesc(20, 1, "Protopet Factory, Yeedil (Interior)"),
+        new RatchetAndClank2SceneDesc(20, 2, "Protopet Factory, Yeedil (Final boss)"),
+        new RatchetAndClank2SceneDesc(30, null, "Insomniac Museum"),
+        // there is no 21 or 27-29
+
     ],
 };

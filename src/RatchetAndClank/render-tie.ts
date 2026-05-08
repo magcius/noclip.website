@@ -88,6 +88,7 @@ void main() {
     ivec2 ambientRgbaTexcoord = ivec2(int(a_ExtraData.z), int(a_InstanceExtraData.x));
     vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
     rgba.rgb *= 2.0; // not sure about this
+    rgba = vec4(vec3(0.5), 1.0);
     vec4 lights = a_InstanceDirectionLights;
     vec3 normal = normalize(inverse(transpose(mat3(instanceTransform))) * a_Normal);
     
@@ -244,20 +245,27 @@ export class TieGeometry {
                                 assert(v !== null);
                                 const { vertex, normalIndex, rgbaIndex } = v;
                                 const fixedTexcoord = fixedTexcoords[i];
-                                const normal = tie.normalsData[normalIndex];
+                                let normal = tie.normalsData[normalIndex];
+                                if (normal === undefined) {
+                                    normal = { x: 0, y: 0, z: 0 };
+                                }
 
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.x;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.y;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.z;
                                 vertexArrayBuffer[vertexPtr++] = textureIndices[currentMaterial.texture];
                                 vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
-                                vertexArrayBuffer[vertexPtr++] = rgbaIndex;
+                                // vertexArrayBuffer[vertexPtr++] = rgbaIndex;
+                                vertexArrayBuffer[vertexPtr++] = 0;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.s;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.t;
                                 assert(vertex.q === 4096);
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.x;
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.y;
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.z;
+                                // vertexArrayBuffer[vertexPtr++] = 0;
+                                // vertexArrayBuffer[vertexPtr++] = 0;
+                                // vertexArrayBuffer[vertexPtr++] = 0;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetX;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetY;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetZ;

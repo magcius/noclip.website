@@ -1,87 +1,153 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { DataViewExt } from "./DataViewExt";
-import { matrixToNoclipSpace } from "./utils";
+import { GN, matrixToNoclipSpace, noclipSpaceFromRatchetSpace } from "./utils";
+import { assert } from "../util";
 
 export type GameplayHeader = ReturnType<typeof readGameplayHeader>;
-export function readGameplayHeader(view: DataViewExt) {
-    /*
-    // https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay.cpp#L113
-    struct GameplayHeader {
-        // 0x0 
-        int32 levelSettings;
-        // 0x4 - InstanceBlock<DirectionLightInstance>
-        int32 directionLightInstances;
-        // 0x8 - InstanceBlock<CameraInstance>
-        int32 cameraInstances;
-        // 0xc - InstanceBlock<SoundInstance>
-        int32 soundInstances;
-        // 0x10 - 0x2c
-        // help message fields
-        // 0x30
-        int32 tieClasses; // just an array of o_class numbers, not class definitions
-        // 0x34 - InstanceBlock<TieInstance>
-        int32 tieInstances;
-        // 0x38
-        int32 shrubClasses;
-        // 0x3c - InstanceBlock<ShrubInstance>
-        int32 shrubInstances;
-        // 0x40
-        int32 mobyClasses;
-        // 0x44 (not the same InstanceBlock structure as the other instance blocks)
-        int32 mobyInstances;
-        // 0x48
-        int32 mobyGroupInstances;
-        // 0x4c
-        int32 sharedData;
-        // 0x50
-        int32 pvarMobyLinks;
-        // 0x54
-        int32 pvarTable;
-        // 0x58
-        int32 pvarData;
-        // 0x5c
-        int32 pvarRelativePointers;
-        // 0x60
-        int32 shapesCuboids;
-        // 0x64
-        int32 shapesSpheres;
-        // 0x68
-        int32 shapesCylinders;
-        // 0x6c
-        int32 shapesPills;
-        // 0x70
-        int32 paths;
-        // 0x74
-        int32 grindPaths;
-        // 0x78
-        int32 pointLightGrid;
-        // 0x7c
-        int32 pointLightInstances;
-        // 0x80
-        int32 envTransitions;
-        // 0x84
-        int32 camColGrid;
-        // 0x88
-        int32 envSamplePoints;
-        // 0x8c
-        int32 occlusionMappings;
-    }
-    */
-    return {
-        levelSettings: view.getInt32(0x0),
-        tieClasses: view.getInt32(0x30),
-        tieInstances: view.getInt32(0x34),
-        shrubClasses: view.getInt32(0x38),
-        shrubInstances: view.getInt32(0x3c),
-        mobyInstances: view.getInt32(0x44),
-        directionLightInstances: view.getInt32(0x4),
-        pointLightInstances: view.getInt32(0x7c),
-        shapesCuboids: view.getInt32(0x60),
-        shapesSpheres: view.getInt32(0x64),
-        shapesCylinders: view.getInt32(0x68),
-        shapesPills: view.getInt32(0x6c),
-        paths: view.getInt32(0x70),
-        grindPaths: view.getInt32(0x74),
+export function readGameplayHeader(gn: GN, view: DataViewExt) {
+    switch (gn) {
+        case 1: {
+            /*
+            // https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay.cpp#L113
+            struct GameplayHeader {
+                // 0x0 
+                int32 levelSettings;
+                // 0x4 - InstanceBlock<DirectionLightInstance>
+                int32 directionLightInstances;
+                // 0x8 - InstanceBlock<CameraInstance>
+                int32 cameraInstances;
+                // 0xc - InstanceBlock<SoundInstance>
+                int32 soundInstances;
+                // 0x10 - 0x2c
+                // help message fields
+                // 0x30
+                int32 tieClasses; // just an array of o_class numbers, not class definitions
+                // 0x34 - InstanceBlock<TieInstance>
+                int32 tieInstances;
+                // 0x38
+                int32 shrubClasses;
+                // 0x3c - InstanceBlock<ShrubInstance>
+                int32 shrubInstances;
+                // 0x40
+                int32 mobyClasses;
+                // 0x44 (not the same InstanceBlock structure as the other instance blocks)
+                int32 mobyInstances;
+                // 0x48
+                int32 mobyGroupInstances;
+                // 0x4c
+                int32 sharedData;
+                // 0x50
+                int32 pvarMobyLinks;
+                // 0x54
+                int32 pvarTable;
+                // 0x58
+                int32 pvarData;
+                // 0x5c
+                int32 pvarRelativePointers;
+                // 0x60
+                int32 shapesCuboids;
+                // 0x64
+                int32 shapesSpheres;
+                // 0x68
+                int32 shapesCylinders;
+                // 0x6c
+                int32 shapesPills;
+                // 0x70
+                int32 paths;
+                // 0x74
+                int32 grindPaths;
+                // 0x78
+                int32 pointLightGrid;
+                // 0x7c
+                int32 pointLightInstances;
+                // 0x80
+                int32 envTransitions;
+                // 0x84
+                int32 camColGrid;
+                // 0x88
+                int32 envSamplePoints;
+                // 0x8c
+                int32 occlusionMappings;
+            }
+            */
+            return {
+                levelSettings: view.getInt32(0x0),
+                directionLightInstances: view.getInt32(0x4),
+                tieClasses: view.getInt32(0x30),
+                tieInstances: view.getInt32(0x34),
+                shrubClasses: view.getInt32(0x38),
+                shrubInstances: view.getInt32(0x3c),
+                mobyInstances: view.getInt32(0x44),
+                shapesCuboids: view.getInt32(0x60),
+                shapesSpheres: view.getInt32(0x64),
+                shapesCylinders: view.getInt32(0x68),
+                shapesPills: view.getInt32(0x6c),
+                paths: view.getInt32(0x70),
+                grindPaths: view.getInt32(0x74),
+                pointLightInstances: view.getInt32(0x7c),
+            };
+        }
+        case 2: {
+            // {0x00, bf<LevelSettingsBlock>(&Gameplay::level_settings), "level settings"},
+            // {0x04, bf<InstanceBlock<DirLightInstance, DirectionalLightPacked>>(&Gameplay::dir_lights), "directional lights"},
+            // {0x08, bf<InstanceBlock<CameraInstance, CameraPacked>>(&Gameplay::cameras), "cameras"},
+            // {0x0c, bf<InstanceBlock<SoundInstance, SoundInstancePacked>>(&Gameplay::sound_instances), "sound instances"},
+            // {0x10, bf<BinHelpMessageBlock<false>>(&Gameplay::us_english_help_messages), "us english help messages"},
+            // {0x14, bf<BinHelpMessageBlock<false>>(&Gameplay::uk_english_help_messages), "uk english help messages"},
+            // {0x18, bf<BinHelpMessageBlock<false>>(&Gameplay::french_help_messages), "french help messages"},
+            // {0x1c, bf<BinHelpMessageBlock<false>>(&Gameplay::german_help_messages), "german help messages"},
+            // {0x20, bf<BinHelpMessageBlock<false>>(&Gameplay::spanish_help_messages), "spanish help messages"},
+            // {0x24, bf<BinHelpMessageBlock<false>>(&Gameplay::italian_help_messages), "italian help messages"},
+            // {0x28, bf<BinHelpMessageBlock<false>>(&Gameplay::japanese_help_messages), "japanese help messages"},
+            // {0x2c, bf<BinHelpMessageBlock<true>>(&Gameplay::korean_help_messages), "korean help messages"},
+            // {0x30, {TieClassBlock::read, TieClassBlock::write}, "tie classes"},
+            // {0x34, bf<InstanceBlock<TieInstance, GcUyaDlTieInstance>>(&Gameplay::tie_instances), "tie instances"},
+            // {0x38, bf<GroupBlock<TieGroupInstance>>(&Gameplay::tie_groups), "tie groups"},
+            // {0x3c, {ShrubClassBlock::read, ShrubClassBlock::write}, "shrub classes"},
+            // {0x40, bf<InstanceBlock<ShrubInstance, ShrubInstancePacked>>(&Gameplay::shrub_instances), "shrub instances"},
+            // {0x44, bf<GroupBlock<ShrubGroupInstance>>(&Gameplay::shrub_groups), "shrub groups"},
+            // {0x48, bf<ClassBlock>(&Gameplay::moby_classes), "moby classes"},
+            // {0x4c, {GcUyaMobyBlock::read, GcUyaMobyBlock::write}, "moby instances"},
+            // {0x50, bf<GroupBlock<MobyGroupInstance>>(&Gameplay::moby_groups), "moby groups"},
+            // {0x54, {SharedDataBlock::read, SharedDataBlock::write}, "shared data"},
+            // {0x58, bf<PvarFixupBlock>(&Gameplay::pvar_moby_links), "moby link fixup table"},
+            // {0x5c, {PvarTableBlock::read, PvarTableBlock::write}, "pvar table"},
+            // {0x60, {PvarDataBlock::read, PvarDataBlock::write}, "pvar data"},
+            // {0x64, bf<PvarFixupBlock>(&Gameplay::pvar_relative_pointers), "relative pvar pointers"},
+            // {0x68, bf<InstanceBlock<CuboidInstance, ShapePacked>>(&Gameplay::cuboids), "cuboids"},
+            // {0x6c, bf<InstanceBlock<SphereInstance, ShapePacked>>(&Gameplay::spheres), "spheres"},
+            // {0x70, bf<InstanceBlock<CylinderInstance, ShapePacked>>(&Gameplay::cylinders), "cylinders"},
+            // {0x74, bf<InstanceBlock<PillInstance, ShapePacked>>(&Gameplay::pills), "pills"},
+            // {0x78, bf<PathBlock>(&Gameplay::paths), "paths"},
+            // {0x7c, {GrindPathBlock::read, GrindPathBlock::write}, "grindpaths"},
+            // {0x80, bf<GcUyaPointLightsBlock>(&Gameplay::point_lights), "point lights"},
+            // {0x84, {EnvTransitionBlock::read, EnvTransitionBlock::write}, "env transitions"},
+            // {0x88, {CamCollGridBlock::read, CamCollGridBlock::write}, "cam coll grid"},
+            // {0x8c, bf<GcUyaDlEnvSamplePointBlock>(&Gameplay::env_sample_points), "env sample points"},
+            // {0x90, bf<OcclusionMappingsBlock>(&Gameplay::occlusion), "occlusion"}
+            // {0x94, {TieAmbientRgbaBlock::read, TieAmbientRgbaBlock::write}, "tie ambient rgbas"},
+            // {0x98, {AreasBlock::read, AreasBlock::write}, "areas"},
+
+            return {
+                levelSettings: view.getInt32(0x0),
+                directionLightInstances: view.getInt32(0x4),
+                tieClasses: view.getInt32(0x30),
+                tieInstances: view.getInt32(0x34),
+                shrubClasses: view.getInt32(0x3c),
+                shrubInstances: view.getInt32(0x40),
+                mobyInstances: view.getInt32(0x4c),
+                shapesCuboids: view.getInt32(0x68),
+                shapesSpheres: view.getInt32(0x6c),
+                shapesCylinders: view.getInt32(0x70),
+                shapesPills: view.getInt32(0x64),
+                paths: view.getInt32(0x78),
+                grindPaths: view.getInt32(0x7c),
+                pointLightInstances: view.getInt32(0x80),
+            };
+        }
+        default: {
+            throw new Error("not implemented");
+        }
     }
 }
 
@@ -93,30 +159,85 @@ export interface LevelSettings {
     fogNearIntensity: number,
     fogFarIntensity: number,
     deathHeight: number,
-    shipPosition: { x: number, y: number, z: number },
-    shipRotationZ: number,
-    shipPath: number,
-    shipCameraCuboidStart: number,
-    shipCameraCuboidEnd: number,
+    chunkPlanes: ChunkPlane[],
+    [unknown: string]: unknown,
 }
 export const SIZEOF_LEVEL_SETTINGS_1 = 0x50;
-export function readLevelSettings(view: DataViewExt): LevelSettings {
-    /*
-    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_misc.inl#L24
-    */
+export function readLevelSettings(gn: GN, view: DataViewExt): LevelSettings {
+    switch (gn) {
+        case 1: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_misc.inl#L24
+            */
+            return {
+                backgroundColor: view.getInt32_Rgb(0),
+                fogColor: view.getInt32_Rgb(0xc),
+                fogNearDistance: view.getFloat32(0x18), // distance in world space multiplied by 1024
+                fogFarDistance: view.getFloat32(0x1c),
+                fogNearIntensity: view.getFloat32(0x20), // 255 means zero fog, 0 means full fog
+                fogFarIntensity: view.getFloat32(0x24),
+                deathHeight: view.getFloat32(0x28),
+                shipPosition: view.getFloat32_Xyz(0x2c),
+                shipRotationZ: view.getFloat32(0x38),
+                shipPath: view.getInt32(0x3c),
+                shipCameraCuboidStart: view.getInt32(0x40),
+                shipCameraCuboidEnd: view.getInt32(0x44),
+                chunkPlanes: [],
+            }
+        }
+        case 2:
+        case 3:
+        case 4: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_misc.inl#L41
+            */
+            return {
+                backgroundColor: view.getInt32_Rgb(0),
+                fogColor: view.getInt32_Rgb(0xc),
+                fogNearDistance: view.getFloat32(0x18),
+                fogFarDistance: view.getFloat32(0x1c),
+                fogNearIntensity: view.getFloat32(0x20),
+                fogFarIntensity: view.getFloat32(0x24),
+                deathHeight: view.getFloat32(0x28),
+                isSphericalWorld: view.getInt32(0x2c),
+                sphericalWorldCenter: view.getFloat32_Xyz(0x30),
+                shipPosition: view.getFloat32_Xyz(0x3c),
+                shipRotationZ: view.getFloat32(0x48),
+                shipPath: view.getInt32(0x4c),
+                shipCameraCuboidStart: view.getInt32(0x50),
+                shipCameraCuboidEnd: view.getInt32(0x54),
+                chunkPlanes: readChunkPlanes(view.subview(0x5c)),
+            };
+        }
+    }
+}
+
+export function readChunkPlanes(view: DataViewExt): ChunkPlane[] {
+    const planes = [readChunkPlane(view)];
+    let count = planes[0].count;
+    for (let i = 1; i < count; i++) {
+        planes.push(readChunkPlane(view.subview(i * SIZEOF_CHUNK_PLANE)));
+    }
+    return planes;
+}
+
+export type ChunkPlane = {
+    count: number,
+    point: vec3,
+    _pointInNoclipSpace: vec3,
+    normal: vec3,
+    _normalInNoclipSpace: vec3,
+}
+export const SIZEOF_CHUNK_PLANE = 0x20;
+export function readChunkPlane(view: DataViewExt): ChunkPlane {
+    const point = view.getFloat32_Vec3(0);
+    const normal = view.getFloat32_Vec3(0x10);
     return {
-        backgroundColor: view.getInt32_Rgb(0),
-        fogColor: view.getInt32_Rgb(0xc),
-        fogNearDistance: view.getFloat32(0x18), // distance in world space multiplied by 1024
-        fogFarDistance: view.getFloat32(0x1c),
-        fogNearIntensity: view.getFloat32(0x20), // 255 means zero fog, 0 means full fog
-        fogFarIntensity: view.getFloat32(0x24),
-        deathHeight: view.getFloat32(0x28),
-        shipPosition: view.getFloat32_Xyz(0x2c),
-        shipRotationZ: view.getFloat32(0x38),
-        shipPath: view.getInt32(0x3c),
-        shipCameraCuboidStart: view.getInt32(0x40),
-        shipCameraCuboidEnd: view.getInt32(0x44),
+        count: view.getInt32(0xc),
+        point,
+        _pointInNoclipSpace: vec3.transformMat4(vec3.create(), point, noclipSpaceFromRatchetSpace),
+        normal,
+        _normalInNoclipSpace: vec3.transformMat4(vec3.create(), normal, noclipSpaceFromRatchetSpace),
     }
 }
 
@@ -143,66 +264,119 @@ export interface TieInstance {
     directionalLights: number[],
     uid: number,
 }
-export const SIZEOF_TIE_INSTANCE = 0xe0;
-export function readTieInstance(view: DataViewExt, instanceIndex: number): TieInstance {
-    /*
-    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L611
-    */
-
-    const matrix = view.getMat4Slice(0x10).slice();
-
-    return {
-        instanceIndex,
-        oClass: view.getInt32(0x0),
-        drawDistance: view.getInt32(0x4),
-        occlusionIndex: view.getInt32(0xc),
-        matrix,
-        _matrixInNoclipSpace: matrixToNoclipSpace(matrix),
-        ambientRgbas: view.subview(0x50, 0x80).getTypedArrayView(Uint16Array), // array of 64 A1BGR5 colors
-        directionalLights: view.getNibbleArray(0xd0, 2),
-        uid: view.getInt32(0xd4),
+export const SIZEOF_TIE_INSTANCE = (gn: GN,) => gn === 1 ? 0xe0 : 0x60;
+export function readTieInstance(gn: GN, view: DataViewExt, instanceIndex: number): TieInstance {
+    switch (gn) {
+        case 1: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L611
+            */
+            const matrix = view.getMat4Slice(0x10).slice();
+            return {
+                instanceIndex,
+                oClass: view.getInt32(0x0),
+                drawDistance: view.getInt32(0x4),
+                occlusionIndex: view.getInt32(0xc),
+                matrix,
+                _matrixInNoclipSpace: matrixToNoclipSpace(matrix),
+                ambientRgbas: view.subview(0x50, 0x80).getTypedArrayView(Uint16Array), // array of 64 A1BGR5 colors
+                directionalLights: view.getNibbleArray(0xd0, 2),
+                uid: view.getInt32(0xd4),
+            }
+        }
+        case 2:
+        case 3:
+        case 4: {
+            const matrix = view.getMat4Slice(0x10).slice();
+            return {
+                instanceIndex,
+                oClass: view.getInt32(0x0),
+                drawDistance: view.getInt32(0x4),
+                occlusionIndex: view.getInt32(0xc),
+                matrix,
+                _matrixInNoclipSpace: matrixToNoclipSpace(matrix),
+                ambientRgbas: new Uint16Array(0x80).fill(0xFFFF), // TODO: remove this
+                directionalLights: view.getNibbleArray(0x50, 2),
+                uid: view.getInt32(0x54),
+            }
+        }
+        default: {
+            assert(false);
+        }
     }
 }
 
 export interface MobyInstance {
-    size: number,
     oClass: number,
     scale: number,
     drawDistance: number,
     updateDistance: number,
     position: { x: number, y: number, z: number },
     rotation: { x: number, y: number, z: number },
-    group: number,
-    isRooted: number,
-    rootedDistance: number,
-    pvarIndex: number,
-    occlusion: number,
-    modeBits: number,
-    color: { r: number, g: number, b: number },
-    light: number,
-}
-export const SIZEOF_MOBY_INSTANCE = 0x78;
-export function readMobyInstance(view: DataViewExt): MobyInstance {
-    /*
-    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L58
-    */
+    [unknown: string]: unknown,
+};
 
-    return {
-        size: view.getInt32(0x0),
-        oClass: view.getInt32(0x18),
-        scale: view.getFloat32(0x1c),
-        drawDistance: view.getFloat32(0x20),
-        updateDistance: view.getInt32(0x24),
-        position: view.getFloat32_Xyz(0x30),
-        rotation: view.getFloat32_Xyz(0x3c),
-        group: view.getInt32(0x48),
-        isRooted: view.getInt32(0x4c),
-        rootedDistance: view.getFloat32(0x50),
-        pvarIndex: view.getInt32(0x58),
-        occlusion: view.getInt32(0x5c),
-        modeBits: view.getInt32(0x60),
-        color: view.getInt32_Rgb(0x64),
-        light: view.getInt32(0x70),
+export const SIZEOF_MOBY_INSTANCE = (gn: GN) => {
+    switch (gn) {
+        case 1: return 0x78;
+        case 2:
+        case 3: return 0x88;
+        case 4: return 0x70;
+    };
+}
+export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
+    switch (gn) {
+        case 1: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L58
+            */
+            return {
+                size: view.getInt32(0x0),
+                oClass: view.getInt32(0x18),
+                scale: view.getFloat32(0x1c),
+                drawDistance: view.getFloat32(0x20),
+                updateDistance: view.getInt32(0x24),
+                position: view.getFloat32_Xyz(0x30),
+                rotation: view.getFloat32_Xyz(0x3c),
+                group: view.getInt32(0x48),
+                isRooted: view.getInt32(0x4c),
+                rootedDistance: view.getFloat32(0x50),
+                pvarIndex: view.getInt32(0x58),
+                occlusion: view.getInt32(0x5c),
+                modeBits: view.getInt32(0x60),
+                color: view.getInt32_Rgb(0x64),
+                light: view.getInt32(0x70),
+            }
+        }
+        case 2:
+        case 3: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L157
+            */
+            return {
+                size: view.getInt32(0x0),
+                mission: view.getInt32(0x4),
+                uid: view.getInt32(0x10),
+                bolts: view.getInt32(0x14),
+                oClass: view.getInt32(0x28),
+                scale: view.getFloat32(0x2c),
+                drawDistance: view.getFloat32(0x30),
+                updateDistance: view.getInt32(0x34),
+                position: view.getFloat32_Xyz(0x40),
+                rotation: view.getFloat32_Xyz(0x4c),
+                group: view.getInt32(0x58),
+                isRooted: view.getInt32(0x5c),
+                rootedDistance: view.getFloat32(0x60),
+                pvarIndex: view.getInt32(0x68),
+                occlusion: view.getInt32(0x6c),
+                modeBits: view.getInt32(0x70),
+                lightColor: view.getInt32_Rgb(0x74),
+                light: view.getInt32(0x80),
+            };
+        }
+        default: {
+            throw new Error("not implemented");
+        }
     }
 }
 

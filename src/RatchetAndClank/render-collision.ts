@@ -132,7 +132,7 @@ export class CollisionGeometry {
         };
     }
 
-    private assemble(collisionOctants: CollisionOctant[], heroCollisionGroups: HeroCollisionGroups) {
+    private assemble(collisionOctants: CollisionOctant[], heroCollisionGroups: HeroCollisionGroups | null) {
         const heroCollisionPositionScale = 1 / 64;
 
         let vertexCount = 0;
@@ -143,9 +143,11 @@ export class CollisionGeometry {
                 vertexCount += octant.faces[j].quad ? 6 : 3;
             }
         }
-        for (let i = 0; i < heroCollisionGroups.groupData.length; i++) {
-            const group = heroCollisionGroups.groupData[i];
-            vertexCount += group.faces.length * 3;
+        if (heroCollisionGroups) {
+            for (let i = 0; i < heroCollisionGroups.groupData.length; i++) {
+                const group = heroCollisionGroups.groupData[i];
+                vertexCount += group.faces.length * 3;
+            }
         }
 
         const vertexArrayBuffer = new Float32Array(vertexCount * CollisionProgram.elementsPerVertex);
@@ -170,18 +172,20 @@ export class CollisionGeometry {
             }
         }
 
-        for (let i = 0; i < heroCollisionGroups.groupData.length; i++) {
-            const group = heroCollisionGroups.groupData[i];
-            for (let j = 0; j < group.faces.length; j++) {
-                const face = group.faces[j];
-                const verts = [face.v0, face.v1, face.v2];
-                for (let k = 0; k < verts.length; k++) {
-                    const vert = group.verts[verts[k]];
-                    const { x, y, z } = vert;
-                    vertexArrayBuffer[vertexPtr++] = heroCollisionPositionScale * x;
-                    vertexArrayBuffer[vertexPtr++] = heroCollisionPositionScale * y;
-                    vertexArrayBuffer[vertexPtr++] = heroCollisionPositionScale * z;
-                    vertexArrayBuffer[vertexPtr++] = -1;
+        if (heroCollisionGroups) {
+            for (let i = 0; i < heroCollisionGroups.groupData.length; i++) {
+                const group = heroCollisionGroups.groupData[i];
+                for (let j = 0; j < group.faces.length; j++) {
+                    const face = group.faces[j];
+                    const verts = [face.v0, face.v1, face.v2];
+                    for (let k = 0; k < verts.length; k++) {
+                        const vert = group.verts[verts[k]];
+                        const { x, y, z } = vert;
+                        vertexArrayBuffer[vertexPtr++] = heroCollisionPositionScale * x;
+                        vertexArrayBuffer[vertexPtr++] = heroCollisionPositionScale * y;
+                        vertexArrayBuffer[vertexPtr++] = heroCollisionPositionScale * z;
+                        vertexArrayBuffer[vertexPtr++] = -1;
+                    }
                 }
             }
         }

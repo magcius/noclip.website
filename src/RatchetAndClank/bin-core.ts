@@ -2,7 +2,7 @@ import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GsPrimitiveType } from "../Common/PS2/GS";
 import { DataViewExt } from "./DataViewExt";
 import { assert } from "../util";
-import { getBits, ImaginaryGsCommand, ImaginaryGsCommandBuffer, truncateTrailing0xFF } from "./utils";
+import { getBits, GN, ImaginaryGsCommand, ImaginaryGsCommandBuffer, truncateTrailing0xFF } from "./utils";
 import { readVifCommandList, VifUnpackFormat, VifUnpackReader } from "./vif";
 
 export interface GsRamTableEntry {
@@ -27,6 +27,7 @@ export function readGsRamTableEntry(view: DataViewExt) {
 }
 
 export interface TieClass {
+    header: TieClassHeader,
     normalsData: { x: number, y: number, z: number }[],
     nearDist: number,
     midDist: number,
@@ -40,29 +41,25 @@ export interface TiePacket {
     header: TiePacketHeader,
     body: TiePacketBody,
 };
-export function readTieClass(view: DataViewExt, oClass: number): TieClass {
+export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClass {
     /*
     https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L37
     */
 
-    // `packetOffsets[i]` points to `TiePacketHeader headers[packetCount[i]]`
-    // (relative to this struct)
-    const packetOffsets = view.getArrayOfNumbers(0x0, 3, Uint32Array);
-    const packetCounts = view.getArrayOfNumbers(0x20, 3, Uint8Array);
+    const header = readTieClassHeader(gn, view);
 
+    // `header.packetOffsets[i]` points to `TiePacketHeader packets[header.packetCount[i]]`
+    // (relative to this struct)
     const packets: TiePacket[][] = [];
 
-    const textureCount = view.getUint8(0x23);
-    const adGifsOffset = view.getUint32(0x2c);
-    const adGifs = view.subdivide(adGifsOffset, textureCount, SIZEOF_TIE_AD_GIFS).map(readTieAdGifs);
+    const adGifs = view.subdivide(header.adGifsOffset, header.textureCount, SIZEOF_TIE_AD_GIFS).map(readTieAdGifs);
 
-    const normalsOffset = view.getUint32(0xc);
-    const normalsData = view.subdivide(normalsOffset, 64, 8).map(view => view.getInt16_Xyzw(0));
+    const normalsData = view.subdivide(header.normalsOffset, header.normalsCount, 8).map(view => view.getInt16_Xyzw(0));
 
     // there are always 3 lods
     for (let i = 0; i < 3; i++) {
-        const packetOffset = packetOffsets[i];
-        const packetCount = packetCounts[i];
+        const packetOffset = header.packetOffsets[i];
+        const packetCount = header.packetCounts[i];
         const packetHeaders = view.subdivide(packetOffset, packetCount, SIZEOF_TIE_PACKET_HEADER).map(readTiePacketHeader);
 
         const packetsInThisLod: TiePacket[] = [];
@@ -72,21 +69,107 @@ export function readTieClass(view: DataViewExt, oClass: number): TieClass {
             packetsInThisLod.push({
                 header: packetHeaders[j],
                 body: packetBody,
-            })
+            });
         }
 
         packets.push(packetsInThisLod);
     }
 
     return {
+        header,
         normalsData,
-        nearDist: view.getFloat32(0x10),
-        midDist: view.getFloat32(0x14),
-        farDist: view.getFloat32(0x18),
-        bsphere: view.getFloat32_Xyzw(0x30),
-        scale: view.getFloat32(0x40),
+        nearDist: header.nearDist,
+        midDist: header.midDist,
+        farDist: header.farDist,
+        bsphere: header.bsphere,
+        scale: header.scale,
         packets,
         adGifs,
+    };
+}
+
+export type TieClassHeader = {
+    packetOffsets: number[],
+    packetCounts: number[],
+    normalsOffset: number,
+    normalsCount: number,
+    textureCount: number,
+    nearDist: number,
+    midDist: number,
+    farDist: number,
+    adGifsOffset: number,
+    bsphere: { x: number, y: number, z: number, w: number },
+}
+export function readTieClassHeader(gn: GN, view: DataViewExt) {
+    switch (gn) {
+        case 1: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L37
+            */
+            return {
+                packetOffsets: view.getArrayOfNumbers(0x0, 3, Uint32Array),
+                normalsOffset: view.getUint32(0xc),
+                normalsCount: 64, // always 64 normals in rac1
+                nearDist: view.getFloat32(0x10),
+                midDist: view.getFloat32(0x14),
+                farDist: view.getFloat32(0x18),
+                packetCounts: view.getArrayOfNumbers(0x20, 3, Uint8Array),
+                textureCount: view.getUint8(0x23),
+                adGifsOffset: view.getUint32(0x2c),
+                bsphere: view.getFloat32_Xyzw(0x30),
+                scale: view.getFloat32(0x40),
+            };
+        }
+        case 2:
+        case 3:
+        case 4: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L64
+            */
+            return {
+                packetOffsets: view.getArrayOfNumbers(0x0, 3, Uint32Array),
+                packetCounts: view.getArrayOfNumbers(0xc, 3, Uint8Array),
+                textureCount: view.getUint8(0xf),
+                nearDist: view.getFloat32(0x10),
+                midDist: view.getFloat32(0x14),
+                farDist: view.getFloat32(0x18),
+                adGifsOffset: view.getInt32(0x1c),
+                instanceIndex: view.getInt32(0x20),
+                cacheSizes: view.getArrayOfNumbers(0x24, 3, Int16Array),
+                rgbaRemapOffsets: view.getArrayOfNumbers(0x2a, 3, Int16Array),
+                ambientRgbasOffset: view.getInt32(0x30),
+                normalsOffset: view.getInt32(0x34),
+                normalsCount: view.getInt16(0x38),
+                ambientSize: view.getInt16(0x3a),
+                modeBits: view.getInt16(0x3c),
+                instanceCount: view.getInt16(0x3e),
+                scale: view.getFloat32(0x40),
+                oClass: view.getInt16(0x44),
+                tClass: view.getInt16(0x46),
+                mipDist: view.getFloat32(0x48),
+                glowRgba: view.getInt32(0x4c),
+                bsphere: view.getFloat32_Xyzw(0x50),
+                lodHeaders: view.subdivide(0x60, 3, SIZEOF_TIE_LOD_HEADER).map(readTieLodHeader),
+                glowRemapOffsets: view.getArrayOfNumbers(0x78, 3, Int16Array),
+            };
+        }
+    }
+}
+
+export type TieLodHeader = {
+    vertCount: number,
+    triCount: number,
+    stripCount: number,
+};
+export const SIZEOF_TIE_LOD_HEADER = 0x8;
+export function readTieLodHeader(view: DataViewExt) {
+    /*
+    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L30
+    */
+    return {
+        vertCount: view.getInt16(0x0),
+        triCount: view.getInt16(0x2),
+        stripCount: view.getInt16(0x4),
     };
 }
 
@@ -1346,13 +1429,13 @@ export function readSkyFace(view: DataViewExt): SkyFace {
 export interface Collision {
     header: CollisionHeader,
     meshGrid: CollisionOctant[],
-    heroGroups: HeroCollisionGroups,
+    heroGroups: HeroCollisionGroups | null,
 };
 
 export function readCollision(view: DataViewExt): Collision {
     const header = readCollisionHeader(view);
     const meshGrid = readCollisionMeshGrid(view.subview(header.mesh));
-    const heroGroups = readHeroCollisionGroups(view.subview(header.heroGroups));
+    const heroGroups = header.heroGroups ? readHeroCollisionGroups(view.subview(header.heroGroups)) : null;
     return {
         header,
         meshGrid,
@@ -1553,8 +1636,9 @@ export interface HeroCollisionGroups {
     groupData: HeroCollisionGroupData[],
 };
 
-export function readHeroCollisionGroups(view: DataViewExt): HeroCollisionGroups {
+export function readHeroCollisionGroups(view: DataViewExt): HeroCollisionGroups | null {
     const header = readHeroCollisionGroupsHeader(view);
+    if (!header.count) return null;
     const groupData = [];
     for (const group of header.groups) {
         const groupView = view.subview(group.offset);

@@ -194,6 +194,10 @@ export function createGfxTextureArrayForPaletteTextures(device: GfxDevice, name:
 
 // create a 64xN texture, where each row contains the 64-wide vertex color lookup table for one tie instance
 export function createTieRgbaTexture(device: GfxDevice, tieInstances: TieInstance[]): GfxTexture {
+    if (tieInstances.length === 0) {
+        return create1x1x1ErrorArrayTexture(device);
+    }
+
     const gfxTexture = device.createTexture({
         dimension: GfxTextureDimension.n2D,
         pixelFormat: GfxFormat.U8_RGBA_NORM,

@@ -76,6 +76,13 @@ export class WadDecompressor {
     private destBuf: Uint8Array
     private destPtr: number;
 
+    static compressedSize(compressed: DataViewExt, offset: number = 0) {
+        if (compressed.getFixedLengthString(offset, 3) !== "WAD") {
+            throw new Error("Not a WAD file")
+        }
+        return compressed.getUint32(offset + 0x3);
+    }
+
     constructor(private srcView: DataViewExt) {
         this.srcBuf = new Uint8Array(srcView.buffer, srcView.byteOffset, srcView.byteLength);
         this.srcPtr = BEGIN_PTR;
@@ -86,14 +93,15 @@ export class WadDecompressor {
             throw new Error("WAD file is too small");
         }
 
-        const compressedSize = srcView.getUint32(0x3);
-        if (compressedSize !== srcView.byteLength) {
-            throw new Error(`Buffer size doesn't match file header (expected ${compressedSize}, actual ${srcView.byteLength})`)
-        }
+        assert(WadDecompressor.compressedSize(srcView) === srcView.byteLength);
+        // const compressedSize = srcView.getUint32(0x3);
+        // if (compressedSize !== srcView.byteLength) {
+        //     throw new Error(`Buffer size doesn't match file header (expected ${compressedSize}, actual ${srcView.byteLength})`)
+        // }
 
-        if (srcView.getFixedLengthString(0, 3) !== "WAD") {
-            throw new Error("Not a WAD file")
-        }
+        // if (srcView.getFixedLengthString(0, 3) !== "WAD") {
+        //     throw new Error("Not a WAD file")
+        // }
     }
 
     public decompress() {
