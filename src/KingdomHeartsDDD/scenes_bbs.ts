@@ -11,8 +11,8 @@ import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON } from "./config/arc";
 import { BBS_VALID_PRESET_ARC } from "./config/setdata_bbs";
-import { LuxObjectSet, LuxOLOInstance, LuxTexture } from "./lux";
-import { BBSRoomObjects, BBSRoomRenderer } from "./render_bbs";
+import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxTexture } from "./lux";
+import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, TIM2Texture } from "./texture_bbs";
 
 function getCharaSubDirectory(name: string) {
@@ -80,10 +80,10 @@ class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: BBSPMP, objects: BBSRoomObjects) {
+    constructor(device: GfxDevice, pmp: BBSPMP, objects: LuxRoomObjects) {
         const tims = [...pmp.tims];
         for (const model of objects.models.values()) {
-            tims.push(...model.tims);
+            tims.push(...(model as BBSModel).tims);
         }
         this.textures = Array(tims.length);
         for (let i = 0; i < tims.length; i++) {
@@ -232,7 +232,7 @@ class Room implements SceneDesc {
             }
         }
 
-        return new Renderer(device, pmp, { sets, models });
+        return new Renderer(device, pmp, { sets, models, animations: new Map() });
     }
 }
 

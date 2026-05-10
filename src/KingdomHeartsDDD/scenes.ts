@@ -9,12 +9,12 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
 import { CTRTexture, CTRTFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { DreamDropRoomObjects, DreamDropRoomRenderer } from "./render";
+import { DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/chara";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_OLO } from "./config/setdata";
-import { LuxObjectSet, LuxOLOInstance, LuxSkeletalAnimation, LuxTexture, LuxTXA } from "./lux";
+import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture, LuxTXA } from "./lux";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -69,10 +69,10 @@ class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: DreamDropRoomObjects, txas: LuxTXA[], private config?: DreamDropRoomConfig) {
+    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: LuxRoomObjects, txas: LuxTXA[], private config?: DreamDropRoomConfig) {
         const ctrts = [...pmp.ctrts];
         for (const model of objects.models.values()) {
-            ctrts.push(...model.ctrts);
+            ctrts.push(...(model as DreamDropPMO).ctrts);
         }
         for (const txa of txas) {
             const ctrt = ctrts.find(t => t.name === txa.textureName)!;
