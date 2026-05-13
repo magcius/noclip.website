@@ -88,45 +88,75 @@ export function readGameplayHeader(gn: GN, view: DataViewExt) {
             };
         }
         case 2: {
-            // {0x00, bf<LevelSettingsBlock>(&Gameplay::level_settings), "level settings"},
-            // {0x04, bf<InstanceBlock<DirLightInstance, DirectionalLightPacked>>(&Gameplay::dir_lights), "directional lights"},
-            // {0x08, bf<InstanceBlock<CameraInstance, CameraPacked>>(&Gameplay::cameras), "cameras"},
-            // {0x0c, bf<InstanceBlock<SoundInstance, SoundInstancePacked>>(&Gameplay::sound_instances), "sound instances"},
-            // {0x10, bf<BinHelpMessageBlock<false>>(&Gameplay::us_english_help_messages), "us english help messages"},
-            // {0x14, bf<BinHelpMessageBlock<false>>(&Gameplay::uk_english_help_messages), "uk english help messages"},
-            // {0x18, bf<BinHelpMessageBlock<false>>(&Gameplay::french_help_messages), "french help messages"},
-            // {0x1c, bf<BinHelpMessageBlock<false>>(&Gameplay::german_help_messages), "german help messages"},
-            // {0x20, bf<BinHelpMessageBlock<false>>(&Gameplay::spanish_help_messages), "spanish help messages"},
-            // {0x24, bf<BinHelpMessageBlock<false>>(&Gameplay::italian_help_messages), "italian help messages"},
-            // {0x28, bf<BinHelpMessageBlock<false>>(&Gameplay::japanese_help_messages), "japanese help messages"},
-            // {0x2c, bf<BinHelpMessageBlock<true>>(&Gameplay::korean_help_messages), "korean help messages"},
-            // {0x30, {TieClassBlock::read, TieClassBlock::write}, "tie classes"},
-            // {0x34, bf<InstanceBlock<TieInstance, GcUyaDlTieInstance>>(&Gameplay::tie_instances), "tie instances"},
-            // {0x38, bf<GroupBlock<TieGroupInstance>>(&Gameplay::tie_groups), "tie groups"},
-            // {0x3c, {ShrubClassBlock::read, ShrubClassBlock::write}, "shrub classes"},
-            // {0x40, bf<InstanceBlock<ShrubInstance, ShrubInstancePacked>>(&Gameplay::shrub_instances), "shrub instances"},
-            // {0x44, bf<GroupBlock<ShrubGroupInstance>>(&Gameplay::shrub_groups), "shrub groups"},
-            // {0x48, bf<ClassBlock>(&Gameplay::moby_classes), "moby classes"},
-            // {0x4c, {GcUyaMobyBlock::read, GcUyaMobyBlock::write}, "moby instances"},
-            // {0x50, bf<GroupBlock<MobyGroupInstance>>(&Gameplay::moby_groups), "moby groups"},
-            // {0x54, {SharedDataBlock::read, SharedDataBlock::write}, "shared data"},
-            // {0x58, bf<PvarFixupBlock>(&Gameplay::pvar_moby_links), "moby link fixup table"},
-            // {0x5c, {PvarTableBlock::read, PvarTableBlock::write}, "pvar table"},
-            // {0x60, {PvarDataBlock::read, PvarDataBlock::write}, "pvar data"},
-            // {0x64, bf<PvarFixupBlock>(&Gameplay::pvar_relative_pointers), "relative pvar pointers"},
-            // {0x68, bf<InstanceBlock<CuboidInstance, ShapePacked>>(&Gameplay::cuboids), "cuboids"},
-            // {0x6c, bf<InstanceBlock<SphereInstance, ShapePacked>>(&Gameplay::spheres), "spheres"},
-            // {0x70, bf<InstanceBlock<CylinderInstance, ShapePacked>>(&Gameplay::cylinders), "cylinders"},
-            // {0x74, bf<InstanceBlock<PillInstance, ShapePacked>>(&Gameplay::pills), "pills"},
-            // {0x78, bf<PathBlock>(&Gameplay::paths), "paths"},
-            // {0x7c, {GrindPathBlock::read, GrindPathBlock::write}, "grindpaths"},
-            // {0x80, bf<GcUyaPointLightsBlock>(&Gameplay::point_lights), "point lights"},
-            // {0x84, {EnvTransitionBlock::read, EnvTransitionBlock::write}, "env transitions"},
-            // {0x88, {CamCollGridBlock::read, CamCollGridBlock::write}, "cam coll grid"},
-            // {0x8c, bf<GcUyaDlEnvSamplePointBlock>(&Gameplay::env_sample_points), "env sample points"},
-            // {0x90, bf<OcclusionMappingsBlock>(&Gameplay::occlusion), "occlusion"}
-            // {0x94, {TieAmbientRgbaBlock::read, TieAmbientRgbaBlock::write}, "tie ambient rgbas"},
-            // {0x98, {AreasBlock::read, AreasBlock::write}, "areas"},
+            /*
+            // https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay.cpp#L113
+            struct GameplayHeader {
+                // 0x0
+                int32 levelSettings;
+                // 0x4 - InstanceBlock<DirLightInstance, DirectionalLightPacked>
+                int32 directionLightInstances;
+                // 0x8 - InstanceBlock<CameraInstance, CameraPacked>
+                int32 cameraInstances;
+                // 0xc - InstanceBlock<SoundInstance, SoundInstancePacked>
+                int32 soundInstances;
+                // 0x10 - 0x2c
+                // help message fields
+                // 0x30 - TieClassBlock
+                int32 tieClasses;
+                // 0x34 - InstanceBlock<TieInstance, GcUyaDlTieInstance>
+                int32 tieInstances;
+                // 0x38 - GroupBlock<TieGroupInstance>
+                int32 tieGroups;
+                // 0x3c - ShrubClassBlock
+                int32 shrubClasses;
+                // 0x40 - InstanceBlock<ShrubInstance, ShrubInstancePacked>
+                int32 shrubInstances;
+                // 0x44 - GroupBlock<ShrubGroupInstance>
+                int32 shrubGroups;
+                // 0x48 - ClassBlock
+                int32 mobyClasses;
+                // 0x4c - GcUyaMobyBlock
+                int32 mobyInstances;
+                // 0x50 - GroupBlock<MobyGroupInstance>
+                int32 mobyGroups;
+                // 0x54 - SharedDataBlock
+                int32 sharedData;
+                // 0x58 - PvarFixupBlock
+                int32 pvarMobyLinks;
+                // 0x5c - PvarTableBlock
+                int32 pvarTable;
+                // 0x60 - PvarDataBlock
+                int32 pvarData;
+                // 0x64 - PvarFixupBlock
+                int32 pvarRelativePointers;
+                // 0x68 - InstanceBlock<CuboidInstance, ShapePacked>
+                int32 cuboids;
+                // 0x6c - InstanceBlock<SphereInstance, ShapePacked>
+                int32 spheres;
+                // 0x70 - InstanceBlock<CylinderInstance, ShapePacked>
+                int32 cylinders;
+                // 0x74 - InstanceBlock<PillInstance, ShapePacked>
+                int32 pills;
+                // 0x78 - PathBlock
+                int32 paths;
+                // 0x7c - GrindPathBlock
+                int32 grindPaths;
+                // 0x80 - GcUyaPointLightsBlock
+                int32 pointLights;
+                // 0x84 - EnvTransitionBlock
+                int32 envTransitions;
+                // 0x88 - CamCollGridBlock
+                int32 camCollGrid;
+                // 0x8c - GcUyaDlEnvSamplePointBlock
+                int32 envSamplePoints;
+                // 0x90 - OcclusionMappingsBlock
+                int32 occlusion;
+                // 0x94 - TieAmbientRgbaBlock
+                int32 tieAmbientRgbas;
+                // 0x98 - AreasBlock
+                int32 areas;
+            }
+            */
 
             return {
                 levelSettings: view.getInt32(0x0),
@@ -143,6 +173,7 @@ export function readGameplayHeader(gn: GN, view: DataViewExt) {
                 paths: view.getInt32(0x78),
                 grindPaths: view.getInt32(0x7c),
                 pointLightInstances: view.getInt32(0x80),
+                tieAmbientRgbas: view.getInt32(0x94),
             };
         }
         default: {
@@ -549,4 +580,38 @@ export function readSpline(view: DataViewExt): Spline {
         count,
         points,
     };
+}
+
+export type TieAmbientRgbaBlock = {
+    maxCount: number,
+    list: {
+        tieIndex: number,
+        count: number,
+        unknown: number,
+        ambientRgbas: Uint16Array,
+    }[]
+};
+export function readTieAmbientRgbaBlock(view: DataViewExt): TieAmbientRgbaBlock {
+    /*
+    struct TieAmbientRgbaBlock {
+        int16 tieIndex;
+        uint16 count;
+        uint16 ambientRgbas[count * 2]; // array of A1BGR5 colors
+    }
+    */
+    const out: TieAmbientRgbaBlock = { maxCount: 0, list: [] };
+    while (true) {
+        const tieIndex = view.getInt16(0x0);
+        if (tieIndex === -1) break;
+        const count = view.getUint16(0x2);
+        out.list.push({
+            tieIndex,
+            count,
+            unknown: view.getInt32(0x4),
+            ambientRgbas: view.subview(8, count * 2 - 4).getTypedArrayView(Uint16Array),
+        });
+        out.maxCount = Math.max(out.maxCount, count);
+        view = view.subview(4 + count * 2);
+    }
+    return out;
 }

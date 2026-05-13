@@ -29,6 +29,8 @@ export function readGsRamTableEntry(view: DataViewExt) {
 export interface TieClass {
     header: TieClassHeader,
     normalsData: { x: number, y: number, z: number }[],
+    rgbaRemaps: (RgbaRemapPacket[] | null)[] | null; // [lod][packet], not present in rac1
+    remapsReadable: boolean[],
     nearDist: number,
     midDist: number,
     farDist: number,
@@ -56,20 +58,54 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
 
     const normalsData = view.subdivide(header.normalsOffset, header.normalsCount, 8).map(view => view.getInt16_Xyzw(0));
 
+    let rgbaRemaps = null;
+    const remapsReadable = [false, false, false];
+    if (gn >= 2) {
+        rgbaRemaps = header.rgbaRemapOffsets!.map((offset, i) => {
+            if (offset === header.adGifsOffset || header.lodHeaders![i].vertCount === 0) return null;
+            return readTieRgbaRemap(view.subview(header.normalsOffset + offset), header);
+        });
+    }
+
     // there are always 3 lods
     for (let i = 0; i < 3; i++) {
         const packetOffset = header.packetOffsets[i];
         const packetCount = header.packetCounts[i];
         const packetHeaders = view.subdivide(packetOffset, packetCount, SIZEOF_TIE_PACKET_HEADER).map(readTiePacketHeader);
 
+        const hasBlock3 = rgbaRemaps?.[i]?.some(packet => !!packet.block3);
+        const hasBlock4 = rgbaRemaps?.[i]?.some(packet => !!packet.block4);
+        const knownRemapFormat = !hasBlock3 && !hasBlock4;
+        const rgbaRemap = knownRemapFormat ? rgbaRemaps?.[i] : null;
+        let rgbaRemapIndex = 0;
+        let regularVertPtr = 0;
+        let morphingVertPtr = 0;
+
         const packetsInThisLod: TiePacket[] = [];
         for (let j = 0; j < packetCount; j++) {
             const packetDataOffset = packetOffset + packetHeaders[j].data;
-            const packetBody = readTiePacketBody(view.subview(packetDataOffset), packetHeaders[j], adGifs, oClass, i, j);
+            const packetBody = readTiePacketBody(gn, view.subview(packetDataOffset), packetHeaders[j], rgbaRemap ? rgbaRemap[rgbaRemapIndex] : null, regularVertPtr, morphingVertPtr, adGifs, oClass, i, j);
             packetsInThisLod.push({
                 header: packetHeaders[j],
                 body: packetBody,
             });
+            if (rgbaRemap) {
+                const rgbaRemapEntry = rgbaRemap[rgbaRemapIndex];
+                regularVertPtr += packetBody.regularVerts.length;
+                morphingVertPtr += packetBody.morphingVerts.length;
+                if (regularVertPtr * 2 >= rgbaRemapEntry.block1!.length) {
+                    assert(regularVertPtr * 2 === rgbaRemapEntry.block1!.length);
+                    if (rgbaRemapEntry.block2) {
+                        assert(morphingVertPtr * 2 === rgbaRemapEntry.block2!.length);
+                    }
+                    rgbaRemapIndex++;
+                    regularVertPtr = 0;
+                    morphingVertPtr = 0;
+                }
+            }
+        }
+        if (rgbaRemap) {
+            assert(rgbaRemapIndex === rgbaRemap.length);
         }
 
         packets.push(packetsInThisLod);
@@ -78,6 +114,8 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
     return {
         header,
         normalsData,
+        rgbaRemaps,
+        remapsReadable,
         nearDist: header.nearDist,
         midDist: header.midDist,
         farDist: header.farDist,
@@ -86,6 +124,71 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
         packets,
         adGifs,
     };
+}
+
+type RgbaRemapPacket = {
+    packetSizeBytes: number,
+    block1: number[] | null,
+    block2: number[] | null,
+    block3: number[] | null,
+    block4: number[] | null,
+    block5: number[] | null,
+    block6: number[] | null,
+}
+
+// I know how to parse this but I have no idea what it does
+export function readTieRgbaRemap(view: DataViewExt, header: TieClassHeader): RgbaRemapPacket[] {
+    const packetSizeList = view.getArrayOfNumbers(0x0, 32, Uint8Array);
+    const packetSizeListBytes = [];
+    for (let i = 0; i < packetSizeList.length; i++) {
+        if (packetSizeList[i] === 0) break;
+        packetSizeListBytes.push(packetSizeList[i] * 16);
+    }
+
+    const packets: RgbaRemapPacket[] = [];
+
+    let packetView = view.subview(0x20);
+    for (let i = 0; i < packetSizeListBytes.length; i++) {
+        const packetSizeBytes = packetSizeListBytes[i];
+        if (packetSizeBytes === 0) break;
+
+        const descriptor = {
+            block1Size: packetView.getUint16(0x0),
+            block2Size: packetView.getUint16(0x2),
+            block4Size: packetView.getUint16(0x4),
+            block5Size: packetView.getUint16(0x6),
+            block6Size: packetView.getUint16(0x8),
+            block3Size: packetView.getUint16(0xa),
+            unknown1: packetView.getUint16(0xc),
+            totalSize: packetView.getUint16(0xe),
+        };
+
+        let ptr = 0x10;
+        const block1 = descriptor.block1Size ? packetView.subview(ptr, descriptor.block1Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array).map(v => v / 4) : null;
+        ptr += descriptor.block1Size;
+        const block2 = descriptor.block2Size ? packetView.subview(ptr, descriptor.block2Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block2Size;
+        const block3 = descriptor.block3Size ? packetView.subview(ptr, descriptor.block3Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block3Size;
+        const block4 = descriptor.block4Size ? packetView.subview(ptr, descriptor.block4Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block4Size;
+        const block5 = descriptor.block5Size ? packetView.subview(ptr, descriptor.block5Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block5Size;
+        const block6 = descriptor.block6Size ? packetView.subview(ptr, descriptor.block6Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block6Size;
+
+        // align 16
+        ptr += (16 - (ptr % 16)) % 16;
+
+        packets.push({ packetSizeBytes, block1, block2, block3, block4, block5, block6 });
+
+        assert(ptr === descriptor.totalSize);
+        assert(ptr === packetSizeBytes);
+
+        packetView = packetView.subview(packetSizeBytes);
+    }
+
+    return packets;
 }
 
 export type TieClassHeader = {
@@ -135,8 +238,8 @@ export function readTieClassHeader(gn: GN, view: DataViewExt) {
                 farDist: view.getFloat32(0x18),
                 adGifsOffset: view.getInt32(0x1c),
                 instanceIndex: view.getInt32(0x20),
-                cacheSizes: view.getArrayOfNumbers(0x24, 3, Int16Array),
-                rgbaRemapOffsets: view.getArrayOfNumbers(0x2a, 3, Int16Array),
+                cacheSizes: view.getArrayOfNumbers(0x24, 3, Uint16Array),
+                rgbaRemapOffsets: view.getArrayOfNumbers(0x2a, 3, Uint16Array),
                 ambientRgbasOffset: view.getInt32(0x30),
                 normalsOffset: view.getInt32(0x34),
                 normalsCount: view.getInt16(0x38),
@@ -150,7 +253,7 @@ export function readTieClassHeader(gn: GN, view: DataViewExt) {
                 glowRgba: view.getInt32(0x4c),
                 bsphere: view.getFloat32_Xyzw(0x50),
                 lodHeaders: view.subdivide(0x60, 3, SIZEOF_TIE_LOD_HEADER).map(readTieLodHeader),
-                glowRemapOffsets: view.getArrayOfNumbers(0x78, 3, Int16Array),
+                glowRemapOffsets: view.getArrayOfNumbers(0x78, 3, Uint16Array),
             };
         }
     }
@@ -221,7 +324,7 @@ const tieCommandSizes = {
 };
 
 export type TiePacketBody = ReturnType<typeof readTiePacketBody>;
-export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketHeader, adGifs: TieGifAds[], oClass: number, lod: number, packetIndex: number) {
+export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: TiePacketHeader, rgbaRemaps: RgbaRemapPacket | null, rgbaRemapBaseRegularVert: number, rgbaRemapBaseMorphingVert: number, adGifs: TieGifAds[], oClass: number, lod: number, packetIndex: number) {
     /*
     struct TiePacketBody {
         // 0x0
@@ -277,25 +380,55 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
     const morphingVertexCount = tieVuHeader.morphingVertexCount;
     const morphingVerts = view.subdivide(ptr, morphingVertexCount, SIZEOF_TIE_MORPHING_VERTEX).map(readTieMorphingVertex);
     ptr += morphingVertexCount * SIZEOF_TIE_MORPHING_VERTEX;
-
-    // indices into the tie's normal array
     alignTo(0x10);
-    const regularNormalIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
-    ptr += tieVuHeader.regularVertexCount * 0x1;
-    alignTo(0x4);
-    const morphingNormalIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyz(0));
-    ptr += tieVuHeader.morphingVertexCount * 0x4;
 
-    // indices into the instance's rgba array
-    alignTo(0x10);
-    const regularRgbaIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
-    ptr += tieVuHeader.regularVertexCount * 0x1;
-    alignTo(0x4);
-    const morphingRgbaIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyzw(0));
-    ptr += tieVuHeader.morphingVertexCount * 0x4;
+    // normal and rgba indices for rac1 only
+    let regularNormalIndices: number[] = [];
+    let morphingNormalIndices: { x: number, y: number, z: number }[] = [];
+    let regularRgbaIndices: number[] = [];
+    let morphingRgbaIndices: { x: number, y: number, z: number }[] = [];
+    if (gn === 1) {
+        // indices into the tie's normal array
+        regularNormalIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
+        ptr += tieVuHeader.regularVertexCount * 0x1;
+        alignTo(0x4);
+        morphingNormalIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyz(0));
+        ptr += tieVuHeader.morphingVertexCount * 0x4;
 
-    // there's one more array of bytes after this but not sure what it is or what its length is (usually 50-60 bytes)
+        // indices into the instance's rgba array
+        alignTo(0x10);
+        regularRgbaIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
+        ptr += tieVuHeader.regularVertexCount * 0x1;
+        alignTo(0x4);
+        morphingRgbaIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyzw(0));
+        ptr += tieVuHeader.morphingVertexCount * 0x4;
+    } else {
+        if (rgbaRemaps) {
+            for (let i = 0; i < regularVerts.length; i++) {
+                assert(rgbaRemaps.block1 !== null);
+                const rgbaIndex = rgbaRemaps.block1[(rgbaRemapBaseRegularVert + i) * 2];
+                assert(rgbaIndex !== undefined);
+                regularRgbaIndices.push(rgbaIndex);
+            }
+        }
+    }
+
+    // I found a way to parse this but I dunno what it does
     alignTo(0x10);
+    const unknownFlags: number[] = [];
+    let unknownFlagsRemaining = tieVuHeader.stripCount + 1;
+    while (true) {
+        const flag = view.getUint8(ptr++);
+        if (flag == 0x7 || flag == 0xFC || flag == 0xF6) {
+            unknownFlagsRemaining--;
+            unknownFlags.push(flag);
+            if (unknownFlagsRemaining === 0) break;
+        } else if (flag == 0x3) {
+            unknownFlags.push(flag);
+        } else {
+            assert(false);
+        }
+    }
 
     const imaginaryGsBuffer = new ImaginaryGsCommandBuffer<TieStrip, { material: number, clamp: number }, TieVertexWithNormalAndRgba>();
 
@@ -309,8 +442,14 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
     // Some are written twice.
     for (let i = 0; i < regularVerts.length; i++) {
         const vertex = regularVerts[i];
-        const normalIndex = regularNormalIndices[i];
-        const rgbaIndex = regularRgbaIndices[i] - 64;
+        let normalIndex = 0;
+        let rgbaIndex = 0;
+        if (gn === 1) {
+            normalIndex = regularNormalIndices[i];
+            rgbaIndex = regularRgbaIndices[i] - 64;
+        } else {
+            rgbaIndex = regularRgbaIndices[i];
+        }
         imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
             imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
@@ -318,8 +457,14 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
     }
     for (let i = 0; i < morphingVerts.length; i++) {
         const vertex = morphingVerts[i];
-        const normalIndex = morphingNormalIndices[i].x; // all 3 components are normal indices, not sure why there are 3, maybe to do with lod morphing
-        const rgbaIndex = morphingRgbaIndices[i].x - 64;
+        let normalIndex = 0;
+        let rgbaIndex = 0;
+        if (gn === 1) {
+            normalIndex = morphingNormalIndices[i].x; // all 3 components are normal indices, not sure why there are 3, maybe to do with lod morphing
+            rgbaIndex = morphingRgbaIndices[i].x - 64;
+        } else {
+            // TODO
+        }
         imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
             imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
@@ -354,6 +499,7 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
         morphingNormalIndices,
         regularRgbaIndices,
         morphingRgbaIndices,
+        unknownFlags,
         commandBuffer: imaginaryGsBuffer.finish(),
     }
 }

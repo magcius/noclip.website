@@ -5,7 +5,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
 import { RatchetShaderLib } from "./shader-lib";
-import { TieClass, TieImaginaryGsCommand, TieVertex, TieVertexWithNormalAndRgba } from "./bin-core";
+import { TieClass, TieVertexWithNormalAndRgba } from "./bin-core";
 import { ImaginaryGsCommandType, MegaBuffer } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
@@ -88,7 +88,6 @@ void main() {
     ivec2 ambientRgbaTexcoord = ivec2(int(a_ExtraData.z), int(a_InstanceExtraData.x));
     vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
     rgba.rgb *= 2.0; // not sure about this
-    rgba = vec4(vec3(0.5), 1.0);
     vec4 lights = a_InstanceDirectionLights;
     vec3 normal = normalize(inverse(transpose(mat3(instanceTransform))) * a_Normal);
     
@@ -111,6 +110,8 @@ flat in int v_TextureIndex;
 flat in int v_Clamp;
 
 void main() {
+    // gl_FragColor = v_Rgba;
+    // return;
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
     vec2 texRemap = u_TextureRemaps.ties[v_TextureIndex].xy;
     vec4 textureSample = ratchetSampler(texRemap.x, texRemap.y, v_Clamp, v_ST);
@@ -247,7 +248,7 @@ export class TieGeometry {
                                 const fixedTexcoord = fixedTexcoords[i];
                                 let normal = tie.normalsData[normalIndex];
                                 if (normal === undefined) {
-                                    normal = { x: 0, y: 0, z: 0 };
+                                    normal = { x: 1 / normalScale, y: 0, z: 0 };
                                 }
 
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.x;
@@ -255,17 +256,13 @@ export class TieGeometry {
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.z;
                                 vertexArrayBuffer[vertexPtr++] = textureIndices[currentMaterial.texture];
                                 vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
-                                // vertexArrayBuffer[vertexPtr++] = rgbaIndex;
-                                vertexArrayBuffer[vertexPtr++] = 0;
+                                vertexArrayBuffer[vertexPtr++] = rgbaIndex;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.s;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.t;
                                 assert(vertex.q === 4096);
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.x;
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.y;
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.z;
-                                // vertexArrayBuffer[vertexPtr++] = 0;
-                                // vertexArrayBuffer[vertexPtr++] = 0;
-                                // vertexArrayBuffer[vertexPtr++] = 0;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetX;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetY;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetZ;

@@ -1,7 +1,7 @@
-import { ChunkPlane, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readLevelSettings, readMobyInstance, readPathBlock, readPointLightInstance, readShrubInstance, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieInstance } from "./bin-gameplay";
+import { ChunkPlane, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readLevelSettings, readMobyInstance, readPathBlock, readPointLightInstance, readShrubInstance, readTieAmbientRgbaBlock, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
 import { DataViewExt } from "./DataViewExt";
 import { readCollision, readShrubClass, readSky, readTfrag, readTfragBlockHeader, readTfragHeader, readTieClass, ShrubClass, SIZEOF_TFRAG_HEADER, TieClass } from "./bin-core";
-import { GN, makeClassOClassMap, makeInstanceOClassMap, makeTextureIndicesByOClassMap, noclipSpaceFromRatchetSpace } from "./utils";
+import { filterInstancesByChunkPlane, filterMobyInstancesByChunkPlane, GN, makeClassOClassMap, makeInstanceOClassMap, makeTextureIndicesByOClassMap, noclipSpaceFromRatchetSpace } from "./utils";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readPalette8TextureSky, readPalette8TextureWithPaletteInGsRam } from "./textures";
 import { ClassEntry, readClassEntry, readLevelCoreHeader, readTextureEntry, SIZEOF_SHRUB_CLASS_ENTRY, SIZEOF_TEXTURE_ENTRY, SIZEOF_TIE_CLASS_ENTRY, TextureEntry } from "./bin-index";
@@ -33,6 +33,7 @@ export interface LevelResources {
     tieClassTextureIndices: Map<number, number[]> | null,
     tieInstances: TieInstance[] | null,
     tieInstancesByOClass: Map<number, TieInstance[]> | null,
+    tieAmbientRgbas: TieAmbientRgbaBlock | null,
 
     shrubTextures: PaletteTexture[] | null,
     shrubOClasses: number[] | null,
@@ -114,6 +115,7 @@ export function load(gn: GN, filterChunk: number | null, out: LevelResources, fi
         collisionDataPromise = loadCollisionData(gn, out, coreDataFilePromise, indexDataPromise);
     }
     const skyDataPromise = loadSkyData(gn, out, coreDataFilePromise, indexDataPromise);
+    const tieAmbientRgbasPromise = loadTieAmbientRgbas(gn, out, gameplayFilePromise, gameplayHeaderPromise);
 
     return Promise.all([
         miscGameplayDataPromise,
@@ -124,6 +126,7 @@ export function load(gn: GN, filterChunk: number | null, out: LevelResources, fi
         textureDataPromise,
         collisionDataPromise,
         skyDataPromise,
+        tieAmbientRgbasPromise,
     ]);
 }
 
@@ -172,48 +175,6 @@ async function loadInstanceData(gn: GN, out: LevelResources, filterChunk: number
     const [gameplayFile, gameplayHeader, levelSettings] = await Promise.all([gameplayFilePromise, gameplayHeaderPromise, levelSettingsPromise]);
 
     const chunkPlanes = levelSettings.chunkPlanes;
-
-    function ownerChunk(pos: vec3, chunkPlanes: ChunkPlane[]): number {
-        if (!chunkPlanes) return 0;
-        for (let j = 0; j < chunkPlanes.length; j++) {
-            const plane = chunkPlanes[j];
-            const v = vec3.sub(vec3.create(), pos, plane._pointInNoclipSpace);
-            const dot = vec3.dot(v, plane._normalInNoclipSpace);
-            if (dot >= 0) {
-                return j + 1;
-            }
-        }
-        return 0;
-    }
-
-    function filterInstancesByChunkPlane<T extends { _matrixInNoclipSpace: mat4 }>(chunkNumber: number | null, instances: T[], chunkPlanes: ChunkPlane[] | undefined): T[] {
-        if (!chunkPlanes) return instances;
-        if (chunkNumber === null) return instances;
-        const out: T[] = [];
-        for (let i = 0; i < instances.length; i++) {
-            const instance = instances[i];
-            const pos = mat4.getTranslation(vec3.create(), instance._matrixInNoclipSpace);
-            if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
-                out.push(instance);
-            }
-        }
-        return out;
-    }
-
-    function filterMobyInstancesByChunkPlane(chunkNumber: number | null, instances: MobyInstance[], chunkPlanes: ChunkPlane[] | undefined): MobyInstance[] {
-        if (!chunkPlanes) return instances;
-        if (chunkNumber === null) return instances;
-        const out: MobyInstance[] = [];
-        for (let i = 0; i < instances.length; i++) {
-            const instance = instances[i];
-            const pos = vec3.fromValues(instance.position.x, instance.position.y, instance.position.z);
-            vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
-            if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
-                out.push(instance);
-            }
-        }
-        return out;
-    }
 
     out.tieOClasses = readClassPositionBlock(gameplayFile.subview(gameplayHeader.tieClasses));
     let tieInstances = readInstanceBlock(gameplayFile.subview(gameplayHeader.tieInstances), SIZEOF_TIE_INSTANCE(gn), (view, i) => readTieInstance(gn, view, i)).instances;
@@ -313,3 +274,10 @@ export async function loadChunkCollisionData(gn: GN, out: LevelResources, chunkC
     };
 }
 
+export async function loadTieAmbientRgbas(gn: GN, out: LevelResources, gameplayFilePromise: Promise<DataViewExt>, gameplayHeaderPromise: Promise<GameplayHeader>) {
+    const [gameplayFile, gameplayHeader] = await Promise.all([gameplayFilePromise, gameplayHeaderPromise]);
+
+    if (gn <= 1) return;
+
+    out.tieAmbientRgbas = readTieAmbientRgbaBlock(gameplayFile.subview(gameplayHeader.tieAmbientRgbas));
+}

@@ -15,10 +15,10 @@ import { LevelResources, load, loadFilesFromNetwork } from "./loader";
 import { createMegaBuffer, MegaBuffer, noclipSpaceFromRatchetSpace, lineChainToLineSegments, GN } from "./utils";
 import { TfragGeometry, TfragRenderer } from "./render-tfrag";
 import { ShrubGeometry, ShrubRenderer } from "./render-shrub";
-import { Blue, colorNewFromRGBA, OpaqueBlack, White } from "../Color";
+import { colorNewFromRGBA, OpaqueBlack, White } from "../Color";
 import { SkyGeometry, SkyRenderer } from "./render-sky";
 import { RatchetShaderLib } from "./shader-lib";
-import { createGfxTextureForPaletteTexture, createTextureAtlases, createTieRgbaTexture, TextureAtlases } from "./textures";
+import { createGfxTextureForPaletteTexture, createTextureAtlases, createTieRgbaTexture_Rac1, createTieRgbaTexture_Rac234, TextureAtlases } from "./textures";
 import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
@@ -97,6 +97,7 @@ class RatchetAndClankScene implements SceneGfx {
             tieClassTextureIndices: null,
             tieInstances: null,
             tieInstancesByOClass: null,
+            tieAmbientRgbas: null,
             shrubTextures: null,
             shrubOClasses: null,
             shrubClasses: null,
@@ -251,11 +252,23 @@ class RatchetAndClankScene implements SceneGfx {
         const existing = this.textures.tieRgbaTexture;
         if (existing) return existing;
 
-        const { tieInstances } = this.levelResources;
-        if (!tieInstances) return null;
+        if (this.gn === 1) {
+            const { tieInstances } = this.levelResources;
+            if (!tieInstances) return null;
 
-        this.textures.tieRgbaTexture = createTieRgbaTexture(this.renderHelper.device, tieInstances);
-        return this.textures.tieRgbaTexture;
+            this.textures.tieRgbaTexture = createTieRgbaTexture_Rac1(this.renderHelper.device, tieInstances);
+            this.textureHolder.viewerTextures.push({ gfxTexture: this.textures.tieRgbaTexture });
+            this.textureHolder.onnewtextures();
+            return this.textures.tieRgbaTexture;
+        } else {
+            const { tieAmbientRgbas } = this.levelResources;
+            if (!tieAmbientRgbas) return null;
+
+            this.textures.tieRgbaTexture = createTieRgbaTexture_Rac234(this.renderHelper.device, tieAmbientRgbas);
+            this.textureHolder.viewerTextures.push({ gfxTexture: this.textures.tieRgbaTexture });
+            this.textureHolder.onnewtextures();
+            return this.textures.tieRgbaTexture;
+        }
     }
 
     getOrCreateAtlasTextures(): GfxSamplerBinding[] | null {
@@ -724,7 +737,7 @@ export const sceneGroup2: SceneGroup = {
         new RatchetAndClank2SceneDesc(20, 0, "Protopet Factory, Yeedil"),
         new RatchetAndClank2SceneDesc(20, 1, "Protopet Factory, Yeedil (Interior)"),
         new RatchetAndClank2SceneDesc(20, 2, "Protopet Factory, Yeedil (Final boss)"),
-        new RatchetAndClank2SceneDesc(30, null, "Insomniac Museum"),
+        new RatchetAndClank2SceneDesc(30, null, "Insomniac Museum, Burbank"),
         // there is no 21 or 27-29
 
     ],
