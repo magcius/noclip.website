@@ -12,7 +12,7 @@ uniform sampler2D u_Texture;
 void main() {
     ivec2 t_FragCoord = ivec2(gl_FragCoord.xy);
 #if !GFX_VIEWPORT_ORIGIN_TL()
-    t_FragCoord.y = ${Math.max(height >>> mipLevel, 1)} - t_FragCoord.y;
+    t_FragCoord.y = ${Math.max(height >>> mipLevel, 1)} - 1 - t_FragCoord.y;
 #endif
     gl_FragColor = texelFetch(TEXTURE(u_Texture), t_FragCoord.xy, ${mipLevel});
 }`;
