@@ -45,7 +45,6 @@
     "SaveState_bk/23/1": "ZNCA861$z:p:D1bKW!RcP8s)!c@:95+f:5[@owEJY:i{oe:H^LLY:GBr5Gie[U0I3c?QSj=",
     "SaveState_bk/24/1": "ZNCA8gviSaj9o5+DDhMP6[,)QGPZ~_cZe9_B~MSHQKp?4$=w;hLE[j]-k+p=ZFDw6;Bi)G=",
     "SaveState_bk/25/1": "ZNCA8FwM+ir:yHH4M(eXHTgM1[fM_IFp162{el2&xLPOy7u/rGQgCwth_Bc7kS3/zg!=7W=",
-
     "SaveState_bk/26/1": "ZNCA8miEpI)YgY*aOHY/9KNy*AxdHfSG6$M-D|pgQgs1px?~Y|FznZWkmU5!R=vjVl;6@==",
     "SaveState_bk/27/1": "ZNCA8/ch&NY!l!U,UEM4e1$^fMY&YkU-tqn0bWWY//yU;r,v^W6*{~ia}+DNA]v(&RA^jy=",
     "SaveState_bk/27/2": "ZNCA8{PaB/3_8@ddmG?Z{YK3Jso,kq9Ud[kudaOovgJnr@I,MEc;!2(OV3WSqY8Q{&gOoC=",
@@ -134,7 +133,6 @@
     "SaveState_bk/92/1": "ZNCA8cZ12NQm1gUHLuBkW^782T}jQcRW2])g:]Iv1D&aLiG7GTz!sk&G{9r+G9&eFJ=yql=",
     "SaveState_bk/93/1": "ZNCA8PD}_&Lb:D66d;ew;D3ybH{hr)4FSlNl;lTqu*1K-T2uF7W?/gY]B9:C5[?a8PO1,4=",
     "SaveState_bk/93/2": "ZNCA87w8ROOrvyxSrA-8[$uy,MmbuB&e}fiJokO^Zm-r-0~-k6l{xb$a6]]UCr:yJesL$c=",
-
     "SaveState_mk64/ktb/1": "ShareData=AA*K]9nDS1Qy54k9L]GT=PJ[vQhNbGUdZPbQhKJQVIDGxUFtib5R{q@9l7yRV[",
     "SaveState_mk64/yv/1": "ShareData=ANBp895I!09E-w4Uk~vi=HHX?Q55tGUkS4;US{x8VvYX?9m&kwT0Es|97AzH+^",
     "SaveState_mk64/dd/1": "ShareData=AV5nrUp![M9JBcXUwGB*WG8,P5v4=gUlvJtUM45xV~z/q9p2TR9M$~VUj2~dV[",
@@ -155,7 +153,6 @@
     "SaveState_mk64/ws/1": "ShareData=AUMM|9iaP88Jr+3T8=p*=BHcx5Z:PKUg?jPT:fxKV:G}W8|2i&T_Jb19hd@g+^",
     "SaveState_mk64/lr/1": "ShareData=AV_9|Um-[$Tg~&@8,B!*=RN[_6L[MxUiv=]T2(03U|-{tT:zHf8@y]fUslkVV[",
     "SaveState_mk64/rr/1": "ShareData=AJ*D_Ui;Y$Tx*@B9NxCT+^=bB5$R=GUs=_gT(a,9WNtZ|UR;-,8,L/dUk&X)V[",
-
     "SaveState_oot3d/bdan/1": "ZNCA8*8vC!B@yO;Sr3}CbX&Aj6/yz[48^4hztVsKuXE]D]ayVd;Ev|AQhe0uV&}Gx,@eio=",
     "SaveState_oot3d/bdan_dd/1": "ZNCA8*8vC!B@yO;Sr3}CbX&Aj6/yz[48^4hztVsKuXE]D]ayVd;Ev|AQhe0uV&}Gx,@eio=",
     "SaveState_oot3d/bdan_boss/1": "ZNCA8xQ(P+vBP},c49ip*oX;yg95bA[c~2xzQ]=A!|s/BKi9}PONH92px|MQj]d=X~bcxO=",
@@ -6944,5 +6941,24 @@
     "SaveState_TopGearRally/coastline_m/1": "ShareData=ABFDUUaGXvUMx9s9rMxFW1wXgQ@LHjUm*ZWUG+=EWCwi=UedLp8/VtzUp(T^={",
     "SaveState_TopGearRally/jungle_m/1": "ShareData=AK3MCUg9cl8Ky3D8/m[6W8!ubP}(;:UWGk;8)|t~We7!hT@/x-T-J,wUoRYj={",
     "SaveState_TopGearRally/stripmine_m/1": "ShareData=AHyy[9i]v)8Z7@&T1u7WWxo-wQQ2B;Uh}SGT5bmIV$M^z9E2+mT8CfS9k=o2-X",
-    "SaveState_TopGearRally/season_winner/1": "ShareData=ASwYt9oRPi7xTv^TBD6OXU*mvRVuteUf6;3T1hTIV1OT*8df5TT++q29qC0kW~"
+    "SaveState_TopGearRally/season_winner/1": "ShareData=ASwYt9oRPi7xTv^TBD6OXU*mvRVuteUf6;3T1hTIV1OT*8df5TT++q29qC0kW~",
+    "SaveState_RatchetAndClank1/0/1": "ShareData=AOS:-Ut:ViTY(Lk9I0y*V5|t-Q9;&_Uqi!(T1Vw;Vbh+RUU!6o9C$l6Uk&u!+d",
+    "SaveState_RatchetAndClank1/1/1": "ShareData=AQBxmUnH|y8$}i0UDtc5VyE3MQl*uVUq]{:T*PU|VSztf9bb!B9ajTYUZ]Cj+5",
+    "SaveState_RatchetAndClank1/2/1": "ShareData=AQQ=PUb0A:TwK5@UYGI,V,${;58kZ5UmeWl8)a)[U$5(99v{D|T]GS}Uf+Im+5",
+    "SaveState_RatchetAndClank1/3/1": "ShareData=AN@PBUmj_kST~=y8PL&gV5*{_Qx&L/UwaZoTeqz3Vr44fTTBu@8mZP]UfJoW+d",
+    "SaveState_RatchetAndClank1/4/1": "ShareData=ALXe7Utc*=7@Z60T@fj8V-dREQ6}}_UvbrCTyWMgVin*W9C_=48svFnUn*NU+5",
+    "SaveState_RatchetAndClank1/5/1": "ShareData=ADQn1Ua$b_7([&q86+XOV/~[KQ-13fUnw[t86_@!Vl2bBTZt-nTfyH0Uoiu5+d",
+    "SaveState_RatchetAndClank1/6/1": "ShareData=ATzu?UlrVfSkqblT0/K[V+okhRAB0_Uq3we8+tDmV5wb!8)gA:TnM;BUr{-j+5",
+    "SaveState_RatchetAndClank1/7/1": "ShareData=AKfHAUa~[mTx0em9fy:,V,buc5+/kmUvg~3T0t5QVZ}-FUJM&v9Ai7lUmN+Q+d",
+    "SaveState_RatchetAndClank1/8/1": "ShareData=AJsZCUAC5WT|uA797)dSV1Cf15]b)+UYK=eUF?@!VX:shUskIG8/l*^UKO2h+5",
+    "SaveState_RatchetAndClank1/9/1": "ShareData=AN&G$96KTr8+vJiUMzJ)V+oKtQ$0/_UX&ZGT8SBaVfOht9c*mLT--Cq9zz8j+5",
+    "SaveState_RatchetAndClank1/10/1": "ShareData=AS[dKUYj_zT3r:d9WlW[Vv{o=QnltjUo1ouT*V0vVnh(hUv1^B9W|ZHUlcqD+5",
+    "SaveState_RatchetAndClank1/11/1": "ShareData=AFfzIUjpEjTF=_y9CE^qV~_F/Q2~edUceM(T&&v9Vy*,KT6@-o8*XCpUkLS=+5",
+    "SaveState_RatchetAndClank1/12/1": "ShareData=AD!N$Uvp^ET,8OO9q?jYV4A0SQ!d}{UdAd9T19D^VmxpVUXPjP8)F)gUhT[T+5",
+    "SaveState_RatchetAndClank1/13/1": "ShareData=AOX}wUdoQ28iM3uT!F]SV5(&-Q;RvXUY9+*T6J&4V8d/)8[l{-9D7fdUqVoT+5",
+    "SaveState_RatchetAndClank1/14/1": "ShareData=AKzy~UkF,A8h*iIURXmqV8DBCRTlX?UbhoPTb$w!VZ-J;9by8?8kam;UrK6K+5",
+    "SaveState_RatchetAndClank1/15/1": "ShareData=AM8zQUwU71Tp^aXURy!BV;onH6PjUTUl8~j8!Z/(Vey=t9KGIHT$p*/UtTu=+5",
+    "SaveState_RatchetAndClank1/16/1": "ShareData=ATLokUa^jrT3^4u9Vlw?V;!{+5}O[hUjcR1UDq^sV2X+|T*=2h9Q7lIUalm,+5",
+    "SaveState_RatchetAndClank1/17/1": "ShareData=AV:qx90F!&8G6ICT6O!fV8jjjRT]v!UXu{_TY-$;V1B*=8~2VmTl8LY97]AM+^",
+    "SaveState_RatchetAndClank1/18/1": "ShareData=AAc8~Uvj17TS|lv9J0N~V3;kMQ|1apUu$P}Tc!qIVk&dhUGK=Q89V+1UdE:!+^"
 }

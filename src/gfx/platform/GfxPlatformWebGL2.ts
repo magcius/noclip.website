@@ -2407,6 +2407,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._debugGroupStatisticsTriangles(count / 3);
     }
 
+    public drawInstanced(count: number, firstVertex: number, instanceCount: number): void {
+        const gl = this.gl;
+        const pipeline = this._currentPipeline;
+        gl.drawArraysInstanced(pipeline.drawMode, firstVertex, count, instanceCount);
+        this._debugGroupStatisticsDrawCall();
+        this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
+    }
+
     public drawIndexed(count: number, firstIndex: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline, inputLayout = assertExists(pipeline.inputLayout);

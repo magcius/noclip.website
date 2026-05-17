@@ -303,8 +303,7 @@ export class GfxRenderInst {
     /**
      * Sets the number of instances to draw.
      *
-     * Instance counts are the same for both indexed and unindexed draws, however instanced draws are (currently)
-     * only supported for indexed draws.
+     * Instance counts are the same for both indexed and unindexed draws.
      *
      * @param instanceCount The number of instances to render.
      */
@@ -530,8 +529,11 @@ export class GfxRenderInst {
 
         const indexed = this._indexBuffer !== null;
         if (this._drawInstanceCount > 1) {
-            assert(indexed);
-            passRenderer.drawIndexedInstanced(this._drawCount, this._drawStart, this._drawInstanceCount);
+            if (indexed) {
+                passRenderer.drawIndexedInstanced(this._drawCount, this._drawStart, this._drawInstanceCount);
+            } else {
+                passRenderer.drawInstanced(this._drawCount, this._drawStart, this._drawInstanceCount);
+            }
         } else if (indexed) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
         } else {

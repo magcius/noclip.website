@@ -365,6 +365,7 @@ export interface GfxRenderPass {
 
     // Draw commands.
     draw(vertexCount: number, firstVertex: number): void;
+    drawInstanced(vertexCount: number, firstVertex: number, instanceCount: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 

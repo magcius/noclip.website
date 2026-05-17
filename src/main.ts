@@ -111,6 +111,7 @@ import * as Scenes_Spyro from './Spyro/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
+import * as Scenes_RatchetAndClank1 from './RatchetAndClank/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -218,6 +219,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Spyro.sceneGroup,
     Scenes_Spyro.sceneGroup2,
     Scenes_Spyro.sceneGroup3,
+    Scenes_RatchetAndClank1.sceneGroup,
     Scenes_PlusForXP.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
