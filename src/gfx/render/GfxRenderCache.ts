@@ -102,11 +102,10 @@ class DynamicBufferEntry {
         this.buffer = device.createBuffer(byteCount, usage, GfxBufferFrequencyHint.Dynamic);
     }
 
-    public allocate(device: GfxDevice, data: Uint8Array): number {
-        if (this.allocOffs + data.byteLength <= this.byteCount) {
+    public allocate(byteCount: number): number {
+        if (this.allocOffs + byteCount <= this.byteCount) {
             let byteOffset = this.allocOffs;
-            device.uploadBufferData(this.buffer, byteOffset, data);
-            this.allocOffs += align(data.byteLength, 4);
+            this.allocOffs += align(byteCount, 4);
             this.age = 4;
             return byteOffset;
         } else {
@@ -139,23 +138,29 @@ export class GfxDynamicBufferCache {
         }
     }
 
-    public allocateData(usage: GfxBufferUsage, data: Uint8Array): GfxVertexBufferDescriptor {
+    public allocateSize(usage: GfxBufferUsage, byteCount: number): GfxVertexBufferDescriptor {
         for (let i = 0; i < this.entry.length; i++) {
             const entry = this.entry[i];
             if (entry.usage !== usage)
                 continue;
-            const byteOffset = entry.allocate(this.device, data);
+            const byteOffset = entry.allocate(byteCount);
             if (byteOffset >= 0)
                 return { buffer: entry.buffer, byteOffset };
         }
 
         // Round to the nearest 64.
-        const newBufferSize = align(data.byteLength, 64);
+        const newBufferSize = align(byteCount, 64);
         const entry = new DynamicBufferEntry(this.device, newBufferSize, usage);
         this.entry.push(entry);
-        const byteOffset = entry.allocate(this.device, data);
+        const byteOffset = entry.allocate(byteCount);
         assert(byteOffset === 0);
         return { buffer: entry.buffer, byteOffset };
+    }
+
+    public allocateData(usage: GfxBufferUsage, data: Uint8Array): GfxVertexBufferDescriptor {
+        const desc = this.allocateSize(usage, data.byteLength);
+        this.device.uploadBufferData(desc.buffer, desc.byteOffset!, data);
+        return desc;
     }
 
     public destroy(): void {
