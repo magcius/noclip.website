@@ -14,6 +14,7 @@ import { emitEffect } from "../EffectSystem.js";
 import { createModelObjMapObj } from "./ModelObj.js";
 import { initLightCtrl } from "../LightData.js";
 import { initShadowFromCSV } from "../Shadow.js";
+import { GameBits } from "../NameObj.js";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -136,9 +137,9 @@ export class NoclipLegacyActorSpawner {
     private isWorldMap = false;
 
     constructor(private sceneObjHolder: SceneObjHolder) {
-        this.isSMG1 = this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy';
-        this.isSMG2 = this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy2';
-        this.isWorldMap = this.isSMG2 && this.sceneObjHolder.sceneDesc.galaxyName.startsWith('WorldMap');
+        this.isSMG1 = !!(this.sceneObjHolder.sceneLoader.gameBit & GameBits.SMG1);
+        this.isSMG2 = !!(this.sceneObjHolder.sceneLoader.gameBit & GameBits.SMG2);
+        this.isWorldMap = this.isSMG2 && this.sceneObjHolder.sceneLoader.sceneDesc.galaxyName.startsWith('WorldMap');
     }
 
     public legacyCreateObjinfo(infoIter: JMapInfoIter): ObjInfo {
@@ -161,7 +162,7 @@ export class NoclipLegacyActorSpawner {
 
     public async spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter): Promise<void> {
         const modelCache = this.sceneObjHolder.modelCache;
-        const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
+        const galaxyName = this.sceneObjHolder.sceneLoader.sceneDesc.galaxyName;
 
         const objinfo = this.legacyCreateObjinfo(infoIter);
         console.log(`LegacyActor: ${objinfo.objName}`);
@@ -457,7 +458,7 @@ export class NoclipLegacyActorSpawner {
 
     public requestArchivesWorldMap(sceneObjHolder: SceneObjHolder): void {
         const modelCache = sceneObjHolder.modelCache;
-        const galaxyName = sceneObjHolder.sceneDesc.galaxyName;
+        const galaxyName = sceneObjHolder.sceneLoader.sceneDesc.galaxyName;
         modelCache.requestObjectData('MiniRoutePoint');
         modelCache.requestObjectData('MiniRouteLine');
         modelCache.requestObjectData('MiniWorldWarpPoint');
@@ -482,7 +483,7 @@ export class NoclipLegacyActorSpawner {
     }
 
     private placeWorldMap(): void {
-        const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
+        const galaxyName = this.sceneObjHolder.sceneLoader.sceneDesc.galaxyName;
 
         const points: WorldmapPointInfo[] = [];
         const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(galaxyName.substr(0, 10))!;

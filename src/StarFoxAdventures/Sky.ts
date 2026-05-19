@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material.js';
 import { DrawParams, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams, calcLODBias, fillSceneParamsData, fillSceneParamsDataOnTemplate, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { getMatrixAxisZ } from '../MathHelpers.js';
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { ObjectRenderContext } from './objects.js';

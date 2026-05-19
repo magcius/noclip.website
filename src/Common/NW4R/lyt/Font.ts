@@ -7,7 +7,7 @@ import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxWrapMode 
 import { ColorKind, GXMaterialHelperGfx, GXTextureMapping, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render.js";
 import { Texture } from "../../../viewer.js";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder.js";
-import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../../../gx/DDraw.js";
 import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color.js";
 import { vec3, vec4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";

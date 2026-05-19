@@ -18,7 +18,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { TDDraw } from "./DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import * as GX from '../gx/gx_enum.js';
 import { MathConstants, saturate, Vec3NegY } from "../MathHelpers.js";
 import { GX_Program } from "../gx/gx_material.js";

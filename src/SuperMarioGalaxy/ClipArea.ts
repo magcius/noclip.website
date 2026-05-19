@@ -21,7 +21,7 @@ import { GXShaderLibrary } from "../gx/gx_material.js";
 import { fallback, mod, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { calcNerveEaseInOutValue, calcRailPointPos, connectToScene, drawSimpleModel, getCamZdir, getEaseOutValue, getRailPointArg0, getRailPointNum, initDefaultPos, isOnSwitchAppear, isOnSwitchB, isRailReachedGoal, isValidSwitchAppear, isValidSwitchB, listenStageSwitchOnOffAppearCtrl, moveCoordAndTransToRailStartPoint, moveTransToCurrentRailPos, useStageSwitchReadAppear, useStageSwitchWriteB } from "./ActorUtil.js";
-import { TDDraw } from "./DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import { emitEffectHitPos } from "./EffectSystem.js";
 import { addHitSensorMapObj } from "./HitSensor.js";
 import { getJMapInfoArg0, getJMapInfoBool, JMapInfoIter } from "./JMapInfo.js";

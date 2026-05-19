@@ -2,27 +2,26 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { parseTextures, buildLevel, buildSkybox, Skybox, Level, parseMobyInstances, MobyInstance, parseLevelData, parseLevelData2 } from "./bin.js"
-import { LevelRenderer, SkyboxRenderer } from "./render.js"
+import { parseSpyroTextures, buildSpyroLevel, buildSpyroSkybox, SpyroSkybox, SpyroLevel, parseMobyInstances, SpyroMobyInstance, parseSpyroLevelData, parseSpyroLevelData2 } from "./bin.js"
+import { SpyroLevelRenderer, SpyroSkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { Checkbox, COOL_BLUE_COLOR, Panel, RENDER_HACKS_ICON } from "../ui.js";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder.js";
+import { CameraController } from "../Camera.js";
 
 /*
 TODO
 
-    Clean up functions in bin.ts
+    Re-write rendering setup, clean up bin.ts
     Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
         There's a problem with extracting their skyboxes so they're not included
-    Clean up the transparency handling. Transparent tiles/water can sometimes disappear behind other ones
-        This is an issue with draw order. Not really a big deal until/if mobys get added to levels that have transparency
-    Some moby instances aren't detected for regular levels when they should be 
+    Some moby instances aren't detected for regular levels when they should be
+    More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
 
     Spyro 1
-        Transparency masking (see edges by the "water" in Gnasty's Loot, Icy Flight or Twilight Harbor)
-            Can't tell how these work, the tile index of the polygons doesn't match what's being rendered
+        Figure out edges of "water" in Gnasty's Loot, Icy Flight or Twilight Harbor
         
     Spyro 2
         Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
@@ -39,27 +38,27 @@ Nice to have
     Remove hardcoded tile scrolling and read dynamically from level data (tile indices and speed)
     Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
     Back-face culling toggle. Winding order is not consistent in the game, so this would require a lot of work
+        There might be a cull mode per ground part, need to check (why though?). But it's definitely not always one mode
     Figure out a way to correctly render LOD and MDL polys at the same time without overlap
         This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
 */
 
-class SpyroRenderer implements SceneGfx {
+class Renderer implements SceneGfx {
     public textureHolder: TextureHolder;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    private levelRenderer: LevelRenderer;
-    private skyboxRenderer: SkyboxRenderer;
+    private levelRenderer: SpyroLevelRenderer;
+    private skyboxRenderer: SpyroSkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, level: Level, skybox: Skybox, private mobyInstances: MobyInstance[]) {
+    constructor(device: GfxDevice, level: SpyroLevel, skybox: SpyroSkybox, private mobyInstances: SpyroMobyInstance[]) {
         this.renderHelper = new GfxRenderHelper(device);
-        const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, level, this.mobyInstances);
-        this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
-        this.clearColor = skybox.backgroundColor;
+        this.levelRenderer = new SpyroLevelRenderer(this.renderHelper.renderCache, level, this.mobyInstances);
+        this.skyboxRenderer = new SpyroSkyboxRenderer(this.renderHelper.renderCache, skybox);
+        this.clearColor = skybox.backgroundColor.map(c => c / 255);
         const viewerTextures = [];
-        for (const t of this.levelRenderer.textures) {
-            viewerTextures.push({gfxTexture: t});
+        for (const t of this.levelRenderer.gfxTextures) {
+            viewerTextures.push({ gfxTexture: t });
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
@@ -77,7 +76,7 @@ class SpyroRenderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
+        mainColorDesc.clearColor = { r: this.clearColor[0], g: this.clearColor[1], b: this.clearColor[2], a: 1 };
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -89,7 +88,9 @@ class SpyroRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
+        if (this.levelRenderer.showMobys) {
+            this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
+        }
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
         this.prepareToRender(device, viewerInput);
@@ -101,9 +102,9 @@ class SpyroRenderer implements SceneGfx {
         const panel = new Panel();
         panel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         panel.setTitle(RENDER_HACKS_ICON, "Render Hacks");
-        const toggleLOD = new Checkbox("Toggle LOD", false);
+        const toggleLOD = new Checkbox("Use LOD polygons", false);
         toggleLOD.onchanged = () => {
-            this.levelRenderer.showLOD = toggleLOD.checked
+            this.levelRenderer.useLOD = toggleLOD.checked
         };
         panel.contents.appendChild(toggleLOD.elem);
         const toggleTextures = new Checkbox("Enable textures", true);
@@ -120,6 +121,10 @@ class SpyroRenderer implements SceneGfx {
         };
         panel.contents.appendChild(showMobysCheckbox.elem);
         return [panel];
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8 / 60);
     }
 
     public destroy(device: GfxDevice): void {
@@ -142,12 +147,12 @@ class SpyroScene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}.bin`);
-        const { vram, textureList, ground, sky, subfile4 } = parseLevelData(levelFile);
+        const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData(levelFile);
         const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
-        const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
-        const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        return new SpyroRenderer(device, level, skybox, mobys);
+        const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
+        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
+        const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
+        return new Renderer(device, level, skybox, mobys);
     }
 }
 
@@ -163,13 +168,13 @@ class SpyroScene2 implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}.bin`);
-        const { vram, textureList, ground, sky, subfile4 } = parseLevelData2(levelFile);
+        const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData2(levelFile);
         vram.applyFontStripFix();
         const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
-        const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
-        const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        return new SpyroRenderer(device, level, skybox, mobys);
+        const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
+        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
+        const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
+        return new Renderer(device, level, skybox, mobys);
     }
 }
 
@@ -188,21 +193,26 @@ class SpyroScene3 implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.bin`);
-        const { vram, textureList, ground: g, grounds, sky, subfile4 } = parseLevelData2(levelFile, this.gameNumber);
+        const { vram, textureList, ground: g, grounds, sky, subfile4 } = parseSpyroLevelData2(levelFile, this.gameNumber);
         const mobys = (this.subLevelID === undefined && subfile4) ? parseMobyInstances(subfile4.createDataView()) : [];
         let ground = g;
         if (this.subLevelID && grounds && grounds.length > 0) {
             ground = grounds[this.subLevelID - 1];
         }
-        const textures = parseTextures(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
-        const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
-        return new SpyroRenderer(device, level, skybox, mobys);
+        const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
+        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
+        const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
+        return new Renderer(device, level, skybox, mobys);
     }
 }
 
+// all subfile/level ids are 1-based from the NSTC versions and v1.1 of Spyro 3
 const id = "Spyro1";
 const name = "Spyro the Dragon";
+const id2 = "Spyro2";
+const name2 = "Spyro 2: Ripto's Rage!";
+const id3 = "Spyro3";
+const name3 = "Spyro: Year of the Dragon";
 const sceneDescs = [
     "Artisans",
     new SpyroScene(11, "Artisans"),
@@ -272,9 +282,6 @@ const sceneDescs = [
     new SpyroScene(101, "Twilight Harbor (Flyover)"),
     new SpyroScene(100, "Gnasty Gnorc (Flyover)")
 ];
-
-const id2 = "Spyro2";
-const name2 = "Spyro 2: Ripto's Rage!";
 const sceneDescs2 = [
     "Summer Forest",
     new SpyroScene2(16, "Summer Forest"),
@@ -322,9 +329,6 @@ const sceneDescs2 = [
     new SpyroScene2(92, "What?! YOU AGAIN!"),
     new SpyroScene2(94, "Come on Sparx!")
 ];
-
-const id3 = "Spyro3";
-const name3 = "Spyro: Year of the Dragon";
 const sceneDescs3 = [
     "Sunrise Spring",
     new SpyroScene3(98, "Sunrise Spring"),

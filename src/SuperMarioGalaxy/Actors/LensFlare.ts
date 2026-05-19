@@ -1,6 +1,6 @@
 
 import { ReadonlyVec3, mat4, vec2, vec3 } from "gl-matrix";
-import { MathConstants, saturate, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers.js";
+import { MathConstants, saturate, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers.js";
 import { PeekZManager, PeekZResult } from "../../ZeldaWindWaker/d_dlst_peekZ.js";
 import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers.js";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers.js";
@@ -9,7 +9,7 @@ import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRender
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { fallback } from "../../util.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { connectToScene3DModelFor2D, connectToSceneMapObjMovement, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamYdir, getPlayerPos, hideModel, isBckStopped, setBckFrameAndStop, setBrkFrameAndStop, setMtxAxisXYZ, showModel, startBckWithInterpole, startBrk, startBtk } from "../ActorUtil.js";
+import { connectToScene3DModelFor2D, connectToSceneMapObjMovement, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamYdir, getPlayerPos, hideModel, isBckStopped, setBckFrameAndStop, setBrkFrameAndStop, showModel, startBckWithInterpole, startBrk, startBtk } from "../ActorUtil.js";
 import { AreaFormType, AreaObj } from "../AreaObj.js";
 import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo.js";
 import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer, isDead } from "../LiveActor.js";
@@ -74,7 +74,7 @@ export class BrightObjBase {
 
         vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
         vec3.cross(scratchVec3a, scratchVec3b, scratchVec3c);
-        setMtxAxisXYZ(scratchMatrix, scratchVec3c, scratchVec3a, scratchVec3b);
+        setMatrixAxis(scratchMatrix, scratchVec3c, scratchVec3a, scratchVec3b);
         setMatrixTranslation(scratchMatrix, position);
 
         checkArg.pointsNum = 0;

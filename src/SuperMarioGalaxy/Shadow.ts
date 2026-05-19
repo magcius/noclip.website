@@ -18,7 +18,7 @@ import { ViewerRenderInput } from "../viewer.js";
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { TSDraw, TDDraw } from "./DDraw.js";
+import { TSDraw, TDDraw } from "../gx/DDraw.js";
 import { GX_Program } from "../gx/gx_material.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { colorFromRGBA } from "../Color.js";
@@ -1318,9 +1318,9 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     let shadowFile: ArrayBufferSlice | null;
 
     const resourceHolder = actor.modelManager!.resourceHolder;
-    if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG1)
+    if (sceneObjHolder.sceneLoader.gameBit === GameBits.SMG1)
         shadowFile = resourceHolder.arc.findFileData(`${filename}.bcsv`);
-    else if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG2)
+    else if (sceneObjHolder.sceneLoader.gameBit === GameBits.SMG2)
         shadowFile = resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
     else
         throw "whoops";

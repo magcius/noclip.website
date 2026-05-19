@@ -8,7 +8,7 @@ import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import { cLib_addCalc, cM_rndF, cM_rndFX, cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../ZeldaWindWaker/d_dlst_peekZ.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc_bs__Constructor, kankyo_class } from "../ZeldaWindWaker/framework.js";

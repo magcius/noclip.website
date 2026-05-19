@@ -9,7 +9,7 @@ import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { ResType } from "./d_resorce.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../gx/gx_render.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo.js';
