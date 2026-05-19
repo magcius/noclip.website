@@ -113,6 +113,17 @@ export enum GSPixelTransmissionOrder {
     LOWER_RIGHT_TO_UPPER_LEFT = 0x03,
 }
 
+export enum GsPrimitiveType {
+    POINT          = 0x00,
+    LINE           = 0x01,
+    LINE_STRIP     = 0x02,
+    TRIANGLE       = 0x03,
+    TRIANGLE_STRIP = 0x04,
+    TRIANGLE_FAN   = 0x05,
+    SPRITE         = 0x06,
+    REVERSED       = 0x07,
+};
+
 export interface GSRegisterTEX0 {
     tbp0: number;
     tbw: number;

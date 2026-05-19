@@ -736,6 +736,12 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this._debugGroupStatisticsTriangles(indexCount / 3);
     }
 
+    public drawInstanced(vertexCount: number, firstVertex: number, instanceCount: number): void {
+        this.gpuRenderPassEncoder!.draw(vertexCount, instanceCount, firstVertex, 0);
+        this._debugGroupStatisticsDrawCall();
+        this._debugGroupStatisticsTriangles((vertexCount / 3) * instanceCount);
+    }
+
     public drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void {
         this.gpuRenderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
         this._debugGroupStatisticsDrawCall();
