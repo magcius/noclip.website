@@ -226,8 +226,8 @@ export class TDDraw extends TDDrawBase {
     public endDraw(renderInstManager: GfxRenderInstManager): void {
         const cache = renderInstManager.gfxRenderCache, device = cache.device;
         this.flushDeviceObjects(renderInstManager.gfxRenderCache);
-        device.uploadBufferData(this.vertexBufferDescriptor!.buffer, 0, new Uint8Array(this.vertexData.buffer));
-        device.uploadBufferData(this.indexBufferDescriptor!.buffer, 0, new Uint8Array(this.indexData.buffer));
+        device.uploadBufferData(this.vertexBufferDescriptor!.buffer, this.vertexBufferDescriptor!.byteOffset!, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBufferDescriptor!.buffer, this.indexBufferDescriptor!.byteOffset!, new Uint8Array(this.indexData.buffer));
     }
 
     public endDrawAndMakeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
