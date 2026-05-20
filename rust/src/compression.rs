@@ -29,6 +29,11 @@ pub fn lzma_decompress(
 }
 
 #[wasm_bindgen]
+pub fn zstd_decompress(src: &[u8]) -> Vec<u8> {
+    zstd::decode_all(src).unwrap()
+}
+
+#[wasm_bindgen]
 pub fn deflate_decompress(src: &[u8]) -> Vec<u8> {
     inflate::inflate_bytes_zlib(src).unwrap()
 }
