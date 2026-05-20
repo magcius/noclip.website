@@ -56,5 +56,11 @@ data/*
 !data/.gitkeep
 !data/Examples/
 dist/
+rumble-racing.wasm
+!data/RumbleRacing/
+data/RumbleRacing/*
+!data/RumbleRacing/json/
+data/RumbleRacing/json/*
+!data/RumbleRacing/json/*.json
 
 .wireit

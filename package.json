@@ -45,6 +45,7 @@
     "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "build:Fez": "cd src/Fez/tools && tsx extractor.ts",
     "build:RatchetAndClank": "cd src/RatchetAndClank/tools && tsx extractor.ts",
+    "build:RumbleRacing": "cd ./go/src/RumbleRacing/noclip && GOOS=js GOARCH=wasm go build -o ../../../../src/RumbleRacing/rumble-racing.wasm main.go",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit"
   },
@@ -56,12 +57,13 @@
         "rsbuild.config.ts",
         "tsconfig.json"
       ],
-      "dependencies": ["build:wasm-release"]
+      "dependencies": ["build:wasm-release", "build:RumbleRacing"]
     },
     "start": {
       "command": "rsbuild dev",
       "dependencies": [
-        "build:wasm-debug"
+        "build:wasm-debug",
+        "build:RumbleRacing"
       ],
       "service": true,
       "cascade": false,
