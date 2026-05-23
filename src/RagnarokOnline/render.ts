@@ -5,7 +5,7 @@
 
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
-import { Vec3UnitY } from "../MathHelpers.js";
+import { MathConstants, Vec3UnitY } from "../MathHelpers.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -283,7 +283,7 @@ void main() {
 
     // RO's wave phase is integer degrees (truncated sine table lookup).
     float t_PhaseDeg = trunc(t_WaveOffset + a_Grid * t_WavePitch);
-    float t_Wave = sin(t_PhaseDeg * 0.01745329251994329577) * t_WaveHeight;
+    float t_Wave = sin(t_PhaseDeg * ${MathConstants.DEG_TO_RAD}) * t_WaveHeight;
     float t_WorldY = -(t_WaterLevel + t_Wave);
 
     vec3 t_WorldPos = vec3(a_WorldXZ.x, t_WorldY, a_WorldXZ.y);
@@ -1113,7 +1113,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const bgmToggle = new UI.Checkbox("BGM (per-map music)", this.bgm.isEnabled());
         bgmToggle.onchanged = () => {
             // The toggle counts as the user gesture browsers require to start playback.
-            void this.bgm.setEnabled(bgmToggle.checked, null);
+            this.bgm.setEnabled(bgmToggle.checked, null);
         };
         renderHacks.contents.appendChild(bgmToggle.elem);
         const bgmVol = new UI.Slider();
@@ -1138,8 +1138,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     public adjustCameraController(c: CameraController): void {
-        // keyMoveSpeed (max 200) * mult = top speed; pick mult so 200 ≈ 8.
-        c.setSceneMoveSpeedMult(8 / 200);
+        c.setSceneMoveSpeedMult(0.04);
         c.setKeyMoveSpeed(64);
     }
 
@@ -1148,15 +1147,15 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private resolveLighting(): { diffuse: vec3, ambient: vec3, envDiff: vec3 } {
         const d = this.light.diffuse, a = this.light.ambient;
         const n = this.nightDegree;
-        const dx = d[0] + (Math.min(d[0], 0.5) - d[0]) * n;
-        const dy = d[1] + (Math.min(d[1], 0.5) - d[1]) * n;
-        const dz = d[2];
-        const diffuse = vec3.fromValues(dx, dy, dz);
+        const dr = d[0] + (Math.min(d[0], 0.5) - d[0]) * n;
+        const dg = d[1] + (Math.min(d[1], 0.5) - d[1]) * n;
+        const db = d[2];
+        const diffuse = vec3.fromValues(dr, dg, db);
         const ambient = vec3.fromValues(a[0], a[1], a[2]);
         const envDiff = vec3.fromValues(
-            1.0 - (1.0 - dx) * (1.0 - a[0]),
-            1.0 - (1.0 - dy) * (1.0 - a[1]),
-            1.0 - (1.0 - dz) * (1.0 - a[2]),
+            1.0 - (1.0 - dr) * (1.0 - a[0]),
+            1.0 - (1.0 - dg) * (1.0 - a[1]),
+            1.0 - (1.0 - db) * (1.0 - a[2]),
         );
         return { diffuse, ambient, envDiff };
     }
