@@ -10,6 +10,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { MobEntity } from "./entity.js";
 import { makeSoftDiscImage } from "./weather.js";
@@ -41,7 +42,6 @@ const DUST_CORNER_OX = [-1, 1, -1, 1];
 const DUST_CORNER_OY = [-1, -1, 1, 1];
 const DUST_CORNER_U = [0, 1, 0, 1];
 const DUST_CORNER_V = [1, 1, 0, 0];
-const DUST_TRI = [0, 1, 2, 1, 3, 2];
 
 class DustProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -114,7 +114,7 @@ export class DustRenderer {
             vertexBufferDescriptors: [
                 { byteStride: DUST_VERTEX_STRIDE_BYTES, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
-            indexBufferFormat: null,
+            indexBufferFormat: GfxFormat.U16_R,
         });
 
         this.sampler = cache.createSampler({
@@ -215,7 +215,8 @@ export class DustRenderer {
         if (totalLive === 0)
             return;
 
-        const vertexCount = totalLive * 6;
+        const vertexCount = totalLive * 4;
+        const indexCount = totalLive * 6;
         const byteCount = vertexCount * DUST_VERTEX_STRIDE_BYTES;
         if (byteCount > this.cpuData.byteLength) {
             this.cpuData = new ArrayBuffer(byteCount);
@@ -235,8 +236,7 @@ export class DustRenderer {
             const ax = p.posX;
             const ay = p.posY + DUST_LIFT_TOTAL * t;
             const az = p.posZ;
-            for (let n = 0; n < 6; n++) {
-                const c = DUST_TRI[n];
+            for (let c = 0; c < 4; c++) {
                 const o = vi * DUST_FLOATS_PER_VERTEX;
                 f32[o + 0] = ax;
                 f32[o + 1] = ay;
@@ -251,13 +251,16 @@ export class DustRenderer {
             }
         }
 
-        const vertexBufferDescriptors = [renderHelper.renderCache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, this.cpuU8.subarray(0, byteCount))];
+        const cache = renderHelper.renderCache;
+        const vertexBufferDescriptors = [cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, this.cpuU8.subarray(0, byteCount))];
+        const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, vertexCount);
+        const indexBufferDescriptor = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Index, new Uint8Array(indexData.buffer));
 
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
-        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
+        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
         const megaState = template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: false });
@@ -276,7 +279,7 @@ export class DustRenderer {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.texture, gfxSampler: this.sampler }]);
-        renderInst.setDrawCount(vertexCount, 0);
+        renderInst.setDrawCount(indexCount, 0);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplate();
