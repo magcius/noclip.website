@@ -11,7 +11,7 @@ import { GatMap, isWalkable } from "./gat.js";
 import { findPath, PathStep } from "./pathfinder.js";
 import { parseSPR, SprModel } from "./spr.js";
 import { parseACT, ActModel } from "./act.js";
-import { SpriteActor } from "./sprite.js";
+import { SpriteActor, computeActorFootPxY } from "./sprite.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coord.js";
 import { RswEffectSource } from "./rsw.js";
 
@@ -62,6 +62,7 @@ interface EntityManifest {
 export interface LoadedSprite {
     spr: SprModel;
     act: ActModel;
+    footPxY: number;
 }
 
 export interface EntityPlacement {
@@ -415,7 +416,9 @@ async function loadSprite(dataFetcher: DataFetcher, pathBase: string, spritePath
             dataFetcher.fetchData(`${pathBase}/sprite/${sprUrl}`),
             dataFetcher.fetchData(`${pathBase}/sprite/${actUrl}`),
         ]);
-        return { spr: parseSPR(sprRaw), act: parseACT(actRaw) };
+        const spr = parseSPR(sprRaw);
+        const act = parseACT(actRaw);
+        return { spr, act, footPxY: computeActorFootPxY(act, spr) };
     } catch {
         return null;
     }
@@ -550,7 +553,7 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
                 }
                 if (cell === null)
                     continue;
-                const actor = new SpriteActor(ls.spr, ls.act);
+                const actor = new SpriteActor(ls.spr, ls.act, ls.footPxY);
                 mobs.push(new MobEntity(actor, gnd, gat, cell[0], cell[1], m.speed, m.canMove !== false, m.name ?? ""));
             }
         }

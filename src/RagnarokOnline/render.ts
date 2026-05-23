@@ -905,7 +905,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             if (p.spriteIndex < 0 || p.spriteIndex >= entityData.sprites.length)
                 continue;
             const ls = entityData.sprites[p.spriteIndex];
-            const actor = new SpriteActor(ls.spr, ls.act);
+            const actor = new SpriteActor(ls.spr, ls.act, ls.footPxY);
             actor.setState(p.state);
             actor.setWorldDirection(p.direction);
             const worldPos = vec3.fromValues(p.worldPos[0], p.worldPos[1], p.worldPos[2]);

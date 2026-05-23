@@ -5,11 +5,13 @@
 // independent: dt is accumulated against the .act per-frame delay table.
 
 import { mat4, vec3 } from "gl-matrix";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { DeviceProgram } from "../Program.js";
 import { DecodedImage } from "./bmp.js";
 import { ActModel, recalcClipXY } from "./act.js";
@@ -29,60 +31,27 @@ const BILLBOARD_TILT = 0.5;
 
 const SPRITE_WORLD_SCALE = 0.2;
 
-// Bottommost row containing any non-transparent pixel; -1 if fully transparent.
-const visibleBottomRowCache = new WeakMap<DecodedImage, number>();
-function visibleBottomRowOf(img: DecodedImage): number {
-    const cached = visibleBottomRowCache.get(img);
-    if (cached !== undefined)
-        return cached;
-    const w = img.width, h = img.height;
-    let row = -1;
-    for (let y = h - 1; y >= 0; y--) {
-        let any = false;
-        const base = y * w * 4 + 3;
-        for (let x = 0; x < w; x++) {
-            if (img.rgba[base + x * 4] !== 0) {
-                any = true;
-                break;
-            }
-        }
-        if (any) { row = y; break; }
-    }
-    visibleBottomRowCache.set(img, row);
-    return row;
+function spriteFrameImage(spr: SprModel, clipType: number, sprIndex: number): DecodedImage | null {
+    const frames = clipType === 0 ? spr.indexed : spr.rgba;
+    return sprIndex >= 0 && sprIndex < frames.length ? frames[sprIndex] : null;
 }
 
-// Topmost row with any non-transparent pixel; used to plant name labels just
-// above the visible head/hat of the current frame.
-const visibleTopRowCache = new WeakMap<DecodedImage, number>();
-function visibleTopRowOf(img: DecodedImage): number {
-    const cached = visibleTopRowCache.get(img);
-    if (cached !== undefined)
-        return cached;
-    const w = img.width, h = img.height;
-    let row = -1;
-    for (let y = 0; y < h; y++) {
-        let any = false;
-        const base = y * w * 4 + 3;
-        for (let x = 0; x < w; x++) {
-            if (img.rgba[base + x * 4] !== 0) {
-                any = true;
-                break;
-            }
-        }
-        if (any) { row = y; break; }
-    }
-    visibleTopRowCache.set(img, row);
-    return row;
+function spriteFrameVisibleBottomRow(spr: SprModel, clipType: number, sprIndex: number): number {
+    const rows = clipType === 0 ? spr.indexedBottomRow : spr.rgbaBottomRow;
+    return sprIndex >= 0 && sprIndex < rows.length ? rows[sprIndex] : -1;
 }
 
-const actorFootPxYCache = new WeakMap<ActModel, WeakMap<SprModel, number>>();
+function spriteFrameVisibleTopRow(spr: SprModel, clipType: number, sprIndex: number): number {
+    const rows = clipType === 0 ? spr.indexedTopRow : spr.rgbaTopRow;
+    return sprIndex >= 0 && sprIndex < rows.length ? rows[sprIndex] : -1;
+}
 
-// The actor's "foot line" in clip-y: min over idle directions of the frame's
-// lowest visible pixel. Per-frame anchoring would bob the figure as the camera
-// orbits (different directions extend below the feet by varying amounts: hem,
-// spear butt, cape). Idle action only, to avoid contamination from dying/sitting.
-function computeActorFootPxY(act: ActModel, spr: SprModel): number {
+// "Foot line" in clip-y: min over idle directions of the frame's lowest visible
+// pixel. Per-frame anchoring would bob the figure as the camera orbits (different
+// directions extend below the feet by varying amounts: hem, spear butt, cape).
+// Idle action only, to avoid contamination from dying/sitting. Computed once
+// per (act, spr) pair at sprite-load time and passed into the SpriteActor.
+export function computeActorFootPxY(act: ActModel, spr: SprModel): number {
     let minPerFrameMax = Infinity;
     const idleDirs = Math.min(8, act.actions.length);
     for (let a = 0; a < idleDirs; a++) {
@@ -91,12 +60,9 @@ function computeActorFootPxY(act: ActModel, spr: SprModel): number {
             continue;
         let frameMax = -Infinity;
         for (const c of motion.clips) {
-            if (c.sprIndex < 0)
+            const img = spriteFrameImage(spr, c.clipType, c.sprIndex);
+            if (img === null)
                 continue;
-            const frames = c.clipType === 0 ? spr.indexed : spr.rgba;
-            if (c.sprIndex >= frames.length)
-                continue;
-            const img = frames[c.sprIndex];
             // Pre-0x0205 .act clips store the image's top-left as the anchor;
             // newer versions store the centre. Recenter the old layout against
             // the .spr image dims so foot-line measurement matches the draw-time
@@ -107,7 +73,7 @@ function computeActorFootPxY(act: ActModel, spr: SprModel): number {
                 recalcClipXY(tmp, img.width, img.height);
                 cy = tmp.y;
             }
-            const visRow = visibleBottomRowOf(img);
+            const visRow = spriteFrameVisibleBottomRow(spr, c.clipType, c.sprIndex);
             if (visRow < 0)
                 continue;
             const visPxY = (cy + visRow) * c.zoomY;
@@ -120,35 +86,24 @@ function computeActorFootPxY(act: ActModel, spr: SprModel): number {
     return minPerFrameMax === Infinity ? NaN : minPerFrameMax;
 }
 
-function actorFootPxY(act: ActModel, spr: SprModel): number {
-    let inner = actorFootPxYCache.get(act);
-    if (inner === undefined) {
-        inner = new WeakMap();
-        actorFootPxYCache.set(act, inner);
-    }
-    const cached = inner.get(spr);
-    if (cached !== undefined)
-        return cached;
-    const v = computeActorFootPxY(act, spr);
-    inner.set(spr, v);
-    return v;
-}
-
 // 3 floats world pos + 2 floats uv + 1 u32 color = 24 bytes.
 const SPRITE_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 4;
 const SPRITE_FLOATS_PER_VERTEX = 6;
+const VERTS_PER_QUAD = 4;
+const INDICES_PER_QUAD = 6;
 
 interface SpriteQuad {
     sheet: number;
     clipType: number;
     sprIndex: number;
-    verts: Float32Array;     // 6 * (x,y,z,u,v,color); color word reinterpreted u32
-    colors: Uint32Array;     // 6 packed RGBA, one per vertex
+    verts: Float32Array;     // 4 * (x,y,z,u,v,color); color word reinterpreted u32
+    colors: Uint32Array;     // 4 packed RGBA, one per vertex
 }
 
 export class SpriteActor {
     private spr: SprModel;
     private act: ActModel;
+    private footPxY: number;
 
     private state = 0;     // action base = state*8 (0 = idle/stand)
     private worldDir = 0;  // entity facing in the world, 0..7
@@ -160,9 +115,10 @@ export class SpriteActor {
     // advance() is a no-op so the two drivers don't fight.
     private externalMotion = false;
 
-    constructor(spr: SprModel, act: ActModel) {
+    constructor(spr: SprModel, act: ActModel, footPxY: number) {
         this.spr = spr;
         this.act = act;
+        this.footPxY = footPxY;
     }
 
     public get sprModel(): SprModel {
@@ -213,12 +169,9 @@ export class SpriteActor {
         let minY = Infinity, maxY = -Infinity;
         let any = false;
         for (const src of mot.clips) {
-            if (src.sprIndex < 0)
+            const img = spriteFrameImage(this.spr, src.clipType, src.sprIndex);
+            if (img === null)
                 continue;
-            const frames = src.clipType === 0 ? this.spr.indexed : this.spr.rgba;
-            if (src.sprIndex >= frames.length)
-                continue;
-            const img = frames[src.sprIndex];
             let clipX = src.x, clipY = src.y;
             if (this.act.version < 0x0205) {
                 const tmp = { ...src };
@@ -260,19 +213,16 @@ export class SpriteActor {
 
         let minVisPxY = Infinity;
         for (const c of mot.clips) {
-            if (c.sprIndex < 0)
+            const img = spriteFrameImage(this.spr, c.clipType, c.sprIndex);
+            if (img === null)
                 continue;
-            const frames = c.clipType === 0 ? this.spr.indexed : this.spr.rgba;
-            if (c.sprIndex >= frames.length)
-                continue;
-            const img = frames[c.sprIndex];
             let cy = c.y;
             if (this.act.version < 0x0205) {
                 const tmp = { ...c };
                 recalcClipXY(tmp, img.width, img.height);
                 cy = tmp.y;
             }
-            const topRow = visibleTopRowOf(img);
+            const topRow = spriteFrameVisibleTopRow(this.spr, c.clipType, c.sprIndex);
             if (topRow < 0)
                 continue;
             const visPxY = (cy + topRow) * c.zoomY;
@@ -282,13 +232,7 @@ export class SpriteActor {
         if (minVisPxY === Infinity)
             return null;
 
-        let anchorPxY: number;
-        if (anchor === "center") {
-            anchorPxY = 0;
-        } else {
-            const foot = actorFootPxY(this.act, this.spr);
-            anchorPxY = Number.isNaN(foot) ? 0 : foot;
-        }
+        const anchorPxY = anchor === "center" ? 0 : (Number.isNaN(this.footPxY) ? 0 : this.footPxY);
         // RO's +y is down the image; top pixel has the smaller pxY.
         return (anchorPxY - minVisPxY) * SPRITE_WORLD_SCALE;
     }
@@ -372,12 +316,9 @@ export class SpriteActor {
         const clips: ClipCorners[] = [];
 
         for (const src of mot.clips) {
-            if (src.sprIndex < 0)
+            const img = spriteFrameImage(this.spr, src.clipType, src.sprIndex);
+            if (img === null)
                 continue;
-            const frames = src.clipType === 0 ? this.spr.indexed : this.spr.rgba;
-            if (src.sprIndex >= frames.length)
-                continue;
-            const img = frames[src.sprIndex];
 
             // Pre-0x0205: recenter against the referenced .spr frame's dims
             // (the parser couldn't, the clip didn't carry its own w/h).
@@ -420,16 +361,10 @@ export class SpriteActor {
         if (clips.length === 0)
             return out;
 
-        // offV = anchorPxY - pxY (positive rises above the anchor). For
-        // "feet", anchorPxY is the actor's cached foot-line; for "center"
-        // it's the .act attach point (0).
-        let anchorPxY: number;
-        if (anchor === "center") {
-            anchorPxY = 0;
-        } else {
-            const foot = actorFootPxY(this.act, this.spr);
-            anchorPxY = Number.isNaN(foot) ? 0 : foot;
-        }
+        // offV = anchorPxY - pxY (positive rises above the anchor). For "feet",
+        // anchorPxY is the actor's foot-line (cached at construction); for
+        // "center" it's the .act attach point (0).
+        const anchorPxY = anchor === "center" ? 0 : (Number.isNaN(this.footPxY) ? 0 : this.footPxY);
 
         const emit = (verts: Float32Array, colors: Uint32Array, vi: number, pxX: number, pxY: number, u: number, v: number, color: number): void => {
             const offH = pxX * SPRITE_WORLD_SCALE;
@@ -443,16 +378,15 @@ export class SpriteActor {
             colors[vi] = color;
         };
 
+        // 4 verts per quad (TL, TR, BL, BR); the renderer's quad index buffer
+        // expands each into two triangles (0,1,2 + 0,2,3).
         for (const c of clips) {
-            const verts = new Float32Array(6 * SPRITE_FLOATS_PER_VERTEX);
-            const colors = new Uint32Array(6);
-            // (TL, TR, BL) and (TR, BR, BL).
+            const verts = new Float32Array(VERTS_PER_QUAD * SPRITE_FLOATS_PER_VERTEX);
+            const colors = new Uint32Array(VERTS_PER_QUAD);
             emit(verts, colors, 0, c.cx[0], c.cy[0], 0.0, 0.0, c.color);
             emit(verts, colors, 1, c.cx[1], c.cy[1], 1.0, 0.0, c.color);
             emit(verts, colors, 2, c.cx[2], c.cy[2], 0.0, 1.0, c.color);
-            emit(verts, colors, 3, c.cx[1], c.cy[1], 1.0, 0.0, c.color);
-            emit(verts, colors, 4, c.cx[3], c.cy[3], 1.0, 1.0, c.color);
-            emit(verts, colors, 5, c.cx[2], c.cy[2], 0.0, 1.0, c.color);
+            emit(verts, colors, 3, c.cx[3], c.cy[3], 1.0, 1.0, c.color);
             // sheet is filled by the renderer (the actor only knows its own
             // sprite, not its index in the renderer's sheet registry).
             out.push({ sheet: 0, clipType: c.clipType, sprIndex: c.sprIndex, verts, colors });
@@ -528,9 +462,12 @@ export interface SpriteInstance {
     anchor?: SpriteAnchor;
 }
 
+// Per-sheet GPU textures. Both clip-type-0 (indexed) and clip-type-!=0 (rgba)
+// frames live in one flat array; the indexed frames are at [0..rgbaBase) and
+// the rgba frames at [rgbaBase..).
 interface SpriteSheet {
-    indexedTex: (GfxTexture | null)[];
-    rgbaTex: (GfxTexture | null)[];
+    tex: (GfxTexture | null)[];
+    rgbaBase: number;
 }
 
 export class SpriteRenderer {
@@ -539,16 +476,13 @@ export class SpriteRenderer {
     private sampler: GfxSampler;
 
     private sheets: SpriteSheet[] = [];
-
-    private vertexBuffer: GfxIndexBufferDescriptor["buffer"] | null = null;
-    private vertexCapacityVerts = 0;
     private device: GfxDevice;
 
     private instances: SpriteInstance[] = [];
     private scratchRight = vec3.create();
     private scratchUp = vec3.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderHelper["renderCache"]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.device = device;
         this.program = cache.createProgram(new SpriteProgram());
 
@@ -561,7 +495,7 @@ export class SpriteRenderer {
             vertexBufferDescriptors: [
                 { byteStride: SPRITE_VERTEX_STRIDE_BYTES, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
-            indexBufferFormat: null,
+            indexBufferFormat: GfxFormat.U16_R,
         });
 
         // Nearest, clamp-to-edge: faithful RO pixel-art look.
@@ -576,9 +510,13 @@ export class SpriteRenderer {
 
     // Uploads a unique .spr's frames as a new sheet and returns its index.
     public addSheet(spr: SprModel): number {
-        const indexedTex = spr.indexed.map((img) => (img.width > 0 && img.height > 0) ? createRGBATexture(this.device, img) : null);
-        const rgbaTex = spr.rgba.map((img) => (img.width > 0 && img.height > 0) ? createRGBATexture(this.device, img) : null);
-        this.sheets.push({ indexedTex, rgbaTex });
+        const tex: (GfxTexture | null)[] = [];
+        for (const img of spr.indexed)
+            tex.push((img.width > 0 && img.height > 0) ? createRGBATexture(this.device, img) : null);
+        const rgbaBase = tex.length;
+        for (const img of spr.rgba)
+            tex.push((img.width > 0 && img.height > 0) ? createRGBATexture(this.device, img) : null);
+        this.sheets.push({ tex, rgbaBase });
         return this.sheets.length - 1;
     }
 
@@ -590,10 +528,10 @@ export class SpriteRenderer {
         if (sprIndex < 0 || sheet < 0 || sheet >= this.sheets.length)
             return null;
         const s = this.sheets[sheet];
-        const set = clipType === 0 ? s.indexedTex : s.rgbaTex;
-        if (sprIndex >= set.length)
-            return null;
-        return set[sprIndex];
+        const base = clipType === 0 ? 0 : s.rgbaBase;
+        const limit = clipType === 0 ? s.rgbaBase : s.tex.length;
+        const idx = base + sprIndex;
+        return idx < limit ? s.tex[idx] : null;
     }
 
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, cameraWorldMatrix: mat4, dtSeconds: number): void {
@@ -633,35 +571,26 @@ export class SpriteRenderer {
             return (bx * bx + by * by + bz * bz) - (ax * ax + ay * ay + az * az);
         });
 
-        const quads: SpriteQuad[] = [];
+        // Order is PRESERVED: an actor's clips stack back-to-front in array
+        // order; reordering would re-layer body parts. Texture is resolved
+        // inline; quads whose frame texture isn't on disk are dropped here.
+        // Only consecutive same-texture quads are coalesced into one draw.
+        const drawQuads: { tex: GfxTexture, verts: Float32Array, colors: Uint32Array }[] = [];
         for (const inst of this.instances) {
             inst.actor.updateFacing(camDir);
             inst.actor.advance(dtSeconds);
             const built = inst.actor.buildQuads(this.scratchRight, this.scratchUp, inst.worldPos, inst.anchor ?? "feet");
             for (const q of built) {
-                q.sheet = inst.sheet;
-                quads.push(q);
+                const tex = this.frameTexture(inst.sheet, q.clipType, q.sprIndex);
+                if (tex === null)
+                    continue;
+                drawQuads.push({ tex, verts: q.verts, colors: q.colors });
             }
-        }
-        if (quads.length === 0)
-            return;
-
-        // Order is PRESERVED: an actor's clips stack back-to-front in array
-        // order; reordering would re-layer body parts. Only consecutive
-        // same-texture quads are coalesced.
-        const drawTex: GfxTexture[] = [];
-        const drawQuads: SpriteQuad[] = [];
-        for (const q of quads) {
-            const tex = this.frameTexture(q.sheet, q.clipType, q.sprIndex);
-            if (tex === null)
-                continue;
-            drawTex.push(tex);
-            drawQuads.push(q);
         }
         if (drawQuads.length === 0)
             return;
 
-        const vertexCount = drawQuads.length * 6;
+        const vertexCount = drawQuads.length * VERTS_PER_QUAD;
         const data = new ArrayBuffer(vertexCount * SPRITE_VERTEX_STRIDE_BYTES);
         const f = new Float32Array(data);
         const u = new Uint32Array(data);
@@ -669,8 +598,8 @@ export class SpriteRenderer {
         const ranges: { tex: GfxTexture, start: number, count: number }[] = [];
         for (let qi = 0; qi < drawQuads.length; qi++) {
             const quad = drawQuads[qi];
-            for (let vi = 0; vi < 6; vi++) {
-                const dst = (qi * 6 + vi) * SPRITE_FLOATS_PER_VERTEX;
+            for (let vi = 0; vi < VERTS_PER_QUAD; vi++) {
+                const dst = (qi * VERTS_PER_QUAD + vi) * SPRITE_FLOATS_PER_VERTEX;
                 const src = vi * SPRITE_FLOATS_PER_VERTEX;
                 f[dst + 0] = quad.verts[src + 0];
                 f[dst + 1] = quad.verts[src + 1];
@@ -679,30 +608,22 @@ export class SpriteRenderer {
                 f[dst + 4] = quad.verts[src + 4];
                 u[dst + 5] = quad.colors[vi];
             }
-            const tex = drawTex[qi];
             const last = ranges.length > 0 ? ranges[ranges.length - 1] : null;
-            if (last !== null && last.tex === tex)
-                last.count += 6;
+            if (last !== null && last.tex === quad.tex)
+                last.count += INDICES_PER_QUAD;
             else
-                ranges.push({ tex, start: qi * 6, count: 6 });
+                ranges.push({ tex: quad.tex, start: qi * INDICES_PER_QUAD, count: INDICES_PER_QUAD });
         }
 
-        if (vertexCount > this.vertexCapacityVerts) {
-            if (this.vertexBuffer !== null)
-                this.device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = this.device.createBuffer(vertexCount * SPRITE_VERTEX_STRIDE_BYTES, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-            this.vertexCapacityVerts = vertexCount;
-        }
-        if (this.vertexBuffer === null)
-            return;
-        this.device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(data));
-
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        const cache = renderHelper.renderCache;
+        const vertexBufferDescriptors = [cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, new Uint8Array(data))];
+        const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, vertexCount);
+        const indexBufferDescriptor = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Index, new Uint8Array(indexData.buffer));
 
         const template = renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
-        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
+        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
 
         let offs = template.allocateUniformBuffer(SpriteProgram.ub_SceneParams, 16);
         const mapped = template.mapUniformBufferF32(SpriteProgram.ub_SceneParams);
@@ -729,15 +650,9 @@ export class SpriteRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        for (const sheet of this.sheets) {
-            for (const t of sheet.indexedTex)
+        for (const sheet of this.sheets)
+            for (const t of sheet.tex)
                 if (t !== null)
                     device.destroyTexture(t);
-            for (const t of sheet.rgbaTex)
-                if (t !== null)
-                    device.destroyTexture(t);
-        }
-        if (this.vertexBuffer !== null)
-            device.destroyBuffer(this.vertexBuffer);
     }
 }

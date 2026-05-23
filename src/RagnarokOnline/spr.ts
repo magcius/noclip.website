@@ -9,10 +9,48 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DecodedImage } from "./bmp.js";
 
 // A decoded .spr. A clip with clip_type 0 references `indexed[spr_index]`; any
-// other clip type references `rgba[spr_index]`.
+// other clip type references `rgba[spr_index]`. The *TopRow/*BottomRow arrays
+// are parallel to indexed/rgba and hold the y of the first/last row containing
+// any non-transparent pixel, -1 for fully transparent frames. Precomputed once
+// at parse time; the sprite renderer reads them every frame.
 export interface SprModel {
     indexed: DecodedImage[];
     rgba: DecodedImage[];
+    indexedTopRow: Int16Array;
+    indexedBottomRow: Int16Array;
+    rgbaTopRow: Int16Array;
+    rgbaBottomRow: Int16Array;
+}
+
+function findVisibleRows(img: DecodedImage): { top: number, bottom: number } {
+    const w = img.width, h = img.height;
+    let top = -1, bottom = -1;
+    for (let y = 0; y < h; y++) {
+        const base = y * w * 4 + 3;
+        for (let x = 0; x < w; x++) {
+            if (img.rgba[base + x * 4] !== 0) { top = y; break; }
+        }
+        if (top !== -1) break;
+    }
+    for (let y = h - 1; y >= 0; y--) {
+        const base = y * w * 4 + 3;
+        for (let x = 0; x < w; x++) {
+            if (img.rgba[base + x * 4] !== 0) { bottom = y; break; }
+        }
+        if (bottom !== -1) break;
+    }
+    return { top, bottom };
+}
+
+function visibleRowArrays(imgs: DecodedImage[]): { top: Int16Array, bottom: Int16Array } {
+    const top = new Int16Array(imgs.length);
+    const bottom = new Int16Array(imgs.length);
+    for (let i = 0; i < imgs.length; i++) {
+        const r = findVisibleRows(imgs[i]);
+        top[i] = r.top;
+        bottom[i] = r.bottom;
+    }
+    return { top, bottom };
 }
 
 class Reader {
@@ -171,5 +209,11 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
         }
     }
 
-    return { indexed, rgba };
+    const indexedRows = visibleRowArrays(indexed);
+    const rgbaRows = visibleRowArrays(rgba);
+    return {
+        indexed, rgba,
+        indexedTopRow: indexedRows.top, indexedBottomRow: indexedRows.bottom,
+        rgbaTopRow: rgbaRows.top, rgbaBottomRow: rgbaRows.bottom,
+    };
 }
