@@ -15,80 +15,101 @@ const MAX_DT = 0.25;
 // RO clips are dense enough that piecewise-linear is visually indistinguishable
 // from a true B-spline reconstruction. `slerp` for the orientation curve, lerp
 // for the rest.
-function sampleCurve(curve: GrannyCurve, t: number, out: Float32Array, slerpQuat: boolean): void {
-    const dim = curve.dimension;
+
+const segment = { a: 0, b: 0, f: 0 };
+
+function findSegment(curve: GrannyCurve, t: number): typeof segment {
     const knots = curve.knots;
-    const ctrl = curve.controls;
     const n = knots.length;
-
-    if (n === 0)
-        return;
-    if (n === 1) {
-        for (let i = 0; i < dim; i++)
-            out[i] = ctrl[i];
-        return;
-    }
-
-    if (t <= knots[0]) {
-        for (let i = 0; i < dim; i++)
-            out[i] = ctrl[i];
-        return;
-    }
-    if (t >= knots[n - 1]) {
-        const base = (n - 1) * dim;
-        for (let i = 0; i < dim; i++)
-            out[i] = ctrl[base + i];
-        return;
-    }
-    let k = 0;
-    while (k < n - 1 && knots[k + 1] <= t)
-        k++;
-    const t0 = knots[k], t1 = knots[k + 1];
-    const span = t1 - t0;
-    const f = span > 1e-8 ? (t - t0) / span : 0;
-    const a = k * dim, b = (k + 1) * dim;
-
-    if (slerpQuat && dim === 4) {
-        sampleQuat[0] = ctrl[a]; sampleQuat[1] = ctrl[a + 1]; sampleQuat[2] = ctrl[a + 2]; sampleQuat[3] = ctrl[a + 3];
-        sampleQuatB[0] = ctrl[b]; sampleQuatB[1] = ctrl[b + 1]; sampleQuatB[2] = ctrl[b + 2]; sampleQuatB[3] = ctrl[b + 3];
-        quat.slerp(sampleQuatOut, sampleQuat, sampleQuatB, f);
-        out[0] = sampleQuatOut[0]; out[1] = sampleQuatOut[1]; out[2] = sampleQuatOut[2]; out[3] = sampleQuatOut[3];
+    const dim = curve.dimension;
+    if (n <= 1 || t <= knots[0]) {
+        segment.a = segment.b = 0;
+        segment.f = 0;
+    } else if (t >= knots[n - 1]) {
+        segment.a = segment.b = (n - 1) * dim;
+        segment.f = 0;
     } else {
-        for (let i = 0; i < dim; i++)
-            out[i] = ctrl[a + i] + (ctrl[b + i] - ctrl[a + i]) * f;
+        let k = 0;
+        while (k < n - 1 && knots[k + 1] <= t)
+            k++;
+        const t0 = knots[k], t1 = knots[k + 1];
+        const span = t1 - t0;
+        segment.a = k * dim;
+        segment.b = (k + 1) * dim;
+        segment.f = span > 1e-8 ? (t - t0) / span : 0;
     }
+    return segment;
 }
 
-const sampleQuat = quat.create();
-const sampleQuatB = quat.create();
-const sampleQuatOut = quat.create();
+const scratchVec3A = vec3.create();
+const scratchVec3B = vec3.create();
+const scratchQuatA = quat.create();
+const scratchQuatB = quat.create();
+
+function sampleVec3(curve: GrannyCurve, t: number, out: vec3): void {
+    if (curve.knots.length === 0)
+        return;
+    const ctrl = curve.controls;
+    const { a, b, f } = findSegment(curve, t);
+    vec3.set(scratchVec3A, ctrl[a], ctrl[a + 1], ctrl[a + 2]);
+    if (a === b) {
+        vec3.copy(out, scratchVec3A);
+        return;
+    }
+    vec3.set(scratchVec3B, ctrl[b], ctrl[b + 1], ctrl[b + 2]);
+    vec3.lerp(out, scratchVec3A, scratchVec3B, f);
+}
+
+function sampleQuat(curve: GrannyCurve, t: number, out: quat): void {
+    if (curve.knots.length === 0)
+        return;
+    const ctrl = curve.controls;
+    const { a, b, f } = findSegment(curve, t);
+    quat.set(scratchQuatA, ctrl[a], ctrl[a + 1], ctrl[a + 2], ctrl[a + 3]);
+    if (a === b) {
+        quat.copy(out, scratchQuatA);
+        return;
+    }
+    quat.set(scratchQuatB, ctrl[b], ctrl[b + 1], ctrl[b + 2], ctrl[b + 3]);
+    quat.slerp(out, scratchQuatA, scratchQuatB, f);
+}
+
+function sampleMat3RowMajor(curve: GrannyCurve, t: number, out: Float32Array): void {
+    if (curve.knots.length === 0)
+        return;
+    const ctrl = curve.controls;
+    const { a, b, f } = findSegment(curve, t);
+    if (a === b) {
+        for (let i = 0; i < 9; i++)
+            out[i] = ctrl[a + i];
+        return;
+    }
+    for (let i = 0; i < 9; i++)
+        out[i] = ctrl[a + i] + (ctrl[b + i] - ctrl[a + i]) * f;
+}
 
 const tmpPos = vec3.create();
 const tmpRot = quat.create();
 const tmpScaleShear = mat4.create();
 const tmpLocal = mat4.create();
-const posBuf = new Float32Array(3);
-const quatBuf = new Float32Array(4);
 const ssBuf = new Float32Array(9);
 
 // Composes bone-local as translation * rotation * scaleShear (Granny's order).
 function composeLocal(bone: GrannyBone, track: GrannyTransformTrack | undefined, t: number, out: mat4): void {
     if (track !== undefined && track.position !== null) {
-        sampleCurve(track.position, t, posBuf, false);
-        vec3.set(tmpPos, posBuf[0], posBuf[1], posBuf[2]);
+        sampleVec3(track.position, t, tmpPos);
     } else {
         vec3.set(tmpPos, bone.translation[0], bone.translation[1], bone.translation[2]);
     }
     if (track !== undefined && track.orientation !== null) {
-        sampleCurve(track.orientation, t, quatBuf, true);
-        quat.set(tmpRot, quatBuf[0], quatBuf[1], quatBuf[2], quatBuf[3]);
+        sampleQuat(track.orientation, t, tmpRot);
         quat.normalize(tmpRot, tmpRot);
     } else {
         quat.set(tmpRot, bone.rotation[0], bone.rotation[1], bone.rotation[2], bone.rotation[3]);
     }
     let ss: Float32Array;
     if (track !== undefined && track.scaleShear !== null) {
-        sampleCurve(track.scaleShear, t, ssBuf, false);
+        sampleMat3RowMajor(track.scaleShear, t, ssBuf);
         ss = ssBuf;
     } else {
         ss = bone.scaleShear;
