@@ -390,15 +390,42 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         vec3.set(out, worldWidth - cx * GND_CELL_SIZE, -h[k], cz * GND_CELL_SIZE);
     };
 
-    const vx: number[] = [], vy: number[] = [], vz: number[] = [];
-    const vu: number[] = [], vv: number[] = [];
-    const vlu: number[] = [], vlv: number[] = [];
-    const vcol: number[] = []; // packed 0xAABBGGRR little-endian for the byte view
+    const surfaceOk = (id: number): GndSurface | null => {
+        if (id < 0 || id >= gnd.surfaces.length)
+            return null;
+        const s = gnd.surfaces[id];
+        return s.textureId >= 0 ? s : null;
+    };
+
+    let quadCount = 0;
+    for (let y = 0; y < gnd.height; y++) {
+        for (let x = 0; x < gnd.width; x++) {
+            const c = gnd.cells[y * gnd.width + x];
+            if (surfaceOk(c.topSurface) !== null)
+                quadCount++;
+            if (y + 1 < gnd.height && surfaceOk(c.frontSurface) !== null)
+                quadCount++;
+            if (x + 1 < gnd.width && surfaceOk(c.rightSurface) !== null)
+                quadCount++;
+        }
+    }
+
+    const vertexCount = quadCount * 4;
+    const indexCount = quadCount * 6;
+    const vertexData = new ArrayBuffer(vertexCount * VERTEX_STRIDE_BYTES);
+    const fview = new Float32Array(vertexData);
+    const uview = new Uint32Array(vertexData);
+    const indexData = new Uint32Array(indexCount);
 
     const buckets = new Map<number, number[]>();
 
     const p0 = vec3.create(), p1 = vec3.create(), p2 = vec3.create(), p3 = vec3.create();
     const luv: [number, number] = [0, 0];
+
+    const min = vec3.fromValues(Infinity, Infinity, Infinity);
+    const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
+
+    let vertexCursor = 0;
 
     const emitQuad = (s: GndSurface, p: vec3[]): void => {
         const argb = s.color >>> 0;
@@ -408,27 +435,31 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         const b = argb & 0xff;
         const packed = (r | (g << 8) | (b << 16) | (a << 24)) >>> 0;
 
-        const base = vx.length;
+        const base = vertexCursor;
         for (let k = 0; k < 4; k++) {
-            vx.push(p[k][0]); vy.push(p[k][1]); vz.push(p[k][2]);
-            vu.push(s.u[k]); vv.push(s.v[k]);
+            const fo = (base + k) * 8;
+            const px = p[k][0], py = p[k][1], pz = p[k][2];
+            fview[fo + 0] = px;
+            fview[fo + 1] = py;
+            fview[fo + 2] = pz;
+            fview[fo + 3] = s.u[k];
+            fview[fo + 4] = s.v[k];
             lightmapUV(s.lightmapId, k, luv);
-            vlu.push(luv[0]); vlv.push(luv[1]);
-            vcol.push(packed);
+            fview[fo + 5] = luv[0];
+            fview[fo + 6] = luv[1];
+            uview[fo + 7] = packed;
+            if (px < min[0]) min[0] = px; if (px > max[0]) max[0] = px;
+            if (py < min[1]) min[1] = py; if (py > max[1]) max[1] = py;
+            if (pz < min[2]) min[2] = pz; if (pz > max[2]) max[2] = pz;
         }
+        vertexCursor += 4;
+
         let bucket = buckets.get(s.textureId);
         if (bucket === undefined) {
             bucket = [];
             buckets.set(s.textureId, bucket);
         }
         bucket.push(base + 0, base + 1, base + 2, base + 2, base + 1, base + 3);
-    };
-
-    const surfaceOk = (id: number): GndSurface | null => {
-        if (id < 0 || id >= gnd.surfaces.length)
-            return null;
-        const s = gnd.surfaces[id];
-        return s.textureId >= 0 ? s : null;
     };
 
     for (let y = 0; y < gnd.height; y++) {
@@ -466,47 +497,19 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         }
     }
 
-    const vertexCount = vx.length;
-    const vertexData = new ArrayBuffer(vertexCount * VERTEX_STRIDE_BYTES);
-    const fview = new Float32Array(vertexData);
-    const uview = new Uint32Array(vertexData);
-    for (let i = 0; i < vertexCount; i++) {
-        const fo = i * 8;
-        fview[fo + 0] = vx[i];
-        fview[fo + 1] = vy[i];
-        fview[fo + 2] = vz[i];
-        fview[fo + 3] = vu[i];
-        fview[fo + 4] = vv[i];
-        fview[fo + 5] = vlu[i];
-        fview[fo + 6] = vlv[i];
-        uview[fo + 7] = vcol[i];
-    }
-
     const groups: TerrainDrawGroup[] = [];
-    const indices: number[] = [];
+    let indexCursor = 0;
     const sortedIds = Array.from(buckets.keys()).sort((a, b) => a - b);
     for (const textureId of sortedIds) {
         const bucket = buckets.get(textureId)!;
-        groups.push({ textureId, indexOffset: indices.length, indexCount: bucket.length });
+        groups.push({ textureId, indexOffset: indexCursor, indexCount: bucket.length });
         for (const idx of bucket)
-            indices.push(idx);
-    }
-
-    const min = vec3.fromValues(Infinity, Infinity, Infinity);
-    const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
-    for (let i = 0; i < vertexCount; i++) {
-        min[0] = Math.min(min[0], vx[i]); max[0] = Math.max(max[0], vx[i]);
-        min[1] = Math.min(min[1], vy[i]); max[1] = Math.max(max[1], vy[i]);
-        min[2] = Math.min(min[2], vz[i]); max[2] = Math.max(max[2], vz[i]);
-    }
-    if (vertexCount === 0) {
-        vec3.set(min, 0, 0, 0);
-        vec3.set(max, 1, 1, 1);
+            indexData[indexCursor++] = idx;
     }
 
     return {
         vertexData,
-        indexData: new Uint32Array(indices),
+        indexData,
         groups,
         lightmapAtlas: atlas,
         atlasW, atlasH,
