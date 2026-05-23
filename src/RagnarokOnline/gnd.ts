@@ -4,15 +4,7 @@
 // (top quad + front/right walls). All values are little-endian.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-
-const eucKrDecoder = new TextDecoder("euc-kr");
-
-function decodeCp949(bytes: Uint8Array): string {
-    let end = bytes.indexOf(0);
-    if (end < 0)
-        end = bytes.length;
-    return eucKrDecoder.decode(bytes.subarray(0, end));
-}
+import { readString } from "../util.js";
 
 // Normalises a GND texture path (backslash-separated CP949) to a URL relative
 // to the textures root. Mirrors what the extractor writes.
@@ -142,8 +134,10 @@ export function parseGND(buffer: ArrayBufferSlice): GndMap {
     if (textureCount < 0 || textureNameLength <= 0)
         throw new Error(`GND: bad texture table (${textureCount} names, ${textureNameLength} bytes each)`);
     const textureNames: string[] = [];
-    for (let i = 0; i < textureCount; i++)
-        textureNames.push(decodeCp949(r.fixedBytes(textureNameLength)));
+    for (let i = 0; i < textureCount; i++) {
+        textureNames.push(readString(buffer, r.offs, textureNameLength, true, "euc-kr"));
+        r.offs += textureNameLength;
+    }
 
     const lightmapCount = r.i32();
     const lightmapWidth = r.i32();

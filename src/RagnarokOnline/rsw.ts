@@ -5,8 +5,7 @@
 // fixed-width CP949 (EUC-KR).
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-
-const eucKrDecoder = new TextDecoder("euc-kr");
+import { readString } from "../util.js";
 
 export interface RswVec3 {
     x: number;
@@ -107,12 +106,9 @@ class Reader {
 
     public name(width: number): string {
         this.assertCanRead(width);
-        const bytes = this.buffer.createTypedArray(Uint8Array, this.offs, width);
+        const s = readString(this.buffer, this.offs, width, true, "euc-kr");
         this.offs += width;
-        let end = bytes.indexOf(0);
-        if (end < 0)
-            end = width;
-        return eucKrDecoder.decode(bytes.subarray(0, end));
+        return s;
     }
 }
 

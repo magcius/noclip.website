@@ -6,9 +6,8 @@
 // names are CP949.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
 import { RswVec3 } from "./rsw.js";
-
-const eucKrDecoder = new TextDecoder("euc-kr");
 
 export interface RsmTexCoord {
     color: number;
@@ -108,12 +107,9 @@ class Reader {
 
     public name(width: number): string {
         this.assertCanRead(width);
-        const bytes = this.buffer.createTypedArray(Uint8Array, this.offs, width);
+        const s = readString(this.buffer, this.offs, width, true, "euc-kr");
         this.offs += width;
-        let end = bytes.indexOf(0);
-        if (end < 0)
-            end = width;
-        return eucKrDecoder.decode(bytes.subarray(0, end));
+        return s;
     }
 }
 
