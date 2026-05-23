@@ -7,7 +7,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
@@ -284,8 +284,8 @@ export class DustRenderer {
         let offs = template.allocateUniformBuffer(DustProgram.ub_SceneParams, 16 + 3 * 4);
         const mapped = template.mapUniformBufferF32(DustProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
-        offs += fillVec4(mapped, offs, camRight[0], camRight[1], camRight[2], 0);
-        offs += fillVec4(mapped, offs, camUp[0], camUp[1], camUp[2], 0);
+        offs += fillVec3v(mapped, offs, camRight);
+        offs += fillVec3v(mapped, offs, camUp);
         offs += fillVec4(mapped, offs, 1, 1, 1, 1);
 
         const renderInst = renderInstManager.newRenderInst();
