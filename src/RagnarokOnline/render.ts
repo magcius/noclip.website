@@ -32,7 +32,7 @@ import { ParticleRenderer, ParticleSceneData } from "./particles.js";
 import { WarpPortalRenderer, WarpPortalSceneData } from "./warp-portal.js";
 import { GrannyInstance, GrannyModelRenderer } from "./granny-render.js";
 import { WeatherParams, WeatherRenderer } from "./weather.js";
-import { GND_CELL_SIZE } from "./coord.js";
+import { gatCellGroundHeight, gatCellToWorld, GND_CELL_SIZE } from "./coord.js";
 import { ShadowRenderer } from "./shadow.js";
 import { SkyDomeRenderer, SkySceneData } from "./sky.js";
 import { LensflareRenderer } from "./lensflare.js";
@@ -585,11 +585,6 @@ export interface WarpTarget {
 
 export interface WarpClickSceneData {
     targets: WarpTarget[];
-    // Camera framing target when this map was reached by a warp; null when
-    // opened directly (frame the whole map).
-    arrivalCellX: number | null;
-    arrivalCellY: number | null;
-    arrivalWorldPos: vec3 | null;
 }
 
 function createRGBATexture(device: GfxDevice, width: number, height: number, rgba: Uint8Array): GfxTexture {
@@ -724,8 +719,10 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     // same user gesture (browsers block autoplay otherwise).
     private bgmFetcher: DataFetcher | null = null;
 
+    private gnd: GndMap;
     private warpTargets: WarpTarget[] = [];
-    private arrivalWorldPos: vec3 | null = null;
+    private arrivalCellX: number | null = null;
+    private arrivalCellY: number | null = null;
     private warpTravelEnabled = true;
     private pendingClick: { x: number, y: number } | null = null;
     private pressX = 0;
@@ -758,6 +755,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     };
 
     constructor(device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgmFetcher: DataFetcher | null = null) {
+        this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
 
@@ -849,10 +847,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (particleData !== null)
             this.particleRenderer = new ParticleRenderer(device, cache, particleData);
 
-        if (warpClickData !== null) {
+        if (warpClickData !== null)
             this.warpTargets = warpClickData.targets;
-            this.arrivalWorldPos = warpClickData.arrivalWorldPos;
-        }
 
         // Bound on the first render frame, off InputManager.toplevel (the canvas).
         this.wantsMouseListeners = this.warpTargets.length > 0 || this.mobs.length > 0;
@@ -1527,7 +1523,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.frameArrivalAt(viewerInput, best.arrivalWorldPos);
             return;
         }
-        triggerTravel(best.dest, best.arrivalCellX, best.arrivalCellY);
+        triggerTravel(best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
     }
 
     // Fixed framing of the arrival cell — scaling with map radius produced a
@@ -1700,6 +1696,33 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         renderInstManager.popTemplate();
     }
 
+    // Centre-overview eye placement used on a fresh open (no URL state).
+    public getDefaultWorldMatrix(dst: mat4): void {
+        const eye = vec3.fromValues(this.center[0], this.center[1] + this.radius * 1.2, this.center[2] + this.radius * 1.2);
+        mat4.targetTo(dst, eye, this.center, Vec3UnitY);
+    }
+
+    // Save-state payload: i16 arrival cellX/Y when a warp brought us here.
+    // Cleared on the first render after framing, so a panned-around camera
+    // bookmarks without re-snapping on reload.
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        if (this.arrivalCellX === null || this.arrivalCellY === null)
+            return offs;
+        const view = new DataView(dst);
+        view.setInt16(offs, this.arrivalCellX, true);
+        view.setInt16(offs + 2, this.arrivalCellY, true);
+        return offs + 4;
+    }
+
+    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
+        if (byteLength - offs < 4)
+            return offs;
+        const view = new DataView(src);
+        this.arrivalCellX = view.getInt16(offs, true);
+        this.arrivalCellY = view.getInt16(offs + 2, true);
+        return offs + 4;
+    }
+
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         // mouseLocation is typed as a {mouseX, mouseY} shim but is actually
         // the InputManager (which exposes `toplevel` = the rendering canvas).
@@ -1710,12 +1733,14 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         }
 
         if (!this.cameraInitialized) {
-            if (this.arrivalWorldPos !== null) {
-                this.frameArrivalAt(viewerInput, this.arrivalWorldPos);
-            } else {
-                const eye = vec3.fromValues(this.center[0], this.center[1] + this.radius * 1.2, this.center[2] + this.radius * 1.2);
-                mat4.targetTo(viewerInput.camera.worldMatrix, eye, this.center, Vec3UnitY);
-                viewerInput.camera.worldMatrixUpdated();
+            // Arrival framing overrides whatever the framework's save-state load
+            // (or getDefaultWorldMatrix) put on the camera. Clear the fields so
+            // subsequent serializeSaveState (after the user pans) bookmarks the
+            // camera alone, not a re-snap to the arrival cell.
+            if (this.arrivalCellX !== null && this.arrivalCellY !== null) {
+                const wp = gatCellToWorld(this.arrivalCellX, this.arrivalCellY, gatCellGroundHeight(this.gnd, this.arrivalCellX, this.arrivalCellY), this.gnd.width);
+                this.frameArrivalAt(viewerInput, vec3.fromValues(wp[0], wp[1], wp[2]));
+                this.arrivalCellX = this.arrivalCellY = null;
             }
             this.cameraInitialized = true;
         }

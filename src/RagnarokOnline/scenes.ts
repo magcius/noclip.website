@@ -19,7 +19,6 @@ import { decodeImageBitmapRGBA } from "./water.js";
 import { loadEntities, loadEffectSources } from "./entity.js";
 import { loadWarpPortals } from "./warp-portal.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight, GAT_CELL_SIZE, GND_CELL_SIZE } from "./coord.js";
-import { takePendingArrival } from "./travel.js";
 import { vec3 } from "gl-matrix";
 import { loadWoeGrannyModels } from "./granny-scene.js";
 import { loadPointLights } from "./lights.js";
@@ -300,19 +299,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
             };
         });
 
-        const arrival = takePendingArrival(this.id);
-        let arrivalWorldPos: vec3 | null = null;
-        if (arrival !== null) {
-            const wp = gatCellToWorld(arrival.cellX, arrival.cellY, gatHeight(arrival.cellX, arrival.cellY), gnd.width);
-            arrivalWorldPos = vec3.fromValues(wp[0], wp[1], wp[2]);
-        }
-
-        const warpClickData: WarpClickSceneData = {
-            targets: warpTargets,
-            arrivalCellX: arrival !== null ? arrival.cellX : null,
-            arrivalCellY: arrival !== null ? arrival.cellY : null,
-            arrivalWorldPos,
-        };
+        const warpClickData: WarpClickSceneData = { targets: warpTargets };
 
         const grannyData = await loadWoeGrannyModels(dataFetcher, pathBase, eraSharedKey(this.id), gnd, gat);
 
