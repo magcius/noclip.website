@@ -4,6 +4,12 @@
 // (e.g. a map id) are forwarded to extract.ts only.
 //
 //   npx tsx src/RagnarokOnline/tools/extract-all.ts [mapId ...]
+//
+// Inputs:
+//   data/RagnarokOnline_raw/assets/data/   <- iRO client GRF (unpack with tools/iro-grf/)
+//   data/RagnarokOnline_raw/iro_effecttool <- iRO client effecttool dir (separate dump)
+//   ../Hercules                            <- sibling checkout of github.com/HerculesWS/Hercules
+//   data/RagnarokOnline/maps               <- produced by the extract stage above
 
 import { spawnSync } from "child_process";
 import { existsSync } from "fs";
