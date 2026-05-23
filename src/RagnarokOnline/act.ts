@@ -5,6 +5,7 @@
 // the documented defaults. All multi-byte values are little-endian.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
 
 export interface ActClip {
     x: number;
@@ -62,15 +63,14 @@ export function recalcClipXY(clip: ActClip, w: number, h: number): void {
 }
 
 export function parseACT(buffer: ArrayBufferSlice): ActModel {
-    const r = new Reader(buffer);
+    const magic = readString(buffer, 0, 2, false);
+    assert(magic === "AC");
 
-    const id = r.u16();
+    const r = new Reader(buffer);
+    r.skip(2);
     const ver = r.u16();
     const actionCount = r.u16();
     r.skip(10); // reserved
-    // Magic 'AC' stored as bytes 'A','C' => little-endian word 'C'<<8 | 'A'.
-    if (id !== (("C".charCodeAt(0) << 8) | "A".charCodeAt(0)))
-        throw new Error(`ACT: bad magic 0x${id.toString(16)}`);
     if (ver > MAX_VERSION)
         throw new Error(`ACT: unsupported version 0x${ver.toString(16)}`);
 
