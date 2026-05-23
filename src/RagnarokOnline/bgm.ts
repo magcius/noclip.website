@@ -2,6 +2,9 @@
 // Per-map background music. setMap(id) swaps the active track when BGM is
 // enabled; tracks loop on a shared HTMLAudioElement. The id -> filename mapping
 // is lazy-loaded from data/RagnarokOnline/bgm/index.json. Default OFF.
+//
+// The on/off state and volume persist across scene switches; the renderer's
+// render-hacks panel hosts the toggle + slider (no separate overlay).
 
 import { DataFetcher } from "../DataFetcher.js";
 
@@ -13,64 +16,6 @@ let currentVolume = 0.5;
 let pathBase: string | null = null;
 let lastFetcher: DataFetcher | null = null;
 let sceneGeneration = 0;
-
-// In-viewport toggle button. A click here counts as the user gesture browsers
-// require to start playback; programmatic setEnabled calls do not.
-let overlayButton: HTMLButtonElement | null = null;
-const enabledListeners = new Set<(value: boolean) => void>();
-
-function ensureOverlay(): void {
-    if (overlayButton !== null || typeof document === "undefined")
-        return;
-    const b = document.createElement("button");
-    b.type = "button";
-    b.title = "Toggle BGM";
-    // Match noclip's bottom-bar SingleIconButton; positioned left of the
-    // share+fullscreen cluster.
-    b.style.cssText = [
-        "position: fixed",
-        "bottom: 16px",
-        "right: 140px",
-        "z-index: 99",
-        "width: 40px",
-        "height: 40px",
-        "border-radius: 4px",
-        "border: 0",
-        "background: rgba(33, 33, 33, 0.85)",
-        "color: white",
-        "font: 20px/1 sans-serif",
-        "cursor: pointer",
-        "padding: 0",
-        "transition: background 0.15s ease",
-    ].join("; ");
-    b.onmouseenter = () => { b.style.background = "rgba(60, 60, 60, 0.95)"; };
-    b.onmouseleave = () => { b.style.background = "rgba(33, 33, 33, 0.85)"; };
-    b.onclick = () => {
-        void setEnabled(!enabled, lastFetcher);
-    };
-    document.body.appendChild(b);
-    overlayButton = b;
-    refreshOverlay();
-}
-
-function refreshOverlay(): void {
-    if (overlayButton === null)
-        return;
-    overlayButton.textContent = enabled ? "♪" : "♪̸";
-    overlayButton.style.color = enabled ? "#9cf" : "rgba(255,255,255,0.55)";
-}
-
-export function onEnabledChange(listener: (value: boolean) => void): () => void {
-    enabledListeners.add(listener);
-    return () => { enabledListeners.delete(listener); };
-}
-
-export function hideOverlay(): void {
-    if (overlayButton !== null) {
-        overlayButton.remove();
-        overlayButton = null;
-    }
-}
 
 function loadIndex(dataFetcher: DataFetcher): Promise<Map<string, string> | null> {
     if (indexPromise !== null)
@@ -120,7 +65,6 @@ export function setBgmPathBase(base: string): void {
 export async function setMap(dataFetcher: DataFetcher, mapId: string): Promise<void> {
     const generation = ++sceneGeneration;
     lastFetcher = dataFetcher;
-    ensureOverlay();
     if (mapId === currentMapId)
         return;
     currentMapId = mapId;
@@ -132,9 +76,6 @@ export async function setMap(dataFetcher: DataFetcher, mapId: string): Promise<v
 export async function setEnabled(value: boolean, dataFetcher: DataFetcher | null): Promise<void> {
     if (enabled === value) return;
     enabled = value;
-    refreshOverlay();
-    for (const listener of enabledListeners)
-        listener(value);
     if (!value) {
         if (audio !== null)
             audio.pause();
@@ -172,7 +113,6 @@ export function teardownScene(): void {
     sceneGeneration++;
     currentMapId = null;
     lastFetcher = null;
-    hideOverlay();
     stop();
 }
 

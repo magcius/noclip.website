@@ -724,7 +724,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     // Stashed so the BGM toggle can kick off the per-map track fetch on the
     // same user gesture (browsers block autoplay otherwise).
     private bgmFetcher: DataFetcher | null = null;
-    private bgmEnabledUnsub: (() => void) | null = null;
 
     private warpTargets: WarpTarget[] = [];
     private arrivalWorldPos: vec3 | null = null;
@@ -1125,10 +1124,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             // The toggle counts as the user gesture browsers require to start playback.
             void BGM.setEnabled(bgm.checked, this.bgmFetcher);
         };
-        // Keep the checkbox in sync with the floating overlay button.
-        if (this.bgmEnabledUnsub !== null)
-            this.bgmEnabledUnsub();
-        this.bgmEnabledUnsub = BGM.onEnabledChange((v) => { bgm.setChecked(v); });
         renderHacks.contents.appendChild(bgm.elem);
         const bgmVol = new UI.Slider();
         bgmVol.setLabel("BGM volume");
@@ -1758,10 +1753,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.detachMouseListeners();
-        if (this.bgmEnabledUnsub !== null) {
-            this.bgmEnabledUnsub();
-            this.bgmEnabledUnsub = null;
-        }
         BGM.teardownScene();
         this.renderHelper.destroy();
         device.destroyBuffer(this.vertexBufferDescriptors[0].buffer);
