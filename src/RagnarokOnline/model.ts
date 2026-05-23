@@ -1,113 +1,47 @@
 
 // Builds a flat, per-texture-grouped mesh from an RSM model's node hierarchy.
 // RO's fixed-function math is row-vector (v' = v * M, transforms compose
-// left-to-right); we mirror that with a small Affine type, then convert to a
-// gl-matrix column-major mat4 for upload. Per-placement world matrix is
-// applied at draw time, not baked here.
+// left-to-right); gl-matrix is column-vector (v' = M * v, compose right-to-left).
+// We rebuild the same transforms in column-major form by reversing the source
+// order — e.g. row-vector L = S * R * P (scale, then rotate, then translate)
+// becomes the column-major sequence T * R * S built via post-multiplying helpers.
+// Per-placement world matrix is applied at draw time, not baked here.
 
 import { mat4, quat, vec3 } from "gl-matrix";
+import { AABB } from "../Geometry.js";
 import { RsmModel, RsmNode } from "./rsm.js";
+import { RswVec3 } from "./rsw.js";
 
-// Row-vector affine: 3x3 linear part `r` (row-major, r[row*3+col]) + translation.
-interface Affine {
-    r: Float32Array; // length 9, row-major
-    t: Float32Array; // length 3
+// L_node (column-major) for "v' = v_row * S * R * P" (apply scale, rotate, translate).
+// In column-vector form that's T(p) * R * S * v, so we build T*R*S via post-multiplies.
+function nodeLocal(n: RsmNode, out: mat4): void {
+    mat4.fromTranslation(out, [n.position.x, n.position.y, n.position.z]);
+    mat4.rotate(out, out, n.rotAngle, [n.rotAxis.x, n.rotAxis.y, n.rotAxis.z]);
+    mat4.scale(out, out, [n.scale.x, n.scale.y, n.scale.z]);
 }
 
-function affineIdentity(): Affine {
-    const r = new Float32Array(9);
-    r[0] = r[4] = r[8] = 1;
-    return { r, t: new Float32Array(3) };
+// Build column-major L from explicit S/R/P parts (used by the animated path).
+function nodeLocalFromParts(scale: vec3, rot: mat4, pos: vec3, out: mat4): void {
+    mat4.fromTranslation(out, pos);
+    mat4.multiply(out, out, rot);
+    mat4.scale(out, out, scale);
 }
 
-// result = a * b (row-vector composition: applies `a` then `b`).
-function affineMultiply(a: Affine, b: Affine): Affine {
-    const r = new Float32Array(9);
-    for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 3; col++) {
-            r[row * 3 + col] =
-                a.r[row * 3 + 0] * b.r[0 * 3 + col] +
-                a.r[row * 3 + 1] * b.r[1 * 3 + col] +
-                a.r[row * 3 + 2] * b.r[2 * 3 + col];
-        }
-    }
-    const t = new Float32Array(3);
-    for (let col = 0; col < 3; col++) {
-        t[col] =
-            a.t[0] * b.r[0 * 3 + col] +
-            a.t[1] * b.r[1 * 3 + col] +
-            a.t[2] * b.r[2 * 3 + col] + b.t[col];
-    }
-    return { r, t };
-}
-
-function affineTranslate(x: number, y: number, z: number): Affine {
-    const m = affineIdentity();
-    m.t[0] = x; m.t[1] = y; m.t[2] = z;
-    return m;
-}
-
-function affineScale(x: number, y: number, z: number): Affine {
-    const r = new Float32Array(9);
-    r[0] = x; r[4] = y; r[8] = z;
-    return { r, t: new Float32Array(3) };
-}
-
-function affineRotAxisAngle(axis: RsmNodeAxis, angle: number): Affine {
-    const omega = angle * 0.5;
-    const s = Math.sin(omega);
-    const qx = axis.x * s, qy = axis.y * s, qz = axis.z * s;
-    const qw = Math.cos(omega);
-    const x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
-    const wx = qw * x2, wy = qw * y2, wz = qw * z2;
-    const xx = qx * x2, xy = qx * y2, xz = qx * z2;
-    const yy = qy * y2, yz = qy * z2, zz = qz * z2;
-    const r = new Float32Array(9);
-    r[0] = 1 - (yy + zz); r[1] = xy + wz;       r[2] = xz - wy;
-    r[3] = xy - wz;       r[4] = 1 - (xx + zz); r[5] = yz + wx;
-    r[6] = xz + wy;       r[7] = yz - wx;       r[8] = 1 - (xx + yy);
-    return { r, t: new Float32Array(3) };
-}
-
-type RsmNodeAxis = { x: number, y: number, z: number };
-
-// out = v * M.
-function affineTransform(m: Affine, x: number, y: number, z: number, out: vec3): void {
-    out[0] = x * m.r[0] + y * m.r[3] + z * m.r[6] + m.t[0];
-    out[1] = x * m.r[1] + y * m.r[4] + z * m.r[7] + m.t[1];
-    out[2] = x * m.r[2] + y * m.r[5] + z * m.r[8] + m.t[2];
-}
-
-// L_node = scale * rot * pos (row-vector order).
-function nodeLocal(n: RsmNode): Affine {
-    const s = affineScale(n.scale.x, n.scale.y, n.scale.z);
-    const r = affineRotAxisAngle(n.rotAxis, n.rotAngle);
-    const p = affineTranslate(n.position.x, n.position.y, n.position.z);
-    return affineMultiply(affineMultiply(s, r), p);
-}
-
-function affineRotQuat(qx: number, qy: number, qz: number, qw: number): Affine {
-    const x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
-    const wx = qw * x2, wy = qw * y2, wz = qw * z2;
-    const xx = qx * x2, xy = qx * y2, xz = qx * z2;
-    const yy = qy * y2, yz = qy * z2, zz = qz * z2;
-    const r = new Float32Array(9);
-    r[0] = 1 - (yy + zz); r[1] = xy + wz;       r[2] = xz - wy;
-    r[3] = xy - wz;       r[4] = 1 - (xx + zz); r[5] = yz + wx;
-    r[6] = xz + wy;       r[7] = yz - wx;       r[8] = 1 - (xx + yy);
-    return { r, t: new Float32Array(3) };
-}
-
-// Row-vector v*M equals column-vector M_col*v with M_col = transpose of the
-// linear part.
-export function affineToMat4(m: Affine, out: mat4): void {
-    mat4.identity(out);
-    for (let col = 0; col < 3; col++)
-        for (let row = 0; row < 3; row++)
-            out[col * 4 + row] = m.r[col * 3 + row];
-    out[12] = m.t[0];
-    out[13] = m.t[1];
-    out[14] = m.t[2];
+// Node's baked offset transform: vertices go through this before the node's
+// accumulated transform. RSM stores offsetMatrix as 3x3 row-major; convert to
+// the column-vector equivalent (transpose) and pack the translation column.
+// `m_col[col*4+row] = m_row[col*3+row]` because row-vector m_row 3x3 in
+// row-major storage `m[row*3+col]` is the same data as col-vector m_col in
+// column-major storage `m_col[col*4+row]` — they're the same buffer.
+function nodeOffset(n: RsmNode, out: mat4): void {
+    const m = n.offsetMatrix;
+    out[0]  = m[0]; out[1]  = m[1]; out[2]  = m[2]; out[3]  = 0;
+    out[4]  = m[3]; out[5]  = m[4]; out[6]  = m[5]; out[7]  = 0;
+    out[8]  = m[6]; out[9]  = m[7]; out[10] = m[8]; out[11] = 0;
+    out[12] = n.offsetTranslation.x;
+    out[13] = n.offsetTranslation.y;
+    out[14] = n.offsetTranslation.z;
+    out[15] = 1;
 }
 
 export interface ModelDrawGroup {
@@ -121,8 +55,7 @@ export interface ModelMesh {
     indexData: Uint32Array;
     groups: ModelDrawGroup[];
     textureNames: string[];
-    bboxMin: vec3;
-    bboxMax: vec3;
+    bbox: AABB;
 }
 
 // position (3 f32) + UV (2 f32) + normal (3 f32) + color (4 u8) = 36 bytes.
@@ -146,17 +79,15 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
         const f = n.faces[i];
         const fn = vec3.create();
         const a = n.vertices[f.vertIdx[0]], b = n.vertices[f.vertIdx[1]], c = n.vertices[f.vertIdx[2]];
-        if (a !== undefined && b !== undefined && c !== undefined) {
-            vec3.set(v1, a.x, a.y, a.z);
-            vec3.set(v2, b.x, b.y, b.z);
-            vec3.set(v3, c.x, c.y, c.z);
-            vec3.sub(e1, v3, v2);
-            vec3.sub(e2, v3, v1);
-            vec3.cross(fn, e1, e2);
-            const len = vec3.length(fn);
-            if (len > 0)
-                vec3.scale(fn, fn, 1 / len);
-        }
+        vec3.set(v1, a.x, a.y, a.z);
+        vec3.set(v2, b.x, b.y, b.z);
+        vec3.set(v3, c.x, c.y, c.z);
+        vec3.sub(e1, v3, v2);
+        vec3.sub(e2, v3, v1);
+        vec3.cross(fn, e1, e2);
+        const len = vec3.length(fn);
+        if (len > 0)
+            vec3.scale(fn, fn, 1 / len);
         faceNormal[i] = fn;
     }
 
@@ -206,28 +137,17 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     return out;
 }
 
-// out = n * R (row-vector), then normalized.
-function affineTransformNormal(m: Affine, x: number, y: number, z: number, out: vec3): void {
-    out[0] = x * m.r[0] + y * m.r[3] + z * m.r[6];
-    out[1] = x * m.r[1] + y * m.r[4] + z * m.r[7];
-    out[2] = x * m.r[2] + y * m.r[5] + z * m.r[8];
+// Transforms a direction by the linear part of `m` (column-major mat4) and
+// normalizes. Uses mat3.fromMat4 to extract the upper-left 3x3.
+function transformNormalMat4(m: mat4, x: number, y: number, z: number, out: vec3): void {
+    // Column-major mat4: linear at indices 0,1,2,4,5,6,8,9,10.
+    out[0] = x * m[0] + y * m[4] + z * m[8];
+    out[1] = x * m[1] + y * m[5] + z * m[9];
+    out[2] = x * m[2] + y * m[6] + z * m[10];
     const len = Math.hypot(out[0], out[1], out[2]);
     if (len > 0) {
         out[0] /= len; out[1] /= len; out[2] /= len;
     }
-}
-
-// Node's baked offset transform: vertices go through this before the node's
-// accumulated transform.
-function nodeOffset(n: RsmNode): Affine {
-    return {
-        r: new Float32Array([
-            n.offsetMatrix[0], n.offsetMatrix[1], n.offsetMatrix[2],
-            n.offsetMatrix[3], n.offsetMatrix[4], n.offsetMatrix[5],
-            n.offsetMatrix[6], n.offsetMatrix[7], n.offsetMatrix[8],
-        ]),
-        t: new Float32Array([n.offsetTranslation.x, n.offsetTranslation.y, n.offsetTranslation.z]),
-    };
 }
 
 // parentIdx[i] = -1 means root (empty parent, self-parent, or dangling parent).
@@ -250,28 +170,43 @@ function resolveParents(model: RsmModel): Int32Array {
     return parentIdx;
 }
 
-// Composes M_node = L_node * M_parent (row-vector hierarchy). Memoized up the
-// chain and cycle-guarded so each node is computed once. Used both at build
-// time (static locals) and per-frame (animated locals).
-function composeNodeMatrices(nodeCount: number, parentOf: (idx: number) => number, local: (idx: number) => Affine): Affine[] {
-    const nodeMat: Affine[] = new Array(nodeCount);
-    const state = new Uint8Array(nodeCount); // 0=unvisited, 1=in-progress, 2=done
-    for (let start = 0; start < nodeCount; start++) {
-        if (state[start] === 2) continue;
-        const chain: number[] = [];
-        let cur = start;
-        while (cur !== -1 && state[cur] === 0) {
-            state[cur] = 1;
-            chain.push(cur);
-            cur = parentOf(cur);
-        }
-        let base = (cur !== -1 && state[cur] === 2) ? nodeMat[cur] : affineIdentity();
-        for (let i = chain.length - 1; i >= 0; i--) {
-            const idx = chain[i];
-            base = affineMultiply(local(idx), base);
-            nodeMat[idx] = base;
-            state[idx] = 2;
-        }
+// Topologically order nodes parent-before-child; resolveParents guarantees no
+// cycles (dangling/self-parents become -1).
+function topoOrder(parentIdx: Int32Array): Int32Array {
+    const n = parentIdx.length;
+    const order = new Int32Array(n);
+    const depth = new Int32Array(n).fill(-1);
+    const computeDepth = (i: number): number => {
+        if (depth[i] !== -1) return depth[i];
+        const p = parentIdx[i];
+        depth[i] = p === -1 ? 0 : computeDepth(p) + 1;
+        return depth[i];
+    };
+    for (let i = 0; i < n; i++) computeDepth(i);
+    const idx = new Int32Array(n);
+    for (let i = 0; i < n; i++) idx[i] = i;
+    // Stable sort by depth so siblings keep input order.
+    const arr = Array.from(idx).sort((a, b) => depth[a] - depth[b]);
+    for (let i = 0; i < n; i++) order[i] = arr[i];
+    return order;
+}
+
+// Composes M_node = M_parent (column-major) * L_node, iterating parent-first.
+// Row-vector hierarchy `M_node_row = L_node_row * M_parent_row` transposes to
+// the column-major form `M_node_col = M_parent_col * L_node_col`.
+function composeNodeMatrices(nodeCount: number, parentIdx: Int32Array, local: (idx: number, out: mat4) => void): mat4[] {
+    const nodeMat: mat4[] = new Array(nodeCount);
+    for (let i = 0; i < nodeCount; i++) nodeMat[i] = mat4.create();
+    const order = topoOrder(parentIdx);
+    const tmp = mat4.create();
+    for (let oi = 0; oi < order.length; oi++) {
+        const i = order[oi];
+        local(i, tmp);
+        const p = parentIdx[i];
+        if (p === -1)
+            mat4.copy(nodeMat[i], tmp);
+        else
+            mat4.multiply(nodeMat[i], nodeMat[p], tmp);
     }
     return nodeMat;
 }
@@ -285,33 +220,34 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     const vcol: number[] = []; // packed 0xAABBGGRR for the byte view
 
     const buckets = new Map<number, number[]>();
-    const bboxMin = vec3.fromValues(Infinity, Infinity, Infinity);
-    const bboxMax = vec3.fromValues(-Infinity, -Infinity, -Infinity);
-    let haveBbox = false;
+    const bbox = new AABB();
 
     if (nodeCount === 0) {
-        vec3.set(bboxMin, 0, 0, 0);
-        vec3.set(bboxMax, 0, 0, 0);
+        bbox.set(0, 0, 0, 0, 0, 0);
         return {
             vertexData: new ArrayBuffer(0),
             indexData: new Uint32Array(0),
             groups: [],
             textureNames: model.textures.slice(),
-            bboxMin, bboxMax,
+            bbox,
         };
     }
 
     const parentIdx = resolveParents(model);
-    const nodeMat = composeNodeMatrices(nodeCount, (idx) => parentIdx[idx], (idx) => nodeLocal(model.nodes[idx]));
+    const nodeMat = composeNodeMatrices(nodeCount, parentIdx, (idx, out) => nodeLocal(model.nodes[idx], out));
 
     const out = vec3.create();
     const nrm = vec3.create();
+    const vt = mat4.create();
+    const offset = mat4.create();
     for (let ni = 0; ni < nodeCount; ni++) {
         const n = model.nodes[ni];
         const M = nodeMat[ni];
 
-        // v = v_raw * offset * M_node.
-        const vt = affineMultiply(nodeOffset(n), M);
+        // Row-vector: v = v_raw * offset * M_node. Column-vector equivalent:
+        // vt_col = M_col * offset_col.
+        nodeOffset(n, offset);
+        mat4.multiply(vt, M, offset);
 
         const nodeNormals = computeNodeNormals(n, model.shadeType);
 
@@ -332,19 +268,10 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
                 if (vi < n.vertices.length) {
                     px = n.vertices[vi].x; py = n.vertices[vi].y; pz = n.vertices[vi].z;
                 }
-                affineTransform(vt, px, py, pz, out);
+                vec3.set(out, px, py, pz);
+                vec3.transformMat4(out, out, vt);
                 vx.push(out[0]); vy.push(out[1]); vz.push(out[2]);
-
-                if (!haveBbox) {
-                    vec3.copy(bboxMin, out); vec3.copy(bboxMax, out); haveBbox = true;
-                } else {
-                    if (out[0] < bboxMin[0]) bboxMin[0] = out[0];
-                    if (out[1] < bboxMin[1]) bboxMin[1] = out[1];
-                    if (out[2] < bboxMin[2]) bboxMin[2] = out[2];
-                    if (out[0] > bboxMax[0]) bboxMax[0] = out[0];
-                    if (out[1] > bboxMax[1]) bboxMax[1] = out[1];
-                    if (out[2] > bboxMax[2]) bboxMax[2] = out[2];
-                }
+                bbox.unionPoint(out);
 
                 let u = 0, v = 0;
                 if (ti < n.texCoords.length) {
@@ -354,7 +281,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
                 vu.push(u); vv.push(v);
 
                 const cn = nodeNormals[faceIdx * 3 + k];
-                affineTransformNormal(vt, cn[0], cn[1], cn[2], nrm);
+                transformNormalMat4(vt, cn[0], cn[1], cn[2], nrm);
                 vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
 
                 vcol.push(0xFFFFFFFF);
@@ -370,10 +297,8 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         }
     }
 
-    if (!haveBbox) {
-        vec3.set(bboxMin, 0, 0, 0);
-        vec3.set(bboxMax, 0, 0, 0);
-    }
+    if (vx.length === 0)
+        bbox.set(0, 0, 0, 0, 0, 0);
 
     // Interleaved vertex: pos(3) + uv(2) + normal(3) + color(1 u32) = 9 32-bit
     // words = 36 bytes per vertex.
@@ -409,7 +334,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         indexData: new Uint32Array(indices),
         groups,
         textureNames: model.textures.slice(),
-        bboxMin, bboxMax,
+        bbox,
     };
 }
 
@@ -421,24 +346,24 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
 // pinned to box top). mapOffX/mapOffZ are half the map extent: the RSW frame
 // is map-centered while the terrain is corner-origin (see coord.ts).
 export function buildPlacementMatrix(
-    bboxMin: vec3, bboxMax: vec3,
-    pos: RswVec3Like, rot: RswVec3Like, scale: RswVec3Like,
+    bbox: AABB,
+    pos: RswVec3, rot: RswVec3, scale: RswVec3,
     mapOffX: number, mapOffZ: number,
     out: mat4,
 ): void {
-    const offX = -(bboxMin[0] + bboxMax[0]) * 0.5;
-    const offY = -bboxMax[1];
-    const offZ = -(bboxMin[2] + bboxMax[2]) * 0.5;
+    const offX = -(bbox.min[0] + bbox.max[0]) * 0.5;
+    const offY = -bbox.max[1];
+    const offZ = -(bbox.min[2] + bbox.max[2]) * 0.5;
 
     const deg = Math.PI / 180;
-    let wtm = affineTranslate(offX, offY, offZ);
-    wtm = affineMultiply(wtm, affineScale(scale.x, scale.y, scale.z));
-    wtm = affineMultiply(wtm, rotY(rot.y * deg));
-    wtm = affineMultiply(wtm, rotX(rot.x * deg));
-    wtm = affineMultiply(wtm, rotZ(rot.z * deg));
-    wtm = affineMultiply(wtm, affineTranslate(pos.x, pos.y, pos.z));
-
-    affineToMat4(wtm, out);
+    // Row-vector source: T(off) * S * Ry * Rx * Rz * T(pos). Column-major
+    // equivalent (transpose, reverse): T(pos) * Rz * Rx * Ry * S * T(off).
+    mat4.fromTranslation(out, [pos.x, pos.y, pos.z]);
+    mat4.rotateZ(out, out, rot.z * deg);
+    mat4.rotateX(out, out, rot.x * deg);
+    mat4.rotateY(out, out, rot.y * deg);
+    mat4.scale(out, out, [scale.x, scale.y, scale.z]);
+    mat4.translate(out, out, [offX, offY, offZ]);
 
     // RO-frame -> render-frame: negate Y, shift X/Z by half the map extent.
     out[1] = -out[1]; out[5] = -out[5]; out[9] = -out[9]; out[13] = -out[13];
@@ -450,30 +375,6 @@ export function buildPlacementMatrix(
     // terrain mesh and sun direction; see coord.ts).
     out[0] = -out[0]; out[4] = -out[4]; out[8] = -out[8];
     out[12] = 2 * mapOffX - out[12];
-}
-
-type RswVec3Like = { x: number, y: number, z: number };
-
-function rotX(angle: number): Affine {
-    const c = Math.cos(angle), s = Math.sin(angle);
-    const m = affineIdentity();
-    m.r[4] = c; m.r[5] = s;
-    m.r[7] = -s; m.r[8] = c;
-    return m;
-}
-function rotY(angle: number): Affine {
-    const c = Math.cos(angle), s = Math.sin(angle);
-    const m = affineIdentity();
-    m.r[0] = c; m.r[2] = -s;
-    m.r[6] = s; m.r[8] = c;
-    return m;
-}
-function rotZ(angle: number): Affine {
-    const c = Math.cos(angle), s = Math.sin(angle);
-    const m = affineIdentity();
-    m.r[0] = c; m.r[1] = s;
-    m.r[3] = -s; m.r[4] = c;
-    return m;
 }
 
 // Keyframe-animated models: nodes with rotation/position/scale tracks. Such
@@ -494,9 +395,9 @@ export interface AnimatedDrawGroup {
 
 export interface AnimatedNode {
     parentIdx: number;
-    offset: Affine;
+    offset: mat4;
     // Static channel values, reused when a channel has no keyframes.
-    staticRot: Affine;
+    staticRot: mat4;
     staticPos: vec3;
     staticScale: vec3;
     posKeyframes: { frame: number, p: vec3 }[];
@@ -511,8 +412,7 @@ export interface AnimatedModelMesh {
     textureNames: string[];
     nodes: AnimatedNode[];
     animLength: number;  // loop length in frames (>= 1)
-    bboxMin: vec3;
-    bboxMax: vec3;
+    bbox: AABB;
 }
 
 // Bbox is taken over the rest pose (frame 0) so the placement matrix anchors
@@ -524,10 +424,14 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const nodes: AnimatedNode[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) {
         const n = model.nodes[i];
+        const offset = mat4.create();
+        nodeOffset(n, offset);
+        const staticRot = mat4.create();
+        mat4.fromRotation(staticRot, n.rotAngle, [n.rotAxis.x, n.rotAxis.y, n.rotAxis.z]);
         nodes[i] = {
             parentIdx: parentIdx[i],
-            offset: nodeOffset(n),
-            staticRot: affineRotAxisAngle(n.rotAxis, n.rotAngle),
+            offset,
+            staticRot,
             staticPos: vec3.fromValues(n.position.x, n.position.y, n.position.z),
             staticScale: vec3.fromValues(n.scale.x, n.scale.y, n.scale.z),
             posKeyframes: n.posKeyframes.map((k) => ({ frame: k.frame, p: vec3.fromValues(k.p.x, k.p.y, k.p.z) })),
@@ -537,31 +441,33 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     }
 
     // Rest-pose locals for bbox (uses first keyframe value where present).
-    const restLocal = (idx: number): Affine => {
+    const restRot = mat4.create();
+    const restScale = vec3.create();
+    const restPos = vec3.create();
+    const restLocal = (idx: number, out: mat4): void => {
         const an = nodes[idx];
-        let sx = an.staticScale[0], sy = an.staticScale[1], sz = an.staticScale[2];
-        if (an.scaleKeyframes.length > 0) {
-            const s0 = an.scaleKeyframes[0].s; sx = s0[0]; sy = s0[1]; sz = s0[2];
-        }
-        const rot = an.rotKeyframes.length > 0
-            ? affineRotQuat(an.rotKeyframes[0].q[0], an.rotKeyframes[0].q[1], an.rotKeyframes[0].q[2], an.rotKeyframes[0].q[3])
-            : an.staticRot;
-        let px = an.staticPos[0], py = an.staticPos[1], pz = an.staticPos[2];
-        if (an.posKeyframes.length > 0) {
-            const p0 = an.posKeyframes[0].p; px = p0[0]; py = p0[1]; pz = p0[2];
-        }
-        return affineMultiply(affineMultiply(affineScale(sx, sy, sz), rot), affineTranslate(px, py, pz));
+        if (an.scaleKeyframes.length > 0)
+            vec3.copy(restScale, an.scaleKeyframes[0].s);
+        else
+            vec3.copy(restScale, an.staticScale);
+        if (an.rotKeyframes.length > 0)
+            mat4.fromQuat(restRot, an.rotKeyframes[0].q);
+        else
+            mat4.copy(restRot, an.staticRot);
+        if (an.posKeyframes.length > 0)
+            vec3.copy(restPos, an.posKeyframes[0].p);
+        else
+            vec3.copy(restPos, an.staticPos);
+        nodeLocalFromParts(restScale, restRot, restPos, out);
     };
-    const restNodeMat = composeNodeMatrices(nodeCount, (idx) => parentIdx[idx], restLocal);
+    const restNodeMat = composeNodeMatrices(nodeCount, parentIdx, restLocal);
 
     const vx: number[] = [], vy: number[] = [], vz: number[] = [];
     const vu: number[] = [], vv: number[] = [];
     const vnx: number[] = [], vny: number[] = [], vnz: number[] = [];
     const vcol: number[] = [];
 
-    const bboxMin = vec3.fromValues(Infinity, Infinity, Infinity);
-    const bboxMax = vec3.fromValues(-Infinity, -Infinity, -Infinity);
-    let haveBbox = false;
+    const bbox = new AABB();
 
     const groups: AnimatedDrawGroup[] = [];
     const groupKey = new Map<string, number[]>();
@@ -570,10 +476,12 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const localOut = vec3.create();
     const restOut = vec3.create();
     const nrm = vec3.create();
+    const restVT = mat4.create();
     for (let ni = 0; ni < nodeCount; ni++) {
         const n = model.nodes[ni];
-        const offset = nodes[ni].offset;       // node-local: raw * offset only
-        const restVT = affineMultiply(offset, restNodeMat[ni]); // for bbox only
+        const offset = nodes[ni].offset;          // node-local: raw * offset only
+        // Row-vector: restVT = offset * restNodeMat. Column-vector: restNodeMat * offset.
+        mat4.multiply(restVT, restNodeMat[ni], offset);
 
         const nodeNormals = computeNodeNormals(n, model.shadeType);
 
@@ -594,20 +502,13 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                     px = n.vertices[vi].x; py = n.vertices[vi].y; pz = n.vertices[vi].z;
                 }
                 // Stored position: node-local (raw * offset), no node transform.
-                affineTransform(offset, px, py, pz, localOut);
+                vec3.set(localOut, px, py, pz);
+                vec3.transformMat4(localOut, localOut, offset);
                 vx.push(localOut[0]); vy.push(localOut[1]); vz.push(localOut[2]);
 
-                affineTransform(restVT, px, py, pz, restOut);
-                if (!haveBbox) {
-                    vec3.copy(bboxMin, restOut); vec3.copy(bboxMax, restOut); haveBbox = true;
-                } else {
-                    if (restOut[0] < bboxMin[0]) bboxMin[0] = restOut[0];
-                    if (restOut[1] < bboxMin[1]) bboxMin[1] = restOut[1];
-                    if (restOut[2] < bboxMin[2]) bboxMin[2] = restOut[2];
-                    if (restOut[0] > bboxMax[0]) bboxMax[0] = restOut[0];
-                    if (restOut[1] > bboxMax[1]) bboxMax[1] = restOut[1];
-                    if (restOut[2] > bboxMax[2]) bboxMax[2] = restOut[2];
-                }
+                vec3.set(restOut, px, py, pz);
+                vec3.transformMat4(restOut, restOut, restVT);
+                bbox.unionPoint(restOut);
 
                 let u = 0, v = 0;
                 if (ti < n.texCoords.length) {
@@ -618,7 +519,7 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
 
                 // Node-local normal; shader rotates by the node's animated mat.
                 const cn = nodeNormals[faceIdx * 3 + k];
-                affineTransformNormal(offset, cn[0], cn[1], cn[2], nrm);
+                transformNormalMat4(offset, cn[0], cn[1], cn[2], nrm);
                 vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
 
                 vcol.push(0xFFFFFFFF);
@@ -636,10 +537,8 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         }
     }
 
-    if (!haveBbox) {
-        vec3.set(bboxMin, 0, 0, 0);
-        vec3.set(bboxMax, 0, 0, 0);
-    }
+    if (vx.length === 0)
+        bbox.set(0, 0, 0, 0, 0, 0);
 
     const vertexCount = vx.length;
     const vertexData = new ArrayBuffer(vertexCount * MODEL_VERTEX_STRIDE_BYTES);
@@ -680,19 +579,17 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         textureNames: model.textures.slice(),
         nodes,
         animLength,
-        bboxMin, bboxMax,
+        bbox,
     };
 }
 
 // Interpolates a node's keyframes at `frame` (wrapped into [0, animLength)).
 // Channels without keyframes fall back to their static value.
-function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine {
-    let rot: Affine;
+function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat, scratchRot: mat4, out: mat4): void {
     if (an.rotKeyframes.length > 0) {
         const kfs = an.rotKeyframes;
         if (kfs.length === 1) {
-            const q = kfs[0].q;
-            rot = affineRotQuat(q[0], q[1], q[2], q[3]);
+            mat4.fromQuat(scratchRot, kfs[0].q);
         } else {
             let i = 0;
             while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
@@ -703,10 +600,10 @@ function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine 
             const t = span > 0 ? (frame - a.frame) / span : 0;
             quat.slerp(scratchQ, a.q, b.q, Math.max(0, Math.min(1, t)));
             quat.normalize(scratchQ, scratchQ);
-            rot = affineRotQuat(scratchQ[0], scratchQ[1], scratchQ[2], scratchQ[3]);
+            mat4.fromQuat(scratchRot, scratchQ);
         }
     } else {
-        rot = an.staticRot;
+        mat4.copy(scratchRot, an.staticRot);
     }
 
     let px = an.staticPos[0], py = an.staticPos[1], pz = an.staticPos[2];
@@ -735,13 +632,15 @@ function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine 
         sx = k.s[0]; sy = k.s[1]; sz = k.s[2];
     }
 
-    const s = affineScale(sx, sy, sz);
-    const p = affineTranslate(px, py, pz);
-    return affineMultiply(affineMultiply(s, rot), p);
+    // Row-vector L = S * R * P -> column-major T(p) * R * S.
+    mat4.fromTranslation(out, [px, py, pz]);
+    mat4.multiply(out, out, scratchRot);
+    mat4.scale(out, out, [sx, sy, sz]);
 }
 
 export class AnimatedPose {
     private scratchQ = quat.create();
+    private scratchRot = mat4.create();
 
     constructor(private mesh: AnimatedModelMesh) {
     }
@@ -752,14 +651,18 @@ export class AnimatedPose {
         while (out.length < nodeCount)
             out.push(mat4.create());
 
-        const local: Affine[] = new Array(nodeCount);
-        for (let i = 0; i < nodeCount; i++)
-            local[i] = animatedLocal(nodes[i], frame, this.scratchQ);
+        const local: mat4[] = new Array(nodeCount);
+        for (let i = 0; i < nodeCount; i++) {
+            local[i] = mat4.create();
+            animatedLocal(nodes[i], frame, this.scratchQ, this.scratchRot, local[i]);
+        }
 
-        const nodeMat = composeNodeMatrices(nodeCount, (idx) => nodes[idx].parentIdx, (idx) => local[idx]);
+        const parents = new Int32Array(nodeCount);
+        for (let i = 0; i < nodeCount; i++) parents[i] = nodes[i].parentIdx;
+        const nodeMat = composeNodeMatrices(nodeCount, parents, (idx, dst) => mat4.copy(dst, local[idx]));
 
         for (let i = 0; i < nodeCount; i++)
-            affineToMat4(nodeMat[i], out[i]);
+            mat4.copy(out[i], nodeMat[i]);
     }
 }
 

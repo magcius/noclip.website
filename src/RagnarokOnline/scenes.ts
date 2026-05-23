@@ -152,14 +152,14 @@ class RagnarokMapSceneDesc implements SceneDesc {
             const staticEntry = meshes.get(p.modelName);
             if (staticEntry !== undefined) {
                 const world = mat4.create();
-                buildPlacementMatrix(staticEntry.mesh.bboxMin, staticEntry.mesh.bboxMax, p.pos, p.rot, p.scale, mapOffX, mapOffZ, world);
+                buildPlacementMatrix(staticEntry.mesh.bbox, p.pos, p.rot, p.scale, mapOffX, mapOffZ, world);
                 instances.push({ modelKey: p.modelName, worldMatrix: world });
                 continue;
             }
             const animEntry = animatedMeshes.get(p.modelName);
             if (animEntry !== undefined) {
                 const placement = mat4.create();
-                buildPlacementMatrix(animEntry.mesh.bboxMin, animEntry.mesh.bboxMax, p.pos, p.rot, p.scale, mapOffX, mapOffZ, placement);
+                buildPlacementMatrix(animEntry.mesh.bbox, p.pos, p.rot, p.scale, mapOffX, mapOffZ, placement);
                 animatedInstances.push({ modelKey: p.modelName, placementMatrix: placement, animSpeed: p.animSpeed });
             }
         }
