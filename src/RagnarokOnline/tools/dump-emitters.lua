@@ -13,19 +13,39 @@
 -- the named table and re-emits each entry as JSON. No Lua bytecode execution
 -- beyond what the LUB itself does (which is just table-construction ops).
 
+-- iRO LUB strings are CP949 (EUC-KR); transcode via iconv so we emit clean
+-- UTF-8 JSON. `-l` is the one flag both GNU and BSD iconv accept.
+do
+    local p = io.popen("iconv -l 2>/dev/null")
+    local out = p and p:read("*a") or ""
+    if p ~= nil then p:close() end
+    if out == "" then
+        io.stderr:write("dump-emitters.lua: iconv not found on PATH (needed for CP949 -> UTF-8)\n")
+        os.exit(2)
+    end
+end
+
+local function cp949ToUtf8(s)
+    for i = 1, #s do
+        if s:byte(i) >= 0x80 then
+            local tmp = os.tmpname()
+            local f = io.open(tmp, "wb"); f:write(s); f:close()
+            local pipe = io.popen("iconv -f CP949 -t UTF-8 < '" .. tmp .. "'")
+            local out = pipe:read("*a"); pipe:close()
+            os.remove(tmp)
+            if out == "" then
+                io.stderr:write("dump-emitters.lua: iconv produced empty output for non-empty input\n")
+                os.exit(2)
+            end
+            return out
+        end
+    end
+    return s
+end
+
 local function jsonEscape(s)
+    s = cp949ToUtf8(s)
     s = s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
-    -- Bytes >= 0x80 are part of legacy CP949 (EUC-KR) multi-byte sequences
-    -- in the iRO emitter texture names (e.g. "effect\\번개4.bmp"). Emitting
-    -- them raw causes JSON.parse on the TS side to mis-decode them as UTF-8
-    -- and produce U+FFFD replacement chars. Escape each high byte as
-    -- \u00HH, a valid JSON Unicode escape. On the TS side the parsed string
-    -- contains chars with codepoint == byte value; the extractor walks each
-    -- char, treats codepoints < 256 as raw bytes, and feeds the byte string
-    -- through TextDecoder('euc-kr') to recover the proper Korean text.
-    -- ASCII control bytes < 0x20 (other than the \n\r\t we already escaped)
-    -- get the same treatment for safety.
-    s = s:gsub("[\128-\255]", function(c) return string.format("\\u%04x", c:byte()) end)
     s = s:gsub("[%z\1-\8\11\12\14-\31]", function(c) return string.format("\\u%04x", c:byte()) end)
     return '"' .. s .. '"'
 end

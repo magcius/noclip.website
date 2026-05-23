@@ -120,35 +120,6 @@ interface RawEmitterDump {
     emitters: Partial<EmitterSpec>[] | null;
 }
 
-// CP949 decoder shared across all emitter texture-name decodes.
-const CP949_DECODER = new TextDecoder("euc-kr");
-
-// dump-emitters.lua escapes any byte >= 0x80 (and a few control bytes) as
-// `\u00HH` so the raw CP949 (EUC-KR) bytes survive JSON encoding intact.
-// After JSON.parse the string contains chars whose codepoints == the raw
-// byte values; we collect those bytes back into a Uint8Array and run them
-// through TextDecoder('euc-kr') to recover the proper Korean text. ASCII
-// passes through unchanged because CP949 is ASCII-compatible for < 0x80.
-// Strings with no codepoints >= 0x80 just round-trip as-is.
-function decodeCp949IfRaw(s: string): string {
-    let needs = false;
-    for (let i = 0; i < s.length; i++) {
-        if (s.charCodeAt(i) > 0x7F) { needs = true; break; }
-    }
-    if (!needs)
-        return s;
-    const bytes = new Uint8Array(s.length);
-    for (let i = 0; i < s.length; i++) {
-        const cp = s.charCodeAt(i);
-        // Any codepoint >= 256 would mean the source string already held a
-        // real Unicode char, not a raw byte — leave the whole string alone
-        // in that case (we can't safely round-trip a mix).
-        if (cp > 0xFF) return s;
-        bytes[i] = cp;
-    }
-    return CP949_DECODER.decode(bytes);
-}
-
 // Defaults applied where the raw dump is missing a field. Mirrors how the
 // engine treats absent table entries: zeros, single-particle caps, additive
 // blend. Better to default than reject a partially-authored emitter.
@@ -176,7 +147,7 @@ function withDefaults(e: Partial<EmitterSpec>): EmitterSpec {
         destmode: v1(e.destmode, [6]),     // D3DBLEND_INVSRCALPHA
         maxcount: v1(e.maxcount, [1]),
         zenable: v1(e.zenable, [1]),
-        texture: typeof e.texture === "string" ? decodeCp949IfRaw(e.texture) : "",
+        texture: typeof e.texture === "string" ? e.texture : "",
     };
 }
 
