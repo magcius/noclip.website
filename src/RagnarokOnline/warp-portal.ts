@@ -17,6 +17,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GfxTopology, convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers.js";
+import { MathConstants } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { DecodedImage, decodeTGA } from "./bmp.js";
@@ -41,8 +42,6 @@ const CONE_DIVISIONS = 21;
 // pos(3 f32) + uv(2 f32) + colour(1 u32) = 24 bytes.
 const VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 4;
 const FLOATS_PER_VERTEX = 6;
-
-const DEG2RAD = Math.PI / 180;
 
 // Hoisted out of emitSpark so we don't allocate them per spark.
 const SPARK_CORNER_H = [-1, 1, 1, -1];
@@ -390,7 +389,7 @@ export class WarpPortalRenderer {
         const arc = 360 / sectors;
         let uInc = 0;
         for (let si = 0; si < sectors; si++) {
-            const a1 = si * arc * DEG2RAD, a2 = (si + 1) * arc * DEG2RAD;
+            const a1 = si * arc * MathConstants.DEG_TO_RAD, a2 = (si + 1) * arc * MathConstants.DEG_TO_RAD;
             const c1 = Math.cos(a1), s1 = Math.sin(a1), c2 = Math.cos(a2), s2 = Math.sin(a2);
             const ox1 = cx + outerR * c1, oz1 = cz + outerR * s1;
             const ox2 = cx + outerR * c2, oz2 = cz + outerR * s2;
@@ -412,7 +411,7 @@ export class WarpPortalRenderer {
     private emitCone(f: Float32Array, u: Uint32Array, at: number, z: WarpZone, arm: CastArm): number {
         const N = CONE_DIVISIONS;
         const d = arm.distance * PORTAL_SCALE;
-        const ra = arm.riseAngle * DEG2RAD;
+        const ra = arm.riseAngle * MathConstants.DEG_TO_RAD;
         const csR = Math.cos(ra), snR = Math.sin(ra);
         const color = packColor(arm.r, arm.g, arm.b, arm.alphaB);
         const cx = z.cx, cy = z.cy, cz = z.cz;
@@ -423,7 +422,7 @@ export class WarpPortalRenderer {
         for (let o = 0; o < N; o++) {
             let angle = o * arc + arm.rotStart;
             if (o === N - 1) angle = arm.rotStart; // close the loop on the seam
-            const cs = Math.cos(angle * DEG2RAD), sn = Math.sin(angle * DEG2RAD);
+            const cs = Math.cos(angle * MathConstants.DEG_TO_RAD), sn = Math.sin(angle * MathConstants.DEG_TO_RAD);
             bx[o] = cx + cs * d; bz[o] = cz + sn * d;
             const rxr = csR * d;
             const ry = snR * d; // render +Y
@@ -443,7 +442,7 @@ export class WarpPortalRenderer {
     }
 
     private emitSpark(f: Float32Array, u: Uint32Array, at: number, z: WarpZone, s: Spark): number {
-        const lon = s.longitude * DEG2RAD;
+        const lon = s.longitude * MathConstants.DEG_TO_RAD;
         const r = s.radius * PORTAL_SCALE;
         const cx = z.cx + r * Math.sin(lon);
         const cz = z.cz + r * Math.cos(lon);
