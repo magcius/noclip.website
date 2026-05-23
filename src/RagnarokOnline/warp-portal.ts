@@ -9,12 +9,14 @@
 // so RO's downward drift (-y) becomes our +Y. Decomp world units map 1:1.
 
 import { mat4, vec3 } from "gl-matrix";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxTopology, convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { DecodedImage, decodeTGA } from "./bmp.js";
@@ -47,7 +49,6 @@ const SPARK_CORNER_H = [-1, 1, -1, 1];
 const SPARK_CORNER_V = [1, 1, -1, -1];
 const SPARK_UV_U = [0, 1, 0, 1];
 const SPARK_UV_V = [0, 0, 1, 1];
-const SPARK_TRI = [0, 1, 2, 1, 3, 2];
 
 interface CastArm {
     rotStart: number;   // azimuth offset (deg) where the ring's seam sits
@@ -212,7 +213,6 @@ export class WarpPortalRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
     private sampler: GfxSampler;
-    private device: GfxDevice;
 
     private discTex: GfxTexture | null = null;
     private ringTex: GfxTexture | null = null;
@@ -221,8 +221,6 @@ export class WarpPortalRenderer {
     private zones: WarpZone[] = [];
     private accum = 0;
 
-    private vertexBuffer: GfxIndexBufferDescriptor["buffer"] | null = null;
-    private vertexCapacityVerts = 0;
     private cpuData: ArrayBuffer = new ArrayBuffer(0);
     private cpuF32: Float32Array = new Float32Array(0);
     private cpuU32: Uint32Array = new Uint32Array(0);
@@ -241,8 +239,7 @@ export class WarpPortalRenderer {
     private sparkWY = new Float32Array(4);
     private sparkWZ = new Float32Array(4);
 
-    constructor(device: GfxDevice, cache: GfxRenderHelper["renderCache"], data: WarpPortalSceneData) {
-        this.device = device;
+    constructor(device: GfxDevice, cache: GfxRenderCache, data: WarpPortalSceneData) {
         this.program = cache.createProgram(new WarpPortalProgram());
 
         this.inputLayout = cache.createInputLayout({
@@ -254,7 +251,7 @@ export class WarpPortalRenderer {
             vertexBufferDescriptors: [
                 { byteStride: VERTEX_STRIDE_BYTES, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
-            indexBufferFormat: null,
+            indexBufferFormat: GfxFormat.U32_R,
         });
 
         this.sampler = cache.createSampler({
@@ -303,13 +300,13 @@ export class WarpPortalRenderer {
         else vec3.normalize(this.scratchUp, this.scratchUp);
 
         const discSectors = Math.round(360 / DISC_ARC_DEG);
-        const discVertsPer = discSectors * 6;
-        const coneVertsPerArm = (CONE_DIVISIONS - 1) * 6;
+        const discVertsPer = discSectors * 4;
+        const coneVertsPerArm = (CONE_DIVISIONS - 1) * 4;
         let discVerts = 0, coneVerts = 0, sparkVerts = 0;
         for (const z of this.zones) {
             if (this.discTex !== null) discVerts += discVertsPer;
             if (this.ringTex !== null) coneVerts += z.arms.length * coneVertsPerArm;
-            sparkVerts += z.sparks.length * 6;
+            sparkVerts += z.sparks.length * 4;
         }
         const totalVerts = discVerts + coneVerts + sparkVerts;
         if (totalVerts === 0)
@@ -338,23 +335,18 @@ export class WarpPortalRenderer {
                 sparkAt = this.emitSpark(f, u, sparkAt, z, s);
         }
 
-        if (totalVerts > this.vertexCapacityVerts) {
-            if (this.vertexBuffer !== null)
-                this.device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = this.device.createBuffer(totalVerts * VERTEX_STRIDE_BYTES, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-            this.vertexCapacityVerts = totalVerts;
-        }
-        if (this.vertexBuffer === null)
-            return;
-        this.device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.cpuData, 0, totalVerts * VERTEX_STRIDE_BYTES));
-
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        const cache = renderHelper.renderCache;
+        const vertexBufferDescriptors = [cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, new Uint8Array(this.cpuData, 0, totalVerts * VERTEX_STRIDE_BYTES))];
+        const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.Quads, totalVerts);
+        const indexData = new Uint32Array(indexCount);
+        convertToTrianglesRange(indexData, 0, GfxTopology.Quads, 0, totalVerts);
+        const indexBufferDescriptor = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Index, new Uint8Array(indexData.buffer));
         const renderInstManager = renderHelper.renderInstManager;
 
         const template = renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
-        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
+        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
         let offs = template.allocateUniformBuffer(WarpPortalProgram.ub_SceneParams, 16);
@@ -367,15 +359,15 @@ export class WarpPortalRenderer {
 
         // Disc: standard src-alpha over. Cone + sparkles: additive
         // (RenderTeiRect srcAlpha/ONE; sparkle is a glow mote on black).
-        this.drawBatch(renderInstManager, this.discTex, discBase, discVerts, false);
-        this.drawBatch(renderInstManager, this.ringTex, coneBase, coneVerts, true);
-        this.drawBatch(renderInstManager, this.sparkTex, sparkBase, sparkVerts, true);
+        this.drawBatch(renderInstManager, this.discTex, discBase / 4 * 6, discVerts / 4 * 6, false);
+        this.drawBatch(renderInstManager, this.ringTex, coneBase / 4 * 6, coneVerts / 4 * 6, true);
+        this.drawBatch(renderInstManager, this.sparkTex, sparkBase / 4 * 6, sparkVerts / 4 * 6, true);
 
         renderInstManager.popTemplate();
     }
 
-    private drawBatch(renderInstManager: GfxRenderHelper["renderInstManager"], tex: GfxTexture | null, baseVert: number, vertCount: number, additive: boolean): void {
-        if (tex === null || vertCount === 0)
+    private drawBatch(renderInstManager: GfxRenderHelper["renderInstManager"], tex: GfxTexture | null, indexStart: number, indexCount: number, additive: boolean): void {
+        if (tex === null || indexCount === 0)
             return;
         const renderInst = renderInstManager.newRenderInst();
         const megaState = renderInst.setMegaStateFlags({});
@@ -385,7 +377,7 @@ export class WarpPortalRenderer {
             blendDstFactor: additive ? GfxBlendFactor.One : GfxBlendFactor.OneMinusSrcAlpha,
         });
         renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: tex, gfxSampler: this.sampler }]);
-        renderInst.setDrawCount(vertCount, baseVert);
+        renderInst.setDrawCount(indexCount, indexStart);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -407,8 +399,6 @@ export class WarpPortalRenderer {
             at = this.vert(f, u, at, cx, cy, cz, u1, 1, color);
             at = this.vert(f, u, at, ox1, cy, oz1, u0, 0, color);
             at = this.vert(f, u, at, ox2, cy, oz2, u1, 0, color);
-            at = this.vert(f, u, at, ox1, cy, oz1, u0, 0, color);
-            at = this.vert(f, u, at, cx, cy, cz, u1, 1, color);
             uInc += 0.25;
             if (uInc >= 1.0) uInc = 0;
         }
@@ -448,8 +438,6 @@ export class WarpPortalRenderer {
             at = this.vert(f, u, at, bx[o], cy, bz[o], tu1, 1, color);
             at = this.vert(f, u, at, tx[o], ty[o], tz[o], tu1, 0, color);
             at = this.vert(f, u, at, tx[o - 1], ty[o - 1], tz[o - 1], tu0, 0, color);
-            at = this.vert(f, u, at, tx[o], ty[o], tz[o], tu1, 0, color);
-            at = this.vert(f, u, at, bx[o - 1], cy, bz[o - 1], tu0, 1, color);
         }
         return at;
     }
@@ -470,10 +458,8 @@ export class WarpPortalRenderer {
             wy[k] = cy + rX[1] * ch + uP[1] * cv;
             wz[k] = cz + rX[2] * ch + uP[2] * cv;
         }
-        for (let n = 0; n < 6; n++) {
-            const c = SPARK_TRI[n];
+        for (let c = 0; c < 4; c++)
             at = this.vert(f, u, at, wx[c], wy[c], wz[c], SPARK_UV_U[c], SPARK_UV_V[c], color);
-        }
         return at;
     }
 
@@ -489,7 +475,6 @@ export class WarpPortalRenderer {
         if (this.discTex !== null) device.destroyTexture(this.discTex);
         if (this.ringTex !== null) device.destroyTexture(this.ringTex);
         if (this.sparkTex !== null) device.destroyTexture(this.sparkTex);
-        if (this.vertexBuffer !== null) device.destroyBuffer(this.vertexBuffer);
     }
 }
 
