@@ -1,147 +1,142 @@
 
-// Per-map background music. setMap(id) swaps the active track when BGM is
-// enabled; tracks loop on a shared HTMLAudioElement. The id -> filename mapping
-// is lazy-loaded from data/RagnarokOnline/bgm/index.json. Default OFF.
-//
-// The on/off state and volume persist across scene switches; the renderer's
-// render-hacks panel hosts the toggle + slider (no separate overlay).
+// Per-map background music owned by the scene's renderer. Tracks loop on a
+// shared HTMLAudioElement; the id -> filename map is lazy-loaded once.
 
 import { DataFetcher } from "../DataFetcher.js";
 
-let indexPromise: Promise<Map<string, string> | null> | null = null;
-let audio: HTMLAudioElement | null = null;
-let enabled = false;
-let currentMapId: string | null = null;
-let currentVolume = 0.5;
-let pathBase: string | null = null;
-let lastFetcher: DataFetcher | null = null;
-let sceneGeneration = 0;
+export class Bgm {
+    private static enabled = false;
+    private static currentVolume = 0.5;
 
-function loadIndex(dataFetcher: DataFetcher): Promise<Map<string, string> | null> {
-    if (indexPromise !== null)
-        return indexPromise;
-    if (pathBase === null)
-        return Promise.resolve(null);
-    const url = `${pathBase}/bgm/index.json`;
-    indexPromise = (async () => {
-        try {
-            const data = await dataFetcher.fetchData(url, { allow404: true });
-            const text = new TextDecoder("utf-8").decode(data.createTypedArray(Uint8Array));
-            const obj = JSON.parse(text) as Record<string, string>;
-            return new Map(Object.entries(obj));
-        } catch {
+    private audio: HTMLAudioElement | null = null;
+    private currentMapId: string | null = null;
+    private lastFetcher: DataFetcher | null = null;
+    private sceneGeneration = 0;
+    private indexPromise: Promise<Map<string, string> | null> | null = null;
+    private destroyed = false;
+
+    constructor(private pathBase: string) {
+    }
+
+    private loadIndex(dataFetcher: DataFetcher): Promise<Map<string, string> | null> {
+        if (this.indexPromise !== null)
+            return this.indexPromise;
+        const url = `${this.pathBase}/bgm/index.json`;
+        this.indexPromise = (async () => {
+            try {
+                const data = await dataFetcher.fetchData(url, { allow404: true });
+                const text = new TextDecoder("utf-8").decode(data.createTypedArray(Uint8Array));
+                const obj = JSON.parse(text) as Record<string, string>;
+                return new Map(Object.entries(obj));
+            } catch {
+                return null;
+            }
+        })();
+        return this.indexPromise;
+    }
+
+    private async urlForMap(dataFetcher: DataFetcher, mapId: string): Promise<string | null> {
+        const idx = await this.loadIndex(dataFetcher);
+        if (idx === null)
             return null;
+        const file = idx.get(mapId);
+        if (file === undefined)
+            return null;
+        return dataFetcher.getDataURLForPath(`${this.pathBase}/bgm/${file}`);
+    }
+
+    private ensureAudio(): HTMLAudioElement {
+        if (this.audio === null) {
+            this.audio = new Audio();
+            this.audio.loop = true;
+            this.audio.preload = "auto";
+            this.audio.volume = Bgm.currentVolume;
         }
-    })();
-    return indexPromise;
-}
-
-async function urlForMap(dataFetcher: DataFetcher, mapId: string): Promise<string | null> {
-    if (pathBase === null)
-        return null;
-    const idx = await loadIndex(dataFetcher);
-    if (idx === null)
-        return null;
-    const file = idx.get(mapId);
-    if (file === undefined)
-        return null;
-    return dataFetcher.getDataURLForPath(`${pathBase}/bgm/${file}`);
-}
-
-function ensureAudio(): HTMLAudioElement {
-    if (audio === null) {
-        audio = new Audio();
-        audio.loop = true;
-        audio.preload = "auto";
-        audio.volume = currentVolume;
+        return this.audio;
     }
-    return audio;
-}
 
-export function setBgmPathBase(base: string): void {
-    pathBase = base;
-}
-
-export async function setMap(dataFetcher: DataFetcher, mapId: string): Promise<void> {
-    const generation = ++sceneGeneration;
-    lastFetcher = dataFetcher;
-    if (mapId === currentMapId)
-        return;
-    currentMapId = mapId;
-    if (!enabled)
-        return;
-    await applyCurrent(dataFetcher, generation);
-}
-
-export async function setEnabled(value: boolean, dataFetcher: DataFetcher | null): Promise<void> {
-    if (enabled === value) return;
-    enabled = value;
-    if (!value) {
-        if (audio !== null)
-            audio.pause();
-        return;
+    public async setMap(dataFetcher: DataFetcher, mapId: string): Promise<void> {
+        const generation = ++this.sceneGeneration;
+        this.lastFetcher = dataFetcher;
+        if (mapId === this.currentMapId)
+            return;
+        this.currentMapId = mapId;
+        if (!Bgm.enabled)
+            return;
+        await this.applyCurrent(dataFetcher, generation);
     }
-    const f = dataFetcher ?? lastFetcher;
-    if (f !== null)
-        await applyCurrent(f, sceneGeneration);
-}
 
-export function isEnabled(): boolean {
-    return enabled;
-}
-
-export function setVolume(v: number): void {
-    currentVolume = Math.max(0, Math.min(1, v));
-    if (audio !== null)
-        audio.volume = currentVolume;
-}
-
-export function getVolume(): number {
-    return currentVolume;
-}
-
-export function stop(): void {
-    if (audio === null)
-        return;
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-}
-
-// Teardown for scene destroy; preserves the user's enabled preference.
-export function teardownScene(): void {
-    sceneGeneration++;
-    currentMapId = null;
-    lastFetcher = null;
-    stop();
-}
-
-async function applyCurrent(dataFetcher: DataFetcher, generation: number): Promise<void> {
-    if (currentMapId === null)
-        return;
-    const mapId = currentMapId;
-    const url = await urlForMap(dataFetcher, mapId);
-    if (generation !== sceneGeneration || mapId !== currentMapId)
-        return;
-    // User may have flipped BGM OFF while the fetch was in flight.
-    if (!enabled)
-        return;
-    const a = ensureAudio();
-    if (url === null) {
-        a.pause();
-        a.removeAttribute("src");
-        a.load();
-        return;
+    public async setEnabled(value: boolean, dataFetcher: DataFetcher | null): Promise<void> {
+        if (Bgm.enabled === value) return;
+        Bgm.enabled = value;
+        if (!value) {
+            if (this.audio !== null)
+                this.audio.pause();
+            return;
+        }
+        const f = dataFetcher ?? this.lastFetcher;
+        if (f !== null)
+            await this.applyCurrent(f, this.sceneGeneration);
     }
-    if (a.src === url) {
-        a.play().catch(() => { /* autoplay block; user gesture required */ });
-        return;
+
+    public isEnabled(): boolean {
+        return Bgm.enabled;
     }
-    a.src = url;
-    a.volume = currentVolume;
-    try {
-        await a.play();
-    } catch {
-        // Autoplay blocked without a user gesture; user interaction will succeed.
+
+    public setVolume(v: number): void {
+        Bgm.currentVolume = Math.max(0, Math.min(1, v));
+        if (this.audio !== null)
+            this.audio.volume = Bgm.currentVolume;
+    }
+
+    public getVolume(): number {
+        return Bgm.currentVolume;
+    }
+
+    public stop(): void {
+        if (this.audio === null)
+            return;
+        this.audio.pause();
+        this.audio.removeAttribute("src");
+        this.audio.load();
+    }
+
+    public destroy(): void {
+        this.destroyed = true;
+        this.sceneGeneration++;
+        this.currentMapId = null;
+        this.lastFetcher = null;
+        this.stop();
+    }
+
+    private async applyCurrent(dataFetcher: DataFetcher, generation: number): Promise<void> {
+        if (this.currentMapId === null)
+            return;
+        const mapId = this.currentMapId;
+        const url = await this.urlForMap(dataFetcher, mapId);
+        if (this.destroyed || generation !== this.sceneGeneration || mapId !== this.currentMapId)
+            return;
+        if (!Bgm.enabled)
+            return;
+        const a = this.ensureAudio();
+        if (url === null) {
+            a.pause();
+            a.removeAttribute("src");
+            a.load();
+            return;
+        }
+        if (a.src === url) {
+            a.play().catch(() => { /* browser autoplay needs a user gesture */ });
+            return;
+        }
+        a.src = url;
+        a.volume = Bgm.currentVolume;
+        try {
+            await a.play();
+        } catch {
+            // browser autoplay needs a user gesture
+        }
+        if (this.destroyed)
+            this.stop();
     }
 }

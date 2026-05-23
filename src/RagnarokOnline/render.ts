@@ -38,8 +38,7 @@ import { SkyDomeRenderer, SkySceneData } from "./sky.js";
 import { LensflareRenderer } from "./lensflare.js";
 import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
-import * as BGM from "./bgm.js";
-import { DataFetcher } from "../DataFetcher.js";
+import { Bgm } from "./bgm.js";
 import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 
 // CSS px of drift allowed between mousedown/up before a click counts as a drag.
@@ -715,9 +714,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     // Trimmed to the picked count by pickActiveLights; recycled across frames.
     private activeLights: PointLight[] = [];
 
-    // Stashed so the BGM toggle can kick off the per-map track fetch on the
-    // same user gesture (browsers block autoplay otherwise).
-    private bgmFetcher: DataFetcher | null = null;
+    private bgm: Bgm;
 
     private gnd: GndMap;
     private warpTargets: WarpTarget[] = [];
@@ -754,7 +751,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.pendingClick = { x: this.pressX, y: this.pressY };
     };
 
-    constructor(device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgmFetcher: DataFetcher | null = null) {
+    constructor(device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm) {
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -765,8 +762,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.fog = fogData;
         if (skyData !== null)
             this.sky = skyData;
-        if (bgmFetcher !== null)
-            this.bgmFetcher = bgmFetcher;
+        this.bgm = bgm;
         if (this.sky.enableDome) {
             this.skyDomeRenderer = new SkyDomeRenderer(cache);
             this.lensflareRenderer = new LensflareRenderer(device, cache);
@@ -1114,17 +1110,17 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             renderHacks.contents.appendChild(lights.elem);
         }
 
-        const bgm = new UI.Checkbox("BGM (per-map music)", BGM.isEnabled());
-        bgm.onchanged = () => {
+        const bgmToggle = new UI.Checkbox("BGM (per-map music)", this.bgm.isEnabled());
+        bgmToggle.onchanged = () => {
             // The toggle counts as the user gesture browsers require to start playback.
-            void BGM.setEnabled(bgm.checked, this.bgmFetcher);
+            void this.bgm.setEnabled(bgmToggle.checked, null);
         };
-        renderHacks.contents.appendChild(bgm.elem);
+        renderHacks.contents.appendChild(bgmToggle.elem);
         const bgmVol = new UI.Slider();
         bgmVol.setLabel("BGM volume");
         bgmVol.setRange(0, 1, 0.01);
-        bgmVol.setValue(BGM.getVolume());
-        bgmVol.onvalue = (v: number) => { BGM.setVolume(v); };
+        bgmVol.setValue(this.bgm.getVolume());
+        bgmVol.onvalue = (v: number) => { this.bgm.setVolume(v); };
         renderHacks.contents.appendChild(bgmVol.elem);
 
         const timeOfDay = new UI.Panel();
@@ -1776,7 +1772,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.detachMouseListeners();
-        BGM.teardownScene();
+        this.bgm.destroy();
         this.renderHelper.destroy();
         device.destroyBuffer(this.vertexBufferDescriptors[0].buffer);
         device.destroyBuffer(this.indexBufferDescriptor.buffer);

@@ -28,9 +28,7 @@ import { eraOf, eraSharedKey, eraSuffix, fetchEraOrBare, resolveWarpDest } from 
 import { SNOW_PARAMS, WeatherParams } from "./weather.js";
 import { buildSkyData } from "./sky.js";
 import { loadParticles } from "./particles.js";
-import * as BGM from "./bgm.js";
-
-BGM.setBgmPathBase("RagnarokOnline");
+import { Bgm } from "./bgm.js";
 
 // Water animation frames live in textures/워터/water<type><NN>.jpg, NN=00..31.
 const WATER_DIR = "워터";
@@ -311,9 +309,10 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
         const particleData = await loadParticles(dataFetcher, pathBase, eraSharedKey(this.id), mapOffX, mapOffZ);
 
-        void BGM.setMap(dataFetcher, eraSharedKey(this.id));
+        const bgm = new Bgm("RagnarokOnline");
+        void bgm.setMap(dataFetcher, eraSharedKey(this.id));
 
-        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, dataFetcher);
+        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm);
     }
 }
 
