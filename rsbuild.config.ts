@@ -47,7 +47,8 @@ export default defineConfig({
   // Enable async TypeScript type checking.
   plugins: [pluginTypeCheck()],
   tools: {
-    rspack(_config) {
+    rspack(config) {
+      config.node = { ...config.node, __dirname: false };
     },
     // Disable standards-compliant class field transforms.
     swc: {
