@@ -113,6 +113,7 @@ import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_RatchetAndClank1 from './RatchetAndClank/scenes.js';
 import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
+import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -202,6 +203,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_Fez.sceneGroup,
+    Scenes_RagnarokOnline.sceneGroup,
     Scenes_CounterStrikeSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
     Scenes_HalfLife2DM.sceneGroup,

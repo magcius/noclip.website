@@ -47,7 +47,10 @@ export default defineConfig({
   // Enable async TypeScript type checking.
   plugins: [pluginTypeCheck()],
   tools: {
-    rspack(_config) {
+    rspack(config) {
+      // librw.js (Emscripten output) references __dirname in its Node.js code
+      // path; that branch is dead in the browser build, but rspack still warns.
+      config.node = { ...config.node, __dirname: false };
     },
     // Disable standards-compliant class field transforms.
     swc: {
