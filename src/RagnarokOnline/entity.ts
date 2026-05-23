@@ -86,6 +86,7 @@ export interface EntitySceneData {
 // Standard mob action layout: 0 stand, 1 walk, 2 attack, 3 hurt, 4 die.
 const STATE_IDLE = 0;
 const STATE_WALK = 1;
+const STATE_HIT = 3;
 const STATE_DEAD = 4;
 
 // Click-to-kill (our addition): time the corpse holds before respawning.
@@ -126,7 +127,7 @@ function cellWorldPos(gnd: GndMap, gat: GatMap | null, gatX: number, gatY: numbe
     return gatCellToWorld(gatX, gatY, h, gnd.width);
 }
 
-type MobLifecycle = "alive" | "dying" | "dead";
+type MobLifecycle = "alive" | "hit" | "dying" | "dead";
 
 // States:
 //   idle  -> pause, pick a random walkable cell within ROAM_RADIUS, FindPath
@@ -178,6 +179,9 @@ export class MobEntity {
     private deathAccum = 0;
     private respawnTimer = 0;
 
+    private hitMotion = 0;
+    private hitAccum = 0;
+
     private idleFailStreak = 0;
 
     constructor(actor: SpriteActor, gnd: GndMap, gat: GatMap, startCellX: number, startCellY: number, speedMsPerCell: number, canMove: boolean, name: string) {
@@ -208,11 +212,20 @@ export class MobEntity {
             return;
         if (!this.actor.hasState(STATE_DEAD))
             return;
+        this.walking = false;
+        this.path = [];
+        // Mobs without a HIT action skip straight to dying so they aren't stranded.
+        if (this.actor.hasState(STATE_HIT)) {
+            this.lifecycle = "hit";
+            this.hitMotion = 0;
+            this.hitAccum = 0;
+            this.actor.setState(STATE_HIT);
+            this.actor.setMotion(0);
+            return;
+        }
         this.lifecycle = "dying";
         this.deathMotion = 0;
         this.deathAccum = 0;
-        this.walking = false;
-        this.path = [];
         this.actor.setState(STATE_DEAD);
         // Pin to frame 0; setMotion also disables the actor's time-based advance
         // so updateDying can step the die frames manually instead of looping.
@@ -226,6 +239,10 @@ export class MobEntity {
         const dt = this.accum;
         this.accum = 0;
 
+        if (this.lifecycle === "hit") {
+            this.updateHit(dt);
+            return;
+        }
         if (this.lifecycle === "dying") {
             this.updateDying(dt);
             return;
@@ -241,6 +258,34 @@ export class MobEntity {
             this.updateWalk(dt);
         else
             this.updateIdle(dt);
+    }
+
+    private updateHit(dt: number): void {
+        const motionCount = this.actor.currentMotionCount();
+        const delaySeconds = this.actor.currentDelay() * ACT_DELAY_TO_SECONDS;
+        if (motionCount <= 1 || delaySeconds <= 0) {
+            this.lifecycle = "dying";
+            this.deathMotion = 0;
+            this.deathAccum = 0;
+            this.actor.setState(STATE_DEAD);
+            this.actor.setMotion(0);
+            return;
+        }
+        this.hitAccum += dt;
+        while (this.hitAccum >= delaySeconds) {
+            this.hitAccum -= delaySeconds;
+            this.hitMotion++;
+            if (this.hitMotion >= motionCount - 1) {
+                this.actor.setMotion(motionCount - 1);
+                this.lifecycle = "dying";
+                this.deathMotion = 0;
+                this.deathAccum = 0;
+                this.actor.setState(STATE_DEAD);
+                this.actor.setMotion(0);
+                return;
+            }
+            this.actor.setMotion(this.hitMotion);
+        }
     }
 
     // Single-frame / missing die action collapses straight to "dead".
