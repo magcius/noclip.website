@@ -41,9 +41,8 @@ import { makeSoftDiscImage } from "./weather.js";
 // Tunables.
 // ---------------------------------------------------------------------------
 
-// One GAT cell is ~5 world units (zoom/2) — see the shadow renderer's notes.
-// Dust dimensions are picked relative to that so they read at the right scale
-// from the free-fly camera.
+// One GAT cell is 5 world units. Dust dimensions are picked relative to that
+// so they read at the right scale from the free-fly camera.
 
 // Lifetime of one puff in seconds. The live client's puff fades quickly so
 // the trail under a walking mob feels like a brief kicked-up scuff, not a

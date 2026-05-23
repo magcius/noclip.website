@@ -36,6 +36,7 @@ import { ParticleRenderer, ParticleSceneData } from "./particles.js";
 import { WarpPortalRenderer, WarpPortalSceneData } from "./warp-portal.js";
 import { GrannyInstance, GrannyModelRenderer } from "./granny-render.js";
 import { WeatherParams, WeatherRenderer } from "./weather.js";
+import { GND_CELL_SIZE } from "./coord.js";
 import { ShadowRenderer } from "./shadow.js";
 import { SkyDomeRenderer, SkySceneData } from "./sky.js";
 import { LensflareRenderer } from "./lensflare.js";
@@ -447,11 +448,9 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         out[1] = (k & 2) ? v1 : v0;
     };
 
-    const zoom = gnd.zoom;
     // Map world width, used to mirror X about the map centre (RO is left-handed,
-    // this renderer right-handed; see coord.ts). Model placements and the sun
-    // direction apply the same mirror so the whole scene stays consistent.
-    const worldWidth = gnd.width * zoom;
+    // this renderer right-handed; see coord.ts).
+    const worldWidth = gnd.width * GND_CELL_SIZE;
 
     // World position of cell (x,y) corner k. Corner [0]=(x,y) [1]=(x+1,y)
     // [2]=(x,y+1) [3]=(x+1,y+1). Stored heights are negated so larger height =>
@@ -459,7 +458,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
     const cornerWorld = (x: number, y: number, k: number, h: ArrayLike<number>, out: vec3): void => {
         const cx = (k & 1) ? (x + 1) : x;
         const cz = (k & 2) ? (y + 1) : y;
-        vec3.set(out, worldWidth - cx * zoom, -h[k], cz * zoom);
+        vec3.set(out, worldWidth - cx * GND_CELL_SIZE, -h[k], cz * GND_CELL_SIZE);
     };
 
     // Interleaved float/byte vertex data is awkward to build directly, so we

@@ -22,7 +22,7 @@ import { computeLightDir, parseRSW } from "./rsw.js";
 import { decodeImageBitmapRGBA } from "./water.js";
 import { loadEntities, loadEffectSources } from "./entity.js";
 import { loadWarpPortals } from "./warp-portal.js";
-import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coord.js";
+import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight, GAT_CELL_SIZE, GND_CELL_SIZE } from "./coord.js";
 import { takePendingArrival } from "./travel.js";
 import { vec3 } from "gl-matrix";
 import { loadWoeGrannyModels } from "./granny-scene.js";
@@ -174,8 +174,8 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
         // Half the map extent: the RSW frame is centered on the map, the terrain
         // is corner-origin, so placement shifts by this and negates Y to coincide.
-        const mapOffX = gnd.width * gnd.zoom * 0.5;
-        const mapOffZ = gnd.height * gnd.zoom * 0.5;
+        const mapOffX = gnd.width * GND_CELL_SIZE * 0.5;
+        const mapOffZ = gnd.height * GND_CELL_SIZE * 0.5;
 
         const instances: ModelInstance[] = [];
         const animatedInstances: AnimatedModelInstance[] = [];
@@ -244,7 +244,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const waterData: WaterSceneData | null = frames.some((f) => f !== null) ? {
             gndWidth: gnd.width,
             gndHeight: gnd.height,
-            zoom: gnd.zoom,
+            zoom: GND_CELL_SIZE,
             params: {
                 level: waterParams.level,
                 animSpeed: waterParams.animSpeed,
@@ -365,7 +365,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         // in sync with the portal renderer's own placement choice above.
         const gatHeight = (gatX: number, gatY: number): number =>
             gat !== null ? gatCellSurfaceHeight(gat, gatX, gatY) : gatCellGroundHeight(gnd, gatX, gatY);
-        const cellSize = gnd.zoom / 2; // world units per GAT cell
+        // Warp span (cells) -> world radius for click hit testing.
         // Resolve each warp's destination to a fully-qualified scene id. For
         // destinations with era variants, this appends the era suffix using
         // the warp's own destEra hint when present (set by the extractor for
@@ -373,11 +373,11 @@ class RagnarokMapSceneDesc implements SceneDesc {
         // Bare destinations (no era variants in maps.ts) pass through.
         const sourceEra = eraOf(this.id);
         const warpTargets: WarpTarget[] = entityData.warps.map((w) => {
-            const wp = gatCellToWorld(w.cellX, w.cellY, gatHeight(w.cellX, w.cellY), gnd.zoom, gnd.width);
+            const wp = gatCellToWorld(w.cellX, w.cellY, gatHeight(w.cellX, w.cellY), gnd.width);
             // The warp's span is a half-extent in cells; its world radius is the
             // larger axis span (or a floor) so the whole trigger tile is hittable.
             const spanCells = Math.max(w.spanX, w.spanY);
-            const radius = Math.max(spanCells * cellSize, WARP_MIN_HIT_RADIUS);
+            const radius = Math.max(spanCells * GAT_CELL_SIZE, WARP_MIN_HIT_RADIUS);
             const dest = resolveWarpDest(w.dest, w.destEra, sourceEra);
             // Intra-map warp (e.g. prt_in's room-to-room portals): pre-resolve the
             // arrival world position from this map's own terrain so the click can
@@ -387,7 +387,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
             // geffen) still detects as intra-map.
             let arrivalWorldPos: vec3 | undefined;
             if (dest === this.id && w.destX !== undefined && w.destY !== undefined) {
-                const ap = gatCellToWorld(w.destX, w.destY, gatHeight(w.destX, w.destY), gnd.zoom, gnd.width);
+                const ap = gatCellToWorld(w.destX, w.destY, gatHeight(w.destX, w.destY), gnd.width);
                 arrivalWorldPos = vec3.fromValues(ap[0], ap[1], ap[2]);
             }
             return {
@@ -403,7 +403,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const arrival = takePendingArrival(this.id);
         let arrivalWorldPos: vec3 | null = null;
         if (arrival !== null) {
-            const wp = gatCellToWorld(arrival.cellX, arrival.cellY, gatHeight(arrival.cellX, arrival.cellY), gnd.zoom, gnd.width);
+            const wp = gatCellToWorld(arrival.cellX, arrival.cellY, gatHeight(arrival.cellX, arrival.cellY), gnd.width);
             arrivalWorldPos = vec3.fromValues(wp[0], wp[1], wp[2]);
         }
 

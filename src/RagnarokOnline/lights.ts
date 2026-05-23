@@ -12,6 +12,7 @@
 
 import { GndMap } from "./gnd.js";
 import { RswPointLight, RswWorld } from "./rsw.js";
+import { GND_CELL_SIZE } from "./coord.js";
 
 // Cap on the shader's uniform light array. 64 is plenty for a single dungeon
 // room around the camera (the densest maps in the corpus have ~800 lights total
@@ -48,8 +49,8 @@ export interface PointLight {
 // worldWidth - pos.x ends up at [mapOffX, 3*mapOffX] and parks every light an
 // extra mapOffX past the map's right edge — invisible.)
 export function loadPointLights(rsw: RswWorld, gnd: GndMap): PointLight[] {
-    const mapOffX = gnd.width * gnd.zoom * 0.5;
-    const mapOffZ = gnd.height * gnd.zoom * 0.5;
+    const mapOffX = gnd.width * GND_CELL_SIZE * 0.5;
+    const mapOffZ = gnd.height * GND_CELL_SIZE * 0.5;
     const out: PointLight[] = [];
     for (const l of rsw.lights) {
         // Cull obviously useless entries (zero range, all-black). Saves shader

@@ -170,7 +170,7 @@ const MAX_DT = 0.25;
 
 // Walk-animation cadence factor, from the engine: the walk frame is
 // floor(distanceTravelled * WALK_MOTION_SCALE / actionDelay) % frameCount, where
-// distance is in world units (one orthogonal cell = the GAT zoom, ~5 units) and
+// distance is in world units (one orthogonal cell = 5 units) and
 // actionDelay is the walk action's .act delay clamped to >= 1. Tying the frame
 // to distance (not the frame clock) makes a slow mob's legs cycle slowly and a
 // fast mob's quickly, at a pace that matches its actual movement.
@@ -196,7 +196,7 @@ function moveDirToFacing(dx: number, dz: number): number {
 // over, so using it puts entities on the same surface the player stands on.
 function cellWorldPos(gnd: GndMap, gat: GatMap | null, gatX: number, gatY: number): [number, number, number] {
     const h = gat !== null ? gatCellSurfaceHeight(gat, gatX, gatY) : gatCellGroundHeight(gnd, gatX, gatY);
-    return gatCellToWorld(gatX, gatY, h, gnd.zoom, gnd.width);
+    return gatCellToWorld(gatX, gatY, h, gnd.width);
 }
 
 // Lifecycle state for a mob. "alive" is the normal wander loop. "dying" plays

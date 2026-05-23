@@ -624,7 +624,7 @@ export async function loadWarpPortals(
 
     const placements: vec3[] = warps.map((w) => {
         const h = gat !== null ? gatCellSurfaceHeight(gat, w.cellX, w.cellY) : gatCellGroundHeight(gnd, w.cellX, w.cellY);
-        const wp = gatCellToWorld(w.cellX, w.cellY, h, gnd.zoom, gnd.width);
+        const wp = gatCellToWorld(w.cellX, w.cellY, h, gnd.width);
         return vec3.fromValues(wp[0], wp[1], wp[2]);
     });
 

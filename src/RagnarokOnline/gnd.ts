@@ -66,8 +66,6 @@ export interface GndWaterParams {
 export interface GndMap {
     width: number;
     height: number;
-    // Horizontal scale applied to each cell's grid coordinate to get world units.
-    zoom: number;
     textureNames: string[];
     lightmaps: GndLightmap[];
     surfaces: GndSurface[];
@@ -151,6 +149,8 @@ export function parseGND(buffer: ArrayBufferSlice): GndMap {
     const zoom = r.f32();
     if (width <= 0 || height <= 0)
         throw new Error(`GND: bad dimensions ${width}x${height}`);
+    if (zoom !== 10)
+        console.warn(`GND: unexpected cell size ${zoom} (expected 10); world placements will be wrong`);
 
     const textureCount = r.i32();
     const textureNameLength = r.i32();
@@ -224,5 +224,5 @@ export function parseGND(buffer: ArrayBufferSlice): GndMap {
         }
     }
 
-    return { width, height, zoom, textureNames, lightmaps, surfaces, cells, water };
+    return { width, height, textureNames, lightmaps, surfaces, cells, water };
 }

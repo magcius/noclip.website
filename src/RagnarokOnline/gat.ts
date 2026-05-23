@@ -3,8 +3,8 @@
 //
 // The GAT is the map's per-cell attribute layer: a width x height grid, each
 // cell holding four corner heights and a type/flag word. The grid is 2x the GND
-// resolution (one GND cell = 2x2 GAT cells) and the engine uses a fixed cell
-// size of 5 world units (half the GND zoom). The flag classifies the cell:
+// resolution (one GND cell = 2x2 GAT cells of 5 world units each). The flag
+// classifies the cell:
 // walkable ground, blocked, water, etc. We expose walkability + the dimensions
 // the pathfinder and the wander controller need.
 //
@@ -22,9 +22,6 @@ export interface GatCell {
 export interface GatMap {
     width: number;
     height: number;
-    // Cell size in world units. The engine leaves this at its default of 5 (the
-    // GAT grid is twice the GND resolution, so half the GND's zoom of 10).
-    zoom: number;
     // Length width*height, row-major: cell(x, y) = cells[y * width + x].
     cells: GatCell[];
 }
@@ -84,5 +81,5 @@ export function parseGAT(buffer: ArrayBufferSlice): GatMap {
         cells[i] = { height: [h0, h1, h2, h3], flag };
     }
 
-    return { width, height, zoom: 5, cells };
+    return { width, height, cells };
 }

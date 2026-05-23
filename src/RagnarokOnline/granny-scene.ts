@@ -21,7 +21,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DecodedImage } from "./bmp.js";
 import { GndMap } from "./gnd.js";
 import { GatMap } from "./gat.js";
-import { gatCellSurfaceHeight } from "./coord.js";
+import { gatCellSurfaceHeight, GAT_CELL_SIZE, GND_CELL_SIZE } from "./coord.js";
 import { extractGrannyModel, GrannyAnimation, parseGranny } from "./granny.js";
 import { GrannyInstance } from "./granny-render.js";
 
@@ -147,7 +147,6 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
     // map centre. The attribute grid is 2x the GND resolution, so the centre cell
     // is at (gnd.width, gnd.height).
     const anchor = EMPERIUM_ROOM[mapId] ?? [gnd.width, gnd.height];
-    const cell = gnd.zoom / 2; // world units per GAT cell
 
     const instances: GrannyInstance[] = [];
     for (const layout of WOE_LAYOUT) {
@@ -189,8 +188,8 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
         const gatY = anchor[1] + layout.dy;
         // X is mirrored about the map centre (RO is left-handed, this renderer
         // right-handed; see coord.ts), matching the terrain and RSM placements.
-        const worldX = gnd.width * gnd.zoom - (gatX + 0.5) * cell;
-        const worldZ = (gatY + 0.5) * cell;
+        const worldX = gnd.width * GND_CELL_SIZE - (gatX + 0.5) * GAT_CELL_SIZE;
+        const worldZ = (gatY + 0.5) * GAT_CELL_SIZE;
         const surfaceHeight = gat !== null ? gatCellSurfaceHeight(gat, gatX, gatY) : gndGroundHeight(gnd, gatX, gatY);
         const worldY = -surfaceHeight;
 
