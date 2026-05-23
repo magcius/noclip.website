@@ -366,7 +366,7 @@ export interface GrannyBone {
     translation: [number, number, number];
     rotation: [number, number, number, number];
     scaleShear: Float32Array; // row-major 3x3
-    inverseWorld: Float32Array; // column-major 4x4
+    inverseBindPose: Float32Array; // column-major 4x4
 }
 
 export interface GrannySkeleton {
@@ -748,15 +748,15 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
                     scaleShear[k] = view.getFloat32(o + 32 + k * 4, true);
             }
             // Inverse bind-pose matrix; column-major, copy verbatim.
-            const inverseWorld = new Float32Array(16);
+            const inverseBindPose = new Float32Array(16);
             const iw = bw.get("InverseWorldTransform");
             if (iw !== undefined && iw.scalarAbs !== undefined) {
                 for (let j = 0; j < 16; j++)
-                    inverseWorld[j] = view.getFloat32(iw.scalarAbs + j * 4, true);
+                    inverseBindPose[j] = view.getFloat32(iw.scalarAbs + j * 4, true);
             } else {
-                inverseWorld[0] = inverseWorld[5] = inverseWorld[10] = inverseWorld[15] = 1;
+                inverseBindPose[0] = inverseBindPose[5] = inverseBindPose[10] = inverseBindPose[15] = 1;
             }
-            bones.push({ name: bn, parentIndex, translation, rotation, scaleShear, inverseWorld });
+            bones.push({ name: bn, parentIndex, translation, rotation, scaleShear, inverseBindPose });
         }
     }
     return { name, bones };

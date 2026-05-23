@@ -171,7 +171,7 @@ export class GrannyAnimator {
             restWorld.push(w);
             if (!mat4.invert(this.inverseBind[i], w)) {
                 // Singular rest world: fall back to the file's stored matrix.
-                const iw = bones[i].inverseWorld;
+                const iw = bones[i].inverseBindPose;
                 for (let j = 0; j < 16; j++)
                     this.inverseBind[i][j] = iw[j];
             }
