@@ -128,7 +128,7 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, wrapPx: number):
     return [words.slice(0, bestIdx).join(" "), words.slice(bestIdx).join(" ")];
 }
 
-function rasterizeLabel(text: string, style: LabelStyle): { rgba: Uint8Array, width: number, height: number } | null {
+function rasterizeLabel(text: string, style: LabelStyle): { canvas: HTMLCanvasElement, width: number, height: number } | null {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (ctx === null)
@@ -174,8 +174,7 @@ function rasterizeLabel(text: string, style: LabelStyle): { rgba: Uint8Array, wi
         ctx.fillText(lines[i], cx, cy);
     }
 
-    const img = ctx.getImageData(0, 0, width, height);
-    return { rgba: new Uint8Array(img.data.buffer.slice(0)), width, height };
+    return { canvas, width, height };
 }
 
 export class NameLabelRenderer {
@@ -240,7 +239,7 @@ export class NameLabelRenderer {
             dimension: GfxTextureDimension.n2D,
             usage: GfxTextureUsage.Sampled,
         });
-        this.device.uploadTextureData(texture, 0, [r.rgba]);
+        this.device.copyExternalImageToTexture(texture, 0, r.canvas);
         return { texture, width: r.width, height: r.height };
     }
 
