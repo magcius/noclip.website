@@ -1,14 +1,11 @@
 
-// Decoder for the uncompressed Windows BMP files Ragnarok Online uses for its
-// textures. RO ground/model textures are 8-bit palettized or 24-bit BI_RGB.
-// We decode to top-down RGBA8 (row 0 = top); BMP scanlines are stored
-// bottom-up unless the header height is negative, so we flip accordingly.
+// Decoders for the BMP and TGA textures RO uses. BMP is 8-bit palettized or
+// 24-bit BI_RGB (no compression); TGA is uncompressed (type 2) or RLE (type 10)
+// 24/32-bit BGR(A). Both decode to top-down RGBA8.
 //
-// RO uses pure magenta (255,0,255) as a transparency color key. The original
-// client keyed against a 16-bit 565 surface, which gave the key an implicit
-// tolerance, and the 8-bit palettization dithers a near-magenta fringe around
-// keyed edges. We widen the window (r>=230, g<=12, b>=230) to absorb that
-// fringe and map matched pixels to alpha 0 for an alpha-cutout.
+// RO uses magenta (255,0,255) as a transparency color key on BMPs. The original
+// client keyed against a 16-bit 565 surface, which gave the key implicit
+// tolerance, so we widen the match window to absorb the dithered fringe.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
@@ -62,7 +59,7 @@ export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
         throw new Error(`BMP: unsupported bit depth ${bpp}`);
     }
 
-    // Each scanline is padded to a 4-byte boundary.
+    // Each scanline padded to 4-byte boundary.
     const rowSize = (((bpp * w + 31) / 32) | 0) * 4;
     if (dataOffset + rowSize * absH > view.byteLength)
         throw new Error(`BMP: pixel data out of range`);
@@ -87,9 +84,8 @@ export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
                 g = bytes[px + 1];
                 r = bytes[px + 2];
             }
-            // Zero the RGB of keyed texels too, not just the alpha: under linear
-            // filtering the magenta would otherwise bleed into neighbouring
-            // opaque texels and show up as a pink fringe along cutout edges.
+            // Zero RGB on keyed texels too so magenta doesn't bleed under
+            // linear filtering at cutout edges.
             const pink = isMagicPink(r, g, b);
             const out = (y * w + x) * 4;
             rgba[out + 0] = pink ? 0 : r;
@@ -102,11 +98,6 @@ export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
     return { width: w, height: absH, rgba };
 }
 
-// Decoder for the true-colour TGA files RO uses for effect/model textures. We
-// handle uncompressed (type 2) and RLE-compressed (type 10), 24/32-bit BGR(A),
-// with no colour map. TGA scanlines are bottom-up unless bit 5 of the image
-// descriptor is set, so we flip to top-down RGBA8 to match decodeBMP. Unlike
-// the BMP path there is no magenta colour key — TGA carries real alpha.
 export function decodeTGA(buffer: ArrayBufferSlice): DecodedImage {
     const view = buffer.createDataView();
     if (view.byteLength < 18)
@@ -122,7 +113,7 @@ export function decodeTGA(buffer: ArrayBufferSlice): DecodedImage {
         throw new Error(`TGA: unsupported variant (type ${imageType}, cmap ${colorMapType}, ${bpp}bpp)`);
     const topDown = (descriptor & 0x20) !== 0;
     const rightToLeft = (descriptor & 0x10) !== 0;
-    const pixelOffs = 18 + idLength; // no colour map for type 2
+    const pixelOffs = 18 + idLength;
     const bytesPerPixel = bpp >>> 3;
     if (imageType === 2 && view.byteLength < pixelOffs + w * h * bytesPerPixel)
         throw new Error(`TGA: truncated pixel data`);
@@ -133,8 +124,8 @@ export function decodeTGA(buffer: ArrayBufferSlice): DecodedImage {
             throw new Error(`TGA: truncated pixel data`);
         const dst = dstPixel * 4;
         fileRgba[dst + 0] = view.getUint8(src + 2); // R (TGA stores BGRA/BGR)
-        fileRgba[dst + 1] = view.getUint8(src + 1); // G
-        fileRgba[dst + 2] = view.getUint8(src + 0); // B
+        fileRgba[dst + 1] = view.getUint8(src + 1);
+        fileRgba[dst + 2] = view.getUint8(src + 0);
         fileRgba[dst + 3] = bpp === 32 ? view.getUint8(src + 3) : 255;
     };
 

@@ -1,20 +1,9 @@
 
-// Parser for Ragnarok Online's RSM 3D model format (magic "GRSM").
-//
-// An RSM is a hierarchy of nodes (a tree, parented by name). Each node carries
-// its own vertex list, texture-coordinate list, triangle faces (each face
-// references a per-node texture slot), an offset matrix baked into its mesh, and
-// a local transform (translation + axis-angle rotation + scale). The model-level
-// header lists the texture filenames every node's faces ultimately reference.
-//
-// Nodes may also carry keyframe tracks (rotation always, position from v1.5,
-// scale from v2.2) and the model header carries an animation length. These drive
-// the moving parts of a model (spinning signs, windmills); they are retained
-// here and applied by the renderer for animated models. Static models (no
-// keyframes) ignore them and render their rest pose.
-//
-// All multi-byte values are little-endian. Texture names are CP949 (EUC-KR),
-// decoded with the same TextDecoder the GND/RSW use.
+// Parser for Ragnarok Online's RSM 3D model format (magic "GRSM"). A node tree
+// (parented by name) where each node owns its vertices/UVs/faces, an offset
+// matrix and a local TRS. Rotation keyframes are always present; position
+// keyframes from v1.6, scale keyframes from v2.2. All values little-endian;
+// names are CP949.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { RswVec3 } from "./rsw.js";
@@ -35,19 +24,16 @@ export interface RsmFace {
     smoothGroup: number;
 }
 
-// A rotation keyframe: a unit quaternion (x,y,z,w) sampled at frame `frame`.
 export interface RsmRotKeyframe {
     frame: number;
-    q: [number, number, number, number];
+    q: [number, number, number, number]; // x,y,z,w
 }
 
-// A position keyframe (v1.5+): the node-local translation at frame `frame`.
 export interface RsmPosKeyframe {
     frame: number;
     p: RswVec3;
 }
 
-// A scale keyframe (v2.2+): the node-local scale at frame `frame`.
 export interface RsmScaleKeyframe {
     frame: number;
     s: RswVec3;
@@ -56,7 +42,6 @@ export interface RsmScaleKeyframe {
 export interface RsmNode {
     name: string;
     parent: string;
-    // Per-node texture indices into RsmModel.textures.
     textureIds: number[];
     // 3x3 linear part of the offset transform, row-major (9 floats).
     offsetMatrix: number[];
@@ -68,7 +53,6 @@ export interface RsmNode {
     vertices: RswVec3[];
     texCoords: RsmTexCoord[];
     faces: RsmFace[];
-    // Animation tracks (empty when the node does not animate that channel).
     posKeyframes: RsmPosKeyframe[];
     rotKeyframes: RsmRotKeyframe[];
     scaleKeyframes: RsmScaleKeyframe[];
@@ -80,10 +64,9 @@ export interface RsmModel {
     shadeType: number;
     alpha: number;        // 0..255
     mainNode: string;
-    textures: string[];   // CP949, relative to the texture root
+    textures: string[];
     nodes: RsmNode[];
-    // Loop length in frames (the model-header animation length). Frame numbers in
-    // the keyframe tracks are measured against this; playback wraps at it.
+    // Loop length in frames; keyframe frame numbers wrap at this.
     animLength: number;
 }
 
@@ -151,8 +134,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
     const shadeType = r.i32();
     const alpha = ge(1, 4) ? r.u8() : 0xFF;
 
-    // 16-byte reserved/unused block (versions < 2.2).
-    if (!ge(2, 2)) r.skip(16);
+    if (!ge(2, 2)) r.skip(16); // reserved block, versions < 2.2
 
     const numTextures = r.i32();
     if (numTextures < 0)
@@ -200,7 +182,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             throw new Error(`RSM: bad texcoord count ${numTexCoords}`);
         const texCoords: RsmTexCoord[] = [];
         for (let i = 0; i < numTexCoords; i++) {
-            const color = ge(1, 2) ? r.u32() : 0xFFFFFFFF;  // color present from v1.2
+            const color = ge(1, 2) ? r.u32() : 0xFFFFFFFF;
             const u = r.f32();
             const v = r.f32();
             texCoords.push({ color, u, v });
@@ -220,12 +202,10 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             faces.push({ vertIdx, texIdx, textureId, twoSided, smoothGroup });
         }
 
-        // Position keyframes are per-node from v1.6 onward. Decomp Model.cpp:655
-        // reads posanim.Load for verMinor>=5, but the on-disk v1.5 corpus
-        // disagrees: 138/344 v1.5 RSMs (e.g. prontera_re/egg_s_01.rsm) yield
-        // infeasible counts when a per-node posanim block is read, while all 344
-        // parse cleanly when it isn't. The decomp source is a later client where
-        // the format was bumped; for the data we actually load, the gate is 1.6.
+        // Gate is 1.6 here even though Model.cpp:655 reads posanim from 1.5: in
+        // the v1.5 corpus 138/344 RSMs yield infeasible counts under the 1.5
+        // gate while all 344 parse cleanly at 1.6. Decomp source is from a later
+        // client where the format moved.
         const posKeyframes: RsmPosKeyframe[] = [];
         if (ge(1, 6)) {
             const numPosKf = r.i32();
@@ -237,7 +217,6 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             }
         }
 
-        // Rotation keyframes (always present): { int32 frame; float qx,qy,qz,qw }.
         const rotKeyframes: RsmRotKeyframe[] = [];
         const numRotKf = r.i32();
         if (numRotKf < 0)
@@ -248,7 +227,6 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             rotKeyframes.push({ frame, q: [qx, qy, qz, qw] });
         }
 
-        // Scale keyframes (v2.2+): { int32 frame; float sx,sy,sz }.
         const scaleKeyframes: RsmScaleKeyframe[] = [];
         if (ge(2, 2)) {
             const numScaleKf = r.i32();
@@ -267,11 +245,9 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
         });
     }
 
-    // Model-level trailer (versions < 1.6): a position-keyframe section and a
-    // volume-box section, both count-prefixed. 6081/6086 v1.4 RSMs in the corpus
-    // have a clean trailer; the 5 outliers (morgue_h_02..06) carry garbage here.
-    // The renderer only needs the nodes above, so consume only when the counts
-    // fit, and warn so a future format change is visible.
+    // Model-level trailer (versions < 1.6): posKf section, then volume-box
+    // section, both count-prefixed. 5/6086 v1.4 RSMs carry garbage here
+    // (morgue_h_02..06); skip only when counts fit.
     if (!ge(1, 6)) {
         if (r.remaining() >= 4) {
             const numPosKf = r.i32();

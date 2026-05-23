@@ -1,25 +1,7 @@
 
-// Camera-relative weather particle field for Ragnarok Online maps (currently
-// snow; the per-map table in mapcategory-adjacent scene code can add rain etc.).
-//
-// RO's snow (CWeather::LaunchSnow -> EF_SNOW) is not a world-placed effect: it is
-// a swarm of small flake billboards that spawn in a volume AROUND THE PLAYER,
-// drift downward, and are recycled once they fall out of range, so the snowfall
-// follows the camera and reads as continuous everywhere on the map. The engine
-// spawned flakes in a horizontal ring (radius up to ~300 RO units) above the
-// player and let them fall at a fixed per-tick speed.
-//
-// We reproduce that as a fixed-size pool of flakes orbiting the camera's
-// horizontal position: each flake holds an offset from the camera, falls along
-// world -Y (render-frame up is +Y; see render.ts cornerWorld, which stores
-// world_y = -height), sways gently, and respawns at the top of the volume once it
-// drops past the floor. The flakes draw as camera-facing white billboards sampling
-// a small soft-round procedural texture.
-//
-// Framerate independence (project rule): all motion is driven by accumulated real
-// dt in seconds, scaled to per-second rates derived from the engine's per-tick
-// values (the original advanced one step per ~60fps game tick). The dt accumulator
-// is clamped so a stall cannot teleport the whole field.
+// Camera-relative weather particle field (snow). A fixed pool of flakes orbits
+// the camera's horizontal position, drifts down, and recycles past the floor.
+// Motion is driven by accumulated dt and clamped against stalls.
 
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
@@ -30,41 +12,19 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 
-// ---------------------------------------------------------------------------
-// Tunables (maintainer-facing). The originals are per-game-tick at ~60fps; the
-// per-second rates below are those values * 62.5 ticks/sec where noted, then
-// rounded to a value that reads well from the wide free-fly camera.
-// ---------------------------------------------------------------------------
-
 export interface WeatherParams {
-    // Number of flakes kept alive at once. The engine spawned 2 per tick over a
-    // 320-tick lifetime (~640 live), but spread over its whole 300-unit volume; a
-    // few hundred reads as a steady snowfall in the viewer without flooding it.
     count: number;
-    // Horizontal half-extent of the spawn/recycle volume around the camera, in
-    // world units (the engine used a ~300-unit spawn radius around the player).
     radius: number;
-    // Vertical extent of the volume: flakes live between (camY - floor) and
-    // (camY + ceiling); a flake that falls below the floor respawns at the top.
     ceiling: number;
     floor: number;
-    // Downward fall speed in world units/second. The engine fell at m_speed=0.5
-    // units/tick (~31 u/s); a touch faster reads better at viewer scale.
     fallSpeed: number;
-    // Random +/- fraction applied per flake to fallSpeed so they don't fall in
-    // lockstep.
     fallSpeedJitter: number;
-    // Horizontal sway: peak drift speed (u/s) and how fast the sway phase cycles
-    // (radians/sec). Gives each flake a gentle wandering path.
     swaySpeed: number;
     swayRate: number;
-    // Flake billboard half-size in world units.
     size: number;
-    // Flake size random +/- fraction.
     sizeJitter: number;
 }
 
-// The default snow profile.
 export const SNOW_PARAMS: WeatherParams = {
     count: 700,
     radius: 320,
@@ -78,30 +38,26 @@ export const SNOW_PARAMS: WeatherParams = {
     sizeJitter: 0.4,
 };
 
-// Clamp on the dt accumulator (seconds): a long stall advances at most this much
-// so the field eases back in rather than jumping.
 const MAX_DT = 0.25;
 
-// 3 floats world pos + 2 floats corner uv = 20 bytes. Color is constant (white)
-// so it lives in the shader, not per-vertex.
+// 3 floats world pos + 2 floats uv = 20 bytes. Color constant (white).
 const FLAKE_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4;
 const FLAKE_FLOATS_PER_VERTEX = 5;
 
 interface Flake {
-    // Offset from the camera's horizontal position; y is absolute world height.
+    // Offset from camera; oy is absolute world height.
     ox: number;
     oy: number;
     oz: number;
     fallSpeed: number;
     size: number;
-    swayPhase: number;   // current sway phase (radians)
-    swayRate: number;    // phase advance rate (radians/sec)
-    swayAmpX: number;    // sway direction weights so flakes drift differently
+    swayPhase: number;
+    swayRate: number;
+    swayAmpX: number;
     swayAmpZ: number;
 }
 
-// A tiny deterministic PRNG so the field is reproducible across reloads (the look
-// is identical, only the seed differs the layout). Mulberry32.
+// Mulberry32: deterministic so layout is reproducible across reloads.
 function makeRng(seed: number): () => number {
     let a = seed >>> 0;
     return () => {
@@ -112,10 +68,8 @@ function makeRng(seed: number): () => number {
     };
 }
 
-// Builds a small soft-round RGBA texture (constant RGB, radial alpha falloff)
-// for camera-facing billboards: weather flakes get white, shadows get black.
-// 16x16 is plenty for a small billboard. Exported so shadow.ts shares the same
-// procedural generator.
+// Small soft-round RGBA texture (constant RGB, radial alpha falloff). Shared
+// with shadow.ts (black) and lensflare.ts (white).
 export function makeSoftDiscImage(r: number, g: number, b: number): { width: number, height: number, rgba: Uint8Array } {
     const N = 16;
     const rgba = new Uint8Array(N * N * 4);
@@ -125,7 +79,6 @@ export function makeSoftDiscImage(r: number, g: number, b: number): { width: num
         for (let x = 0; x < N; x++) {
             const dx = x - c, dy = y - c;
             const d = Math.sqrt(dx * dx + dy * dy) / rMax;
-            // Smooth falloff: full at center, 0 at the edge, with a soft shoulder.
             let a = 1.0 - d;
             a = Math.max(0, a);
             a = a * a * (3 - 2 * a); // smoothstep
@@ -139,9 +92,6 @@ export function makeSoftDiscImage(r: number, g: number, b: number): { width: num
     return { width: N, height: N, rgba };
 }
 
-// Shader for the flake billboards: world-space vertices projected by the scene
-// matrix, fragment samples the soft-round texture; constant white tint. Alpha
-// blended (no cutout) so the soft edge stays soft.
 class WeatherProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_TexCoord = 1;
@@ -177,9 +127,6 @@ void main() {
 `;
 }
 
-// Owns the flake pool + GPU resources for the weather pass. Built once by the
-// renderer for maps that have a weather entry; advanced + drawn each frame from
-// inside the renderer's prepare cycle as a transparent billboard layer.
 export class WeatherRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
@@ -243,26 +190,18 @@ export class WeatherRenderer {
         this.cpuF32 = new Float32Array(this.cpuData);
     }
 
-    // Creates a flake. When `initial`, the height is randomized across the whole
-    // volume (so the field starts already snowing); otherwise it spawns at the
-    // top, ready to fall (used on recycle). `oy` is a camera-relative height
-    // offset throughout (world height is camY + oy), so the field follows the
-    // camera vertically as well as horizontally.
+    // initial=true randomises height across the volume so the field is already
+    // snowing on the first frame; recycle calls pass false to spawn at the top.
     private newFlake(initial: boolean): Flake {
         const p = this.params;
         const r = this.rng;
-        // Uniform-ish disc placement: a random point in the square volume (the
-        // few corner flakes outside the camera frustum cost nothing and keep the
-        // field even when the camera turns).
         const ox = (r() * 2 - 1) * p.radius;
         const oz = (r() * 2 - 1) * p.radius;
         const fall = p.fallSpeed * (1 + (r() * 2 - 1) * p.fallSpeedJitter);
         const size = p.size * (1 + (r() * 2 - 1) * p.sizeJitter);
-        // Sway: a per-flake phase, rate and 2D direction so flakes drift apart.
         const swayPhase = r() * Math.PI * 2;
         const swayRate = p.swayRate * (0.6 + r() * 0.8);
         const ang = r() * Math.PI * 2;
-        // oy filled by seedHeights / recycle; placeholder relative height here.
         const oy = initial ? (r() * (p.ceiling + p.floor) - p.floor) : p.ceiling;
         return {
             ox, oy, oz,
@@ -272,22 +211,17 @@ export class WeatherRenderer {
         };
     }
 
-    // Advances the field off real dt and draws it. `camWorld` supplies the camera
-    // basis (for the billboard plane) and position (the field follows it).
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, cameraWorldMatrix: mat4, dtSeconds: number): void {
         const p = this.params;
         const camX = cameraWorldMatrix[12], camY = cameraWorldMatrix[13], camZ = cameraWorldMatrix[14];
 
-        // Billboard basis: camera right flattened to horizontal, world-up leaned
-        // toward the camera up — same convention as the sprite/effect passes so
-        // the flakes face the camera consistently.
+        // Billboard basis: horizontal camera-right, world-up leaned toward
+        // camera-up by 0.5 (same convention as the sprite/effect passes).
         vec3.set(this.scratchRight, cameraWorldMatrix[0], 0, cameraWorldMatrix[2]);
         if (vec3.len(this.scratchRight) < 1e-5)
             vec3.set(this.scratchRight, 1, 0, 0);
         else
             vec3.normalize(this.scratchRight, this.scratchRight);
-        // Flakes are small round dots; a near-camera-facing up keeps them round
-        // from any pitch. Lean world-up toward camera-up by 0.5 (like sprites).
         const t = 0.5;
         vec3.set(this.scratchUp, t * cameraWorldMatrix[4], (1 - t) + t * cameraWorldMatrix[5], t * cameraWorldMatrix[6]);
         if (vec3.len(this.scratchUp) < 1e-5)
@@ -295,25 +229,17 @@ export class WeatherRenderer {
         else
             vec3.normalize(this.scratchUp, this.scratchUp);
 
-        // Advance off accumulated dt (clamped against a stall). The motion is
-        // continuous (not stepped) since it's pure linear fall + smooth sway, so
-        // a single dt-scaled update is exact and framerate independent.
         this.accum += dtSeconds;
         if (this.accum > MAX_DT)
             this.accum = MAX_DT;
         const dt = this.accum;
         this.accum = 0;
 
-        // All three axes are camera-relative: ox/oz are offsets from the camera's
-        // horizontal position and oy is an offset from the camera's height, so the
-        // whole [camY - floor, camY + ceiling] band rides with the camera and the
-        // field never empties when you fly up or down. Flakes fall through the
-        // band (oy decreases) and recycle to the top once past the floor.
+        // All three axes are camera-relative so the field follows the camera
+        // when flying up or down.
         for (const f of this.flakes) {
             f.oy -= f.fallSpeed * dt;
             f.swayPhase += f.swayRate * dt;
-            // Recycle a flake that fell past the floor, or wandered too far
-            // horizontally from the camera, back to the top of the volume.
             if (f.oy < -p.floor || Math.abs(f.ox) > p.radius * 1.2 || Math.abs(f.oz) > p.radius * 1.2) {
                 const nf = this.newFlake(false);
                 f.ox = nf.ox; f.oz = nf.oz;
@@ -324,8 +250,6 @@ export class WeatherRenderer {
             }
         }
 
-        // Build billboard quads. Each flake is a small square in the camera-facing
-        // plane centered at (camX+ox+sway, oy, camZ+oz+sway).
         const f32 = this.cpuF32;
         const rX = this.scratchRight, uP = this.scratchUp;
         let vi = 0;
@@ -336,8 +260,6 @@ export class WeatherRenderer {
             const cy = camY + f.oy;
             const s = f.size;
 
-            // Four corners: (-s,+s) TL, (+s,+s) TR, (-s,-s) BL, (+s,-s) BR in the
-            // (right, up) plane.
             const cornerH = [-s, s, -s, s];
             const cornerV = [s, s, -s, -s];
             const wx = [0, 0, 0, 0], wy = [0, 0, 0, 0], wz = [0, 0, 0, 0];
@@ -346,10 +268,8 @@ export class WeatherRenderer {
                 wy[k] = cy + rX[1] * cornerH[k] + uP[1] * cornerV[k];
                 wz[k] = cz + rX[2] * cornerH[k] + uP[2] * cornerV[k];
             }
-            // UVs: TL(0,0) TR(1,0) BL(0,1) BR(1,1).
             const uu = [0, 1, 0, 1];
             const vv = [0, 0, 1, 1];
-            // Two triangles: (TL,TR,BL) and (TR,BR,BL).
             const tri = [0, 1, 2, 1, 3, 2];
             for (let n = 0; n < 6; n++) {
                 const c = tri[n];
@@ -384,17 +304,12 @@ export class WeatherRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
-        // TRANSLUCENT: a camera-relative billboard field drawn after the opaque
-        // scene; depth-tested but not depth-writing.
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
         let offs = template.allocateUniformBuffer(WeatherProgram.ub_SceneParams, 16);
         const mapped = template.mapUniformBufferF32(WeatherProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
 
-        // Two-sided, depth-tested (occluded by closer geometry) but no depth write
-        // — flakes never block the scene or each other. Standard src-alpha over
-        // blend for the soft round look.
         const megaState = template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: false });
         setAttachmentStateSimple(megaState, {
             blendMode: GfxBlendMode.Add,

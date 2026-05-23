@@ -1,31 +1,8 @@
 
-// Soft blob shadows under feet-anchored sprites (NPCs, monsters) to ground them
-// on the terrain instead of having them float as free-standing billboards.
-//
-// The original client renders data\sprite\shadow.spr — a flat soft-round dark
-// disc — under every character at its world position. We stand in for that with
-// a procedurally generated soft-round dark texture (same trick weather.ts uses
-// for snow flakes via makeFlakeImage), drawn as a flat textured quad on the XZ
-// plane (parallel to the ground) at each sprite's world anchor.
-//
-// Blend: standard src-alpha over with a low max alpha (~0.4) so the shadow
-// reads as a gentle darkening rather than an opaque black disc. Depth-tested
-// (so a wall in front occludes it) but NO depth write (so it doesn't shadow the
-// transparent layers drawn on top — water, sprites, effects).
-//
-// The quad is lifted slightly above the terrain along world-up to avoid
-// z-fighting with the ground mesh. The sprite renderer's worldPos is
-// already correctly mirrored (gatCellToWorld / mapOffX - e.pos.x), so the
-// shadow just consumes that anchor unchanged — no new mirror.
-//
-// Effect-source placements (anchor === "center", e.g. torch flames) are
-// authored centred on their emit point, often well above the ground; we skip
-// them, matching the original which does not shadow them either. Only
-// feet-anchored sprites (NPCs/mobs) get a shadow.
-//
-// Mobs move every frame, so the renderer re-emits the instance list from the
-// current world positions each frame (clear -> add -> prepare). Sub-frame
-// re-emit is cheap (hundreds of shadows at most).
+// Soft blob shadows under feet-anchored sprites (NPCs, monsters). Flat textured
+// quad on the XZ plane at each sprite's world anchor, lifted slightly to avoid
+// z-fighting. Standard alpha blend; no depth write so the shadow doesn't
+// occlude the transparent layers drawn over it (sprites, water, effects).
 
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
@@ -37,51 +14,21 @@ import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManage
 import { DeviceProgram } from "../Program.js";
 import { makeSoftDiscImage } from "./weather.js";
 
-// ---------------------------------------------------------------------------
-// Tunables. These read well from a free-fly camera; tweak if the shadows feel
-// too heavy/light or too small/large.
-// ---------------------------------------------------------------------------
-
-// Half-extent of a shadow quad in world units (so the quad spans 2*SIZE).
-// A GAT cell is ~5 world units (zoom/2); 5.5 puts a feet-anchored sprite's
-// shadow at ~2.2 cells across — comfortably readable from the wide free-fly
-// camera. (Was 2.4 then 4.0 — both too subtle to spot under most sprites.)
 const SHADOW_HALF_SIZE = 5.5;
-
-// Peak alpha at the shadow center, after the texture's radial falloff. The
-// disc fades to 0 at the edge so the average darkening is gentler than this
-// peak suggests; 0.85 gives the centre a clearly visible "this thing has a
-// shadow" feel without being a black blob.
 const SHADOW_MAX_ALPHA = 0.85;
-
-// World-up lift above the worldPos anchor (in render-frame units) so the quad
-// sits just above the terrain and doesn't z-fight with the ground mesh. The
-// ground surface at a cell is at -height; entities sit on that, so lifting by
-// a small positive amount along +Y in the render frame raises the shadow above
-// the ground. Render frame here is Y-up; the terrain mesh world_y = -height.
+// Lift along +Y (terrain world_y = -height, render frame is Y-up) so the quad
+// doesn't z-fight with the ground.
 const SHADOW_LIFT = 0.4;
 
-// 3 floats world pos + 2 floats uv = 20 bytes per vertex. Color is constant
-// (black at SHADOW_MAX_ALPHA) so it lives in the shader, not per-vertex.
+// 3 floats pos + 2 floats uv = 20 bytes. Color is constant in the shader.
 const SHADOW_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4;
 const SHADOW_FLOATS_PER_VERTEX = 5;
 
-// One placed shadow: its world anchor (the sprite's worldPos) and a half-size
-// for the quad. Size is per-instance so a giant mob (MVP) could get a larger
-// shadow than a Poring; the renderer caller can scale by sprite frame size,
-// or just pass SHADOW_HALF_SIZE for a uniform look.
 export interface ShadowInstance {
     worldPos: vec3;
     size: number;
 }
 
-// The shadow texture is the same soft-round disc weather flakes use, just
-// black instead of white. See makeSoftDiscImage in weather.ts.
-
-// Shader for the shadow quads: world-space vertices projected by the scene
-// matrix, fragment samples the soft-round texture; constant black tint scaled
-// by the texture's alpha and a uniform peak alpha. Alpha-blended (no cutout)
-// so the soft edge stays soft.
 class ShadowProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_TexCoord = 1;
@@ -118,12 +65,6 @@ void main() {
 `;
 }
 
-// Owns the GPU resources for the shadow pass: a single small soft-round texture,
-// the shared pipeline, and a transient per-frame vertex buffer rebuilt from the
-// caller's instance list. Driven from inside the terrain renderer's prepare
-// cycle BEFORE the sprite pass, so shadows render under their sprites.
-// Quad-corner offset and triangle-index tables are constant; hoist them out of
-// the per-frame inner loop so we don't churn six small Arrays per instance.
 const SHADOW_CORNER_OX = [-1, 1, -1, 1];
 const SHADOW_CORNER_OZ = [-1, -1, 1, 1];
 const SHADOW_CORNER_U = [0, 1, 0, 1];
@@ -141,8 +82,6 @@ export class ShadowRenderer {
 
     private vertexBuffer: GfxIndexBufferDescriptor["buffer"] | null = null;
     private vertexCapacityVerts = 0;
-    // Persistent CPU scratch buffers grown on demand and reused every frame;
-    // avoids `new ArrayBuffer / Float32Array / Uint8Array` per prepare().
     private cpuData: ArrayBuffer = new ArrayBuffer(0);
     private cpuF32: Float32Array = new Float32Array(0);
     private cpuU8: Uint8Array = new Uint8Array(0);
@@ -180,9 +119,6 @@ export class ShadowRenderer {
         device.uploadTextureData(this.texture, 0, [img.rgba]);
     }
 
-    // Caller refreshes the instance list each frame from current sprite/mob
-    // positions (mobs move) and then calls prepare(); the renderer is purely a
-    // GPU front-end with no state of its own across frames besides the texture.
     public clearInstances(): void {
         this.instances.length = 0;
     }
@@ -191,41 +127,32 @@ export class ShadowRenderer {
         this.instances.push(inst);
     }
 
-    // Refreshes the instance list from a caller-owned anchor list, mutating
-    // slots in place to avoid the `{ worldPos, size }` literal per anchor per
-    // frame. Slots beyond `anchors.length` are dropped. Use this in place of
-    // clearInstances + addInstance when all instances share the same size.
+    // Mutates slots in place to avoid the `{ worldPos, size }` literal per
+    // anchor per frame. Keeps the reference to each live anchor vec3 (mobs
+    // walk by mutating their worldPos).
     public setAnchors(anchors: vec3[], size: number): void {
         const n = anchors.length;
-        // Grow the pool to fit the new anchor count; mutate existing slots.
         while (this.instances.length < n)
             this.instances.push({ worldPos: vec3.create(), size });
         for (let i = 0; i < n; i++) {
             const inst = this.instances[i];
-            // Keep the reference to the live anchor vec3 (mobs walk by mutating
-            // their worldPos), so the next frame reads current positions for free.
             inst.worldPos = anchors[i];
             inst.size = size;
         }
         this.instances.length = n;
     }
 
-    // The default half-size, exposed so callers can use it as a uniform-look
-    // value without re-importing the tunable name.
     public static defaultHalfSize(): number {
         return SHADOW_HALF_SIZE;
     }
 
-    // Builds this frame's quads and submits one draw covering them all. Call
-    // inside the renderer's prepare cycle BEFORE the sprite pass so shadows
-    // render under their sprites (the sprite's own alpha-blend layers on top).
+    // Call BEFORE the sprite pass so shadows render under their sprites.
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4): void {
         if (this.instances.length === 0)
             return;
 
         const vertexCount = this.instances.length * 6;
         const byteCount = vertexCount * SHADOW_VERTEX_STRIDE_BYTES;
-        // Grow the persistent CPU scratch only when the frame outsizes it.
         if (byteCount > this.cpuData.byteLength) {
             this.cpuData = new ArrayBuffer(byteCount);
             this.cpuF32 = new Float32Array(this.cpuData);
@@ -233,12 +160,6 @@ export class ShadowRenderer {
         }
         const f32 = this.cpuF32;
 
-        // Each shadow is a flat quad on the XZ plane (parallel to the ground)
-        // centered on (wx, wy, wz) with corners at (+/- s, 0, +/- s). World Y
-        // is up in the render frame (terrain world_y = -height); SHADOW_LIFT
-        // raises the quad along +Y so it sits just above the ground mesh and
-        // doesn't z-fight with it. Corner offsets and triangle indices come
-        // from module-scope const tables (no per-instance literals).
         let vi = 0;
         for (const inst of this.instances) {
             const wx = inst.worldPos[0];
@@ -274,10 +195,9 @@ export class ShadowRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
-        // OPAQUE layer so shadows draw BEFORE the sprite billboards that layer
-        // over them (sprite renderer's depthWrite would clobber a later-drawn
-        // shadow). Within the OPAQUE layer, stable sort preserves the renderer's
-        // submission order (shadows before sprites).
+        // OPAQUE layer so shadows draw BEFORE the sprite billboards (sprite
+        // renderer's depthWrite would clobber a later-drawn shadow). Stable
+        // sort preserves submission order within the layer.
         template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
 
         let offs = template.allocateUniformBuffer(ShadowProgram.ub_SceneParams, 16 + 4);
@@ -285,11 +205,8 @@ export class ShadowRenderer {
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
         offs += fillVec4(mapped, offs, SHADOW_MAX_ALPHA, 0, 0, 0);
 
-        // Two-sided (an upward-facing quad would otherwise vanish if viewed
-        // from below the terrain in a fly-through), depth-tested (closer
-        // geometry occludes it) but NO depth write — the shadow should never
-        // block the transparent layers drawn over it (sprites, water, effects).
-        // Standard src-alpha over blend for the soft round look.
+        // depthWrite off: shadow must not block the transparent layers drawn
+        // over it (sprites, water, effects).
         const megaState = template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: false });
         setAttachmentStateSimple(megaState, {
             blendMode: GfxBlendMode.Add,

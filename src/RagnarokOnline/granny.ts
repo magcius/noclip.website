@@ -1,58 +1,35 @@
 
-// Parser for Granny2 (.gr2) files, used by Ragnarok Online for a handful of 3D
-// monsters (WOE guardians, the Emperium, guild flags, treasure boxes) plus the
-// separate skeletal-animation files in 3dmob_bone/.
+// Parser for Granny2 (.gr2) files used by RO for WoE 3D props (Emperium,
+// guardians, flag, treasure box) and the shared 3dmob_bone animation files.
 //
-// Granny is a proprietary RAD format, but the on-disk container is well
-// documented by the community (Blender/noesis importers, the open opengr2/
-// liboodle reverse-engineering work). We parse it directly — no SDK, no native
-// runtime. A .gr2 is, in order:
+// Container layout: [magic+header 32B][GrannyFileHeader 56B][section table
+// (44B per entry)][per-section data + fixup/marshal tables]. Sections are
+// concatenated into one decompressed blob; an absolute-offset -> absolute-offset
+// fixup map rewrites stored pointers. A self-describing type tree is walked in
+// lockstep with root data to pull out typed members.
 //
-//   [magic+header (32 B)] [file info (56 B, the GrannyFileHeader)]
-//   [section table (sectorCount * 44 B)] [per-section data + fixup/marshal tables]
+// 32-bit LE only — RO ships no 64-bit or BE variants.
 //
-// Each section may be stored uncompressed or compressed with one of Granny's
-// codecs. After copying/decompressing every section into one contiguous blob, a
-// pointer-fixup table rewrites stored pointers to point at the right place in
-// the blob; we model that as a map from an absolute source offset (in the blob)
-// to an absolute destination offset. Then a self-describing TYPE TREE is walked
-// in lockstep with the ROOT data to pull out typed members (the mesh's
-// vertices/normals/UVs/indices, the skeleton's bones). The type tree is the same
-// generic node format the engine uses, so this walker is content-agnostic.
-//
-// All values are little-endian, 32-bit pointers (every RO .gr2 is LE/32-bit;
-// big-endian / 64-bit variants exist but none ship with RO, so they're rejected
-// rather than half-supported).
-//
-// IMPORTANT — RO corpus compression: the 21 RO .gr2 files store their data
-// sections with Granny compression type 1 ("Oodle0"). Oodle0 is a DIFFERENT
-// codec from the widely-reverse-engineered "Oodle1" (type 2) implemented below
-// (and in opengr2/liboodle/nwn2mdk). Running the Oodle1 decoder on these
-// sections yields garbage (verified: no Granny type strings appear, the data
-// fails to parse). No open Oodle0 decoder exists at time of writing — opengr2
-// stubs it out, opengr2-rs panics on it. So this parser fully handles
-// UNCOMPRESSED and OODLE1 .gr2 (validated end-to-end against an uncompressed
-// reference model: header → sections → fixups → type tree → mesh verts/indices),
-// but the RO monster files cannot be decoded until an Oodle0 decompressor lands.
-// `parseGranny` throws a clearly-labelled error for an Oodle0 section so callers
-// can degrade gracefully.
+// RO corpus uses Granny compression type 1 (Oodle0), a DIFFERENT codec from
+// type 2 (Oodle1, implemented below). Running the Oodle1 decoder on Oodle0
+// yields garbage that fails to parse — looks like a parse bug but isn't. No
+// open Oodle0 decoder exists, so RO .gr2 must be expanded offline; parseGranny
+// throws GrannyOodle0Error on type 1.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-// ---------------------------------------------------------------------------
-// Granny element type ids (the self-describing type-tree node "type" field).
-// ---------------------------------------------------------------------------
+// Type-tree node "type" field.
 const enum GrannyType {
     None = 0,
-    Inline = 1,                 // empty node, just a container with children
+    Inline = 1,                 // container with children, no data
     Reference = 2,              // pointer to one child struct
-    ReferenceToArray = 3,       // count + pointer to a tightly-packed array
-    ArrayOfReferences = 4,      // count + pointer to an array of pointers
-    VariantReference = 5,       // (type pointer, data pointer)
-    ReferenceToVariantArray = 7,// (type pointer, count, data pointer)
-    String = 8,                 // pointer to a NUL-terminated string
+    ReferenceToArray = 3,       // count + pointer to packed array
+    ArrayOfReferences = 4,      // count + pointer to array of pointers
+    VariantReference = 5,       // (type ptr, data ptr)
+    ReferenceToVariantArray = 7,// (type ptr, count, data ptr)
+    String = 8,                 // pointer to NUL-terminated string
     Transform = 9,              // GrannyTransform (68 bytes)
-    Real32 = 10,                // f32
+    Real32 = 10,
     Int8 = 11, UInt8 = 12, BinormalInt8 = 13, NormalUInt8 = 14,
     Int16 = 15, UInt16 = 16, BinormalInt16 = 17, NormalUInt16 = 18,
     Int32 = 19, UInt32 = 20,
@@ -60,7 +37,6 @@ const enum GrannyType {
     EmptyReference = 22,
 }
 
-// Compression types in the section header.
 const enum GrannyCompression {
     None = 0,
     Oodle0 = 1,
@@ -69,8 +45,7 @@ const enum GrannyCompression {
     BitKnit2 = 4,
 }
 
-// Per-element on-disk size in 32-bit mode (only the fixed-size scalar/struct
-// types; pointer-bearing types are read explicitly in the walker).
+// Per-element on-disk size in 32-bit mode (scalar/struct types only).
 const TYPE_SCALAR_SIZE: { [k: number]: number } = {
     [GrannyType.Real32]: 4, [GrannyType.Int32]: 4, [GrannyType.UInt32]: 4,
     [GrannyType.Int16]: 2, [GrannyType.UInt16]: 2, [GrannyType.BinormalInt16]: 2, [GrannyType.NormalUInt16]: 2,
@@ -79,39 +54,32 @@ const TYPE_SCALAR_SIZE: { [k: number]: number } = {
     [GrannyType.Transform]: 68,
 };
 
-// Little-endian 32-bit Granny2 v6/v7 magic, as the bytes appear on disk.
+// LE 32-bit Granny2 v6/v7 magic.
 const GRANNY_MAGIC = [0xb8, 0x67, 0xb0, 0xca, 0xf8, 0x6d, 0xb1, 0x0f, 0x84, 0x72, 0x8c, 0x7e, 0x5e, 0x19, 0x00, 0x1e];
 
 interface GrannySection {
     compression: number;
-    dataOffset: number;   // offset in the FILE of this section's (compressed) bytes
+    dataOffset: number;
     compressedSize: number;
     decompressedSize: number;
     alignment: number;
     oodleStop0: number;
     oodleStop1: number;
-    fixupOffset: number;  // offset in the FILE of this section's pointer-fixup table
+    fixupOffset: number;
     fixupCount: number;
     marshalOffset: number;
     marshalCount: number;
 }
 
-// The decoded file: one contiguous data blob (all sections decompressed and
-// concatenated), per-section base offsets into it, the resolved pointer-fixup
-// map, and the absolute offsets of the type tree + root object.
 export interface GrannyFile {
     blob: Uint8Array;
     view: DataView;
-    sectionBase: number[];       // sectionBase[i] = byte offset of section i in `blob`
-    fixups: Map<number, number>; // absolute src offset -> absolute dst offset
-    typeAbs: number;             // absolute offset of the root type list
-    rootAbs: number;             // absolute offset of the root data object
+    sectionBase: number[];
+    fixups: Map<number, number>; // abs src -> abs dst (both in `blob`)
+    typeAbs: number;
+    rootAbs: number;
     version: number;
 }
-
-// ---------------------------------------------------------------------------
-// Container: read header, section table, decompress sections, apply fixups.
-// ---------------------------------------------------------------------------
 
 export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     const view = buffer.createDataView();
@@ -124,8 +92,7 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         if (bytes[i] !== GRANNY_MAGIC[i])
             throw new Error(`Granny: bad magic`);
 
-    // magic[16], headerSize@0x10, headerFormat@0x14 (0 = sections individually
-    // (de)compressed, which is the only form RO uses), reserved[2].
+    // headerFormat@0x14: 0 = per-section (de)compression, only form RO uses.
     const headerFormat = view.getUint32(0x14, true);
     if (headerFormat !== 0)
         throw new Error(`Granny: unsupported header format ${headerFormat}`);
@@ -138,17 +105,16 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     if (totalSize !== view.byteLength)
         throw new Error(`Granny: size mismatch (header ${totalSize}, file ${view.byteLength})`);
 
-    // sectionArrayOffset is relative to the start of the file header (0x20).
+    // sectionArrayOffset is relative to the file header at 0x20.
     const sectionArrayOffset = 0x20 + view.getUint32(0x2c, true);
     const sectionCount = view.getUint32(0x30, true);
 
-    // Root references: (sectionIndex, offsetInSection). Type list + root data.
     const typeSection = view.getUint32(0x34, true);
     const typeOffset = view.getUint32(0x38, true);
     const rootSection = view.getUint32(0x3c, true);
     const rootOffset = view.getUint32(0x40, true);
 
-    // Read the section table (44 bytes per entry).
+    // Section table: 44 bytes per entry.
     const sections: GrannySection[] = [];
     for (let i = 0; i < sectionCount; i++) {
         const o = sectionArrayOffset + i * 44;
@@ -167,7 +133,7 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         });
     }
 
-    // Decompress every section into one contiguous blob; record per-section base.
+    // Decompress every section into one contiguous blob.
     let blobSize = 0;
     for (const s of sections)
         blobSize += s.decompressedSize;
@@ -181,15 +147,12 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         } else if (s.compression === GrannyCompression.None) {
             blob.set(bytes.subarray(s.dataOffset, s.dataOffset + s.decompressedSize), cursor);
         } else if (s.compression === GrannyCompression.Oodle1) {
-            // Oodle1: faithful, validates on Oodle1-compressed gr2.
             const comp = new Uint8Array(s.compressedSize + 4);
             comp.set(bytes.subarray(s.dataOffset, s.dataOffset + s.compressedSize));
             const out = blob.subarray(cursor, cursor + s.decompressedSize);
             decompressOodle1(comp, s.compressedSize, out, s.decompressedSize, s.oodleStop0, s.oodleStop1);
         } else if (s.compression === GrannyCompression.Oodle0) {
-            // RO's monster files land here. Oodle0 is NOT Oodle1 — see the file
-            // header note. We have no faithful decoder, so fail loudly rather
-            // than emit garbage.
+            // RO's monster files land here; no open Oodle0 decoder. See header note.
             throw new GrannyOodle0Error(`Granny: section uses Oodle0 compression, which has no open decoder (RO monster .gr2 are blocked on this)`);
         } else {
             throw new Error(`Granny: unsupported section compression ${s.compression}`);
@@ -197,10 +160,9 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         cursor += s.decompressedSize;
     }
 
-    // Apply the pointer-fixup tables. Each fixup says "the pointer stored at
-    // (srcSection, srcOffset) should point at (dstSection, dstOffset)". We build
-    // an absolute-offset -> absolute-offset map; the walker reads pointer fields
-    // through it (a field with no fixup is a null pointer).
+    // Pointer-fixup tables: each entry rewrites (srcSection, srcOffset) to
+    // point at (dstSection, dstOffset). Built as abs -> abs in `blob`; a pointer
+    // field with no fixup is null.
     const fixups = new Map<number, number>();
     for (let i = 0; i < sections.length; i++) {
         const s = sections[i];
@@ -211,7 +173,7 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
             const dstOffset = view.getUint32(o + 8, true);
             fixups.set(sectionBase[i] + srcOffset, sectionBase[dstSection] + dstOffset);
         }
-        // Marshalling fixups only matter for endianness mismatches (none here).
+        // Marshalling fixups only matter for endianness mismatches; skipped.
     }
 
     return {
@@ -225,32 +187,27 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     };
 }
 
-// Thrown specifically for the (currently undecodable) Oodle0 sections so callers
-// can detect and skip RO monster models without conflating it with a real parse
-// failure.
+// Distinguishes the undecodable-Oodle0 case from a real parse failure.
 class GrannyOodle0Error extends Error {}
 
-// ---------------------------------------------------------------------------
-// Type-tree walker. Reads a list of 32-byte type nodes (terminated by a node
-// whose type==0) at `typeAbs`, consuming the matching data sequentially from
-// `dataAbs`. Returns the typed members keyed by name.
-// ---------------------------------------------------------------------------
+// Walks a list of 32-byte type nodes (terminated by type==0) at `typeAbs`,
+// consuming matching data sequentially from `dataAbs`. Returns members by name.
 
 interface GrannyMember {
     type: number;
     name: string | null;
-    childTypeAbs: number | null; // type list describing the child struct/elements
+    childTypeAbs: number | null;
     arraySize: number;
-    // resolved data, depending on `type`:
-    ref?: number | null;         // Reference / EmptyReference / VariantReference target (abs offset)
-    variantTypeAbs?: number | null; // VariantReference / ReferenceToVariantArray element type
-    count?: number;              // array element count
-    arrAbs?: number | null;      // array data (abs offset)
-    str?: string | null;         // String value
-    scalarAbs?: number;          // start offset of inline scalar data
+    ref?: number | null;
+    variantTypeAbs?: number | null;
+    count?: number;
+    arrAbs?: number | null;
+    str?: string | null;
+    scalarAbs?: number;
 }
 
-const TYPE_NODE_SIZE = 32; // 32-bit: type(4) name(4) children(4) arraySize(4) extra[12] extra4(4)
+// 32-bit: type(4) name(4) children(4) arraySize(4) extra[12] extra4(4).
+const TYPE_NODE_SIZE = 32;
 
 function readCString(blob: Uint8Array, off: number | null): string | null {
     if (off === null || off < 0 || off >= blob.length)
@@ -264,12 +221,8 @@ function readCString(blob: Uint8Array, off: number | null): string | null {
     return s;
 }
 
-// On-disk byte size a member of the given type consumes in the data stream
-// (32-bit). Pointer-bearing members store fixed-width handles; an Inline member
-// embeds its child struct in place, so its size is the child struct's size. Used
-// to keep the data cursor in sync across inline structs (e.g. a texture's
-// pixel-layout, a skeleton's inline members) — without this the walker desyncs
-// for every member after an inline one.
+// Data-stream byte size of a member (32-bit). Inline embeds its child struct
+// in place; without this the walker desyncs after any inline member.
 function memberDataSize(gr: GrannyFile, type: number, childTypeAbs: number | null, arraySize: number, depth: number): number {
     const n = Math.max(1, arraySize);
     let unit: number;
@@ -293,7 +246,6 @@ function memberDataSize(gr: GrannyFile, type: number, childTypeAbs: number | nul
     return unit * n;
 }
 
-// Total data-stream size of an inline struct described by a type list.
 function computeInlineSize(gr: GrannyFile, typeAbs: number, depth = 0): number {
     const { view, blob, fixups } = gr;
     let t = typeAbs;
@@ -318,7 +270,6 @@ function walkType(gr: GrannyFile, typeAbs: number, dataAbs: number): Map<string,
 
     let t = typeAbs;
     let d = dataAbs;
-    // Resolve a pointer field at absolute offset `o` via the fixup map.
     const ptr = (o: number): number | null => {
         const v = fixups.get(o);
         return v === undefined ? null : v;
@@ -364,9 +315,6 @@ function walkType(gr: GrannyFile, typeAbs: number, dataAbs: number): Map<string,
             m.arrAbs = ptr(d); d += 4;
             break;
         case GrannyType.Inline:
-            // An inline struct lives in place in the data stream. Record its
-            // start so callers can walk it, and advance past its full size so
-            // following members stay aligned.
             m.scalarAbs = d;
             d += memberDataSize(gr, ntype, childP, arraySize, 0);
             break;
@@ -387,7 +335,6 @@ function walkType(gr: GrannyFile, typeAbs: number, dataAbs: number): Map<string,
     return out;
 }
 
-// Dereferences an ArrayOfReferences member into its element pointers (abs offs).
 function derefArrayOfReferences(gr: GrannyFile, m: GrannyMember): (number | null)[] {
     const out: (number | null)[] = [];
     if (m.arrAbs === null || m.arrAbs === undefined || m.count === undefined)
@@ -399,51 +346,40 @@ function derefArrayOfReferences(gr: GrannyFile, m: GrannyMember): (number | null
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Mesh extraction. Pulls Position / Normal / TextureCoordinates0 + index buffer
-// from each mesh, plus optional per-vertex bone weights/indices for skinning.
-// ---------------------------------------------------------------------------
-
 interface GrannyVertexFormatField {
     name: string | null;
     type: number;
-    count: number;     // element count (e.g. 3 for a float3)
-    byteSize: number;  // total bytes for this field
-    byteOffset: number;// offset of this field within the vertex
+    count: number;
+    byteSize: number;
+    byteOffset: number;
 }
 
 export interface GrannyMesh {
     name: string | null;
-    // Interleaved decoded attributes (one per vertex):
-    positions: Float32Array; // vertexCount * 3
-    normals: Float32Array;   // vertexCount * 3 (zeroed if absent)
-    uvs: Float32Array;       // vertexCount * 2 (zeroed if absent)
-    boneWeights: Float32Array; // vertexCount * 4 (zeroed if absent)
-    boneIndices: Uint8Array;   // vertexCount * 4 (zeroed if absent)
+    positions: Float32Array;   // vertexCount * 3
+    normals: Float32Array;     // vertexCount * 3
+    uvs: Float32Array;         // vertexCount * 2
+    boneWeights: Float32Array; // vertexCount * 4
+    boneIndices: Uint8Array;   // vertexCount * 4
     indices: Uint32Array;
     vertexCount: number;
-    boneBindingNames: string[]; // names referenced by per-mesh bone bindings (skin)
-    textureIndex: number;       // index into GrannyModelData.textures (-1 if none)
+    boneBindingNames: string[];
+    textureIndex: number; // -1 if none
 }
 
-// A decoded embedded texture image (level 0), expanded to tightly-packed RGBA.
 interface GrannyTextureImage {
     width: number;
     height: number;
-    rgba: Uint8Array; // width * height * 4
+    rgba: Uint8Array;
 }
 
 export interface GrannyBone {
     name: string | null;
     parentIndex: number;
-    // Local rest transform (decomposed): translation, rotation quat, 3x3 scale-shear.
     translation: [number, number, number];
     rotation: [number, number, number, number];
-    scaleShear: Float32Array; // 9 (row-major 3x3)
-    // The bone's inverse-bind (inverse world-rest) 4x4, column-major as gl-matrix
-    // wants it. Skinning multiplies the animated bone-world by this to take a
-    // rest-space vertex into the bone's animated frame.
-    inverseWorld: Float32Array; // 16
+    scaleShear: Float32Array; // row-major 3x3
+    inverseWorld: Float32Array; // column-major 4x4
 }
 
 export interface GrannySkeleton {
@@ -451,17 +387,15 @@ export interface GrannySkeleton {
     bones: GrannyBone[];
 }
 
-// One keyframed curve: degree, knot times (seconds), and a flat control array of
-// `dimension` floats per knot (3 = position xyz, 4 = orientation quat xyzw,
-// 9 = scale-shear 3x3). Empty (zero knots) means "use the bone's rest value".
+// One keyframed curve. `dimension` per knot: 3 = position, 4 = orientation quat,
+// 9 = scale-shear 3x3. Zero knots means "use the bone's rest value".
 export interface GrannyCurve {
     degree: number;
     dimension: number;
-    knots: Float32Array;    // knotCount
+    knots: Float32Array;
     controls: Float32Array; // knotCount * dimension
 }
 
-// Per-bone animation: optional position / orientation / scale-shear curves.
 export interface GrannyTransformTrack {
     boneName: string | null;
     position: GrannyCurve | null;
@@ -469,9 +403,6 @@ export interface GrannyTransformTrack {
     scaleShear: GrannyCurve | null;
 }
 
-// A clip: total duration (seconds) and per-bone transform tracks. RO's WoE
-// models carry exactly one animation with one track group whose tracks map
-// 1:1 (by name) onto the skeleton's bones.
 export interface GrannyAnimation {
     name: string | null;
     duration: number;
@@ -483,11 +414,9 @@ export interface GrannyModelData {
     skeletons: GrannySkeleton[];
     animations: GrannyAnimation[];
     textureNames: string[];
-    textures: (GrannyTextureImage | null)[]; // index-aligned with textureNames
+    textures: (GrannyTextureImage | null)[];
 }
 
-// Reads a vertex-format type list (the variant type of a Vertices array) into a
-// field layout with byte offsets and a total stride.
 function readVertexFormat(gr: GrannyFile, typeAbs: number): { fields: GrannyVertexFormatField[], stride: number } {
     const { view, blob, fixups } = gr;
     const fields: GrannyVertexFormatField[] = [];
@@ -512,7 +441,6 @@ function readVertexFormat(gr: GrannyFile, typeAbs: number): { fields: GrannyVert
     return { fields, stride };
 }
 
-// Reads a fixed-count scalar field from a vertex at `base`.
 function readVertexFloats(view: DataView, base: number, field: GrannyVertexFormatField, out: Float32Array, outOff: number, n: number): void {
     for (let i = 0; i < n; i++) {
         if (i < field.count && field.type === GrannyType.Real32)
@@ -522,7 +450,6 @@ function readVertexFloats(view: DataView, base: number, field: GrannyVertexForma
     }
 }
 
-// Extracts a single mesh from its data struct.
 function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): GrannyMesh | null {
     const { view } = gr;
     const mw = walkType(gr, meshTypeAbs, meshDataAbs);
@@ -537,7 +464,7 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
     if (topo === undefined || topo.ref === null || topo.ref === undefined || topo.childTypeAbs === null)
         return null;
 
-    // Vertices: a ReferenceToVariantArray whose variant type is the vertex format.
+    // Vertices: ReferenceToVariantArray, variant type = vertex format.
     const vw = walkType(gr, pvd.childTypeAbs, pvd.ref);
     const verts = vw.get("Vertices");
     if (verts === undefined || verts.arrAbs === null || verts.arrAbs === undefined || verts.variantTypeAbs === null || verts.variantTypeAbs === undefined || verts.count === undefined)
@@ -553,7 +480,6 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
     const boneWeights = new Float32Array(vertexCount * 4);
     const boneIndices = new Uint8Array(vertexCount * 4);
 
-    // Identify the relevant fields by Granny's standard component names.
     const fPos = fields.find((f) => f.name === "Position");
     const fNrm = fields.find((f) => f.name === "Normal");
     const fUV = fields.find((f) => f.name === "TextureCoordinates0" || f.name === "TextureCoordinates");
@@ -566,7 +492,6 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
         if (fNrm !== undefined) readVertexFloats(view, base, fNrm, normals, v * 3, 3);
         if (fUV !== undefined) readVertexFloats(view, base, fUV, uvs, v * 2, 2);
         if (fBoneW !== undefined) {
-            // Bone weights are NormalUInt8[4] (0..255 -> 0..1) on most exports.
             for (let i = 0; i < 4; i++) {
                 if (i < fBoneW.count) {
                     if (fBoneW.type === GrannyType.NormalUInt8 || fBoneW.type === GrannyType.UInt8)
@@ -582,7 +507,7 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
         }
     }
 
-    // Indices: Indices (u32) or Indices16 (u16). Topology may also carry groups.
+    // Indices: u32 or u16.
     const tw = walkType(gr, topo.childTypeAbs, topo.ref);
     let indices = new Uint32Array(0);
     const ind32 = tw.get("Indices");
@@ -597,12 +522,8 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
             indices[i] = view.getUint16(ind16.arrAbs + i * 2, true);
     }
 
-    // Bone bindings: the bones this mesh's vertices are skinned to. A vertex's
-    // BoneIndices are LOCAL indices into THIS list (0..bindingCount-1); each
-    // binding's BoneName resolves to a skeleton bone. The struct is a String
-    // (BoneName) + OBBMin[3] + OBBMax[3] + TriangleCount(int) + TriangleIndices
-    // pointer; computeInlineSize gives the correct stride across the String/
-    // pointer fields (the earlier scalar-only stride undercounted).
+    // Vertex BoneIndices are LOCAL indices into this list; each binding's
+    // BoneName maps to a skeleton bone.
     const boneBindingNames: string[] = [];
     const bb = mw.get("BoneBindings");
     if (bb !== undefined && bb.arrAbs !== null && bb.arrAbs !== undefined && bb.count !== undefined && bb.childTypeAbs !== null) {
@@ -618,11 +539,8 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
     return { name, positions, normals, uvs, boneWeights, boneIndices, indices, vertexCount, boneBindingNames, textureIndex: -1 };
 }
 
-// Decodes one embedded texture's level-0 image to tightly-packed RGBA. RO's
-// Granny textures are stored raw, 4 bytes/pixel, with a component layout
-// (shift/bits per channel). The common case is RGBA8888 (shifts 0/8/16/24, all
-// 8-bit) — a direct copy; we honour the layout generally so a BGRA/other order
-// still decodes. A null return means no usable image data.
+// Decodes one embedded texture's level-0 image to RGBA. Honours the per-component
+// shift/bits layout; common case is RGBA8888 (a direct copy).
 function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number): GrannyTextureImage | null {
     const { view } = gr;
     const tw = walkType(gr, texTypeAbs, texDataAbs);
@@ -633,7 +551,7 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
     if (width === undefined || height === undefined || width <= 0 || height <= 0)
         return null;
 
-    // Pixel layout (inline struct): BytesPerPixel + per-component shift/bit count.
+    // Pixel layout (inline): BytesPerPixel + per-component shift/bit count.
     let bytesPerPixel = 4;
     const shifts = [0, 8, 16, 24];
     const bits = [8, 8, 8, 8];
@@ -648,40 +566,34 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
             for (let i = 0; i < 4; i++) bits[i] = view.getInt32(bi.scalarAbs + i * 4, true);
     }
 
-    // Images[0].MIPLevels[0].Pixels — both arrays are ReferenceToArray of packed
-    // structs; the level-0 pixel bytes are a ReferenceToArray of UInt8.
+    // Images[0].MIPLevels[0].Pixels.
     const images = tw.get("Images");
     if (images === undefined || images.arrAbs === null || images.arrAbs === undefined || !images.count || images.childTypeAbs === null)
         return null;
-    const iw = walkType(gr, images.childTypeAbs, images.arrAbs); // image[0]
+    const iw = walkType(gr, images.childTypeAbs, images.arrAbs);
     const mips = iw.get("MIPLevels");
     if (mips === undefined || mips.arrAbs === null || mips.arrAbs === undefined || !mips.count || mips.childTypeAbs === null)
         return null;
-    const mw = walkType(gr, mips.childTypeAbs, mips.arrAbs); // mip[0]
+    const mw = walkType(gr, mips.childTypeAbs, mips.arrAbs);
     const pixels = mw.get("Pixels") ?? mw.get("PixelBytes");
     if (pixels === undefined || pixels.arrAbs === null || pixels.arrAbs === undefined || !pixels.count)
         return null;
     const strideField = scI(mw.get("Stride"));
     const rowStride = strideField && strideField > 0 ? strideField : width * bytesPerPixel;
 
-    // RO's textures use a proprietary RAD compressed encoding (Encoding != raw):
-    // the stored pixel bytes are far smaller than a raw image and only granny2's
-    // own codec expands them. We don't decode that here — those textures are
-    // expanded offline (the .tex bake) and loaded separately. Only decode when
-    // the data is genuinely raw (full size present).
+    // RO ships RAD-encoded pixels (Encoding != raw) that only granny2.dll
+    // expands; those are baked offline. Only decode genuinely raw data here.
     if (pixels.count < width * height * bytesPerPixel)
         return null;
 
     const src = gr.blob;
     const srcBase = pixels.arrAbs;
     const rgba = new Uint8Array(width * height * 4);
-    // Fast path: 4 bytes/pixel, 8 bits each, shift order R,G,B,A -> a direct copy.
     const direct = bytesPerPixel === 4 && bits[0] === 8 && bits[1] === 8 && bits[2] === 8 &&
         shifts[0] === 0 && shifts[1] === 8 && shifts[2] === 16;
     for (let y = 0; y < height; y++) {
         const rowOff = srcBase + y * rowStride;
         if (direct) {
-            // copy R,G,B then alpha (or 255 if no alpha channel / 0-bit alpha).
             for (let x = 0; x < width; x++) {
                 const s = rowOff + x * 4, d = (y * width + x) * 4;
                 if (s + 4 > src.length) break;
@@ -709,9 +621,8 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
     return { width, height, rgba };
 }
 
-// Follows a material to its diffuse texture's data offset, recursing through the
-// material's Maps (mirrors GrannyGetMaterialTextureByType). Returns the absolute
-// offset of the granny_texture struct, or null.
+// Returns the absolute offset of the diffuse granny_texture struct, recursing
+// through the material's Maps (mirrors GrannyGetMaterialTextureByType).
 function resolveMaterialTexture(gr: GrannyFile, matTypeAbs: number, matDataAbs: number, depth = 0): number | null {
     if (depth > 8)
         return null;
@@ -738,7 +649,6 @@ function resolveMaterialTexture(gr: GrannyFile, matTypeAbs: number, matDataAbs: 
     return null;
 }
 
-// Resolves a mesh's first material binding to a model-texture index.
 function resolveMeshTextureIndex(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number, texAbsToIndex: Map<number, number>): number {
     const mw = walkType(gr, meshTypeAbs, meshDataAbs);
     const mb = mw.get("MaterialBindings");
@@ -759,13 +669,10 @@ function resolveMeshTextureIndex(gr: GrannyFile, meshTypeAbs: number, meshDataAb
     return -1;
 }
 
-// Extracts the model's meshes + skeletons + texture names from a parsed file.
 export function extractGrannyModel(gr: GrannyFile): GrannyModelData {
     const top = walkType(gr, gr.typeAbs, gr.rootAbs);
 
-    // Model textures first: their data offsets index the per-mesh material lookup,
-    // and their embedded images decode to RGBA. textureNames / textures stay
-    // index-aligned. (Textures is an ArrayOfReferences.)
+    // Textures first: their data offsets key the per-mesh material lookup.
     const textureNames: string[] = [];
     const textures: (GrannyTextureImage | null)[] = [];
     const texAbsToIndex = new Map<number, number>();
@@ -828,12 +735,8 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     const name = sw.get("Name")?.str ?? null;
     const bonesM = sw.get("Bones");
     const bones: GrannyBone[] = [];
-    // Bones is a ReferenceToArray (type 3): a tightly-packed array of bone
-    // structs reached through `childTypeAbs` (NOT a variant array). Each bone:
-    // Name(String), ParentIndex(Int32), Transform(GrannyTransform 68B),
-    // InverseWorldTransform(Real32[16]), then pointers we ignore. We derive the
-    // element stride from the bone type list (computeInlineSize handles the
-    // inline 68B Transform), and read the named fields per element.
+    // Bone struct: Name + ParentIndex + Transform(68B) + InverseWorldTransform[16]
+    // + ignored pointers. Stride comes from computeInlineSize over the bone type.
     if (bonesM !== undefined && bonesM.arrAbs !== null && bonesM.arrAbs !== undefined && bonesM.childTypeAbs !== null && bonesM.count !== undefined) {
         const stride = computeInlineSize(gr, bonesM.childTypeAbs);
         for (let i = 0; i < bonesM.count; i++) {
@@ -846,17 +749,14 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
             let rotation: [number, number, number, number] = [0, 0, 0, 1];
             const scaleShear = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
             if (tr !== undefined && tr.scalarAbs !== undefined) {
-                // GrannyTransform: Flags(u32), Position f32[3], Orientation f32[4], ScaleShear f32[3][3].
+                // GrannyTransform: Flags(u32) + Position[3] + Orientation[4] + ScaleShear[3][3].
                 const o = tr.scalarAbs;
                 translation = [view.getFloat32(o + 4, true), view.getFloat32(o + 8, true), view.getFloat32(o + 12, true)];
                 rotation = [view.getFloat32(o + 16, true), view.getFloat32(o + 20, true), view.getFloat32(o + 24, true), view.getFloat32(o + 28, true)];
                 for (let k = 0; k < 9; k++)
                     scaleShear[k] = view.getFloat32(o + 32 + k * 4, true);
             }
-            // InverseWorldTransform is the inverse world-rest matrix. Granny lays
-            // it out so that the 16 floats, read in order, are already a
-            // column-major matrix (verified: worldRest * inverseWorld == I when
-            // read straight). So copy verbatim — no transpose.
+            // InverseWorldTransform is laid out column-major; copy verbatim.
             const inverseWorld = new Float32Array(16);
             const iw = bw.get("InverseWorldTransform");
             if (iw !== undefined && iw.scalarAbs !== undefined) {
@@ -871,20 +771,11 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     return { name, bones };
 }
 
-// Reads one granny_curve from an inline curve struct in a transform track.
-// Granny stores curves in two equivalent shapes; we accept either:
-//   (a) direct `granny_curve_data_da_keyframes_32f` inline:
-//         { Degree(int), Knots[](float), Controls[](float) }
-//       — the form every RO baked .gr2 uses.
-//   (b) standard `granny_curve2 { ..., CurveData: VariantReference -> X }`
-//       where X is the keyframes struct above. SDK-generated files use this.
-// `dimension` is the per-knot control width (3/4/9). Returns null when the curve
-// has no usable keys (so the caller falls back to the bone's rest value).
+// Accepts either form: (a) Knots/Controls inline (every RO baked .gr2), or
+// (b) a CurveData VariantReference to the keyframes struct (SDK files).
 function extractCurve(gr: GrannyFile, curveTypeAbs: number, curveDataAbs: number, dimension: number): GrannyCurve | null {
     const { view } = gr;
     let cw = walkType(gr, curveTypeAbs, curveDataAbs);
-    // Form (b): follow the inner CurveData VariantReference if Knots/Controls
-    // aren't direct members of this curve struct.
     if (!cw.has("Knots") || !cw.has("Controls")) {
         const cd = cw.get("CurveData");
         if (cd === undefined || cd.ref === null || cd.ref === undefined || cd.variantTypeAbs === null || cd.variantTypeAbs === undefined)
@@ -949,33 +840,20 @@ function extractAnimation(gr: GrannyFile, animTypeAbs: number, animDataAbs: numb
     return { name, duration, tracks };
 }
 
-// ---------------------------------------------------------------------------
-// Oodle1 decompressor (Granny compression type 2).
-//
-// Faithful port of the open Oodle1 spec (LunaticInAHat/liboodle; cross-checked
-// against nwn2mdk/opengr2, which validate byte-for-byte vs granny32.dll). The
-// scheme is a three-layer codec: a bitstream layer (an arithmetic-coder-style
-// fixed-point reader), an adaptive multi-symbol coder, and an LZSS dictionary.
-//
-// A compressed section holds three 12-byte parameter headers, then one bitstream
-// that is decoded in up to three passes (the "stop" offsets split the output);
-// each pass uses its own parameter set + a fresh dictionary.
-//
-// NOTE: this does NOT decode the RO monster files — those use Oodle0 (type 1),
-// a different codec (see the file header). This is here so the parser is
-// complete for uncompressed + Oodle1 .gr2, and ready the moment Oodle0 is added.
-// ---------------------------------------------------------------------------
+// Oodle1 decompressor (Granny compression type 2). Three-layer codec:
+// arithmetic-style bitstream + adaptive multi-symbol coder + LZSS dictionary.
+// Section header has three 12-byte parameter blocks; decoding runs in three
+// passes split at the "stop" offsets, each with its own params + dictionary.
+// Does NOT decode RO's Oodle0 (type 1) sections.
 
 interface OodleParams {
-    decodedValueMax: number; // literal alphabet absolute size
-    backrefValueMax: number; // LZ window size
-    decodedCount: number;    // unique literal count
+    decodedValueMax: number;
+    backrefValueMax: number;
+    decodedCount: number;
     highbitCount: number;
-    sizesCount: number[];    // 4 bytes
+    sizesCount: number[];
 }
 
-// Bitstream + arithmetic decoder. R/M are the shift register + modulus; L is the
-// out-of-line LSB flag.
 class OodleDecoder {
     private R: number;
     private M = 0x80;
@@ -1006,7 +884,6 @@ class OodleDecoder {
         return z < max - 1 ? z : max - 1;
     }
 
-    // Consume a decoded symbol: lower-bound `val` spanning `err`.
     public commit(max: number, val: number, err: number): number {
         const sz = val * this.sScale;
         this.R = this.R - sz;
@@ -1023,7 +900,6 @@ class OodleDecoder {
     }
 }
 
-// Adaptive multi-symbol weight window.
 class WeighWindow {
     private countCap: number;
     private ranges: number[] = [0, 0x4000];
@@ -1090,8 +966,7 @@ class WeighWindow {
         }
     }
 
-    // Returns [newSlotIndex, value]. newSlotIndex >= 0 means a fresh slot whose
-    // value the caller must decode and store; -1 means use the returned value.
+    // Returns [newSlotIndex, value]; newSlotIndex >= 0 means decode+store, -1 = use value.
     public tryDecode(dec: OodleDecoder): [number, number] {
         if (this.weightTotal >= this.threshRangeRebuild) {
             if (this.threshRangeRebuild >= this.threshWeightRebuild)
@@ -1132,7 +1007,6 @@ class WeighWindow {
     }
 }
 
-// LZ dictionary for one decompression pass.
 class OodleDictionary {
     private static readonly SIZES = [128, 192, 256, 512];
     private decodedSize = 0;
@@ -1169,7 +1043,6 @@ class OodleDictionary {
         this.sizeWindows.push(new WeighWindow(64, p.sizesCount[0]));
     }
 
-    // Decodes one block into `out` at `outpos`; returns bytes written.
     public block(dec: OodleDecoder, out: Uint8Array, outpos: number): number {
         const sw = this.sizeWindows[this.backrefSize];
         let [d1i, d1v] = sw.tryDecode(dec);

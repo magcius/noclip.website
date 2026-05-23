@@ -1,52 +1,35 @@
 
-// Parser for Ragnarok Online's ACT animation format (magic "AC").
-//
-// An .act drives an .spr: it is a flat list of actions, where (by RO
-// convention) each logical state occupies 8 consecutive actions, one per facing
-// direction. An action is an ordered list of motion frames; each motion is a
-// set of sprite "clips" (one drawn .spr image with its own offset, tint, zoom,
-// mirror and rotation). A trailing per-action delay table gives the playback
-// cadence (roughly milliseconds-per-frame at the original ~60fps).
-//
-// Fields are promoted to the newest layout regardless of the file version that
-// produced them; older versions fill the missing fields with the documented
-// defaults. Reads are version-gated exactly as the original loader.
-//
-// All multi-byte values are little-endian.
+// Parser for Ragnarok Online's ACT animation format (magic "AC"). Drives a
+// matching .spr: each logical state occupies 8 consecutive actions (one per
+// facing). Reads are version-gated; older versions fill missing fields with
+// the documented defaults. All multi-byte values are little-endian.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-// One sprite reference within a motion frame: which .spr image to draw, where,
-// and how to tint/scale/mirror/rotate it. clip_type selects the frame set
-// (0 = palette-indexed, otherwise the true-color RGBA frames).
 export interface ActClip {
     x: number;
     y: number;
     sprIndex: number;     // -1 = unused slot
-    mirror: boolean;      // horizontal flip
+    mirror: boolean;
     r: number; g: number; b: number; a: number; // tint, 0..255
     zoomX: number;
     zoomY: number;
     angle: number;        // degrees
-    clipType: number;
+    clipType: number;     // 0 = palette-indexed frame set, else rgba
 }
 
-// One animation frame: the set of clips composited for that frame.
 export interface ActMotion {
     clips: ActClip[];
 }
 
-// One action: an ordered list of motion frames.
 export interface ActAction {
     motions: ActMotion[];
 }
 
-// A decoded .act: the actions, the per-action playback delay table (one entry
-// per action, default 4.0), and the source file version.
 export interface ActModel {
     version: number;
     actions: ActAction[];
-    delay: number[];
+    delay: number[];      // per-action playback delay, default 4.0
 }
 
 class Reader {
@@ -69,14 +52,11 @@ class Reader {
     public skip(n: number): void { this.assertCanRead(n); this.offs += n; }
 }
 
-// Highest ACT version we accept; matches the original loader and the modern
-// corpus ceiling.
 const MAX_VERSION = 0x0206;
 
 // Recenters a clip whose stored origin is the sprite's top-left to one centered
-// on the sprite, matching the original loader's ReCalcClipXY. The half-size
-// flags double the source dimensions; from version 0x0205 they are forced off
-// (the clip carries its own width/height). Applied in-place.
+// on the sprite, matching the original loader's ReCalcClipXY. From version
+// 0x0205 the half-size flags are forced off (the clip carries its own w/h).
 export function recalcClipXY(clip: ActClip, w: number, h: number, halfW: boolean, halfH: boolean): void {
     let cx = w;
     let cy = h;
@@ -93,7 +73,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
     const ver = r.u16();
     const actionCount = r.u16();
     r.skip(10); // reserved
-    // Magic 'AC' is stored as bytes 'A','C' => little-endian word 'C'<<8 | 'A'.
+    // Magic 'AC' stored as bytes 'A','C' => little-endian word 'C'<<8 | 'A'.
     if (id !== (("C".charCodeAt(0) << 8) | "A".charCodeAt(0)))
         throw new Error(`ACT: bad magic 0x${id.toString(16)}`);
     if (ver > MAX_VERSION)
@@ -107,8 +87,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
         const motions: ActMotion[] = [];
 
         for (let j = 0; j < motionCount; j++) {
-            // range1 / range2 (attack/body bounding rects): present but unused by
-            // the render slice.
+            // range1 / range2 (attack/body bounding rects): unused.
             r.skip(16);
             r.skip(16);
             const clipCount = r.i32();
@@ -134,7 +113,6 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
                     clip.b = r.u8();
                     clip.a = r.u8();
                     if (ver < 0x0204) {
-                        // A single uniform zoom, promoted to zoomX/zoomY.
                         const zoom = r.f32();
                         clip.zoomX = zoom;
                         clip.zoomY = zoom;
@@ -146,10 +124,9 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
                     clip.clipType = r.i32();
 
                     if (ver >= 0x0205) {
-                        // The clip carries its own source width/height and is
-                        // recentered against THEM (half-flags forced off). Older
-                        // versions defer recentering to the renderer, which uses
-                        // the referenced .spr frame's dimensions instead.
+                        // Clip carries its own width/height and is recentered
+                        // against THEM; older versions defer recentering to the
+                        // renderer using the referenced .spr frame's dims.
                         const w = r.i32();
                         const h = r.i32();
                         if (clip.sprIndex !== -1)
@@ -160,12 +137,11 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
                 clips.push(clip);
             }
 
-            // event id (>= 0x0200; 0x0200 itself has no usable id)
             if (ver >= 0x0200)
-                r.i32();
+                r.i32(); // event id
 
-            // attach points (>= 0x0203): 16 bytes each, unused by the render slice.
             if (ver >= 0x0203) {
+                // attach points: 16 bytes each, unused.
                 const attachCount = r.i32();
                 if (attachCount < 0)
                     throw new Error(`ACT: bad attach count ${attachCount}`);
@@ -179,15 +155,14 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
         actions.push({ motions });
     }
 
-    // Event-name table (>= 0x0201): 40-byte fixed strings, skipped.
     if (ver >= 0x0201) {
+        // Event-name table: 40-byte fixed strings, skipped.
         const eventCount = r.i32();
         if (eventCount < 0)
             throw new Error(`ACT: bad event count ${eventCount}`);
         r.skip(eventCount * 40);
     }
 
-    // Per-action delay table (>= 0x0202); default 4.0 per action otherwise.
     const delay: number[] = new Array(actionCount).fill(4.0);
     if (ver >= 0x0202) {
         for (let i = 0; i < actionCount; i++)

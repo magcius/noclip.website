@@ -1,21 +1,10 @@
 
-// Parser for Ragnarok Online's GND ground format (magic "GRGN").
-//
-// A GND describes a map's terrain as a width x height grid of cells. Each cell
-// stores four corner heights and references up to three surfaces (a top quad
-// plus a front and right wall to the neighbouring cells). Surfaces carry the
-// texture/lightmap/colour used to skin the geometry; for untextured geometry we
-// only need the cell heights and the grid dimensions, but the full per-cell and
-// surface data is small so we parse it in one pass.
-//
-// All multi-byte values are little-endian.
+// Parser for Ragnarok Online's GND ground format (magic "GRGN"). A GND is a
+// grid of terrain cells with corner heights and up to three surfaces per cell
+// (top quad + front/right walls). All values are little-endian.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-// RO stores texture paths as CP949 (EUC-KR) Korean bytes. The WHATWG 'euc-kr'
-// label decodes the full CP949 set and is available in both Node 18+ and
-// browsers, so no external table is needed. The SAME decode is used by the
-// extraction tool, so disk paths and fetch paths always agree.
 const eucKrDecoder = new TextDecoder("euc-kr");
 
 function decodeCp949(bytes: Uint8Array): string {
@@ -25,15 +14,13 @@ function decodeCp949(bytes: Uint8Array): string {
     return eucKrDecoder.decode(bytes.subarray(0, end));
 }
 
-// Normalizes a GND texture path to a URL relative to the textures root:
-// backslashes become forward slashes, and each segment is percent-encoded so
-// Korean names survive the fetch. Mirrors the layout the extractor writes.
+// Normalises a GND texture path (backslash-separated CP949) to a URL relative
+// to the textures root. Mirrors what the extractor writes.
 export function textureNameToUrl(name: string): string {
     return name.split("\\").map(encodeURIComponent).join("/");
 }
 
 export interface GndSurface {
-    // Texture UVs, one per cell corner.
     u: [number, number, number, number];
     v: [number, number, number, number];
     textureId: number;
@@ -42,7 +29,7 @@ export interface GndSurface {
 }
 
 export interface GndCell {
-    // Corner heights, ordered [0]=(x,y) [1]=(x+1,y) [2]=(x,y+1) [3]=(x+1,y+1).
+    // Corner order: [0]=(x,y) [1]=(x+1,y) [2]=(x,y+1) [3]=(x+1,y+1).
     height: [number, number, number, number];
     topSurface: number;
     frontSurface: number;
@@ -69,9 +56,9 @@ export interface GndMap {
     textureNames: string[];
     lightmaps: GndLightmap[];
     surfaces: GndSurface[];
-    // Length width*height, stored row-major: cell(x, y) = cells[y * width + x].
+    // Row-major: cell(x, y) = cells[y * width + x].
     cells: GndCell[];
-    // GND 1.8+ stores the water setup that RSW 2.6 removed from the world file.
+    // GND 1.8+ stores the water setup that RSW 2.6 dropped from the world file.
     water: GndWaterParams | null;
 }
 
@@ -104,7 +91,6 @@ class Reader {
         return v;
     }
 
-    // Reads a fixed-width field of raw bytes, advancing by exactly `width`.
     public fixedBytes(width: number): Uint8Array {
         this.assertCanRead(width);
         const v = this.buffer.createTypedArray(Uint8Array, this.offs, width);
@@ -112,7 +98,6 @@ class Reader {
         return v;
     }
 
-    // Reads a fixed-width ASCII magic and always advances by `width` bytes.
     public magic(width: number): string {
         const bytes = this.fixedBytes(width);
         let end = bytes.indexOf(0);
@@ -200,10 +185,9 @@ export function parseGND(buffer: ArrayBufferSlice): GndMap {
     if (minor >= 8 && r.remaining() >= 24) {
         water = readWaterParams(r);
 
-        // 1.8 appends a U/V grid and one float level per water plane. 1.9
-        // appends the U/V grid and a full water config per plane. The current
-        // renderer draws a single map-wide plane, so prefer the first explicit
-        // plane when present and otherwise keep the base config.
+        // 1.8 appends a U/V plane grid + one float level per plane; 1.9 appends
+        // a full water config per plane. We render a single map-wide plane, so
+        // prefer the first plane's config when present.
         if (r.remaining() >= 8) {
             const numWaterPlanesU = r.i32();
             const numWaterPlanesV = r.i32();

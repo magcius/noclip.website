@@ -1,26 +1,14 @@
 
 // Builds a flat, per-texture-grouped mesh from an RSM model's node hierarchy.
-//
-// Each RSM node has a local transform (translation, axis-angle rotation, scale)
-// and is parented to another node by name, forming a tree. A node's vertices are
-// first put through its baked offset transform, then through the node's
-// accumulated world-relative transform (its local transform composed up the
-// parent chain), producing model-local positions. Faces are grouped by the
-// model-level texture they resolve to, so each unique texture draws in one call
-// — the same pattern the terrain renderer uses.
-//
-// RO's fixed-function math is row-vector (a point is v' = v * M, transforms
-// compose left-to-right). We keep that convention here with a small affine type
-// so the composition order matches the engine exactly, then convert to a
-// gl-matrix column-major mat4 (transposing the linear part, translation in the
-// last column) for GPU upload. The per-placement world matrix is applied
-// separately at draw time, not baked here.
+// RO's fixed-function math is row-vector (v' = v * M, transforms compose
+// left-to-right); we mirror that with a small Affine type, then convert to a
+// gl-matrix column-major mat4 for upload. Per-placement world matrix is
+// applied at draw time, not baked here.
 
 import { mat4, quat, vec3 } from "gl-matrix";
 import { RsmModel, RsmNode } from "./rsm.js";
 
-// Row-vector affine: 3x3 linear part `r` (row-major, r[row*3+col]) plus a
-// translation `t`. Matches RO's fixed-function transform convention.
+// Row-vector affine: 3x3 linear part `r` (row-major, r[row*3+col]) + translation.
 interface Affine {
     r: Float32Array; // length 9, row-major
     t: Float32Array; // length 3
@@ -65,8 +53,6 @@ function affineScale(x: number, y: number, z: number): Affine {
     return { r, t: new Float32Array(3) };
 }
 
-// Axis-angle rotation as a unit quaternion (q = (axis*sin(a/2), cos(a/2))),
-// matching the engine's node-rotation matrix builder.
 function affineRotAxisAngle(axis: RsmNodeAxis, angle: number): Affine {
     const omega = angle * 0.5;
     const s = Math.sin(omega);
@@ -85,14 +71,14 @@ function affineRotAxisAngle(axis: RsmNodeAxis, angle: number): Affine {
 
 type RsmNodeAxis = { x: number, y: number, z: number };
 
-// Transforms a row-vector point: out = v * M.
+// out = v * M.
 function affineTransform(m: Affine, x: number, y: number, z: number, out: vec3): void {
     out[0] = x * m.r[0] + y * m.r[3] + z * m.r[6] + m.t[0];
     out[1] = x * m.r[1] + y * m.r[4] + z * m.r[7] + m.t[1];
     out[2] = x * m.r[2] + y * m.r[5] + z * m.r[8] + m.t[2];
 }
 
-// A node's local transform, composed L = scale * rot * pos (row-vector order).
+// L_node = scale * rot * pos (row-vector order).
 function nodeLocal(n: RsmNode): Affine {
     const s = affineScale(n.scale.x, n.scale.y, n.scale.z);
     const r = affineRotAxisAngle(n.rotAxis, n.rotAngle);
@@ -100,9 +86,6 @@ function nodeLocal(n: RsmNode): Affine {
     return affineMultiply(affineMultiply(s, r), p);
 }
 
-// A unit quaternion (x,y,z,w) as a row-vector rotation affine. Mirrors the
-// matrix the engine builds from a node's axis-angle, but driven by an explicit
-// quaternion (used for the interpolated keyframe rotation).
 function affineRotQuat(qx: number, qy: number, qz: number, qw: number): Affine {
     const x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
     const wx = qw * x2, wy = qw * y2, wz = qw * z2;
@@ -115,8 +98,8 @@ function affineRotQuat(qx: number, qy: number, qz: number, qw: number): Affine {
     return { r, t: new Float32Array(3) };
 }
 
-// Converts a row-vector affine to a gl-matrix column-major mat4. Row-vector
-// v*M equals column-vector M_col*v with M_col = transpose of the linear part.
+// Row-vector v*M equals column-vector M_col*v with M_col = transpose of the
+// linear part.
 export function affineToMat4(m: Affine, out: mat4): void {
     mat4.identity(out);
     for (let col = 0; col < 3; col++)
@@ -142,26 +125,20 @@ export interface ModelMesh {
     bboxMax: vec3;
 }
 
-// Per-vertex stride: position (3 f32), UV (2 f32), normal (3 f32), color (4 u8).
-// 36 bytes.
+// position (3 f32) + UV (2 f32) + normal (3 f32) + color (4 u8) = 36 bytes.
 export const MODEL_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 3 * 4 + 4;
 
 // Per-node smooth-shaded normals, mirroring the engine's RSM lighting:
-//   - Each face's geometric normal is cross(v3-v2, v3-v1), normalized.
-//   - shadeType 0 (none): no lighting; the shader leaves the vertex full-bright,
-//     so the stored normal is unused (zeroed here).
-//   - shadeType 1 (flat): every vertex of a face takes that face's normal.
-//   - shadeType 2 (gouraud): a vertex's normal is the sum of the face normals of
-//     all faces in the SAME smoothing group that touch that vertex, normalized.
-//     Faces in different smoothing groups never share a normal, so a hard edge
-//     between two groups stays hard.
-// Returns one normal per face-corner (3 per face), in the node's local vertex
-// space (same space the positions are computed from), in face order.
+//   shadeType 0 (none): unused, zeroed.
+//   shadeType 1 (flat): every corner of a face takes the face's normal.
+//   shadeType 2 (gouraud): a vertex's normal sums the face normals of all
+//     faces in the SAME smoothing group touching that vertex, then normalize.
+// Returns one normal per face-corner (3 per face), in node-local space.
 function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     const faceCount = n.faces.length;
     const out: vec3[] = new Array(faceCount * 3);
 
-    // Geometric face normals from the raw node vertices.
+    // Geometric face normal = cross(v3-v2, v3-v1), normalized (matches engine).
     const faceNormal: vec3[] = new Array(faceCount);
     const v1 = vec3.create(), v2 = vec3.create(), v3 = vec3.create();
     const e1 = vec3.create(), e2 = vec3.create();
@@ -173,7 +150,6 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
             vec3.set(v1, a.x, a.y, a.z);
             vec3.set(v2, b.x, b.y, b.z);
             vec3.set(v3, c.x, c.y, c.z);
-            // cross(v3-v2, v3-v1), matching the engine.
             vec3.sub(e1, v3, v2);
             vec3.sub(e2, v3, v1);
             vec3.cross(fn, e1, e2);
@@ -185,19 +161,14 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     }
 
     if (shadeType !== 2) {
-        // shadeType 0/1: every corner uses the face normal (0 leaves it unused).
         for (let i = 0; i < faceCount; i++)
             for (let k = 0; k < 3; k++)
                 out[i * 3 + k] = vec3.clone(faceNormal[i]);
         return out;
     }
 
-    // Gouraud: accumulate per smoothing group. For each (group, vertex) sum the
-    // group's touching face normals; each face corner then reads its vertex's
-    // group-accumulated normal. A face belongs to exactly one group, so we
-    // evaluate each face under its own group.
+    // Gouraud: accumulate per smoothing group.
     const vertCount = n.vertices.length;
-    // group -> (vertexIndex -> accumulated normal)
     const groupVertNormals = new Map<number, vec3[]>();
     for (let i = 0; i < faceCount; i++) {
         const g = n.faces[i].smoothGroup;
@@ -216,7 +187,6 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
                 vec3.add(acc[vi], acc[vi], fn);
         }
     }
-    // Normalize each accumulated normal once.
     for (const acc of groupVertNormals.values()) {
         for (let v = 0; v < vertCount; v++) {
             const len = vec3.length(acc[v]);
@@ -236,8 +206,7 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     return out;
 }
 
-// Transforms a normal (direction) by an affine's linear part: out = n * R
-// (row-vector), then normalized. Translation is irrelevant for directions.
+// out = n * R (row-vector), then normalized.
 function affineTransformNormal(m: Affine, x: number, y: number, z: number, out: vec3): void {
     out[0] = x * m.r[0] + y * m.r[3] + z * m.r[6];
     out[1] = x * m.r[1] + y * m.r[4] + z * m.r[7];
@@ -248,9 +217,8 @@ function affineTransformNormal(m: Affine, x: number, y: number, z: number, out: 
     }
 }
 
-// The node's baked offset transform. offsetMatrix is the row-major 3x3 linear
-// part; offsetTranslation is its bottom-row translation. Vertices go through
-// this before the node's accumulated transform.
+// Node's baked offset transform: vertices go through this before the node's
+// accumulated transform.
 function nodeOffset(n: RsmNode): Affine {
     return {
         r: new Float32Array([
@@ -262,8 +230,8 @@ function nodeOffset(n: RsmNode): Affine {
     };
 }
 
-// Resolves the parent tree by name. First occurrence wins for duplicate names.
 // parentIdx[i] = -1 means root (empty parent, self-parent, or dangling parent).
+// First occurrence wins for duplicate node names.
 function resolveParents(model: RsmModel): Int32Array {
     const nodeCount = model.nodes.length;
     const nameToIdx = new Map<string, number>();
@@ -282,12 +250,9 @@ function resolveParents(model: RsmModel): Int32Array {
     return parentIdx;
 }
 
-// Composes each node's world-relative matrix M_node = L_node * M_parent
-// (row-vector hierarchy), where L_node is supplied by `local(idx)` and the
-// parent chain is followed via `parentOf(idx)` (-1 == no parent). Memoized up
-// the chain and cycle-guarded so each node is computed once. Used both at
-// build time (static locals + Int32Array parents) and per-frame (animated
-// locals + nodes[].parentIdx).
+// Composes M_node = L_node * M_parent (row-vector hierarchy). Memoized up the
+// chain and cycle-guarded so each node is computed once. Used both at build
+// time (static locals) and per-frame (animated locals).
 function composeNodeMatrices(nodeCount: number, parentOf: (idx: number) => number, local: (idx: number) => Affine): Affine[] {
     const nodeMat: Affine[] = new Array(nodeCount);
     const state = new Uint8Array(nodeCount); // 0=unvisited, 1=in-progress, 2=done
@@ -337,9 +302,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     }
 
     const parentIdx = resolveParents(model);
-
-    // Accumulate M_node = L_node * M_parent (row-vector hierarchy) from each
-    // node's static local transform.
     const nodeMat = composeNodeMatrices(nodeCount, (idx) => parentIdx[idx], (idx) => nodeLocal(model.nodes[idx]));
 
     const out = vec3.create();
@@ -348,17 +310,14 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         const n = model.nodes[ni];
         const M = nodeMat[ni];
 
-        // The offset transform baked into vertices at load: v = v_raw * offset,
-        // then * M_node.
+        // v = v_raw * offset * M_node.
         const vt = affineMultiply(nodeOffset(n), M);
 
-        // Per-corner normals in node-local vertex space, baked into the same
-        // mesh frame as the positions (offset * node transform, rotation only).
         const nodeNormals = computeNodeNormals(n, model.shadeType);
 
         let faceIdx = 0;
         for (const f of n.faces) {
-            // Resolve the face's per-node texture slot to a model-level index.
+            // Resolve face's per-node texture slot to a model-level index.
             let modelTex = 0;
             if (f.textureId < n.textureIds.length)
                 modelTex = n.textureIds[f.textureId];
@@ -394,14 +353,10 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
                 }
                 vu.push(u); vv.push(v);
 
-                // Bake the node-local corner normal into the mesh frame (the
-                // linear part of offset * node transform).
                 const cn = nodeNormals[faceIdx * 3 + k];
                 affineTransformNormal(vt, cn[0], cn[1], cn[2], nrm);
                 vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
 
-                // White vertex color; the model's per-face/per-vertex tint is not
-                // used by the reference fragment beyond a passthrough multiply.
                 vcol.push(0xFFFFFFFF);
             }
 
@@ -420,8 +375,8 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         vec3.set(bboxMax, 0, 0, 0);
     }
 
-    // Pack interleaved vertex data: pos(3) + uv(2) + normal(3) + color(1 u32) =
-    // 9 32-bit words = 36 bytes per vertex.
+    // Interleaved vertex: pos(3) + uv(2) + normal(3) + color(1 u32) = 9 32-bit
+    // words = 36 bytes per vertex.
     const vertexCount = vx.length;
     const vertexData = new ArrayBuffer(vertexCount * MODEL_VERTEX_STRIDE_BYTES);
     const fview = new Float32Array(vertexData);
@@ -439,7 +394,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         uview[fo + 8] = vcol[i] >>> 0;
     }
 
-    // Concatenate index buckets (sorted by texture id) into one index buffer.
     const groups: ModelDrawGroup[] = [];
     const indices: number[] = [];
     const sortedIds = Array.from(buckets.keys()).sort((a, b) => a - b);
@@ -459,16 +413,13 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     };
 }
 
-// Builds the per-placement world matrix in the terrain's render frame, mirroring
+// Builds per-placement world matrix in the terrain's render frame, mirroring
 // the engine's actor-matrix build:
 //   wtm = T(boxOffset) * S * Ry * Rx * Rz * T(pos)   (row-vector order)
-// then mapped to the render frame: render = (ro.x + offX, -ro.y, ro.z + offZ).
-// boxOffset anchors the model by its object-space bounding box (X/Z centered on
-// the box center, Y pinned to the box top) before scale/rotation/placement.
-//
-// offX/offZ are half the map extent (center -> corner shift): the RSW frame is
-// centered on the map while the terrain is built corner-origin with world Y =
-// -height, so this shift + Y negate lands models in the exact terrain frame.
+// then mapped to render frame: render = (ro.x + offX, -ro.y, ro.z + offZ).
+// boxOffset anchors the model by its object-space bbox (X/Z centered, Y
+// pinned to box top). mapOffX/mapOffZ are half the map extent: the RSW frame
+// is map-centered while the terrain is corner-origin (see coord.ts).
 export function buildPlacementMatrix(
     bboxMin: vec3, bboxMax: vec3,
     pos: RswVec3Like, rot: RswVec3Like, scale: RswVec3Like,
@@ -490,25 +441,19 @@ export function buildPlacementMatrix(
     affineToMat4(wtm, out);
 
     // RO-frame -> render-frame: negate Y, shift X/Z by half the map extent.
-    // Equivalent to ro_to_render * world, applied as a column-major pre-multiply.
-    // ro_to_render only scales Y by -1 and adds (offX, 0, offZ) translation, so
-    // we fold it in directly: row 1 (Y outputs) negate, then add the offsets.
     out[1] = -out[1]; out[5] = -out[5]; out[9] = -out[9]; out[13] = -out[13];
     out[12] += mapOffX;
     out[14] += mapOffZ;
 
     // Mirror X about the map centre (W = 2*mapOffX): RO is left-handed, this
-    // renderer right-handed, so the whole world is mirrored to read correctly
-    // (matching the terrain mesh and the sun direction; see coord.ts). Negating
-    // the X-output row also flips the model's own geometry and normals, so the
-    // prop's facade faces the right way; the sun's X is negated to match.
+    // renderer right-handed, so the whole world is mirrored (matching the
+    // terrain mesh and sun direction; see coord.ts).
     out[0] = -out[0]; out[4] = -out[4]; out[8] = -out[8];
     out[12] = 2 * mapOffX - out[12];
 }
 
 type RswVec3Like = { x: number, y: number, z: number };
 
-// Row-vector axis rotations matching the engine's fixed-function builders.
 function rotX(angle: number): Affine {
     const c = Math.cos(angle), s = Math.sin(angle);
     const m = affineIdentity();
@@ -531,43 +476,26 @@ function rotZ(angle: number): Affine {
     return m;
 }
 
-// === Keyframe-animated models ============================================
-//
-// Some RSM nodes carry keyframe tracks (rotation, and from later versions
-// position/scale) that spin or shift them over a looping animation. A model is
-// "animated" if any node has any keyframe track. Such models can't be baked to
-// one static mesh: each animated node's transform changes every frame.
-//
-// Geometry for animated models is therefore left in NODE-LOCAL space (raw
-// vertices through the node's offset transform only, WITHOUT the composed node
-// transform) and grouped per (node, texture). At draw time the renderer computes
-// each node's animated world-relative matrix M_node(t) and draws that node's
-// groups with u_WorldFromModel = placement * M_node(t). The static-mesh path is
-// untouched; only models with keyframes take this branch.
+// Keyframe-animated models: nodes with rotation/position/scale tracks. Such
+// models can't be baked statically — geometry stays in NODE-LOCAL space and is
+// grouped per (node, texture); the renderer composes M_node(t) per frame.
 
-// True if any node in the model carries any keyframe track.
 export function modelIsAnimated(model: RsmModel): boolean {
     return model.nodes.some((n) =>
         n.rotKeyframes.length > 0 || n.posKeyframes.length > 0 || n.scaleKeyframes.length > 0);
 }
 
-// One draw group of an animated model: a run of indices belonging to a single
-// (node, texture) pair, sharing the model's one vertex/index buffer.
 export interface AnimatedDrawGroup {
     nodeIndex: number;
-    textureId: number;   // index into textureNames
+    textureId: number;
     indexOffset: number;
     indexCount: number;
 }
 
-// The static per-node data the renderer needs to evaluate M_node(t): the parent
-// link, the baked offset transform, the static local transform (fallback for
-// channels without keyframes), and the keyframe tracks.
 export interface AnimatedNode {
     parentIdx: number;
     offset: Affine;
-    // Static channel values, reused when a channel has no keyframes. staticRot is
-    // the node's axis-angle rotation as a rotation-only affine.
+    // Static channel values, reused when a channel has no keyframes.
     staticRot: Affine;
     staticPos: vec3;
     staticScale: vec3;
@@ -587,18 +515,12 @@ export interface AnimatedModelMesh {
     bboxMax: vec3;
 }
 
-// Builds an animated model's geometry: per-(node,texture) groups with node-local
-// vertices, plus the node metadata + loop length the renderer evaluates each
-// frame. The bounding box is taken over the rest pose (frame 0) so the placement
-// matrix anchors the model exactly as the static path would at start.
+// Bbox is taken over the rest pose (frame 0) so the placement matrix anchors
+// the model exactly as the static path would at start.
 export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const nodeCount = model.nodes.length;
     const parentIdx = resolveParents(model);
 
-    // Build the per-node runtime data. The static local stays as the engine's
-    // scale*rot*pos so non-keyframed channels keep their rest value; the rotation
-    // axis-angle is kept separately so a node without rotation keyframes still
-    // rotates by its static rotation.
     const nodes: AnimatedNode[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) {
         const n = model.nodes[i];
@@ -614,8 +536,7 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         };
     }
 
-    // Rest-pose node matrices (frame 0) for the bounding box, mirroring the
-    // composition the per-frame evaluator does.
+    // Rest-pose locals for bbox (uses first keyframe value where present).
     const restLocal = (idx: number): Affine => {
         const an = nodes[idx];
         let sx = an.staticScale[0], sy = an.staticScale[1], sz = an.staticScale[2];
@@ -642,10 +563,8 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const bboxMax = vec3.fromValues(-Infinity, -Infinity, -Infinity);
     let haveBbox = false;
 
-    // Index buckets keyed by node*K+texture so each (node, texture) is its own
-    // contiguous group. Track insertion to keep groups stable & sorted by node.
     const groups: AnimatedDrawGroup[] = [];
-    const groupKey = new Map<string, number[]>();   // key -> index list
+    const groupKey = new Map<string, number[]>();
     const groupMeta = new Map<string, { nodeIndex: number, textureId: number }>();
 
     const localOut = vec3.create();
@@ -656,8 +575,6 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         const offset = nodes[ni].offset;       // node-local: raw * offset only
         const restVT = affineMultiply(offset, restNodeMat[ni]); // for bbox only
 
-        // Node-local corner normals; the renderer transforms them by the node's
-        // animated world matrix in the shader (positions stay node-local too).
         const nodeNormals = computeNodeNormals(n, model.shadeType);
 
         let faceIdx = 0;
@@ -680,7 +597,6 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                 affineTransform(offset, px, py, pz, localOut);
                 vx.push(localOut[0]); vy.push(localOut[1]); vz.push(localOut[2]);
 
-                // Bounding box from the rest-pose world-relative position.
                 affineTransform(restVT, px, py, pz, restOut);
                 if (!haveBbox) {
                     vec3.copy(bboxMin, restOut); vec3.copy(bboxMax, restOut); haveBbox = true;
@@ -700,8 +616,7 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                 }
                 vu.push(u); vv.push(v);
 
-                // Node-local normal (offset rotation only), to be rotated by the
-                // node's animated world matrix in the shader.
+                // Node-local normal; shader rotates by the node's animated mat.
                 const cn = nodeNormals[faceIdx * 3 + k];
                 affineTransformNormal(offset, cn[0], cn[1], cn[2], nrm);
                 vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
@@ -726,7 +641,6 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         vec3.set(bboxMax, 0, 0, 0);
     }
 
-    // Pack vertex data (same layout as the static mesh: pos, uv, normal, color).
     const vertexCount = vx.length;
     const vertexData = new ArrayBuffer(vertexCount * MODEL_VERTEX_STRIDE_BYTES);
     const fview = new Float32Array(vertexData);
@@ -744,7 +658,6 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         uview[fo + 8] = vcol[i] >>> 0;
     }
 
-    // Concatenate buckets ordered by (node, texture) into one index buffer.
     const indices: number[] = [];
     const keys = Array.from(groupKey.keys()).sort((a, b) => {
         const ma = groupMeta.get(a)!, mb = groupMeta.get(b)!;
@@ -771,12 +684,9 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     };
 }
 
-// Interpolates a node's keyframe tracks at frame time `frame` (already wrapped
-// into [0, animLength)) and returns its animated local transform. Channels
-// without keyframes fall back to the static value: rotation to the node's static
-// axis-angle, position/scale to their static values.
+// Interpolates a node's keyframes at `frame` (wrapped into [0, animLength)).
+// Channels without keyframes fall back to their static value.
 function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine {
-    // Rotation: slerp between the bracketing keyframes.
     let rot: Affine;
     if (an.rotKeyframes.length > 0) {
         const kfs = an.rotKeyframes;
@@ -799,7 +709,6 @@ function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine 
         rot = an.staticRot;
     }
 
-    // Position: lerp between bracketing keyframes, else static.
     let px = an.staticPos[0], py = an.staticPos[1], pz = an.staticPos[2];
     if (an.posKeyframes.length > 0) {
         const kfs = an.posKeyframes;
@@ -818,8 +727,8 @@ function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine 
         }
     }
 
-    // Scale: the original takes the first scale key (or the static scale when
-    // there are none) and does not interpolate scale across keyframes.
+    // Scale: original takes the first scale key (or static) and does not
+    // interpolate across keyframes.
     let sx = an.staticScale[0], sy = an.staticScale[1], sz = an.staticScale[2];
     if (an.scaleKeyframes.length > 0) {
         const k = an.scaleKeyframes[0];
@@ -831,26 +740,18 @@ function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat): Affine 
     return affineMultiply(affineMultiply(s, rot), p);
 }
 
-// Evaluates every node's animated world-relative matrix at frame time `frame`
-// and writes them, as gl-matrix column-major mat4s, into `out` (one per node,
-// resized as needed). The matrices are M_node(t) = L_node(t) * M_parent(t) in
-// row-vector order; multiply a placement matrix on their left at draw time.
 export class AnimatedPose {
     private scratchQ = quat.create();
 
     constructor(private mesh: AnimatedModelMesh) {
     }
 
-    // Composes the node matrices at `frame` (in [0, animLength)) into `out`.
     public evaluate(frame: number, out: mat4[]): void {
         const nodes = this.mesh.nodes;
         const nodeCount = nodes.length;
         while (out.length < nodeCount)
             out.push(mat4.create());
 
-        // Pre-evaluate per-node animated local so the shared compose walk
-        // (also used by the build-time composition) can index it without
-        // re-running animatedLocal up parent chains.
         const local: Affine[] = new Array(nodeCount);
         for (let i = 0; i < nodeCount; i++)
             local[i] = animatedLocal(nodes[i], frame, this.scratchQ);
@@ -862,26 +763,14 @@ export class AnimatedPose {
     }
 }
 
-// Drives an animated model's frame clock off real elapsed time, independent of
-// the render rate. Map props always loop, wrapping at the model's loop length.
-// The C++ client advances `m_curMotion += animSpeed * 100` once per game tick;
-// we fold the tick rate into a per-second cursor rate and apply it smoothly
-// per render frame (`frame += framesPerSecond * dt`), so playback is identical
-// at any render rate and never snaps between updates.
+// Drives an animated model's frame clock off real elapsed time. The C++ client
+// advances m_curMotion += animSpeed * 100 per game tick; we fold the tick rate
+// into a per-second cursor rate so playback is identical at any render rate.
 //
-// TICK_RATE is the effective per-second tick count we're modelling. The C++
-// InitTimer(60) sets a 60 Hz target but g_frameskip=0 (default) means the
-// game's actual tick rate is just the render rate. Empirically (compared
-// against a live iRO server) prop animation lands at ~10 Hz — alberta's
-// pickaxes loop ~2.5x slower than the C++ formula at 60 Hz would predict.
-// This also matches the canonical roBrowser/BrowEdit rate (1000 cursor units
-// per second for animSpeed=1, which equals animSpeed * (4/3) * 100 * 10 ≈
-// 1333 units/sec with the engine's 4/3 prefactor).
-//
-// The RSW placement's anim_speed is scaled by 4/3 before use (the original
-// applies this when building a map actor), and a speed of 0 means the prop
-// never advances — it holds the rest pose (frame 0). The placement's anim_type
-// field is not used for map props: they always loop.
+// TICK_RATE: empirically ~10 Hz against a live iRO server (alberta's pickaxes
+// loop ~2.5x slower than the C++ 60 Hz formula would predict). Also matches
+// the canonical roBrowser/BrowEdit rate. anim_speed is scaled by 4/3 (engine
+// applies this when building a map actor); 0 stays 0 (frozen at frame 0).
 export class ModelAnimator {
     private static readonly TICK_RATE = 10;
 
@@ -891,19 +780,15 @@ export class ModelAnimator {
     constructor(private animLength: number, animSpeed: number) {
         if (this.animLength < 1)
             this.animLength = 1;
-        // Map-actor speed scaling: 0 stays 0 (static), otherwise * 4/3. The 100
-        // is the original per-tick cursor step; * TICK_RATE folds it into a
-        // per-second rate applied continuously per frame.
         const effectiveSpeed = animSpeed !== 0 ? animSpeed * (4 / 3) : 0;
         this.framesPerSecond = effectiveSpeed * 100 * ModelAnimator.TICK_RATE;
     }
 
     public update(dtSeconds: number): void {
         if (this.framesPerSecond === 0)
-            return; // anim_speed 0: frozen at the rest pose.
+            return;
 
-        // Clamp dt so a long stall (backgrounded tab) cannot leap the cursor
-        // forward by an arbitrary amount.
+        // Clamp dt so a long stall (backgrounded tab) can't leap the cursor.
         const dt = dtSeconds > 1.0 ? 1.0 : dtSeconds;
         this.frame += this.framesPerSecond * dt;
         if (this.frame >= this.animLength)

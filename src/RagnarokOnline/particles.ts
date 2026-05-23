@@ -1,36 +1,9 @@
 
-// Per-map particle emitters: chimney smoke, dust motes, ambient sparkles, etc.
-//
-// Source: each map's compiled effecttool LUB
-// (`data\luafiles514\lua files\effecttool\<mapId>.lub`). At extract time the
-// patched Lua 5.1 binary runs each LUB to populate its `_<mapId>_emitterInfo`
-// table, which we serialize to `<mapId>.emitters.json` next to the .rsw. See
-// `tools/extract-emitters.ts` for the offline pipeline.
-//
-// Runtime (this file): on map load we fetch the JSON, decode each emitter's
-// referenced texture (effect/<name>.bmp/.tga, magic-pink keyed by bmp.ts),
-// transform emitter positions into the renderer's frame, and own a particle
-// pool per emitter. Each frame we:
-//   - spawn new particles at the per-emitter `rate` until the pool reaches
-//     `maxcount`,
-//   - integrate each live particle (velocity += gravity * dt; pos += velocity
-//     * dt; age += dt) and kill at `life`,
-//   - build a vertex buffer of camera-facing billboard quads and submit one
-//     draw per emitter (so each emitter keeps its own srcmode/destmode/color).
-//
-// Coordinate conversion mirrors loadEffectSources in entity.ts: the RSW frame
-// is left-handed and Y-down, the render frame is Y-up + X-mirrored about the
-// map centre and Z-shifted by half the map extent. For positions:
-//   render = [mapOffX - x, -y, z + mapOffZ]
-// For velocity/gravity (no offset, only axis flips):
-//   render = [-x, -y, z]
-//
-// Render ordering: the pass runs as a translucent overlay AFTER the opaque
-// terrain/props/water but BEFORE the sprite/warp/weather passes — depth-tested
-// so a wall in front of a chimney occludes its smoke, but no depth write so
-// the next transparent layer (sprites) draws over the particles. Per-emitter
-// blend mode is driven by srcmode/destmode (D3DBLEND ids), translated to GL
-// blend factors with the same table effect.ts uses for .str layers.
+// Per-map particle emitters from each map's compiled effecttool LUB. Offline,
+// `tools/extract-emitters.ts` runs the patched Lua 5.1 binary to dump emitter
+// tables to `<mapId>.emitters.json` next to the .rsw. At runtime we fetch the
+// JSON, decode textures, transform to the render frame, and own a particle pool
+// per emitter.
 
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -43,10 +16,6 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 import { decodeBMP, decodeTGA, DecodedImage } from "./bmp.js";
-
-// ---------------------------------------------------------------------------
-// JSON schema and resolved/render-side types.
-// ---------------------------------------------------------------------------
 
 interface RawEmitterSpec {
     pos: [number, number, number];
@@ -71,24 +40,16 @@ interface RawEmitterDoc {
     emitters: RawEmitterSpec[];
 }
 
-// A particle alive this frame. The pool is per-emitter and indexed; dead
-// slots are kept in `freeList` for O(1) reuse so we don't churn allocations.
 interface Particle {
     posX: number; posY: number; posZ: number;
     velX: number; velY: number; velZ: number;
-    age: number;       // seconds since spawn
-    lifeEnd: number;   // age at which to kill
+    age: number;
+    lifeEnd: number;
     size: number;
     alive: boolean;
 }
 
-// An emitter, resolved to the render frame and bound to its decoded texture.
-// Per-emitter state is the particle pool, a spawn-time accumulator (carry the
-// fractional particles owed each frame), and per-frame deterministic state
-// folded into the particle update.
 interface ResolvedEmitter {
-    // Spec values, mostly passed straight through but with render-frame
-    // velocity/gravity (axis-flipped) and render-frame position.
     posX: number; posY: number; posZ: number;
     radiusX: number; radiusY: number; radiusZ: number;
     dir1X: number; dir1Y: number; dir1Z: number;
@@ -98,35 +59,26 @@ interface ResolvedEmitter {
     sizeMin: number; sizeMax: number;
     lifeMin: number; lifeMax: number;
     speed: number;
-    color: [number, number, number, number];  // 0..255 (matches RO)
+    color: [number, number, number, number];  // 0..255
     srcmode: number; destmode: number;
     maxcount: number;
     zenable: boolean;
 
     textureName: string;
-    texture: GfxTexture | null;  // resolved when scene wires it
+    texture: GfxTexture | null;
 
     particles: Particle[];
-    freeList: number[];          // indices of dead slots in `particles`
-    spawnAccumulator: number;    // fractional particles owed
+    freeList: number[];
+    spawnAccumulator: number;
 }
 
-// What the scene loader passes to the renderer at construction time. The
-// images are kept separate from the emitter list because multiple emitters
-// can share a texture and we want to upload each GPU texture once.
 export interface ParticleSceneData {
     emitters: ResolvedEmitter[];
     images: Map<string, DecodedImage>;
 }
 
-// ---------------------------------------------------------------------------
-// Scene loader: fetch JSON, decode textures, transform to render frame.
-// ---------------------------------------------------------------------------
-
-// Translate the RO D3DBLEND ids the emitter spec carries into the engine's
-// GfxBlendFactor. 9 (DESTCOLOR) is RO's hack for "multiply into the
-// framebuffer", 7 (DESTALPHA) is treated additively the way the reference
-// renderer does for typical emissive effects.
+// Translate D3DBLEND ids from the emitter spec. 9 (DESTCOLOR) is RO's
+// multiply-into-framebuffer; 7 (DESTALPHA) is treated additively.
 function gfxBlend(d3dBlend: number): GfxBlendFactor {
     switch (d3dBlend) {
     case 1: return GfxBlendFactor.Zero;
@@ -135,17 +87,15 @@ function gfxBlend(d3dBlend: number): GfxBlendFactor {
     case 4: return GfxBlendFactor.OneMinusSrc;
     case 5: return GfxBlendFactor.SrcAlpha;
     case 6: return GfxBlendFactor.OneMinusSrcAlpha;
-    case 7: return GfxBlendFactor.One;  // DESTALPHA -> additive
+    case 7: return GfxBlendFactor.One;
     case 8: return GfxBlendFactor.OneMinusDstAlpha;
-    case 9: return GfxBlendFactor.Dst;             // DESTCOLOR
-    case 10: return GfxBlendFactor.OneMinusDst;    // INVDESTCOLOR (screen-blend dust)
-    case 11: return GfxBlendFactor.SrcAlpha;       // SRCALPHASAT (~clamped; fall back)
+    case 9: return GfxBlendFactor.Dst;
+    case 10: return GfxBlendFactor.OneMinusDst;
+    case 11: return GfxBlendFactor.SrcAlpha;
     default: return GfxBlendFactor.SrcAlpha;
     }
 }
 
-// Decode a texture file by extension. Effect particles are either .bmp
-// (magic-pink keyed) or .tga (true alpha). Other extensions are unsupported.
 function decodeImage(name: string, slice: ArrayBufferSlice): DecodedImage | null {
     const ext = name.toLowerCase().split(".").pop() ?? "";
     try {
@@ -157,9 +107,6 @@ function decodeImage(name: string, slice: ArrayBufferSlice): DecodedImage | null
     }
 }
 
-// Fetch and decode an effect texture. Returns null on any failure (404,
-// unsupported format, decode error). Failure is logged and the emitter that
-// referenced it falls out of the scene.
 async function loadParticleTexture(
     dataFetcher: DataFetcher, pathBase: string, name: string,
 ): Promise<DecodedImage | null> {
@@ -172,13 +119,9 @@ async function loadParticleTexture(
     }
 }
 
-// Fetch <mapId>.emitters.json, decode textures, return ResolvedEmitter[]
-// already in the render frame. Texture decoding runs in parallel for all
-// uniquely-referenced textures. Emitters whose texture fails to decode are
-// dropped. mapOffX/mapOffZ come from the same caller that builds the entity
-// world positions (scenes.ts), so emitter positions sit in the same world.
-//
-// Returns null if the map has no emitters JSON at all (most maps don't).
+// Render-frame conversion mirrors loadEffectSources in entity.ts:
+//   position: [mapOffX - x, -y, z + mapOffZ]
+//   velocity/gravity: axis flips only ([-x, -y, z])
 export async function loadParticles(
     dataFetcher: DataFetcher, pathBase: string, mapId: string,
     mapOffX: number, mapOffZ: number,
@@ -194,8 +137,6 @@ export async function loadParticles(
     if (raw === null || !Array.isArray(raw.emitters) || raw.emitters.length === 0)
         return null;
 
-    // Pre-fetch every uniquely-referenced texture in parallel; an emitter
-    // that doesn't get a decoded image is dropped.
     const wanted = new Set<string>();
     for (const e of raw.emitters) {
         const name = (e.texture ?? "").replace(/\\/g, "/").split("/").pop() ?? "";
@@ -214,9 +155,7 @@ export async function loadParticles(
         const name = (e.texture ?? "").replace(/\\/g, "/").split("/").pop() ?? "";
         if (name === "" || !images.has(name))
             continue;
-        // Render-frame conversion: same recipe as loadEffectSources.
         const rPos: [number, number, number] = [mapOffX - e.pos[0], -e.pos[1], e.pos[2] + mapOffZ];
-        // For velocity/gravity the axis flips apply but not the offsets.
         const flipX = (v: [number, number, number]): [number, number, number] => [-v[0], -v[1], v[2]];
         const dir1 = flipX(e.dir1);
         const dir2 = flipX(e.dir2);
@@ -243,7 +182,7 @@ export async function loadParticles(
             maxcount,
             zenable: (e.zenable?.[0] ?? 1) !== 0,
             textureName: name,
-            texture: null,  // wired by the renderer at setup
+            texture: null,
             particles,
             freeList: [],
             spawnAccumulator: 0,
@@ -253,12 +192,7 @@ export async function loadParticles(
     return out.length > 0 ? { emitters: out, images } : null;
 }
 
-// ---------------------------------------------------------------------------
-// GPU pipeline.
-// ---------------------------------------------------------------------------
-
-// Vertex layout: world pos (3 floats), per-particle offset (2 floats in
-// camera-aligned billboard local), uv (2 floats). 7 floats * 4 bytes = 28.
+// pos (3) + offset (2) + uv (2) = 7 floats.
 const PARTICLE_VERTEX_STRIDE_BYTES = 7 * 4;
 const PARTICLE_FLOATS_PER_VERTEX = 7;
 
@@ -280,7 +214,7 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_DrawParams {
-    vec4 u_Color;     // rgba 0..1 (uniform tint, multiplied by texel)
+    vec4 u_Color;     // rgba 0..1
 };
 
 uniform sampler2D u_Texture;
@@ -294,10 +228,6 @@ layout(location = ${ParticleProgram.a_Offset}) in vec2 a_Offset;
 layout(location = ${ParticleProgram.a_TexCoord}) in vec2 a_TexCoord;
 
 void main() {
-    // Billboard the particle: anchor at world a_Position, offset by
-    // (a_Offset.x * camRight + a_Offset.y * camUp). Camera axes come in as
-    // unit vectors; the offset is already scaled by the particle's half-size
-    // on the CPU.
     vec3 t_World = a_Position
                  + u_CamRight.xyz * a_Offset.x
                  + u_CamUp.xyz    * a_Offset.y;
@@ -314,9 +244,6 @@ void main() {
 `;
 }
 
-// Owns the particle pipeline + per-emitter GPU resources (one texture per
-// emitter) + the transient per-frame vertex buffer. Called from inside the
-// terrain renderer's prepare cycle after the opaque pass and before sprites.
 export class ParticleRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
@@ -352,9 +279,7 @@ export class ParticleRenderer {
             wrapT: GfxWrapMode.Clamp,
         });
 
-        // Upload one GPU texture per unique decoded image. We index by name
-        // so emitters sharing a texture (e.g. all of prontera's chimneys use
-        // smoke1.bmp) share the same GPU resource.
+        // One GPU texture per unique decoded image; emitters share by name.
         const gpuByName = new Map<string, GfxTexture>();
         for (const [name, img] of data.images.entries()) {
             const tex = device.createTexture({
@@ -372,26 +297,16 @@ export class ParticleRenderer {
             e.texture = gpuByName.get(e.textureName) ?? null;
     }
 
-    // Cheap uniform random in [a, b]. Used at spawn time for jittered initial
-    // velocity, size, life, and spawn-radius offsets. The original engine
-    // uses rand() with the same uniform distribution; we don't bother
-    // matching its seeding because none of these effects observe particle
-    // identity across frames.
     private rand(a: number, b: number): number {
         return a + (b - a) * Math.random();
     }
 
-    // Spawn one particle into the given emitter's pool (overwriting a free
-    // slot, or growing in the rare case both maxcount=cap and all live).
-    // Initial position jitters within `radius` around the emitter; initial
-    // velocity is uniform inside the box [dir1, dir2] times `speed`.
     private spawnOne(e: ResolvedEmitter): void {
         let idx: number;
         if (e.freeList.length > 0) {
             idx = e.freeList.pop()!;
         } else {
-            // All slots live (we hit maxcount). The original engine drops
-            // the spawn; we do too.
+            // maxcount hit; original engine also drops.
             return;
         }
         const p = e.particles[idx];
@@ -401,12 +316,7 @@ export class ParticleRenderer {
         p.velX = this.rand(e.dir1X, e.dir2X) * e.speed;
         p.velY = this.rand(e.dir1Y, e.dir2Y) * e.speed;
         p.velZ = this.rand(e.dir1Z, e.dir2Z) * e.speed;
-        // RO's dir bounds are an authored velocity in world units per "tick"
-        // when speed=0 (the smoke just rises by the gravity component); we
-        // honour that by always adding the dir-bounded base, then scaling by
-        // (1 + speed) so speed=0 still gives motion. The (1 + speed) shape
-        // matches what RO does in practice (its CParticleSystem applies the
-        // dir as a base velocity then a separate speed multiplier).
+        // RO's dir bounds act as a base velocity when speed=0.
         if (e.speed === 0) {
             p.velX = this.rand(e.dir1X, e.dir2X);
             p.velY = this.rand(e.dir1Y, e.dir2Y);
@@ -418,23 +328,15 @@ export class ParticleRenderer {
         p.alive = true;
     }
 
-    // Advance every emitter by dt seconds: spawn pending particles, integrate
-    // live ones, kill expired. Called once per render frame BEFORE building
-    // the GPU buffer; safe to call on a frame the renderer skips drawing.
     public update(dt: number): void {
         if (dt <= 0) return;
-        // Clamp dt to avoid spawning a flood after a long pause (tab in the
-        // background, breakpoint, etc.). 0.1s ~= 6 frames at 60fps.
+        // Clamp dt to avoid flood-spawning after a long pause (tab in background).
         const dtc = Math.min(dt, 0.1);
         for (const e of this.emitters) {
-            // Spawn budget for the frame: a uniform random rate in [rateMin,
-            // rateMax] particles/sec, integrated over dtc. Fractional debt
-            // carries to the next frame so we never lose throughput at low
-            // dt and never over-spawn at high dt.
             const rate = this.rand(e.rateMin, e.rateMax);
             e.spawnAccumulator += rate * dtc;
-            // Initialise the free list lazily — `freeList` empty at start
-            // means we treat every slot as free (alive=false).
+            // Lazy free-list init: an empty freeList with all-dead particles
+            // means the pool was never used.
             if (e.freeList.length === 0) {
                 let allDead = true;
                 for (const p of e.particles) if (p.alive) { allDead = false; break; }
@@ -448,7 +350,6 @@ export class ParticleRenderer {
                 e.spawnAccumulator -= 1;
                 this.spawnOne(e);
             }
-            // Integrate + kill.
             for (let i = 0; i < e.particles.length; i++) {
                 const p = e.particles[i];
                 if (!p.alive) continue;
@@ -467,8 +368,6 @@ export class ParticleRenderer {
         }
     }
 
-    // Count live particles across all emitters (used to size the per-frame VB
-    // once instead of growing it ad-hoc).
     private countLive(): number {
         let n = 0;
         for (const e of this.emitters)
@@ -476,21 +375,14 @@ export class ParticleRenderer {
         return n;
     }
 
-    // Submit one draw per emitter that has live particles. Caller passes the
-    // current frame's clipFromWorld + camera basis (right/up in the render
-    // frame) so the vertex shader can billboard each particle without an
-    // inverse-view computation.
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, camRight: vec3, camUp: vec3): void {
         const totalLive = this.countLive();
         if (totalLive === 0) return;
 
-        // 6 vertices per particle (two triangles).
         const vertexCount = totalLive * 6;
         const data = new ArrayBuffer(vertexCount * PARTICLE_VERTEX_STRIDE_BYTES);
         const f32 = new Float32Array(data);
 
-        // Per-emitter ranges into the buffer so each emitter's draw covers
-        // only its own particles. `ranges[i]` = [startVertex, count].
         const ranges: { start: number, count: number, emitter: ResolvedEmitter }[] = [];
 
         let vi = 0;
@@ -500,17 +392,12 @@ export class ParticleRenderer {
                 if (!p.alive) continue;
                 const hx = p.size * 0.5;
                 const hy = p.size * 0.5;
-                // Two triangles, six verts, on the camera-aligned plane.
-                // Offsets are in world units (camera basis is unit-length).
                 const cx = [-hx, hx, -hx, hx, -hx, hx];
                 const cy = [-hy, -hy, hy, -hy, hy, hy];
                 const uu = [0, 1, 0, 1, 0, 1];
+                // V flipped: BMP decoder is top-down but RO authoring places
+                // uv (0,0) at the texture's bottom-left.
                 const vv = [1, 1, 0, 1, 0, 0];
-                // Note: V flipped because BMP decoder writes top-down RGBA
-                // but particle UV (0,0) reads as top-left on most decoders;
-                // flipping V here means uv (0,0) maps to the texture's
-                // bottom-left, which is RO's authoring convention for
-                // billboard quads.
                 const tri = [0, 1, 2, 3, 5, 4];
                 for (let n = 0; n < 6; n++) {
                     const c = tri[n];
@@ -547,22 +434,18 @@ export class ParticleRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
-        // TRANSLUCENT layer so particles draw after the opaque sprites/labels
-        // and depth-test correctly against the depth they wrote.
+        // TRANSLUCENT so we sort after the depth-writing sprite pass (otherwise
+        // a sprite's depth clobbers a particle drawn earlier).
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
-        // Scene-level uniforms (shared across all emitters this frame).
         let sceneOffs = template.allocateUniformBuffer(ParticleProgram.ub_SceneParams, 16 + 2 * 4);
         const sceneMapped = template.mapUniformBufferF32(ParticleProgram.ub_SceneParams);
         sceneOffs += fillMatrix4x4(sceneMapped, sceneOffs, clipFromWorld);
         sceneOffs += fillVec4(sceneMapped, sceneOffs, camRight[0], camRight[1], camRight[2], 0);
         sceneOffs += fillVec4(sceneMapped, sceneOffs, camUp[0], camUp[1], camUp[2], 0);
 
-        // One draw per emitter — different srcmode/destmode/colour/texture. The
-        // megastate is set on the renderInst, NOT the template, so each draw
-        // gets its own blend mode (the template-level setMegaStateFlags would
-        // mutate one shared block and every draw would end up with the last
-        // emitter's blend). See warp-portal.ts:drawBatch for the same pattern.
+        // Megastate goes on the renderInst (not the template) so each emitter
+        // gets its own blend mode — see warp-portal.ts:drawBatch.
         for (const r of ranges) {
             const e = r.emitter;
             if (e.texture === null) continue;
@@ -587,7 +470,6 @@ export class ParticleRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        // GPU textures: we created them in the ctor; we own them.
         const seen = new Set<GfxTexture>();
         for (const e of this.emitters) {
             if (e.texture !== null && !seen.has(e.texture)) {

@@ -1,34 +1,23 @@
 
-// A* cell pathfinder for Ragnarok Online's GAT walkability grid.
-//
-// This is a port of the 2008 client's CPathFinder::FindPath. The search expands
-// the eight neighbours of the best open node in the engine's fixed order, with
-// the engine's costs: 10 for an orthogonal step, 14 for a diagonal, and a
-// Manhattan-distance heuristic scaled by 10. The per-node state machine
-// (UNEXPLORED -> OPEN -> CLOSED, with re-opening on a cheaper path) and the
-// open-set priority by total cost mirror the original. Walkability comes from
-// the GAT grid: a neighbour is reachable only if its cell is walkable.
-//
-// The engine's direction codes are kept (0..7), since the wander controller maps
-// them to the actor's 8-direction facing. Output is the cell path from start to
-// goal inclusive, each step tagged with the engine's move direction into it.
+// A* cell pathfinder over the GAT walkability grid. Port of the 2008 client's
+// CPathFinder::FindPath: same neighbour expansion order, the engine's costs
+// (10 orthogonal, 14 diagonal, Manhattan*10 heuristic), the same node state
+// machine (UNEXPLORED -> OPEN -> CLOSED with re-opening on a cheaper path),
+// and the same MAX_PATHNODE budget. Direction codes 0..7 are the engine's,
+// and the wander controller maps them to actor facings.
 
 import { GatMap, isWalkable } from "./gat.js";
 
-// Orthogonal / diagonal step costs, as the engine uses them.
 const COST_ORTHO = 10;
 const COST_DIAG = 14;
-
-// Node pool cap, matching the engine's MAX_PATHNODE. Long searches that exceed
-// it abort (return no path) rather than allocate without bound.
 const MAX_PATHNODE = 150;
 
 const UNEXPLORED = 0;
 const OPEN = 1;
 const CLOSED = 2;
 
-// One step of a found path: the GAT cell and the engine move-direction code
-// (0..7) of the step that arrives at it.
+// One step of a found path: the GAT cell and the engine direction code (0..7)
+// of the step that arrives at it.
 export interface PathStep {
     x: number;
     y: number;
@@ -40,14 +29,12 @@ interface PathNode {
     y: number;
     cost: number;   // g: accumulated cost from start
     total: number;  // f: cost + heuristic
-    dir: number;    // engine direction code of the step into this node
-    type: number;   // UNEXPLORED / OPEN / CLOSED
+    dir: number;
+    type: number;
     parent: PathNode | null;
 }
 
-// The eight neighbour offsets in the engine's expansion order, each with its
-// step cost and the engine's direction code for moving that way. Direction
-// codes: 0=+Y, 1=-X+Y, 2=-X, 3=-X-Y, 4=-Y, 5=+X-Y, 6=+X, 7=+X+Y.
+// Direction codes: 0=+Y, 1=-X+Y, 2=-X, 3=-X-Y, 4=-Y, 5=+X-Y, 6=+X, 7=+X+Y.
 const NEIGHBORS: { dx: number, dy: number, cost: number, dir: number }[] = [
     { dx: +1, dy: -1, cost: COST_DIAG, dir: 5 },
     { dx: +1, dy: 0, cost: COST_ORTHO, dir: 6 },
@@ -59,10 +46,8 @@ const NEIGHBORS: { dx: number, dy: number, cost: number, dir: number }[] = [
     { dx: 0, dy: -1, cost: COST_ORTHO, dir: 4 },
 ];
 
-// A* over the GAT grid. Returns the cell path from (sx, sy) to (dx, dy)
-// inclusive, or null if start equals goal, the goal is unwalkable, or no path
-// exists within the node budget. The heuristic, costs, neighbour order and node
-// state machine follow the engine's CPathFinder.
+// Returns the cell path from (sx, sy) to (dx, dy) inclusive, or null if start
+// equals goal, the goal is unwalkable, or no path exists within the node budget.
 export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: number): PathStep[] | null {
     if (sx === dx && sy === dy)
         return null;
@@ -71,7 +56,6 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
 
     const heuristic = (x: number, y: number): number => (Math.abs(x - dx) + Math.abs(y - dy)) * 10;
 
-    // Master map (cell key -> node) for O(1) lookup, plus a node-count budget.
     const master = new Map<number, PathNode>();
     const key = (x: number, y: number): number => x + y * gat.width;
     let poolCount = 0;
@@ -89,9 +73,8 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
         return node;
     };
 
-    // Open set as a binary min-heap keyed by node.total (the engine's priority
-    // queue, which orders by total cost). Stale entries are tolerated: a popped
-    // node already moved to CLOSED is skipped.
+    // Min-heap by node.total. Stale entries (a popped node already CLOSED) are
+    // skipped at pop time.
     const heap: PathNode[] = [];
     const heapPush = (node: PathNode): void => {
         heap.push(node);
@@ -135,16 +118,16 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
         const newCost = parent.cost + traverseCost;
         const node = getNode(x, y);
         if (node === null)
-            return false; // node pool exhausted: abort
+            return false; // node pool exhausted
         if (node.type !== UNEXPLORED) {
             if (node.cost <= newCost)
-                return true; // no improvement
+                return true;
             node.parent = parent;
             node.cost = newCost;
             node.total = newCost + heuristic(x, y);
             node.dir = dir;
             if (node.type === OPEN)
-                heapPush(node); // re-insert with improved priority (stale dup tolerated)
+                heapPush(node); // re-insert; stale dup tolerated at pop
             else if (node.type === CLOSED) {
                 node.type = OPEN;
                 heapPush(node);
@@ -163,7 +146,7 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
     while (heap.length > 0) {
         const best = heapPop();
         if (best.type === CLOSED)
-            continue; // stale heap entry
+            continue;
         if (best.x === dx && best.y === dy)
             return buildResultPath(best);
 
@@ -172,16 +155,14 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
             if (!isWalkable(gat, nx, ny))
                 continue;
             if (!processNode(best, n.cost, nx, ny, n.dir))
-                return null; // buffer overflow
+                return null;
         }
         best.type = CLOSED;
     }
 
-    return null; // no path found
+    return null;
 }
 
-// Walks the parent chain from the goal back to the start and reverses it into a
-// start->goal step list. Mirrors the engine's BuildResultPath ordering.
 function buildResultPath(goal: PathNode): PathStep[] {
     const reversed: PathStep[] = [];
     let node: PathNode | null = goal;

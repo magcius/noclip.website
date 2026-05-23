@@ -1,11 +1,7 @@
 
-// Renderer for a Granny (.gr2) 3D model. Uploads the parser's extracted meshes
-// + textures once, runs an alpha-cutout / simple directional shading pass that
-// mirrors RSM ModelProgram, and (when the model has a skeleton + animation) does
-// linear-blend skinning on the GPU from a per-frame bone palette produced by
-// GrannyAnimator; static models take the cheaper rigid path. Per-source RSW
-// point lights are layered on top. The caller supplies one model->world matrix
-// (built in scenes.ts) so placement lives with the rest of the map's placements.
+// Renderer for a Granny (.gr2) 3D model. Alpha-cutout + fixed directional
+// shading, optional GPU linear-blend skinning when a skeleton + animation is
+// present, layered with RSW per-source point lights.
 
 import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -20,9 +16,7 @@ import { GrannyAnimation, GrannyMesh, GrannySkeleton } from "./granny.js";
 import { GRANNY_MAX_BONES, GrannyAnimator } from "./granny-anim.js";
 import { MAX_POINT_LIGHTS, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 
-// Vertex layout: position (3 f32), uv (2 f32), normal (3 f32),
-// boneWeights (4 u8 norm), boneIndices (4 u8). 40 bytes. The bone attributes are
-// carried for the eventual skinned pass; the rest-pose pass ignores them.
+// pos(3 f32) + uv(2 f32) + normal(3 f32) + boneWeights(4 u8n) + boneIndices(4 u8) = 40B.
 const GRANNY_VERTEX_STRIDE = 3 * 4 + 2 * 4 + 3 * 4 + 4 + 4;
 
 class GrannyProgram extends DeviceProgram {
@@ -40,25 +34,18 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_LightDir;     // xyz: world-space sun direction (render frame)
-    vec4 u_DiffuseColor; // rgb: directional diffuse
-    vec4 u_AmbientColor; // rgb: ambient
-    // Per-source point lights (RSW OT_LIGHTSRC). x = active count, y = global
-    // intensity gain, z = falloff exponent, w = master enable (1/0).
-    vec4 u_PointLightParams;
-    // posRange[i]: xyz = world pos (render frame), w = range (world units).
-    vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];
-    // color[i]: rgb = linear 0..1 colour, a = unused.
-    vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];
+    vec4 u_LightDir;     // xyz: sun dir
+    vec4 u_DiffuseColor;
+    vec4 u_AmbientColor;
+    vec4 u_PointLightParams; // x=count, y=gain, z=falloff, w=enable
+    vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}]; // xyz=pos, w=range
+    vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];    // rgb=colour
 };
 
 layout(std140) uniform ub_ModelParams {
     Mat4x4 u_WorldFromModel;
-    // Skinning palette: skinMatrix[i] = boneWorld[i] * inverseBind[i]. Identity
-    // for an unposed bone. u_Skinned.x is 1.0 when this draw is skinned, else the
-    // model is drawn rigid (rest pose) and the palette is ignored.
-    vec4 u_Skinned;
-    Mat4x4 u_BoneMatrices[${GRANNY_MAX_BONES}];
+    vec4 u_Skinned; // x>0.5 = skinned, else rigid (palette ignored)
+    Mat4x4 u_BoneMatrices[${GRANNY_MAX_BONES}]; // skinMatrix[i] = boneWorld[i] * inverseBind[i]
 };
 
 uniform sampler2D u_BaseTexture;
@@ -81,8 +68,6 @@ void main() {
     vec3 t_Pos = a_Position;
     vec3 t_Nrm = a_Normal;
     if (u_Skinned.x > 0.5) {
-        // Linear-blend skinning: blend the bone-relative transforms by weight.
-        // Each skin matrix takes a rest-space vertex into the animated frame.
         float t_WeightSum = a_BoneWeights.x + a_BoneWeights.y + a_BoneWeights.z + a_BoneWeights.w;
         if (t_WeightSum > 0.0001) {
             // Denormalize the 0..1 indices back to bone indices (+0.5 to round).
@@ -106,20 +91,10 @@ void main() {
 }
 `;
 
-    // Granny (.gr2) actors are NOT lit by the map's RSW ambient/diffuse like the
-    // RSM props are. RO lights them with a fixed, bright directional light that
-    // ignores day/night entirely, so a glowing object like the gold Emperium reads
-    // bright/vivid regardless of how dim the surrounding map lighting is.
-    //
-    // The per-vertex shade RO computes (RenderNormal) is, per channel:
-    //     light = clamp(dot(N, sunDir), 0, 1)
-    //     shade = (light * CONTRAST + (255 - CONTRAST)) / 255
-    // with CONTRAST = 128. That maps a face fully lit -> 1.0 and a face fully in
-    // shadow -> ~0.5 (a "wrapped" half-Lambert floor), then modulates the texture
-    // by it. We reproduce that here as the texture multiplier.
-    //
-    // GRANNY_LIGHT_FLOOR is the shadow-side brightness (RO's 0.5). Raise toward
-    // 1.0 for a flatter / brighter look, lower for more directional contrast.
+    // Granny actors use a fixed bright directional light (not the RSW ambient/
+    // diffuse), so a glowing prop like the gold Emperium stays vivid at night.
+    // RO's per-vertex shade is mix(0.5, 1.0, clamp(dot(N, sunDir), 0, 1)) — a
+    // wrapped half-Lambert with the floor as shadow brightness.
     public override frag = `
 const float GRANNY_LIGHT_FLOOR = 0.5;
 
@@ -139,9 +114,7 @@ void main() {
     }
     vec3 t_Color = t_Base.rgb * t_Shade;
 
-    // Per-source point lights (torches/lamps) layered on top of the fixed
-    // bright directional shading, so a guardian standing next to a torch picks
-    // up the warm glow on the lit side.
+    // RSW point lights (torches/lamps) layered on top.
     if (u_PointLightParams.w > 0.5) {
         int t_Count = int(u_PointLightParams.x);
         float t_Gain = u_PointLightParams.y;
@@ -173,23 +146,16 @@ interface GpuGrannyMesh {
     texture: GfxTexture | null;
 }
 
-// One placed Granny model: which uploaded meshes + a world matrix.
+// One placed Granny model. Index-aligned `textures` (null = drawn untextured).
+// Null `skeleton` / empty `animations` -> drawn rigid.
 export interface GrannyInstance {
     meshes: GrannyMesh[];
     worldMatrix: mat4;
-    // The decoded texture each mesh samples (index-aligned with meshes); a null
-    // entry draws white-lit (untextured) so the silhouette is still visible.
     textures: (DecodedImage | null)[];
-    // The skeleton + animation clips driving skinning. When the skeleton is null
-    // (or no clips) the model is drawn rigid (rest pose); when present its bones
-    // cycle through the clips in order.
     skeleton: GrannySkeleton | null;
     animations: GrannyAnimation[];
 }
 
-// Owns the Granny GPU program + uploaded meshes, and draws them into the model
-// pass of the main scene. Self-contained so the integration into the terrain
-// renderer is one construct + one prepare() + one destroy() call.
 export class GrannyModelRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
@@ -203,19 +169,13 @@ export class GrannyModelRenderer {
         this.program = cache.createProgram(new GrannyProgram());
         this.worldMatrix = instance.worldMatrix;
 
-        // Build the animator if the model carries a skeleton + animation. A model
-        // with a skeleton but no usable clip still skins (to its rest pose, a
-        // no-op) — but we only flag it skinned when there's actually an animation
-        // so static models keep the cheaper rigid path.
         const skeleton = instance.skeleton;
         if (skeleton !== null && skeleton.bones.length > 0) {
             this.animator = new GrannyAnimator(skeleton, instance.animations);
             this.skinned = this.animator.hasAnimation();
         }
 
-        // Map each skeleton bone name to its global index, so per-mesh local bone
-        // indices (which index a mesh's own BoneBindings list) can be rewritten to
-        // global skeleton indices that match the skinning palette.
+        // Remap per-mesh local bone indices (into BoneBindings) to global skeleton indices.
         const boneIndexByName = new Map<string, number>();
         if (skeleton !== null)
             skeleton.bones.forEach((b, i) => { if (b.name !== null) boneIndexByName.set(b.name, i); });
@@ -226,10 +186,8 @@ export class GrannyModelRenderer {
                 { location: GrannyProgram.a_TexCoord, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 4, bufferIndex: 0 },
                 { location: GrannyProgram.a_Normal, format: GfxFormat.F32_RGB, bufferByteOffset: 5 * 4, bufferIndex: 0 },
                 { location: GrannyProgram.a_BoneWeights, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 8 * 4, bufferIndex: 0 },
-                // Indices are normalized (0..1) so they bind to the float vec4
-                // shader input — a non-normalized U8 format is an integer
-                // attribute and mismatches a `vec4` input (GL_INVALID_OPERATION).
-                // The shader denormalizes (* 255) back to the bone index.
+                // U8_RGBA_NORM (not raw U8): a raw int attribute mismatches the vec4
+                // shader input (GL_INVALID_OPERATION). Shader denormalizes (* 255).
                 { location: GrannyProgram.a_BoneIndices, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 8 * 4 + 4, bufferIndex: 0 },
             ],
             vertexBufferDescriptors: [
@@ -250,8 +208,6 @@ export class GrannyModelRenderer {
             const mesh = instance.meshes[i];
             if (mesh.indices.length === 0)
                 continue;
-            // Build this mesh's local-binding -> global-bone remap. If there are
-            // no bindings (rigid mesh) the indices pass through unchanged.
             const remap = mesh.boneBindingNames.map((n) => boneIndexByName.get(n) ?? 0);
             const vertexData = this.packVertices(mesh, remap);
             const vbuf = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData);
@@ -268,9 +224,7 @@ export class GrannyModelRenderer {
         }
     }
 
-    // Packs interleaved vertices. `remap` rewrites each vertex's local bone index
-    // (into the mesh's BoneBindings list) to a global skeleton bone index so the
-    // skinning palette can be indexed directly in the shader.
+    // `remap` rewrites local BoneBindings indices to global skeleton bone indices.
     private packVertices(mesh: GrannyMesh, remap: number[]): ArrayBuffer {
         const n = mesh.vertexCount;
         const ab = new ArrayBuffer(n * GRANNY_VERTEX_STRIDE);
@@ -309,17 +263,10 @@ export class GrannyModelRenderer {
         return tex;
     }
 
-    // Draws the model into the current render-inst list using a shared scene
-    // params block (clip-from-world + light + per-source point lights). Call
-    // inside the same template the map's other models use, or its own — it
-    // pushes its own template. `activeLights` + `activeLightCount` are the
-    // per-frame culled set the terrain renderer prepared.
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, lightDir: vec3, diffuse: vec3, ambient: vec3, dtSeconds: number, activeLights: PointLight[], activeLightCount: number): void {
         if (this.gpuMeshes.length === 0)
             return;
 
-        // Advance the clip off real elapsed time (frame-rate independent: the
-        // animator accumulates dt, loops within the clip, and clamps a stall).
         if (this.animator !== null)
             this.animator.update(dtSeconds);
 
@@ -330,7 +277,6 @@ export class GrannyModelRenderer {
         template.setGfxProgram(this.program);
         template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
-        // SceneParams = mat4(16) + 3 vec4(3*4) + point-light block (1 + 2*MAX) * 4.
         const pointLightVec4Count = 1 + 2 * MAX_POINT_LIGHTS;
         let so = template.allocateUniformBuffer(GrannyProgram.ub_SceneParams, 16 + 3 * 4 + pointLightVec4Count * 4);
         const sm = template.mapUniformBufferF32(GrannyProgram.ub_SceneParams);
@@ -338,7 +284,6 @@ export class GrannyModelRenderer {
         so += fillVec4(sm, so, lightDir[0], lightDir[1], lightDir[2], 0);
         so += fillVec4(sm, so, diffuse[0], diffuse[1], diffuse[2], 0);
         so += fillVec4(sm, so, ambient[0], ambient[1], ambient[2], 0);
-        // Point lights: params (count, intensity, falloff, enable), then posRange[MAX] + color[MAX].
         const enabled = activeLightCount > 0 ? 1 : 0;
         so += fillVec4(sm, so, activeLightCount, POINT_LIGHT_INTENSITY, POINT_LIGHT_FALLOFF_EXPONENT, enabled);
         for (let i = 0; i < MAX_POINT_LIGHTS; i++) {
@@ -360,19 +305,16 @@ export class GrannyModelRenderer {
 
         for (const gm of this.gpuMeshes) {
             if (gm.texture === null)
-                continue; // untextured mesh: skipped (no white fallback tex created)
+                continue;
             const ri = renderInstManager.newRenderInst();
             ri.setVertexInput(this.inputLayout, gm.vertexBufferDescriptors, gm.indexBufferDescriptor);
-            // ub_ModelParams: WorldFromModel(16) + Skinned(4) + bone palette(16*MAX).
             const modelParamsSize = 16 + 4 + 16 * GRANNY_MAX_BONES;
             let mo = ri.allocateUniformBuffer(GrannyProgram.ub_ModelParams, modelParamsSize);
             const mm = ri.mapUniformBufferF32(GrannyProgram.ub_ModelParams);
             mo += fillMatrix4x4(mm, mo, this.worldMatrix);
             const doSkin = this.skinned && this.animator !== null;
             mo += fillVec4(mm, mo, doSkin ? 1 : 0, 0, 0, 0);
-            // Bone palette. fillMatrix4x4 packs the row-major layout UnpackMatrix
-            // expects, so each column-major skin matrix is filled through it (not
-            // copied raw) to round-trip correctly in the shader.
+            // Fill each skin matrix through fillMatrix4x4 so UnpackMatrix round-trips it.
             if (doSkin) {
                 const palette = this.animator!.skinMatrices;
                 for (let b = 0; b < GRANNY_MAX_BONES; b++)

@@ -1,32 +1,18 @@
 
-// Classifies a map by its id, using RO's strict naming conventions plus a small
-// curated town list (towns are bare-named, e.g. "geffen", so a prefix rule can't
-// catch them). Used to drive fog (only dungeons read well under the even-tint
-// fog; open towns/fields just look hazed) and available for grouping the scene
-// list later.
+// Classifies a map by its id, used to drive fog (dungeons only) and grouping.
 
 export type MapCategory = "city" | "field" | "dungeon" | "indoor" | "castle" | "instance" | "other";
 
-// Historical "version" of a map. RO has two main vintages: pre-renewal (2002–
-// 2010 art and content) and renewal (2010+). A few towns got rebuilt in place
-// at the same engine id (Geffen, Payon, Izlude); for those we ship both eras
-// side-by-side under a `<base>@<era>` scene id (e.g. `geffen@classic`,
-// `geffen@renewal`). The bare id (`geffen`) is a primary alias resolving to
-// PRIMARY_ERA, so existing URLs and inter-map warp scripts keep working.
+// Maps with both vintages (Geffen, Payon, Izlude) ship as `<base>@<era>` scenes;
+// the bare id resolves to PRIMARY_ERA so existing URLs keep working.
 export type Era = "classic" | "renewal";
 
-// The era served when a bare id is encountered. Renewal because our default
-// asset extraction is from a modern client and the Hercules union prefers
-// renewal scripts; classic is the explicit opt-in.
 export const PRIMARY_ERA: Era = "renewal";
 
-// Parses `geffen@classic` -> {base:"geffen", era:"classic"}, `geffen` ->
-// {base:"geffen", era:null}. The `@` delimiter is unambiguous because RO's
-// instance maps (`1@gef`, `2@nyd`) put `@` only as a leading position char.
+// `geffen@classic` -> {base:"geffen", era:"classic"}; `geffen` -> {base, era:null}.
+// Instance maps `1@gef`/`2@nyd` have `@` early; only trailing `@<era>` matches.
 export function parseEra(id: string): { base: string, era: Era | null } {
     const at = id.lastIndexOf("@");
-    // Instance maps like `1@gef` have `@` early; only treat trailing `@<era>`
-    // as our era suffix (era is always a known string).
     if (at <= 0)
         return { base: id, era: null };
     const tail = id.substring(at + 1);
@@ -35,14 +21,11 @@ export function parseEra(id: string): { base: string, era: Era | null } {
     return { base: id, era: null };
 }
 
-// Era of a scene given its id. Era-suffixed ids return the suffix's era; bare
-// ids return PRIMARY_ERA (whether they have era variants or not — a town
-// without era variants effectively IS its primary era).
 export function eraOfScene(id: string): Era {
     return parseEra(id).era ?? PRIMARY_ERA;
 }
 
-// Bare-named towns (and a few town-equivalent hubs) that no prefix rule catches.
+// Bare-named towns (and town-equivalent hubs) that no prefix rule catches.
 const TOWNS = new Set([
     "prontera", "geffen", "payon", "morocc", "alberta", "izlude", "aldebaran", "comodo",
     "umbala", "niflheim", "amatsu", "gonryun", "ayothaya", "louyang", "jawaii", "einbroch",
@@ -55,8 +38,6 @@ const TOWNS = new Set([
 const NAMED_DUNGEON_RE = /^(gl_|abyss|abbey|juperos|jupe_|gefenia|cave\b|beach_dun|izlu2dun|iz_dun|anthell|in_sphinx|in_orcs|in_rogue|orcsdun|c_tower|tha_t|thana|treasure|nyd_dun|mag_dun|kh_|lhz_dun|ra_san|ice_dun|thor_v|gld_dun|gld2_dun|moc_pryd|prt_sew|prt_maze|pay_dun|gef_dun|alde_dun|um_dun|ama_dun|gon_dun|ayo_dun|lou_dun|ein_dun|bra_dun|dew_dun|mal_dun|spl_in|dic_dun|ecl_tdun|1@|2@)/;
 
 export function mapCategory(id: string): MapCategory {
-    // Strip any trailing era suffix before classifying — era variants of the
-    // same logical map share the category of their base id.
     id = parseEra(id).base;
     if (/_cas\d|g_cas/.test(id) || id.startsWith("nguild_") || /_gld\b|gld_/.test(id)) return "castle";
     if (/^\d+@/.test(id)) return "dungeon"; // instance dungeons read as dungeons for fog
@@ -68,32 +49,21 @@ export function mapCategory(id: string): MapCategory {
     return "other";
 }
 
-// Whether the even-tint fog should apply on this map. RO's per-map fog reads as
-// atmosphere inside dungeons but as a flat, pointless haze over open towns and
-// fields, so we only honour it for dungeon-type maps. (Atmospheric towns like
-// Niflheim could be whitelisted here if desired.)
+// RO's per-map fog reads as atmosphere inside dungeons but as a flat haze over
+// open towns and fields, so only honour it for dungeon-type maps.
 export function mapWantsFog(id: string): boolean {
     return mapCategory(id) === "dungeon";
 }
 
-// Per-map weather. RO drives weather from a script table (CWeather::AddScript /
-// ScriptProcess) keyed by map name; for the viewer we keep a small static table
-// here so other weather (rain, falling petals, ...) can be slotted in later.
-// "snow" is the camera-relative falling-flake field (see weather.ts).
-//
-// Only the OUTDOOR Lutie maps snow: xmas (the town) and xmas_fild01 (the field).
-// The interior xmas_in and the toy-factory dungeons xmas_dun01/xmas_dun02 are
-// indoors and do NOT snow.
 export type WeatherKind = "snow";
 
+// Only the OUTDOOR Lutie maps snow; xmas_in and the toy-factory dungeons don't.
 const WEATHER_MAPS: Record<string, WeatherKind> = {
     "xmas": "snow",
     "xmas_fild01": "snow",
 };
 
-// The weather kind for a map, or null if the map has none. Era-shared (xmas
-// classic and xmas renewal both snow if either does), so strip the era suffix
-// before the table lookup.
+// Era-shared, so strip the era suffix before lookup.
 export function mapWeather(id: string): WeatherKind | null {
     return WEATHER_MAPS[parseEra(id).base] ?? null;
 }

@@ -1,26 +1,15 @@
 
-// Parser for Ragnarok Online's SPR sprite-image format (magic "SP").
-//
-// A .spr holds the bitmap frames a character/monster/effect animates through.
-// Two kinds of frame coexist: palette-indexed frames (an 8-bit index per pixel,
-// run-length-encoded in newer versions, resolved against a 256-color palette
-// embedded in the file's last 1024 bytes), and — in versions >= 0x0200 —
-// true-color RGBA frames stored bottom-up as packed pixels.
-//
-// Palette index 0 is the transparency key: those pixels decode to alpha 0. We
-// composite every frame to top-down RGBA8 (the same DecodedImage shape the BMP
-// and water decoders produce), so the renderer treats sprite frames and other
-// textures uniformly.
-//
-// All multi-byte values are little-endian.
+// Parser for Ragnarok Online's SPR sprite-image format (magic "SP"). Two frame
+// kinds: palette-indexed (8-bit per pixel, RLE in newer versions, resolved
+// against a 256-color palette in the file's last 1024 bytes) and (>= 0x0200)
+// true-color RGBA frames stored bottom-up. Palette index 0 is the transparency
+// key. All multi-byte values are little-endian.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DecodedImage } from "./bmp.js";
 
-// A decoded .spr: the palette-indexed frames composited against the embedded
-// palette, and the optional true-color (RGBA) frames newer versions append. A
-// clip with clip_type 0 references `indexed[spr_index]`; any other clip type
-// references `rgba[spr_index]`.
+// A decoded .spr. A clip with clip_type 0 references `indexed[spr_index]`; any
+// other clip type references `rgba[spr_index]`.
 export interface SprModel {
     indexed: DecodedImage[];
     rgba: DecodedImage[];
@@ -55,18 +44,15 @@ class Reader {
     public byteAt(o: number): number { return this.view.getUint8(o); }
 }
 
-// Highest SPR version we accept; matches the original loader's ceiling and the
-// modern corpus (no newer SPR layout exists in the data we target).
 const MAX_VERSION = 0x0201;
 
-// Run-length-decodes the indexed-image stream into exactly width*height palette
-// indices. A 0x00 byte is a marker followed by a length byte that expands into
-// that many transparent (index 0) pixels; any other byte is one literal index.
+// A 0x00 byte is a marker followed by a length byte (a run of that many
+// transparent pixels); any other byte is one literal index.
 function zeroDecompress(r: Reader, end: number, width: number, height: number): Uint8Array {
     const total = width * height;
     const out = new Uint8Array(total);
 
-    let run = 0;       // remaining transparent pixels in the current run
+    let run = 0;
     let color = 0;
     let at = 0;
     for (let i = 0; i < total; i++) {
@@ -90,17 +76,15 @@ function zeroDecompress(r: Reader, end: number, width: number, height: number): 
     return out;
 }
 
-// Composites width*height palette indices to top-down RGBA8. Index 0 is the
-// transparency key (alpha 0); other indices take their RGB from the palette at
-// full opacity. `palette` is 256 entries of R,G,B,flags (4 bytes each).
+// Palette is 256 entries of R,G,B,flags (4 bytes each).
 function compositeIndexed(indices: Uint8Array, palette: Uint8Array, width: number, height: number): DecodedImage {
     const rgba = new Uint8Array(width * height * 4);
     for (let i = 0; i < indices.length; i++) {
         const idx = indices[i];
         const pe = idx * 4;
         const o = i * 4;
-        // Zero the RGB of keyed texels (not just alpha) so the transparent color
-        // never bleeds into opaque neighbours under linear filtering.
+        // Zero RGB on keyed texels (not just alpha) so the transparent color
+        // doesn't bleed into opaque neighbours under linear filtering.
         if (idx === 0) {
             rgba[o + 0] = 0;
             rgba[o + 1] = 0;
@@ -121,7 +105,7 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
 
     const id = r.u16();
     const ver = r.u16();
-    // Magic 'SP' is stored as bytes 'S','P' => little-endian word 'P'<<8 | 'S'.
+    // Magic 'SP' stored as bytes 'S','P' => little-endian word 'P'<<8 | 'S'.
     if (id !== (("P".charCodeAt(0) << 8) | "S".charCodeAt(0)))
         throw new Error(`SPR: bad magic 0x${id.toString(16)}`);
     if (ver > MAX_VERSION)
@@ -129,8 +113,7 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
 
     const indexedCount = r.u16();
 
-    // The embedded palette (versions >= 0x0101) is the file's last 1024 bytes:
-    // 256 entries of R,G,B,flags.
+    // Embedded palette (versions >= 0x0101) is the file's last 1024 bytes.
     const palette = new Uint8Array(256 * 4);
     if (ver >= 0x0101) {
         if (r.byteLength < 1024)
@@ -151,9 +134,7 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
 
         let indices: Uint8Array;
         if (ver >= 0x0201) {
-            // RLE: a WORD payload size, then bytes that decode to exactly w*h
-            // indices. Bound the decode to the declared chunk so a malformed run
-            // can't read past it.
+            // RLE: WORD payload size, then bytes decoding to exactly w*h indices.
             const compressedSize = r.u16();
             const chunkEnd = r.offs + compressedSize;
             if (chunkEnd > r.byteLength)
@@ -161,7 +142,6 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
             indices = zeroDecompress(r, chunkEnd, w, h);
             r.offs = chunkEnd; // skip any unread padding in the chunk
         } else {
-            // Raw: w*h index bytes, one per pixel.
             indices = r.bytes(w * h).slice();
         }
 
@@ -174,8 +154,8 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
             const w = r.u16();
             const h = r.u16();
             const out = new Uint8Array(w * h * 4);
-            // Pixels are stored bottom-up as packed DWORDs whose little-endian
-            // byte order is a,b,g,r; flip rows to produce top-down RGBA8.
+            // Stored bottom-up as packed DWORDs whose little-endian byte order
+            // is a,b,g,r; flip rows to produce top-down RGBA8.
             for (let y = h - 1; y >= 0; y--) {
                 const row = w * y;
                 for (let x = 0; x < w; x++) {

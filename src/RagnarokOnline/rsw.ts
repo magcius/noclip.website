@@ -1,15 +1,8 @@
 
-// Parser for Ragnarok Online's RSW world format (magic "GRSW").
-//
-// An RSW ties a map together: it names the .gnd ground and .gat attribute grid,
-// holds the global lighting/water parameters, and lists every object placed in
-// the world. We only need the model placements for static-prop rendering, but
-// the other object records (lights, sounds, effects) must still be skipped by
-// the exact byte size their version uses so the cursor stays aligned.
-//
-// All multi-byte values are little-endian. Texture/model/node names are CP949
-// (EUC-KR) byte strings, decoded with the same 'euc-kr' TextDecoder the GND uses
-// so disk and fetch paths agree.
+// Parser for Ragnarok Online's RSW world format (magic "GRSW"). Ties the .gnd
+// ground and .gat attribute grid to global lighting/water plus a list of placed
+// objects (models, lights, sounds, effects). All values little-endian; names are
+// fixed-width CP949 (EUC-KR).
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
@@ -22,9 +15,9 @@ export interface RswVec3 {
 }
 
 export interface RswModelPlacement {
-    name: string;       // CP949 instance label
-    modelName: string;  // CP949 .rsm path, relative to the model root
-    nodeName: string;   // CP949 root node name
+    name: string;
+    modelName: string;
+    nodeName: string;
     pos: RswVec3;
     rot: RswVec3;        // Euler degrees
     scale: RswVec3;
@@ -33,24 +26,19 @@ export interface RswModelPlacement {
     blockType: number;
 }
 
-// A world-placed ambient effect source (OT_EFFECTSRC). `type` is RO's built-in
-// effect id (the same EF_* enum LaunchEffect takes); the engine spawns a looping
-// emitter of that effect at `pos`, re-emitting every `emitSpeed` ticks. `param`
-// are effect-specific (e.g. torch passes param[0]=size, param[1]=anim speed).
+// OT_EFFECTSRC: `type` is the EF_* id, the engine re-emits every `emitSpeed`
+// ticks. `param` are effect-specific (e.g. torch: param[0]=size, param[1]=anim speed).
 export interface RswEffectSource {
-    name: string;       // CP949 instance label
+    name: string;
     pos: RswVec3;
-    type: number;       // EF_* effect id
+    type: number;
     emitSpeed: number;
     param: [number, number, number, number];
 }
 
-// A world-placed point light (OT_LIGHTSRC). Indoor maps (towns/dungeons) seed
-// dozens to hundreds of these at torches, lamps, candelabras, etc. — they pair
-// with the torch/firefly effect sources and make dim baked areas glow under the
-// fixture. Color is linear 0..1 RGB, range is in world units.
+// OT_LIGHTSRC point light. Color is linear 0..1 RGB, range in world units.
 export interface RswPointLight {
-    name: string;       // CP949 instance label
+    name: string;
     pos: RswVec3;
     color: [number, number, number];
     range: number;
@@ -78,7 +66,6 @@ export interface RswWorld {
     lights: RswPointLight[];
 }
 
-// Object type tags from the world resource (OT_VIRTUAL = 0).
 const OT_MODEL = 1;
 const OT_LIGHTSRC = 2;
 const OT_SOUNDSRC = 3;
@@ -118,7 +105,6 @@ class Reader {
         return String.fromCharCode(...bytes.subarray(0, end));
     }
 
-    // Reads a fixed-width CP949 name field, trimmed at the first NUL.
     public name(width: number): string {
         this.assertCanRead(width);
         const bytes = this.buffer.createTypedArray(Uint8Array, this.offs, width);
@@ -131,41 +117,22 @@ class Reader {
 }
 
 // Builds the world's directional sun vector from the RSW longitude/latitude,
-// exactly as the engine does: take the up vector (0,1,0), rotate it about X by
-// the latitude, then about Y by the longitude (row-vector composition, so the X
-// rotation is applied first). The result is the direction light travels toward
-// the surface; the shader dots it against the surface normal.
-//
-// The terrain renderer's world is RO's frame with Y negated (height -> -height),
-// so the returned vector is the render-frame direction (Y flipped) ready to dot
-// against the render-frame normals the meshes carry.
+// matching the engine's row-vector composition: rotate (0,1,0) about X by
+// latitude, then about Y by longitude. The terrain render frame negates Y
+// (world_y = -height), so the returned vector is the render-frame direction.
 export function computeLightDir(longitudeDeg: number, latitudeDeg: number): [number, number, number] {
     const deg = Math.PI / 180;
     const latRad = latitudeDeg * deg;
     const lonRad = longitudeDeg * deg;
 
-    // Row-vector v' = v * (Xrot * Yrot), v = (0,1,0).
-    // After X rotation about latitude: (0, cos(lat), sin(lat)) in the engine's
-    // row-vector X-rotation (matches matrix::MakeXRotation).
     const cx = Math.cos(latRad), sx = Math.sin(latRad);
-    // X-rotation row-vector form used by the engine:
-    //   y' = y*cx + z*(-sx? ) ...  We replicate matrix::MakeXRotation directly:
-    //   [1   0    0 ]
-    //   [0   cx   sx]
-    //   [0  -sx   cx]
-    // v=(0,1,0) -> (0, cx, sx).
     let x = 0, y = cx, z = sx;
 
-    // Y-rotation appended (AppendYRotation), row-vector matrix::MakeYRotation:
-    //   [ cy  0  -sy]
-    //   [ 0   1   0 ]
-    //   [ sy  0   cy]
     const cy = Math.cos(lonRad), sy = Math.sin(lonRad);
     const rx = x * cy + z * sy;
     const ry = y;
     const rz = x * (-sy) + z * cy;
 
-    // RO frame -> render frame: negate Y (the terrain uses world_y = -height).
     return [rx, -ry, rz];
 }
 
@@ -178,43 +145,33 @@ export function parseRSW(buffer: ArrayBufferSlice): RswWorld {
 
     const major = r.u8();
     const minor = r.u8();
-    // Version gate: the reference loader caps at 2.1; iRO's modern content ships
-    // RSWs through 2.6. We consume the 2.2/2.5 header changes, the 2.6 water
-    // relocation, and the 2.6.162+ model-record byte below. v3+ is still
-    // hard-rejected until its layout is known.
+    // Reference loader caps at 2.1; iRO ships through 2.6. v3+ rejected.
     if (major > 2 || (major === 2 && minor > 6))
         throw new Error(`RSW: unsupported version ${major}.${minor}`);
 
     const ge = (mj: number, mn: number): boolean =>
         (major === mj && minor >= mn) || major > mj;
 
-    // 2.2 adds a build byte after the major/minor pair. 2.5 widens that build
-    // number to uint32 and follows it with a one-byte render flag.
+    // 2.2 adds a u8 build number; 2.5 widens it to u32 and adds a render flag.
     let buildNumber = 0;
     if (ge(2, 5)) {
-        // u32: a build number with bit 31 set would otherwise go negative and
-        // silently bypass the >= 162 gate on the 2.6 model record below.
         buildNumber = r.u32();
-        r.u8(); // unknown render flag
+        r.u8(); // render flag
     } else if (ge(2, 2)) {
         buildNumber = r.u8();
     }
 
     const iniFile = r.name(40);
     const gndFile = r.name(40);
-    const gatFile = ge(1, 4) ? r.name(40) : "";  // .gat name, v1.4+
+    const gatFile = ge(1, 4) ? r.name(40) : "";
     const scrFile = r.name(40);
 
-    // RSW 2.6 moved water-plane setup into GND 1.8/1.9. Keep sane defaults
-    // here; scenes.ts prefers the GND water block when present. Empirical:
-    // all 67 v2.6 RSWs in the corpus parse aligned with the skip; keeping the
-    // legacy bytes misaligns 63/67. Decomp: World.cpp:248-273.
+    // RSW 2.6 moved water-plane setup into GND 1.8/1.9. Defaults here; scenes.ts
+    // prefers the GND water block when present. Decomp: World.cpp:248-273.
     let waterLevel = 0.0, waterType = 0, waveHeight = 1.0, waveSpeed = 2.0, wavePitch = 50.0;
     let waterAnimSpeed = 3;
     if (!ge(2, 6)) {
         waterLevel = ge(1, 3) ? r.f32() : 0.0;
-        // World.cpp:252 only reads waterType (and the wave triplet) for verMinor>=8.
-        // v1.3-1.7 keeps the defaults; no extra i32 is on disk.
         if (ge(1, 8)) {
             waterType = r.i32();
             waveHeight = r.f32();
@@ -258,7 +215,7 @@ export function parseRSW(buffer: ArrayBufferSlice): RswWorld {
                 animSpeed = r.f32();
                 blockType = r.i32();
                 if (major === 2 && minor === 6 && buildNumber >= 162)
-                    r.u8(); // unknown model render/collision flag
+                    r.u8(); // model render/collision flag
             }
             // tmpActorInfo: modelName[80], nodeName[80], pos, rot, scale.
             const modelName = r.name(80);
@@ -270,7 +227,7 @@ export function parseRSW(buffer: ArrayBufferSlice): RswWorld {
             break;
         }
         case OT_LIGHTSRC: {
-            // name[80], pos, rgb (3 floats, linear 0..1), range (float).
+            // name[80], pos, rgb (linear 0..1), range.
             const lightName = r.name(80);
             const pos = r.vec3();
             const cr = r.f32(), cg = r.f32(), cb = r.f32();
@@ -280,12 +237,12 @@ export function parseRSW(buffer: ArrayBufferSlice): RswWorld {
         }
         case OT_SOUNDSRC:
             // name[80], waveName[80], pos, vol, width, height, range, [cycle].
-            // The v1.x record omits the trailing cycle float (4 bytes shorter).
+            // v1.x record omits the trailing cycle float.
             if (major >= 2) r.skip(80 + 80 + 12 + 4 + 4 + 4 + 4 + 4);
             else            r.skip(80 + 80 + 12 + 4 + 4 + 4 + 4);
             break;
         case OT_EFFECTSRC: {
-            // name[80], pos, type (int), emitSpeed (float), param[4] (float).
+            // name[80], pos, type, emitSpeed, param[4].
             const name = r.name(80);
             const pos = r.vec3();
             const type = r.i32();
@@ -295,8 +252,6 @@ export function parseRSW(buffer: ArrayBufferSlice): RswWorld {
             break;
         }
         default:
-            // Unknown object tag: its size is unknown, so the cursor would
-            // desync. Stop here rather than misalign.
             throw new Error(`RSW: unknown object type ${type} at index ${i}`);
         }
     }

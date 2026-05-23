@@ -1,32 +1,12 @@
 
-// Faithful recreation of Ragnarok Online's warp-portal effect (the glowing
-// swirling gate that sits on a map's warp tiles). Modern clients render warp
-// NPCs with CRagEffect::WarpZone2 (EF_WARPZONE2; see Npc.cpp SECONDJOB_SKILL2),
-// which composes three kinds of CEffectPrim primitive:
+// Recreation of Ragnarok Online's warp-portal effect (CRagEffect::WarpZone2,
+// EF_WARPZONE2). Three layers: a soft ground disc (alpha_down.tga), two
+// PP_3DCASTING_4 funnels of "arms" (ring_blue.tga ribbons that collapse inward
+// 10 -> 0 and flare up by rise_angle = 90 - distance*9), and orbiting rising
+// sparkles (particle1.spr). Funnel + sparkles are additive.
 //
-//   * a soft filled ground disc (alpha_down.tga, PP_3DCIRCLE + PT_FILLCIRCLE):
-//     radius 15, lying flat, alpha ramps 0 -> 128. The base glow.
-//   * the swirl itself: two PP_3DCASTING_4 primitives, each four "arms" — rings
-//     of radius `distance` that continuously collapse inward (distance -= 0.05,
-//     looping 10 -> 0) while flaring up and out by `rise_angle = 90 - distance*9`.
-//     Each arm is a textured ribbon (ring_blue.tga) drawn by Render3DCasting as a
-//     quad-strip from the ground ring (v=1) to the risen ring (v=0). The arms are
-//     tinted blue and blended ADDITIVELY (RenderTeiRect: srcAlpha/ONE), the two
-//     sets staggered in start radius/angle so the funnel reads as a living vortex.
-//   * orbiting rising sparkles (particle1.spr, PP_3DPARTICLEORBIT): every 10
-//     ticks, motes orbiting at radius ~4.5-6 (+/-2.5 deg/tick) drifting upward,
-//     also additive.
-//
-// Coordinate frame: RO authors these in a Y-down local frame around the effect
-// origin; this renderer's world is Y-up (terrain stores world_y = -height), so
-// "flat on the ground" is the XZ plane at the ground height and RO's downward
-// drift (-y) becomes our +Y. Decomp world units map 1:1 to render units (the map
-// geometry is the same RO world), so radii/heights are used as-is; PORTAL_SCALE
-// is provided only for tuning.
-//
-// Framerate independence (project rule): the per-portal state advances at the
-// engine's fixed ~62.5 Hz game tick, drained from accumulated real dt (clamped
-// against stalls), so the animation runs at the same cadence at any render rate.
+// RO authors in a Y-down local frame; our world is Y-up (world_y = -height),
+// so RO's downward drift (-y) becomes our +Y. Decomp world units map 1:1.
 
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
@@ -43,27 +23,17 @@ import { GatMap } from "./gat.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coord.js";
 import { parseSPR } from "./spr.js";
 
-// ---------------------------------------------------------------------------
-// Tunables
-// ---------------------------------------------------------------------------
-
-// The game tick: WarpZone2 (like all CEffectPrim effects) advances one step per
-// ~60 fps game tick. 1000/60 -> a 16 ms integer period (62.5 ticks/sec).
+// Engine tick: WarpZone2 advances one step per ~60 fps tick (1000/60 -> 16ms).
 const SECONDS_PER_TICK = 16.0 / 1000.0;
-
-// Clamp on the dt accumulator so a stall can't burst the tick loop.
 const MAX_ACCUM = 0.25;
-
-// Overall portal size multiplier (decomp radii are used 1:1; this is for taste).
 const PORTAL_SCALE = 1.0;
 
-// Lift the flat geometry just above the terrain so it reads on top and does not
-// z-fight the ground (the decomp nudges the disc 1.5 units; a small lift suffices).
+// Lift above the terrain to avoid z-fighting (decomp nudges 1.5 units).
 const GROUND_LIFT = 0.6;
 
-// Circle tessellation for the disc (the engine's default m_arcAngle, 36 deg).
+// Engine default m_arcAngle.
 const DISC_ARC_DEG = 36;
-// Casting-arm tessellation (Render3DCasting's E_DIVISION = 21 points -> 20 segs).
+// Render3DCasting's E_DIVISION = 21 points -> 20 segs.
 const CONE_DIVISIONS = 21;
 
 // pos(3 f32) + uv(2 f32) + colour(1 u32) = 24 bytes.
@@ -72,30 +42,21 @@ const FLOATS_PER_VERTEX = 6;
 
 const DEG2RAD = Math.PI / 180;
 
-// Spark billboard corner / UV / triangle-index tables, constant across all
-// sparks. Hoisted out of emitSpark so we don't allocate them per spark.
+// Hoisted out of emitSpark so we don't allocate them per spark.
 const SPARK_CORNER_H = [-1, 1, -1, 1];
 const SPARK_CORNER_V = [1, 1, -1, -1];
 const SPARK_UV_U = [0, 1, 0, 1];
 const SPARK_UV_V = [0, 0, 1, 1];
 const SPARK_TRI = [0, 1, 2, 1, 3, 2];
 
-// ---------------------------------------------------------------------------
-// Primitive state
-// ---------------------------------------------------------------------------
-
-// One casting "arm" (a TeiEffect in m_GI[]): a full ring at radius `distance`
-// that collapses inward and rises. `process`/`alphaB` drive the alpha fade-in;
-// colour is fixed per casting set.
 interface CastArm {
     rotStart: number;   // azimuth offset (deg) where the ring's seam sits
     distance: number;   // current ring radius (collapses 10 -> 0, loops)
-    riseAngle: number;  // derived: 90 - distance*9 (deg)
+    riseAngle: number;  // 90 - distance*9 (deg)
     alphaB: number;     // 0..70
     r: number; g: number; b: number;
 }
 
-// One orbiting sparkle (PP_3DPARTICLEORBIT).
 interface Spark {
     stateCnt: number;
     duration: number;
@@ -111,17 +72,12 @@ interface Spark {
     size: number;       // billboard half-size
 }
 
-// The casting-set definitions from WarpZone2 (two PP_3DCASTING_4 prims). Each
-// arm's rise_angle is recomputed every tick, so only the start radius/azimuth and
-// the set colour matter here. Set A is the lighter-blue outer funnel (m_size 11),
-// set B the deeper-blue inner one (m_size 4).
+// Two PP_3DCASTING_4 prims: A is the lighter-blue outer funnel (m_size 11),
+// B the deeper-blue inner one (m_size 4). Staggered start radius/angle so the
+// funnel reads as a living vortex.
 const CAST_SET_A = { r: 170, g: 170, b: 255, arms: [{ rot: 270, dist: 2.5 }, { rot: 0, dist: 5.0 }, { rot: 90, dist: 7.5 }, { rot: 180, dist: 10.0 }] };
 const CAST_SET_B = { r: 100, g: 100, b: 255, arms: [{ rot: 271, dist: 2.7 }, { rot: 1, dist: 5.2 }, { rot: 91, dist: 7.7 }, { rot: 181, dist: 10.2 }] };
 
-// A single warp portal: its world centre and the running WarpZone2 state. The
-// disc and casting arms are persistent (the engine spawns them once with a
-// near-infinite duration and the arms loop internally); only the sparkles come
-// and go.
 class WarpZone {
     public arms: CastArm[] = [];
     public sparks: Spark[] = [];
@@ -132,19 +88,17 @@ class WarpZone {
         for (const set of [CAST_SET_A, CAST_SET_B])
             for (const a of set.arms)
                 this.arms.push({ rotStart: a.rot, distance: a.dist, riseAngle: 90 - a.dist * 9, alphaB: 0, r: set.r, g: set.g, b: set.b });
-        // Pre-warm to a populated steady state, staggered per portal so a field of
-        // warps does not pulse in lockstep.
+        // Pre-warm to steady state, staggered per portal so a field of warps
+        // does not pulse in lockstep.
         const warm = 80 + (phase % 200);
         for (let i = 0; i < warm; i++)
             this.tick();
     }
 
     public tick(): void {
-        // Disc alpha ramps to 128 and holds.
         if (this.discAlpha < 128)
             this.discAlpha = Math.min(128, this.discAlpha + 128 / 10);
 
-        // Casting arms: collapse inward, rise more steeply, fade alpha in to 70.
         for (const a of this.arms) {
             a.distance -= 0.05;
             if (a.distance <= 0) {
@@ -156,7 +110,6 @@ class WarpZone {
                 a.alphaB += 1;
         }
 
-        // Spawn an orbiting sparkle every 10 ticks.
         if (this.stateCnt % 10 === 0)
             this.sparks.push(this.makeSpark());
         for (const s of this.sparks)
@@ -182,7 +135,6 @@ class WarpZone {
     }
 
     private updateSpark(s: Spark): void {
-        // Linear fade-out over the tail (after fadeOutCnt).
         if (s.stateCnt >= s.fadeOutCnt)
             s.alpha = Math.max(0, 255 * (1 - (s.stateCnt - s.fadeOutCnt) / (s.duration - s.fadeOutCnt)));
         s.riseVel += s.riseAccel;
@@ -192,10 +144,6 @@ class WarpZone {
         s.stateCnt++;
     }
 }
-
-// ---------------------------------------------------------------------------
-// GPU
-// ---------------------------------------------------------------------------
 
 class WarpPortalProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -246,25 +194,20 @@ function createRGBATexture(device: GfxDevice, img: DecodedImage): GfxTexture {
     return texture;
 }
 
-// The decoded textures the portal needs. A missing one disables that layer (the
-// portal still renders its other layers).
+// A missing texture disables that layer; the portal renders the others.
 export interface WarpPortalAssets {
     disc: DecodedImage | null;
     ring: DecodedImage | null;
     spark: DecodedImage | null;
 }
 
-// Everything the renderer needs: the shared textures plus one ground anchor per
-// warp tile.
 export interface WarpPortalSceneData {
     assets: WarpPortalAssets;
     placements: vec3[];
 }
 
-// Owns the GPU resources and the per-warp WarpZone2 state. Built once for a map
-// with warps; ticked + drawn each frame from the renderer's prepare cycle as a
-// transparent pass. Geometry is grouped into three batches (disc, cone, spark) so
-// the whole field draws in three textured draws regardless of warp count.
+// Three batches (disc, cone, spark) so the whole field draws in three textured
+// draws regardless of warp count.
 export class WarpPortalRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
@@ -287,16 +230,13 @@ export class WarpPortalRenderer {
     private scratchRight = vec3.create();
     private scratchUp = vec3.create();
 
-    // emitCone: per-arm precomputed rings. Sized to CONE_DIVISIONS once at
-    // construction so emitCone reuses these instead of allocating five
-    // Float32Arrays per arm per zone per frame.
+    // Reused across arms/sparks to avoid per-call allocations.
     private coneBX = new Float32Array(CONE_DIVISIONS);
     private coneBZ = new Float32Array(CONE_DIVISIONS);
     private coneTX = new Float32Array(CONE_DIVISIONS);
     private coneTY = new Float32Array(CONE_DIVISIONS);
     private coneTZ = new Float32Array(CONE_DIVISIONS);
 
-    // emitSpark: four-corner billboard scratch reused across sparks.
     private sparkWX = new Float32Array(4);
     private sparkWY = new Float32Array(4);
     private sparkWZ = new Float32Array(4);
@@ -317,7 +257,6 @@ export class WarpPortalRenderer {
             indexBufferFormat: null,
         });
 
-        // Smooth gradients, no tiling.
         this.sampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
@@ -340,8 +279,6 @@ export class WarpPortalRenderer {
         return this.zones.length;
     }
 
-    // Advance every portal off real dt and draw the field. Call after the opaque
-    // and sprite passes, with the active render-inst list selected.
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, cameraWorldMatrix: mat4, dtSeconds: number): void {
         if (this.zones.length === 0)
             return;
@@ -355,8 +292,8 @@ export class WarpPortalRenderer {
                 z.tick();
         }
 
-        // Billboard basis for the sparks (camera right flattened to horizontal,
-        // world-up leaned toward the camera up — same convention as sprites).
+        // Spark billboard basis: camera right flattened to horizontal,
+        // world-up leaned toward camera up (same convention as sprites).
         vec3.set(this.scratchRight, cameraWorldMatrix[0], 0, cameraWorldMatrix[2]);
         if (vec3.len(this.scratchRight) < 1e-5) vec3.set(this.scratchRight, 1, 0, 0);
         else vec3.normalize(this.scratchRight, this.scratchRight);
@@ -365,10 +302,9 @@ export class WarpPortalRenderer {
         if (vec3.len(this.scratchUp) < 1e-5) vec3.set(this.scratchUp, 0, 1, 0);
         else vec3.normalize(this.scratchUp, this.scratchUp);
 
-        // Count vertices per batch so they can be laid out contiguously.
         const discSectors = Math.round(360 / DISC_ARC_DEG);
         const discVertsPer = discSectors * 6;
-        const coneVertsPerArm = (CONE_DIVISIONS - 1) * 6; // 20 segments, 2 tris each
+        const coneVertsPerArm = (CONE_DIVISIONS - 1) * 6;
         let discVerts = 0, coneVerts = 0, sparkVerts = 0;
         for (const z of this.zones) {
             if (this.discTex !== null) discVerts += discVertsPer;
@@ -386,8 +322,7 @@ export class WarpPortalRenderer {
         }
         const f = this.cpuF32, u = this.cpuU32;
 
-        // Three contiguous regions: [disc | cone | spark]. Disc draws first (under
-        // everything), then the additive cones, then the additive sparks on top.
+        // [disc | cone | spark]: disc under, then additive cones, then sparks.
         const discBase = 0;
         const coneBase = discVerts;
         const sparkBase = discVerts + coneVerts;
@@ -420,25 +355,18 @@ export class WarpPortalRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
-        // TRANSLUCENT layer: portals are additive overlays drawn after the
-        // opaque scene, depth-tested but not depth-writing.
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
         let offs = template.allocateUniformBuffer(WarpPortalProgram.ub_SceneParams, 16);
         const mapped = template.mapUniformBufferF32(WarpPortalProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
 
-        // Two-sided, transparent (no depth write — a translucent layer must not
-        // block later draws). Depth TEST stays at the pipeline default so opaque
-        // geometry standing between the camera and the portal (a wall, a column,
-        // an indoor floor above the portal's room) occludes it correctly; the
-        // portal anchors are lifted onto the walkable surface (GAT heights, not
-        // GND) at load time, so the disc sits on top of staircase/platform props.
+        // Two-sided, depth-test on / depth-write off. Depth test so opaque
+        // geometry (walls, floor above) occludes the portal correctly.
         template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: false });
 
-        // Disc is a gradient meant for standard src-alpha over; the cone funnel and
-        // the glow sparkles are additive (RenderTeiRect srcAlpha/ONE; the sparkle
-        // sprite is a glow mote on a black field).
+        // Disc: standard src-alpha over. Cone + sparkles: additive
+        // (RenderTeiRect srcAlpha/ONE; sparkle is a glow mote on black).
         this.drawBatch(renderInstManager, this.discTex, discBase, discVerts, false);
         this.drawBatch(renderInstManager, this.ringTex, coneBase, coneVerts, true);
         this.drawBatch(renderInstManager, this.sparkTex, sparkBase, sparkVerts, true);
@@ -461,9 +389,8 @@ export class WarpPortalRenderer {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    // The filled ground disc: a radial quad-strip flat on the XZ plane (the
-    // engine's Render3DCircle with PT_FILLCIRCLE -> inner radius 0). v runs 1 at
-    // the centre to 0 at the rim, u cycles by 0.25 each sector.
+    // Render3DCircle with PT_FILLCIRCLE -> inner radius 0. v runs 1 at the
+    // centre to 0 at the rim, u cycles by 0.25 each sector.
     private emitDisc(f: Float32Array, u: Uint32Array, at: number, z: WarpZone, sectors: number): number {
         const outerR = 15 * PORTAL_SCALE;
         const color = packColor(255, 255, 255, z.discAlpha);
@@ -488,10 +415,10 @@ export class WarpPortalRenderer {
         return at;
     }
 
-    // One casting arm (Render3DCasting): a ribbon around a ring of radius
-    // `distance`, extruded up-and-outward by `height = distance` at `rise_angle`.
-    // Builds the ground ring (v=1) and the risen ring (v=0), then a quad strip
-    // between consecutive points. u runs around the circumference.
+    // Render3DCasting: ribbon around a ring of radius `distance`, extruded
+    // up-and-outward by `height = distance` at `rise_angle`. Builds ground
+    // ring (v=1) and risen ring (v=0), quad-stripped between consecutive
+    // points. u runs around the circumference.
     private emitCone(f: Float32Array, u: Uint32Array, at: number, z: WarpZone, arm: CastArm): number {
         const N = CONE_DIVISIONS;
         const d = arm.distance * PORTAL_SCALE;
@@ -501,7 +428,6 @@ export class WarpPortalRenderer {
         const cx = z.cx, cy = z.cy, cz = z.cz;
         const arc = 360 / (N - 1);
 
-        // Precompute the two rings into module-persistent scratch buffers.
         const bx = this.coneBX, bz = this.coneBZ;
         const tx = this.coneTX, ty = this.coneTY, tz = this.coneTZ;
         for (let o = 0; o < N; o++) {
@@ -509,8 +435,8 @@ export class WarpPortalRenderer {
             if (o === N - 1) angle = arm.rotStart; // close the loop on the seam
             const cs = Math.cos(angle * DEG2RAD), sn = Math.sin(angle * DEG2RAD);
             bx[o] = cx + cs * d; bz[o] = cz + sn * d;
-            const rxr = csR * d;        // radial extrusion length
-            const ry = snR * d;         // vertical extrusion (render +Y)
+            const rxr = csR * d;
+            const ry = snR * d; // render +Y
             tx[o] = cx + cs * (d + rxr);
             tz[o] = cz + sn * (d + rxr);
             ty[o] = cy + ry * PORTAL_SCALE;
@@ -518,7 +444,6 @@ export class WarpPortalRenderer {
 
         for (let o = 1; o < N; o++) {
             const tu0 = (o - 1) / N, tu1 = o / N;
-            // quad: prevBase(v1), curBase(v1), curTop(v0), prevTop(v0)
             at = this.vert(f, u, at, bx[o - 1], cy, bz[o - 1], tu0, 1, color);
             at = this.vert(f, u, at, bx[o], cy, bz[o], tu1, 1, color);
             at = this.vert(f, u, at, tx[o], ty[o], tz[o], tu1, 0, color);
@@ -529,7 +454,6 @@ export class WarpPortalRenderer {
         return at;
     }
 
-    // A camera-facing billboard quad for one orbiting spark.
     private emitSpark(f: Float32Array, u: Uint32Array, at: number, z: WarpZone, s: Spark): number {
         const lon = s.longitude * DEG2RAD;
         const r = s.radius * PORTAL_SCALE;
@@ -539,8 +463,6 @@ export class WarpPortalRenderer {
         const sz = s.size * PORTAL_SCALE;
         const rX = this.scratchRight, uP = this.scratchUp;
         const color = packColor(255, 255, 255, s.alpha);
-        // Corner offsets / UVs / triangle indices live in module-scope const
-        // tables; the per-spark world positions go into persistent scratch.
         const wx = this.sparkWX, wy = this.sparkWY, wz = this.sparkWZ;
         for (let k = 0; k < 4; k++) {
             const ch = SPARK_CORNER_H[k] * sz, cv = SPARK_CORNER_V[k] * sz;
@@ -571,29 +493,18 @@ export class WarpPortalRenderer {
     }
 }
 
-// Pack an RGBA colour (0..255 each) as a little-endian u32 whose bytes read
-// [R,G,B,A] for the U8_RGBA_NORM attribute.
+// Little-endian u32, bytes read [R,G,B,A] for U8_RGBA_NORM.
 function packColor(r: number, g: number, b: number, a: number): number {
     const cl = (v: number) => Math.max(0, Math.min(255, v | 0));
     return ((cl(a) << 24) | (cl(b) << 16) | (cl(g) << 8) | cl(r)) >>> 0;
 }
 
-// ---------------------------------------------------------------------------
-// Loading
-// ---------------------------------------------------------------------------
-
-// The portal's three textures, staged flat under effects/textures/ (the two
-// TGAs) and as a sprite under sprite/이팩트/ (particle1). Names match the decomp.
 const DISC_TEX = "alpha_down.tga";
 const RING_TEX = "ring_blue.tga";
 const SPARK_SPR = "particle1.spr";
 
-// Loads the warp-portal textures and places one portal anchor per warp tile
-// (grounded on the walkable surface — the GAT heights when available, falling
-// back to GND when not, so a warp under a staircase prop sits on the stairs
-// rather than sinking through them into the flat ground underneath). Returns
-// null when there are no warps or none of the textures load (a partial set
-// still renders the layers it has). Failure of any single fetch is tolerated.
+// Grounded on the walkable surface (GAT when available, else GND) so a warp
+// under a staircase prop sits on the stairs.
 export async function loadWarpPortals(
     dataFetcher: DataFetcher,
     pathBase: string,
