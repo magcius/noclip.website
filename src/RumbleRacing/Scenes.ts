@@ -503,7 +503,9 @@ export const sceneGroup: SceneGroup = {
     }),
     "Metropolis",
     new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go", {}),
-    new RumbleRacingSceneDesc("MP2", "CarGo", "Car Go", {}),
+    new RumbleRacingSceneDesc("MP2", "CarGo", "Car Go", {
+      nodeIds: new Set([1408952]), // Some giant angled rectangle on the border of the map/submarine. Not sure what this is for.
+    }),
     "Southern Exposure",
     new RumbleRacingSceneDesc("SE1", "TrueGrits", "True Grits", {
       nodeIds: new Set([
