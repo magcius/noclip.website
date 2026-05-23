@@ -91,33 +91,7 @@ function loadIndex(dataFetcher: DataFetcher): Promise<Map<string, string> | null
     return indexPromise;
 }
 
-// Blob URL cache keyed by FILENAME (not map id) so maps sharing a track (e.g.
-// prontera + prt_in both play 08.mp3) hit the same URL — the audio element's
-// `src === url` check then keeps playback running across the map transition
-// instead of restarting. LRU-capped; never revokes the URL the audio element
-// is currently using (would stop playback mid-track).
-const BLOB_URL_CACHE_CAP = 16;
-const blobUrlByFile = new Map<string, string>(); // insertion order = LRU order
-
-function touchBlobUrlLru(file: string): void {
-    const v = blobUrlByFile.get(file)!;
-    blobUrlByFile.delete(file);
-    blobUrlByFile.set(file, v);
-}
-
-function evictIfNeeded(): void {
-    while (blobUrlByFile.size > BLOB_URL_CACHE_CAP) {
-        const oldestKey = blobUrlByFile.keys().next().value as string | undefined;
-        if (oldestKey === undefined)
-            return;
-        const url = blobUrlByFile.get(oldestKey)!;
-        blobUrlByFile.delete(oldestKey);
-        if (audio === null || audio.src !== url)
-            URL.revokeObjectURL(url);
-    }
-}
-
-async function blobUrlForMap(dataFetcher: DataFetcher, mapId: string): Promise<string | null> {
+async function urlForMap(dataFetcher: DataFetcher, mapId: string): Promise<string | null> {
     if (pathBase === null)
         return null;
     const idx = await loadIndex(dataFetcher);
@@ -126,21 +100,7 @@ async function blobUrlForMap(dataFetcher: DataFetcher, mapId: string): Promise<s
     const file = idx.get(mapId);
     if (file === undefined)
         return null;
-    const cached = blobUrlByFile.get(file);
-    if (cached !== undefined) {
-        touchBlobUrlLru(file);
-        return cached;
-    }
-    try {
-        const data = await dataFetcher.fetchData(`${pathBase}/bgm/${file}`, { allow404: true });
-        const blob = new Blob([data.createTypedArray(Uint8Array)], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        blobUrlByFile.set(file, url);
-        evictIfNeeded();
-        return url;
-    } catch {
-        return null;
-    }
+    return dataFetcher.getDataURLForPath(`${pathBase}/bgm/${file}`);
 }
 
 function ensureAudio(): HTMLAudioElement {
@@ -220,7 +180,7 @@ async function applyCurrent(dataFetcher: DataFetcher, generation: number): Promi
     if (currentMapId === null)
         return;
     const mapId = currentMapId;
-    const url = await blobUrlForMap(dataFetcher, mapId);
+    const url = await urlForMap(dataFetcher, mapId);
     if (generation !== sceneGeneration || mapId !== currentMapId)
         return;
     // User may have flipped BGM OFF while the fetch was in flight.
