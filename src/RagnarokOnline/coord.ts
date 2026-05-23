@@ -1,9 +1,14 @@
 import { GndMap } from "./gnd.js";
 import { GatMap } from "./gat.js";
 
-// GND cells are 10 world units wide; each contains a 2x2 grid of 5-unit GAT cells.
-// World Y is the negated GND height. The X axis is mirrored about the map centre
-// to match the terrain mesh's orientation (gnd.ts builds it the same way).
+// RO's world is left-handed D3D9 (Y-down heights); noclip is right-handed
+// Y-up. We negate Y and mirror X about the map centre — picking the centre
+// over a plain `-x` keeps the [0,0] corner at world origin instead of at
+// -worldWidth. The terrain mesh (render.ts) and model placement matrix
+// (model.ts) apply the same flip.
+//
+// GND cells are 10 world units wide; each contains a 2x2 grid of 5-unit
+// GAT cells.
 
 export const GND_CELL_SIZE = 10;
 export const GAT_CELL_SIZE = 5;
