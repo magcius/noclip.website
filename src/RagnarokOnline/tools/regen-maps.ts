@@ -14,6 +14,32 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import * as path from "path";
+import { MapCategory, parseEra } from "../mapcategory.js";
+
+// Bare-named towns (and town-equivalent hubs) that no prefix rule catches.
+const TOWNS = new Set([
+    "prontera", "geffen", "payon", "morocc", "alberta", "izlude", "aldebaran", "comodo",
+    "umbala", "niflheim", "amatsu", "gonryun", "ayothaya", "louyang", "jawaii", "einbroch",
+    "einbech", "lighthalzen", "hugel", "rachel", "veins", "yuno", "xmas", "moscovia",
+    "brasilis", "dewata", "malangdo", "malaya", "eclage", "mora", "manuk", "splendide",
+    "dicastes01", "mid_camp", "prt_fild08", "new_1-1", "new_zone01", "prt_monk",
+]);
+
+// Named dungeons (and dungeon-like areas) whose ids don't contain `_dun`. Ids
+// matching `/_dun/` are handled by the generic check in `classifyMap` below.
+const NAMED_DUNGEON_RE = /^(gl_|abyss|abbey|juperos|jupe_|gefenia|cave\b|izlu2dun|anthell|in_sphinx|in_orcs|in_rogue|orcsdun|c_tower|tha_t|thana|treasure|kh_|ra_san|thor_v|moc_pryd|prt_sew|prt_maze|spl_in|ecl_tdun|1@|2@)/;
+
+function classifyMap(id: string): MapCategory {
+    id = parseEra(id).base;
+    if (/_cas\d|g_cas/.test(id) || id.startsWith("nguild_") || /_gld\b|gld_/.test(id)) return "castle";
+    if (/^\d+@/.test(id)) return "dungeon"; // instance dungeons read as dungeons for fog
+    if (/^que_|^job_|^force_|^pvp_|^gvg|^arena|^ordeal|^poring_w|^guild_vs|^bat_|^job3|^turbo_|^sec_|^prt_are|auction/.test(id)) return "instance";
+    if (/_fild\d|_field/.test(id)) return "field";
+    if (/_dun/.test(id) || NAMED_DUNGEON_RE.test(id)) return "dungeon";
+    if (/_in\d|^in_|_in$|_room|_indoor/.test(id)) return "indoor";
+    if (TOWNS.has(id) || (/^(prt|gef|pay|moc|alde|cmd|um|nif|ama|gon|ayo|lou|ein|lhz|yuno|ra|ve|bra|dew|mal|izlude|glast|hu|mosk|dic|ecl|man|teak|tur|alb|pay)_/.test(id) && !/_dun|_fild|_in/.test(id))) return "city";
+    return "other";
+}
 
 const MAPS_DIR = path.resolve("data/RagnarokOnline/maps");
 const ENTITIES_DIR = path.resolve("data/RagnarokOnline/entities");
@@ -109,11 +135,12 @@ function main(): void {
         return { display, name };
     };
 
-    type Entry = { id: string, name: string, era?: "classic" };
+    type Entry = { id: string, name: string, category: MapCategory, era?: "classic" };
     const entries: Entry[] = [];
     for (const id of bareIds.sort((a, b) => a.localeCompare(b))) {
         const lookup = lookupName(id);
-        entries.push({ id, name: lookup.name });
+        const category = classifyMap(id);
+        entries.push({ id, name: lookup.name, category });
         // Classic variant: same display name with a " (Classic)" suffix so the
         // user can tell them apart at a glance. The bare entry IS the renewal
         // alias (no separate @renewal variant — see the comment above).
@@ -121,7 +148,7 @@ function main(): void {
             const classicName = lookup.display !== undefined
                 ? `${id} — ${lookup.display} (Classic)`
                 : `${id} (classic)`;
-            entries.push({ id: `${id}@classic`, name: classicName, era: "classic" });
+            entries.push({ id: `${id}@classic`, name: classicName, category, era: "classic" });
         }
     }
 
@@ -130,6 +157,7 @@ function main(): void {
             const fields = [
                 `id: ${JSON.stringify(e.id)}`,
                 `name: ${JSON.stringify(e.name)}`,
+                `category: ${JSON.stringify(e.category)}`,
             ];
             if (e.era !== undefined)
                 fields.push(`era: ${JSON.stringify(e.era)}`);
@@ -157,9 +185,14 @@ function main(): void {
 // consumed by resolveWarpDest to route cross-map warps to the right version
 // of the destination.
 
+import type { MapCategory } from "./mapcategory.js";
+
 export interface RagnarokMapEntry {
     id: string;
     name: string;
+    // Pre-computed at regen time so the runtime doesn't re-parse ids. See
+    // classifyMap in tools/regen-maps.ts for the classification rules.
+    category: MapCategory;
     // Set on non-primary-era variants (e.g. \`{ id: "geffen@classic", era: "classic" }\`).
     // Bare alias entries leave this unset — they resolve to PRIMARY_ERA at
     // scene-load time.
