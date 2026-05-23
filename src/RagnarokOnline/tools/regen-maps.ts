@@ -8,7 +8,7 @@
 // Inputs:
 //   data/RagnarokOnline/maps/*.rsw            (scanned for the id list)
 //   data/RagnarokOnline-iro-tables/mapnametable.txt  (English names; preferred)
-//   ../client_data/assets/data/misc/mapnametable.txt  (Korean kRO; fallback)
+//   data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt  (Korean kRO; fallback)
 // Output:
 //   src/RagnarokOnline/maps.ts (committed; the scene registry maps over it)
 
@@ -18,7 +18,7 @@ import * as path from "path";
 const MAPS_DIR = path.resolve("data/RagnarokOnline/maps");
 const ENTITIES_DIR = path.resolve("data/RagnarokOnline/entities");
 const IRO_NAMETABLE = path.resolve("data/RagnarokOnline-iro-tables/mapnametable.txt");
-const KRO_NAMETABLE = path.resolve("../client_data/assets/data/misc/mapnametable.txt");
+const KRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
 const OUT = path.resolve("src/RagnarokOnline/maps.ts");
 
 // mapnametable.txt: each line `<map_id>.rsw#<display name>#`, CP949 encoded on

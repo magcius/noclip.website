@@ -1,5 +1,5 @@
 -- Run a single effecttool .lub/.lua under Lua 5.1 (the iRO patched binary
--- under client_data/bin/lua-5.1-iro) and dump the global _<map>_emitterInfo
+-- under data/RagnarokOnline_raw/bin/lua-5.1-iro) and dump the global _<map>_emitterInfo
 -- table to stdout as one JSON object per line. Stdin is the absolute path of
 -- the script to load; stdout is the JSON; failures emit `null`.
 --

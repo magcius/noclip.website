@@ -19,7 +19,7 @@ import { parseSTR } from "../str.js";
 // real on-disk names. Korean-named maps would arrive CP949-encoded and must be
 // normalized to UTF-8 (see normalizeMapName); ASCII maps like `prontera` pass
 // through unchanged.
-const ASSET_MAPS_DIR = path.resolve("../client_data/assets/data/maps");
+const ASSET_MAPS_DIR = path.resolve("data/RagnarokOnline_raw/assets/data/maps");
 
 // Destination: noclip's local dev data dir. DataFetcher serves this at /data in
 // development; the `data/` tree is gitignored (see .gitignore), so these staged
@@ -30,7 +30,7 @@ const OUT_MAPS_DIR = path.resolve("data/RagnarokOnline/maps");
 // CP949 string like `필드바닥\\prt_초원01.bmp`; on disk the same path exists with
 // the Korean directory/file names already in UTF-8 and backslashes replaced by
 // the OS separator.
-const ASSET_TEXTURE_DIR = path.resolve("../client_data/assets/graphics/texture");
+const ASSET_TEXTURE_DIR = path.resolve("data/RagnarokOnline_raw/assets/graphics/texture");
 
 // Destination: textures land under here at the normalized relative path the
 // renderer reconstructs from the GND name alone (backslashes -> '/').
@@ -39,7 +39,7 @@ const OUT_TEXTURE_DIR = path.resolve("data/RagnarokOnline/textures");
 // Source/destination for RSM 3D model props. The RSW stores each model path as
 // a CP949 string like `프론테라\\분수대.rsm`; on disk the same path exists with
 // the Korean directory/file names already in UTF-8.
-const ASSET_MODEL_DIR = path.resolve("../client_data/assets/graphics/model");
+const ASSET_MODEL_DIR = path.resolve("data/RagnarokOnline_raw/assets/graphics/model");
 const OUT_MODEL_DIR = path.resolve("data/RagnarokOnline/model");
 
 const MAP_EXTENSIONS = [".rsw", ".gnd", ".gat"];
@@ -47,14 +47,14 @@ const MAP_EXTENSIONS = [".rsw", ".gnd", ".gat"];
 // Granny (.gr2) 3D models — the WoE objects (Emperium, guardians, guild flag,
 // treasure box). RO ships these Oodle0-compressed with RAD-encoded textures that
 // only granny2.dll can decode, so they're expanded OFFLINE (see gr2_decompress.c
-// + gr2_texbake.c, run under wine on x86) into client_data/baked/. This stage
+// + gr2_texbake.c, run under wine on x86) into data/RagnarokOnline_raw/baked/. This stage
 // just copies the baked artifacts into the dev data dir: each model's
 // decompressed <name>.gr2 (our parser reads its geometry) and its expanded
 // per-texture <name>.<i>.tex (a 16-byte header + RGBA). A missing baked dir just
 // skips this stage (the maps still render without the 3D WoE props).
-const BAKED_GR2_DIR = path.resolve("../client_data/baked/gr2/3dmob");
-const BAKED_BONE_DIR = path.resolve("../client_data/baked/gr2/3dmob_bone");
-const BAKED_TEX_DIR = path.resolve("../client_data/baked/gr2tex");
+const BAKED_GR2_DIR = path.resolve("data/RagnarokOnline_raw/baked/gr2/3dmob");
+const BAKED_BONE_DIR = path.resolve("data/RagnarokOnline_raw/baked/gr2/3dmob_bone");
+const BAKED_TEX_DIR = path.resolve("data/RagnarokOnline_raw/baked/gr2tex");
 const OUT_MODEL3D_DIR = path.resolve("data/RagnarokOnline/model3d");
 const WOE_GRANNY_MODELS = ["empelium90_0", "sguardian90_9", "aguardian90_8", "kguardian90_7", "guildflag90_1", "treasurebox_2"];
 // Shared skeletal action clips (mesh-less) the guardians cycle through, keyed by
@@ -109,7 +109,7 @@ function extractGrannyModels(): void {
 // graphics/sprite/, with monsters in the CP949 "몬스터" dir; on disk the Korean
 // names are already UTF-8. The renderer fetches them at the same normalized
 // relative path (backslashes/forward-slashes preserved, percent-encoded).
-const ASSET_SPRITE_DIR = path.resolve("../client_data/assets/graphics/sprite");
+const ASSET_SPRITE_DIR = path.resolve("data/RagnarokOnline_raw/assets/graphics/sprite");
 const OUT_SPRITE_DIR = path.resolve("data/RagnarokOnline/sprite");
 
 // SPR/ACT pairs to stage outside the per-map entity manifest. "몬스터/poring" is
@@ -124,13 +124,13 @@ const SPRITES_TO_EXTRACT = ["몬스터/poring", "이팩트/torch_01", "이팩트
 // Source: the per-map fog parameter table. Records are '#'-delimited fields in
 // the order: <rsw>#, start#, end#, 0xAARRGGBB#, density#. The viewer fetches a
 // compact per-map JSON the extractor writes alongside the map files.
-const ASSET_FOG_TABLE = path.resolve("../client_data/assets/data/misc/fogparametertable.txt");
+const ASSET_FOG_TABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/fogparametertable.txt");
 
 // Source: the map display-name table. One '#'-delimited record per line in the
 // form `<rsw>#<display name>#` (the key keeps its `.rsw` extension). The file is
 // CP949 (EUC-KR) encoded; names are Korean. The committed manifest cross-
 // references it so each map gets a human-readable label, falling back to its id.
-const ASSET_MAP_NAME_TABLE = path.resolve("../client_data/assets/data/misc/mapnametable.txt");
+const ASSET_MAP_NAME_TABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
 
 // Destination: the committed, generated manifest the scene registry maps over.
 // It lives in source (not data/) because main.ts builds the scene groups
@@ -178,7 +178,7 @@ function normalizeMapName(name: string): string {
 // live alongside the effect textures under texture/effect/; each layer's frame
 // texture names are relative to that same dir. The viewer fetches the .str at
 // effects/<name>.str and its textures flat at effects/textures/<name>.
-const ASSET_EFFECT_DIR = path.resolve("../client_data/assets/graphics/texture/effect");
+const ASSET_EFFECT_DIR = path.resolve("data/RagnarokOnline_raw/assets/graphics/texture/effect");
 const OUT_EFFECT_DIR = path.resolve("data/RagnarokOnline/effects");
 
 // .str effect files to stage (room to add ambient sources later).

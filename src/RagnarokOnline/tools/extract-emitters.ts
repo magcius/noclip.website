@@ -9,19 +9,19 @@
 //
 // The LUBs were compiled for 32-bit Lua (the Win32 RO client), so a stock
 // 64-bit Lua refuses to load them ("bad header"/"bad size_t"). We ship a
-// minimally patched Lua 5.1 binary at `client_data/bin/lua-5.1-iro` that
+// minimally patched Lua 5.1 binary at `data/RagnarokOnline_raw/bin/lua-5.1-iro` that
 // reads 32-bit size_t from the file regardless of the host pointer width.
 // dump-emitters.lua runs each LUB under that binary in a sandboxed env and
 // emits the discovered emitter table as one JSON object on stdout.
 //
 // This tool drives that:
-//   1. Enumerate the LUB/LUA files under client_data/iro_effecttool.
+//   1. Enumerate the LUB/LUA files under data/RagnarokOnline_raw/iro_effecttool.
 //   2. For each, invoke the patched Lua to dump JSON.
 //   3. Filter out non-map files (libraries, utilities — basename not in the
 //      maps.ts manifest).
 //   4. Write one <mapId>.emitters.json per map next to the existing .rsw.
 //   5. Also stage the textures the emitters reference (already extracted
-//      under client_data/iro_eff_textures_all) into the data effect dir.
+//      under data/RagnarokOnline_raw/iro_eff_textures_all) into the data effect dir.
 //
 // Run with: tsx src/RagnarokOnline/tools/extract-emitters.ts
 
@@ -33,17 +33,17 @@ const REPO = path.resolve(".");
 
 // The patched Lua 5.1 binary (see lua-5.1.5/src/lundump.c patch for the
 // 32-bit-size_t header tolerance) and the dump script that runs each LUB.
-const LUA_BIN = path.resolve("../client_data/bin/lua-5.1-iro");
+const LUA_BIN = path.resolve("data/RagnarokOnline_raw/bin/lua-5.1-iro");
 const DUMP_LUA = path.resolve("src/RagnarokOnline/tools/dump-emitters.lua");
 
 // Source: extracted LUB tree from the iRO GRF. The path inside data.grf is
 // `data\luafiles514\lua files\effecttool\<name>.lub`; we sweep the whole tree
 // so we catch the few stragglers under `data\lua files\` too.
-const LUB_ROOT = path.resolve("../client_data/iro_effecttool");
+const LUB_ROOT = path.resolve("data/RagnarokOnline_raw/iro_effecttool");
 
 // Source: the 133 textures the LUBs reference, pre-extracted from the GRF
 // into a flat `data/texture/effect/` layout.
-const EFFECT_TEX_ROOT = path.resolve("../client_data/iro_eff_textures_all/data/texture/effect");
+const EFFECT_TEX_ROOT = path.resolve("data/RagnarokOnline_raw/iro_eff_textures_all/data/texture/effect");
 
 // Destination: per-map emitter JSON lives next to the staged .rsw/.gnd/.gat
 // so the scene loader can fetch it with `${mapId}.emitters.json`.

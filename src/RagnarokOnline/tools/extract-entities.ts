@@ -30,7 +30,7 @@ const MOB_DBS = [
 
 // Client sprite tree. Monsters live under the CP949 "몬스터" dir; NPC job
 // sprites under "npc". On disk the Korean names are already UTF-8.
-const SPRITE_SRC = path.resolve("../client_data/assets/graphics/sprite");
+const SPRITE_SRC = path.resolve("data/RagnarokOnline_raw/assets/graphics/sprite");
 const MONSTER_DIR = "몬스터";
 const NPC_SPRITE_DIR = "npc";
 
