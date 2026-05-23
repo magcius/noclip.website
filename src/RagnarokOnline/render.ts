@@ -1203,6 +1203,11 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareToRender(viewerInput: ViewerRenderInput): void {
+        // Mobs must advance before shadows + sprites read their positions.
+        const mobDtSeconds = viewerInput.deltaTime / 1000;
+        for (const mob of this.mobs)
+            mob.update(mobDtSeconds);
+
         const renderInstManager = this.renderHelper.renderInstManager;
         renderInstManager.setCurrentList(this.renderInstList);
 
@@ -1217,6 +1222,48 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         // Done once here so all later passes (terrain, models, granny) share the set.
         this.refreshActiveLights();
 
+        this.prepareTerrain(viewerInput, lit, fogColor);
+
+        this.prepareModels(viewerInput);
+
+        if (this.grannyModels.length > 0) {
+            // Wrap so granny's inner pushTemplate inherits the OPAQUE sortKey
+            // (it doesn't set one itself; default 0 = BACKGROUND).
+            const opaque = this.renderHelper.pushTemplateRenderInst();
+            opaque.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+            for (const g of this.grannyModels)
+                g.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.light.lightDir as vec3, lit.diffuse, lit.ambient, viewerInput.deltaTime / 1000, this.activeLights, this.activeLights.length);
+            renderInstManager.popTemplate();
+        }
+
+        this.prepareWater(viewerInput);
+
+        // Submitted before sprites so a sprite layers over its own shadow.
+        this.prepareShadows(viewerInput);
+
+        this.prepareSprites(viewerInput);
+
+        // TRANSLUCENT so they sort after the depth-writing sprite pass (otherwise
+        // a sprite's depth clobbers a particle drawn earlier — original sort bug).
+        this.prepareParticles(viewerInput);
+
+        this.prepareDust(viewerInput);
+
+        this.prepareWarpPortals(viewerInput);
+
+        this.prepareWeather(viewerInput);
+
+        // Mob hits consume the click so a mob on a portal dies rather than travels.
+        this.processMobClick(viewerInput);
+        this.processWarpClick(viewerInput);
+
+        this.lensflareRenderer?.prepare(this.renderHelper, viewerInput.camera, this.light.lightDir as vec3);
+
+        this.renderHelper.prepareToRender();
+    }
+
+    private prepareTerrain(viewerInput: ViewerRenderInput, lit: { diffuse: vec3, ambient: vec3, envDiff: vec3 }, fogColor: [number, number, number, number]): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 2 }]);
         template.setGfxProgram(this.program);
@@ -1252,48 +1299,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         }
 
         renderInstManager.popTemplate();
-
-        this.prepareModels(viewerInput);
-
-        if (this.grannyModels.length > 0) {
-            // Wrap so granny's inner pushTemplate inherits the OPAQUE sortKey
-            // (it doesn't set one itself; default 0 = BACKGROUND).
-            const opaque = this.renderHelper.pushTemplateRenderInst();
-            opaque.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
-            for (const g of this.grannyModels)
-                g.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.light.lightDir as vec3, lit.diffuse, lit.ambient, viewerInput.deltaTime / 1000, this.activeLights, this.activeLights.length);
-            renderInstManager.popTemplate();
-        }
-
-        this.prepareWater(viewerInput);
-
-        // Mobs must advance before shadows + sprites read their positions.
-        const mobDtSeconds = viewerInput.deltaTime / 1000;
-        for (const mob of this.mobs)
-            mob.update(mobDtSeconds);
-
-        // Submitted before sprites so a sprite layers over its own shadow.
-        this.prepareShadows(viewerInput);
-
-        this.prepareSprites(viewerInput);
-
-        // TRANSLUCENT so they sort after the depth-writing sprite pass (otherwise
-        // a sprite's depth clobbers a particle drawn earlier — original sort bug).
-        this.prepareParticles(viewerInput);
-
-        this.prepareDust(viewerInput);
-
-        this.prepareWarpPortals(viewerInput);
-
-        this.prepareWeather(viewerInput);
-
-        // Mob hits consume the click so a mob on a portal dies rather than travels.
-        this.processMobClick(viewerInput);
-        this.processWarpClick(viewerInput);
-
-        this.lensflareRenderer?.prepare(this.renderHelper, viewerInput.camera, this.light.lightDir as vec3);
-
-        this.renderHelper.prepareToRender();
     }
 
     private prepareWater(viewerInput: ViewerRenderInput): void {
