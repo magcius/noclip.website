@@ -7,6 +7,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Color, colorNewFromRGBA } from "../Color.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -18,11 +19,11 @@ import { DeviceProgram } from "../Program.js";
 import { decodeBMP, decodeTGA, DecodedImage } from "./bmp.js";
 
 interface RawEmitterSpec {
-    pos: [number, number, number];
-    radius: [number, number, number];
-    dir1: [number, number, number];
-    dir2: [number, number, number];
-    gravity: [number, number, number];
+    pos: vec3;
+    radius: vec3;
+    dir1: vec3;
+    dir2: vec3;
+    gravity: vec3;
     color: [number, number, number, number];
     rate: [number, number];
     size: [number, number];
@@ -59,7 +60,7 @@ interface ResolvedEmitter {
     sizeMin: number; sizeMax: number;
     lifeMin: number; lifeMax: number;
     speed: number;
-    color: [number, number, number, number];  // 0..255
+    color: Color;
     srcmode: number; destmode: number;
     maxcount: number;
     zenable: boolean;
@@ -155,11 +156,10 @@ export async function loadParticles(
         const name = (e.texture ?? "").replace(/\\/g, "/").split("/").pop() ?? "";
         if (name === "" || !images.has(name))
             continue;
-        const rPos: [number, number, number] = [mapOffX - e.pos[0], -e.pos[1], e.pos[2] + mapOffZ];
-        const flipX = (v: [number, number, number]): [number, number, number] => [-v[0], -v[1], v[2]];
-        const dir1 = flipX(e.dir1);
-        const dir2 = flipX(e.dir2);
-        const grav = flipX(e.gravity);
+        const rPos: vec3 = [mapOffX - e.pos[0], -e.pos[1], e.pos[2] + mapOffZ];
+        const dir1: vec3 = [-e.dir1[0], -e.dir1[1], e.dir1[2]];
+        const dir2: vec3 = [-e.dir2[0], -e.dir2[1], e.dir2[2]];
+        const grav: vec3 = [-e.gravity[0], -e.gravity[1], e.gravity[2]];
 
         const maxcount = Math.max(1, Math.floor(e.maxcount?.[0] ?? 1));
         const particles: Particle[] = new Array(maxcount);
@@ -176,7 +176,7 @@ export async function loadParticles(
             sizeMin: e.size[0], sizeMax: e.size[1],
             lifeMin: e.life[0], lifeMax: e.life[1],
             speed: e.speed?.[0] ?? 1,
-            color: [e.color[0], e.color[1], e.color[2], e.color[3]],
+            color: colorNewFromRGBA(e.color[0]/255, e.color[1]/255, e.color[2]/255, e.color[3]/255),
             srcmode: e.srcmode?.[0] ?? 5,
             destmode: e.destmode?.[0] ?? 6,
             maxcount,
@@ -461,7 +461,7 @@ export class ParticleRenderer {
             let drawOffs = renderInst.allocateUniformBuffer(ParticleProgram.ub_DrawParams, 4);
             const drawMapped = renderInst.mapUniformBufferF32(ParticleProgram.ub_DrawParams);
             drawOffs += fillVec4(drawMapped, drawOffs,
-                e.color[0] / 255, e.color[1] / 255, e.color[2] / 255, e.color[3] / 255);
+                e.color.r, e.color.g, e.color.b, e.color.a);
             renderInst.setDrawCount(r.count, r.start);
             renderInstManager.submitRenderInst(renderInst);
         }
