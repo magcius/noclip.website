@@ -46,15 +46,18 @@ export function loadPointLights(rsw: RswWorld, gnd: GndMap): PointLight[] {
 
 // Picks the (up to MAX_POINT_LIGHTS) lights most likely to contribute. Score
 // is `range² / distance²` so a far powerful light beats a near tiny one.
-export function pickActiveLights(lights: PointLight[], eyeX: number, eyeY: number, eyeZ: number, out: (PointLight | null)[]): number {
+// Trims `out` to the picked count; caller recycles the array across frames.
+export function pickActiveLights(lights: PointLight[], eyeX: number, eyeY: number, eyeZ: number, out: PointLight[]): void {
     const n = lights.length;
     if (n <= MAX_POINT_LIGHTS) {
+        out.length = n;
         for (let i = 0; i < n; i++)
             out[i] = lights[i];
-        return n;
+        return;
     }
     // Partial sort: cheaper than Array.sort on the full list at K=64, n<=~1000.
     const K = MAX_POINT_LIGHTS;
+    out.length = K;
     const scores = new Float32Array(K);
     let filled = 0;
     let worstIdx = 0;
@@ -87,5 +90,4 @@ export function pickActiveLights(lights: PointLight[], eyeX: number, eyeY: numbe
         for (let j = 1; j < K; j++)
             if (scores[j] < worstScore) { worstScore = scores[j]; worstIdx = j; }
     }
-    return K;
 }

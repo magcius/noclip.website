@@ -717,9 +717,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     private pointLights: PointLight[] = [];
     private pointLightsEnabled = true;
-    // Only the first activeLightCount slots are valid.
-    private activeLightBuffer: (PointLight | null)[] = new Array(MAX_POINT_LIGHTS).fill(null);
-    private activeLightCount = 0;
+    // Trimmed to the picked count by pickActiveLights; recycled across frames.
+    private activeLights: PointLight[] = [];
 
     // Stashed so the BGM toggle can kick off the per-map track fetch on the
     // same user gesture (browsers block autoplay otherwise).
@@ -1178,34 +1177,36 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     private refreshActiveLights(): void {
         if (this.pointLights.length === 0 || !this.pointLightsEnabled) {
-            this.activeLightCount = 0;
+            this.activeLights.length = 0;
             return;
         }
-        this.activeLightCount = pickActiveLights(
+        pickActiveLights(
             this.pointLights,
             this.scratchEye[0], this.scratchEye[1], this.scratchEye[2],
-            this.activeLightBuffer,
+            this.activeLights,
         );
     }
 
     private fillPointLightUniforms(d: Float32Array, offs: number): number {
         const start = offs;
         const enabled = this.pointLightsEnabled && this.pointLights.length > 0 ? 1 : 0;
-        const count = enabled === 1 ? this.activeLightCount : 0;
+        const count = this.activeLights.length;
         offs += fillVec4(d, offs, count, POINT_LIGHT_INTENSITY, POINT_LIGHT_FALLOFF_EXPONENT, enabled);
         for (let i = 0; i < MAX_POINT_LIGHTS; i++) {
-            const l = i < count ? this.activeLightBuffer[i] : null;
-            if (l !== null)
+            if (i < count) {
+                const l = this.activeLights[i];
                 offs += fillVec4(d, offs, l.pos[0], l.pos[1], l.pos[2], l.range);
-            else
+            } else {
                 offs += fillVec4(d, offs, 0, 0, 0, 0);
+            }
         }
         for (let i = 0; i < MAX_POINT_LIGHTS; i++) {
-            const l = i < count ? this.activeLightBuffer[i] : null;
-            if (l !== null)
+            if (i < count) {
+                const l = this.activeLights[i];
                 offs += fillVec4(d, offs, l.color[0], l.color[1], l.color[2], 0);
-            else
+            } else {
                 offs += fillVec4(d, offs, 0, 0, 0, 0);
+            }
         }
         return offs - start;
     }
@@ -1263,16 +1264,13 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.prepareModels(viewerInput);
 
-        // First activeLightCount slots are guaranteed non-null after refreshActiveLights.
-        const activeLights = this.activeLightBuffer as PointLight[];
-        const activeLightCount = this.pointLightsEnabled ? this.activeLightCount : 0;
         if (this.grannyModels.length > 0) {
             // Wrap so granny's inner pushTemplate inherits the OPAQUE sortKey
             // (it doesn't set one itself; default 0 = BACKGROUND).
             const opaque = this.renderHelper.pushTemplateRenderInst();
             opaque.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
             for (const g of this.grannyModels)
-                g.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.light.lightDir as vec3, lit.diffuse, lit.ambient, viewerInput.deltaTime / 1000, activeLights, activeLightCount);
+                g.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.light.lightDir as vec3, lit.diffuse, lit.ambient, viewerInput.deltaTime / 1000, this.activeLights, this.activeLights.length);
             renderInstManager.popTemplate();
         }
 
