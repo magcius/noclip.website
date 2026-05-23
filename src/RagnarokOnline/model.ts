@@ -9,6 +9,8 @@
 
 import { mat4, quat, vec3 } from "gl-matrix";
 import { AABB } from "../Geometry.js";
+import { transformVec3Mat4w0 } from "../MathHelpers.js";
+import { assert } from "../util.js";
 import { RsmModel, RsmNode } from "./rsm.js";
 import { RswVec3 } from "./rsw.js";
 
@@ -27,12 +29,7 @@ function nodeLocalFromParts(scale: vec3, rot: mat4, pos: vec3, out: mat4): void 
     mat4.scale(out, out, scale);
 }
 
-// Node's baked offset transform: vertices go through this before the node's
-// accumulated transform. RSM stores offsetMatrix as 3x3 row-major; convert to
-// the column-vector equivalent (transpose) and pack the translation column.
-// `m_col[col*4+row] = m_row[col*3+row]` because row-vector m_row 3x3 in
-// row-major storage `m[row*3+col]` is the same data as col-vector m_col in
-// column-major storage `m_col[col*4+row]` — they're the same buffer.
+// RSM offsetMatrix is 3x3 row-major; rewriting as column-major mat4 transposes it.
 function nodeOffset(n: RsmNode, out: mat4): void {
     const m = n.offsetMatrix;
     out[0]  = m[0]; out[1]  = m[1]; out[2]  = m[2]; out[3]  = 0;
@@ -137,13 +134,8 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     return out;
 }
 
-// Transforms a direction by the linear part of `m` (column-major mat4) and
-// normalizes. Uses mat3.fromMat4 to extract the upper-left 3x3.
-function transformNormalMat4(m: mat4, x: number, y: number, z: number, out: vec3): void {
-    // Column-major mat4: linear at indices 0,1,2,4,5,6,8,9,10.
-    out[0] = x * m[0] + y * m[4] + z * m[8];
-    out[1] = x * m[1] + y * m[5] + z * m[9];
-    out[2] = x * m[2] + y * m[6] + z * m[10];
+function transformNormalMat4(m: mat4, v: vec3, out: vec3): void {
+    transformVec3Mat4w0(out, m, v);
     const len = Math.hypot(out[0], out[1], out[2]);
     if (len > 0) {
         out[0] /= len; out[1] /= len; out[2] /= len;
@@ -170,37 +162,13 @@ function resolveParents(model: RsmModel): Int32Array {
     return parentIdx;
 }
 
-// Topologically order nodes parent-before-child; resolveParents guarantees no
-// cycles (dangling/self-parents become -1).
-function topoOrder(parentIdx: Int32Array): Int32Array {
-    const n = parentIdx.length;
-    const order = new Int32Array(n);
-    const depth = new Int32Array(n).fill(-1);
-    const computeDepth = (i: number): number => {
-        if (depth[i] !== -1) return depth[i];
-        const p = parentIdx[i];
-        depth[i] = p === -1 ? 0 : computeDepth(p) + 1;
-        return depth[i];
-    };
-    for (let i = 0; i < n; i++) computeDepth(i);
-    const idx = new Int32Array(n);
-    for (let i = 0; i < n; i++) idx[i] = i;
-    // Stable sort by depth so siblings keep input order.
-    const arr = Array.from(idx).sort((a, b) => depth[a] - depth[b]);
-    for (let i = 0; i < n; i++) order[i] = arr[i];
-    return order;
-}
-
-// Composes M_node = M_parent (column-major) * L_node, iterating parent-first.
-// Row-vector hierarchy `M_node_row = L_node_row * M_parent_row` transposes to
-// the column-major form `M_node_col = M_parent_col * L_node_col`.
+// Composes M_node = M_parent * L_node, parent-first.
 function composeNodeMatrices(nodeCount: number, parentIdx: Int32Array, local: (idx: number, out: mat4) => void): mat4[] {
     const nodeMat: mat4[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) nodeMat[i] = mat4.create();
-    const order = topoOrder(parentIdx);
     const tmp = mat4.create();
-    for (let oi = 0; oi < order.length; oi++) {
-        const i = order[oi];
+    for (let i = 0; i < nodeCount; i++) {
+        assert(parentIdx[i] < i, `RSM node ${i} has parent ${parentIdx[i]} >= self`);
         local(i, tmp);
         const p = parentIdx[i];
         if (p === -1)
@@ -244,8 +212,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         const n = model.nodes[ni];
         const M = nodeMat[ni];
 
-        // Row-vector: v = v_raw * offset * M_node. Column-vector equivalent:
-        // vt_col = M_col * offset_col.
         nodeOffset(n, offset);
         mat4.multiply(vt, M, offset);
 
@@ -281,7 +247,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
                 vu.push(u); vv.push(v);
 
                 const cn = nodeNormals[faceIdx * 3 + k];
-                transformNormalMat4(vt, cn[0], cn[1], cn[2], nrm);
+                transformNormalMat4(vt, cn, nrm);
                 vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
 
                 vcol.push(0xFFFFFFFF);
@@ -479,8 +445,7 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const restVT = mat4.create();
     for (let ni = 0; ni < nodeCount; ni++) {
         const n = model.nodes[ni];
-        const offset = nodes[ni].offset;          // node-local: raw * offset only
-        // Row-vector: restVT = offset * restNodeMat. Column-vector: restNodeMat * offset.
+        const offset = nodes[ni].offset;
         mat4.multiply(restVT, restNodeMat[ni], offset);
 
         const nodeNormals = computeNodeNormals(n, model.shadeType);
@@ -519,7 +484,7 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
 
                 // Node-local normal; shader rotates by the node's animated mat.
                 const cn = nodeNormals[faceIdx * 3 + k];
-                transformNormalMat4(offset, cn[0], cn[1], cn[2], nrm);
+                transformNormalMat4(offset, cn, nrm);
                 vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
 
                 vcol.push(0xFFFFFFFF);
