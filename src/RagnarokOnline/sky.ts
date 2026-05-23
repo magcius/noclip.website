@@ -6,7 +6,7 @@
 // flat clear.
 
 import { mat4, vec3 } from "gl-matrix";
-import { GfxCullMode, GfxProgram } from "../gfx/platform/GfxPlatform.js";
+import { GfxProgram } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -98,8 +98,8 @@ class SkyDomeProgram extends DeviceProgram {
 ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
+    // Camera-relative: maps NDC at z=1 directly to a world-space ray dir.
     Mat4x4 u_WorldFromClip;
-    vec4 u_EyePos;        // xyz: camera world position
     vec4 u_HorizonColor;  // rgb
     vec4 u_ZenithColor;   // rgb
     vec4 u_GroundColor;   // rgb
@@ -120,8 +120,7 @@ void main() {
     gl_Position = vec4(t_NDC, 1.0, 1.0);
 
     vec4 t_Far = UnpackMatrix(u_WorldFromClip) * vec4(t_NDC, 1.0, 1.0);
-    vec3 t_World = t_Far.xyz / t_Far.w;
-    v_RayDir = t_World - u_EyePos.xyz;
+    v_RayDir = t_Far.xyz / t_Far.w;
 }
 `;
 
@@ -162,6 +161,7 @@ void main() {
 
 export class SkyDomeRenderer {
     private program: GfxProgram;
+    private scratchClip = mat4.create();
     private scratchInv = mat4.create();
 
     constructor(cache: GfxRenderHelper["renderCache"]) {
@@ -172,7 +172,11 @@ export class SkyDomeRenderer {
         if (!sky.enableDome)
             return;
 
-        mat4.invert(this.scratchInv, clipFromWorld);
+        // Pre-translate by eye so the inverse maps NDC to (world - eye) — i.e.
+        // a ray direction — directly. Works for both perspective and ortho:
+        // clipFromWorld * T(eye) cancels the view's T(-eye), leaving P * R.
+        mat4.translate(this.scratchClip, clipFromWorld, eyePos);
+        mat4.invert(this.scratchInv, this.scratchClip);
 
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderHelper.pushTemplateRenderInst();
@@ -180,17 +184,15 @@ export class SkyDomeRenderer {
         template.setGfxProgram(this.program);
         template.setVertexInput(null, null, null);
         // BACKGROUND layer + fullscreenMegaState so the dome paints before
-        // terrain regardless of submission order; cull-off because the
-        // gl_VertexID triangle has no real winding.
+        // terrain regardless of submission order.
         template.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
-        template.setMegaStateFlags({ ...fullscreenMegaState, cullMode: GfxCullMode.None });
+        template.setMegaStateFlags(fullscreenMegaState);
 
         const renderInst = renderInstManager.newRenderInst();
 
-        let offs = renderInst.allocateUniformBuffer(SkyDomeProgram.ub_SceneParams, 16 + 7 * 4);
+        let offs = renderInst.allocateUniformBuffer(SkyDomeProgram.ub_SceneParams, 16 + 6 * 4);
         const mapped = renderInst.mapUniformBufferF32(SkyDomeProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, this.scratchInv);
-        offs += fillVec4(mapped, offs, eyePos[0], eyePos[1], eyePos[2], 0);
         offs += fillVec4(mapped, offs, sky.horizonColor[0], sky.horizonColor[1], sky.horizonColor[2], 0);
         offs += fillVec4(mapped, offs, sky.zenithColor[0], sky.zenithColor[1], sky.zenithColor[2], 0);
         offs += fillVec4(mapped, offs, sky.groundColor[0], sky.groundColor[1], sky.groundColor[2], 0);
