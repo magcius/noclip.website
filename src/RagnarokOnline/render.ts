@@ -66,6 +66,9 @@ class TerrainProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `
+precision highp float;
+precision highp sampler2DArray;
+
 ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
@@ -80,10 +83,10 @@ layout(std140) uniform ub_SceneParams {
 };
 
 uniform sampler2D u_BaseTexture;
-uniform sampler2D u_Lightmap;
+uniform sampler2DArray u_Lightmap;
 
 varying vec2 v_TexCoord;
-varying vec2 v_LightCoord;
+varying vec3 v_LightCoord;
 varying vec4 v_Color;
 varying vec3 v_WorldPos;
 `;
@@ -91,7 +94,7 @@ varying vec3 v_WorldPos;
     public override vert = `
 layout(location = ${TerrainProgram.a_Position}) in vec3 a_Position;
 layout(location = ${TerrainProgram.a_TexCoord}) in vec2 a_TexCoord;
-layout(location = ${TerrainProgram.a_LightCoord}) in vec2 a_LightCoord;
+layout(location = ${TerrainProgram.a_LightCoord}) in vec3 a_LightCoord;
 layout(location = ${TerrainProgram.a_Color}) in vec4 a_Color;
 
 void main() {
@@ -108,7 +111,7 @@ void main() {
     vec4 t_Base = texture(SAMPLER_2D(u_BaseTexture), v_TexCoord);
     if (t_Base.a < 0.5)
         discard;
-    vec4 t_Light = texture(SAMPLER_2D(u_Lightmap), v_LightCoord);
+    vec4 t_Light = texture(SAMPLER_2DArray(u_Lightmap), v_LightCoord);
     // Lightmap intensity rides in alpha; the rgb tint is additive.
     float t_Intensity = t_Light.a;
     vec3 t_Lit = t_Base.rgb * v_Color.rgb * t_Intensity + t_Light.rgb;
@@ -307,8 +310,8 @@ void main() {
 `;
 }
 
-// pos (3 f32) + baseUV (2 f32) + lightmapUV (2 f32) + color (4 u8) = 32 bytes.
-const VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 2 * 4 + 4;
+// pos (3 f32) + baseUV (2 f32) + lightmapUV (3 f32: u, v, tileIndex) + color (4 u8) = 36 bytes.
+const VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 3 * 4 + 4;
 
 interface TerrainDrawGroup {
     textureId: number;
@@ -320,65 +323,41 @@ interface TerrainMesh {
     vertexData: ArrayBuffer;
     indexData: Uint32Array;
     groups: TerrainDrawGroup[];
-    lightmapAtlas: Uint8Array; // atlasW*atlasH*4 RGBA
-    atlasW: number;
-    atlasH: number;
+    lightmapTiles: Uint8Array[];
+    lightmapTileCount: number;
     min: vec3;
     max: vec3;
 }
 
-// 8x8 lightmap tiles packed into a roughly-square atlas. Tint in RGB, intensity in A.
-function buildLightmapAtlas(gnd: GndMap): { atlas: Uint8Array, atlasW: number, atlasH: number, tilesPerRow: number } {
-    const n = gnd.lightmaps.length;
-    const tilesPerRow = n > 0 ? Math.max(1, Math.ceil(Math.sqrt(n))) : 1;
-    const tileRows = n > 0 ? Math.ceil(n / tilesPerRow) : 1;
-    const atlasW = tilesPerRow * 8;
-    const atlasH = tileRows * 8;
-    const atlas = new Uint8Array(atlasW * atlasH * 4);
-
-    for (let i = 0; i < n; i++) {
-        const lm = gnd.lightmaps[i];
-        const tx = (i % tilesPerRow) * 8;
-        const ty = ((i / tilesPerRow) | 0) * 8;
-        for (let y8 = 0; y8 < 8; y8++) {
-            for (let x8 = 0; x8 < 8; x8++) {
-                const texel = y8 * 8 + x8;
-                const px = tx + x8;
-                const py = ty + y8;
-                const off = (py * atlasW + px) * 4;
-                atlas[off + 0] = lm.color[texel * 3 + 0];
-                atlas[off + 1] = lm.color[texel * 3 + 1];
-                atlas[off + 2] = lm.color[texel * 3 + 2];
-                atlas[off + 3] = lm.intensity[texel];
-            }
+// Each GND lightmap is an 8x8 RGBA tile (RGB=tint, A=intensity); one slice per tile.
+function buildLightmapTiles(gnd: GndMap): Uint8Array[] {
+    const tiles: Uint8Array[] = [];
+    for (const lm of gnd.lightmaps) {
+        const tile = new Uint8Array(8 * 8 * 4);
+        for (let texel = 0; texel < 64; texel++) {
+            const off = texel * 4;
+            tile[off + 0] = lm.color[texel * 3 + 0];
+            tile[off + 1] = lm.color[texel * 3 + 1];
+            tile[off + 2] = lm.color[texel * 3 + 2];
+            tile[off + 3] = lm.intensity[texel];
         }
+        tiles.push(tile);
     }
-
-    return { atlas, atlasW, atlasH, tilesPerRow };
+    return tiles;
 }
 
 function buildTerrainMesh(gnd: GndMap): TerrainMesh {
-    const { atlas, atlasW, atlasH, tilesPerRow } = buildLightmapAtlas(gnd);
-    const n = gnd.lightmaps.length;
+    const lightmapTiles = buildLightmapTiles(gnd);
+    const n = lightmapTiles.length;
 
-    // GND lightmaps reserve a 1-texel border; cell corners sample at tile
-    // texel boundaries 1 and 7. A half-texel inset would land on the border
-    // and leave a dark blot in each cell corner (visible on prt_fild08).
-    const insetU = atlasW > 0 ? 1 / atlasW : 0;
-    const insetV = atlasH > 0 ? 1 / atlasH : 0;
-
-    const lightmapUV = (lightmapId: number, k: number, out: [number, number]): void => {
+    // Sample at texel 1 and 7 to skip the 1-texel border the GND reserves.
+    const lightmapUV = (lightmapId: number, k: number, out: [number, number, number]): void => {
         let idx = lightmapId;
         if (n === 0 || idx >= n)
             idx = 0;
-        const tx = (idx % tilesPerRow) * 8;
-        const ty = ((idx / tilesPerRow) | 0) * 8;
-        const u0 = tx / atlasW + insetU;
-        const u1 = (tx + 8) / atlasW - insetU;
-        const v0 = ty / atlasH + insetV;
-        const v1 = (ty + 8) / atlasH - insetV;
-        out[0] = (k & 1) ? u1 : u0;
-        out[1] = (k & 2) ? v1 : v0;
+        out[0] = (k & 1) ? 7 / 8 : 1 / 8;
+        out[1] = (k & 2) ? 7 / 8 : 1 / 8;
+        out[2] = idx;
     };
 
     // X mirrored about the map centre (see coord.ts).
@@ -420,7 +399,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
     const buckets = new Map<number, number[]>();
 
     const p0 = vec3.create(), p1 = vec3.create(), p2 = vec3.create(), p3 = vec3.create();
-    const luv: [number, number] = [0, 0];
+    const luv: [number, number, number] = [0, 0, 0];
 
     const min = vec3.fromValues(Infinity, Infinity, Infinity);
     const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
@@ -437,7 +416,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
 
         const base = vertexCursor;
         for (let k = 0; k < 4; k++) {
-            const fo = (base + k) * 8;
+            const fo = (base + k) * 9;
             const px = p[k][0], py = p[k][1], pz = p[k][2];
             fview[fo + 0] = px;
             fview[fo + 1] = py;
@@ -447,7 +426,8 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
             lightmapUV(s.lightmapId, k, luv);
             fview[fo + 5] = luv[0];
             fview[fo + 6] = luv[1];
-            uview[fo + 7] = packed;
+            fview[fo + 7] = luv[2];
+            uview[fo + 8] = packed;
             if (px < min[0]) min[0] = px; if (px > max[0]) max[0] = px;
             if (py < min[1]) min[1] = py; if (py > max[1]) max[1] = py;
             if (pz < min[2]) min[2] = pz; if (pz > max[2]) max[2] = pz;
@@ -511,8 +491,8 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         vertexData,
         indexData,
         groups,
-        lightmapAtlas: atlas,
-        atlasW, atlasH,
+        lightmapTiles,
+        lightmapTileCount: n,
         min, max,
     };
 }
@@ -786,8 +766,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             vertexAttributeDescriptors: [
                 { location: TerrainProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0 },
                 { location: TerrainProgram.a_TexCoord, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 4, bufferIndex: 0 },
-                { location: TerrainProgram.a_LightCoord, format: GfxFormat.F32_RG, bufferByteOffset: 5 * 4, bufferIndex: 0 },
-                { location: TerrainProgram.a_Color, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 7 * 4, bufferIndex: 0 },
+                { location: TerrainProgram.a_LightCoord, format: GfxFormat.F32_RGB, bufferByteOffset: 5 * 4, bufferIndex: 0 },
+                { location: TerrainProgram.a_Color, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 8 * 4, bufferIndex: 0 },
             ],
             vertexBufferDescriptors: [
                 { byteStride: VERTEX_STRIDE_BYTES, frequency: GfxVertexBufferFrequency.PerVertex },
@@ -800,7 +780,19 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.textures = textureImages.map((img) => img !== null ? createRGBATexture(device, img.width, img.height, img.rgba) : null);
 
-        this.lightmapTexture = createRGBATexture(device, mesh.atlasW, mesh.atlasH, mesh.lightmapAtlas);
+        const lightmapLayerCount = Math.max(mesh.lightmapTileCount, 1);
+        this.lightmapTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2DArray,
+            width: 8, height: 8,
+            depthOrArrayLayers: lightmapLayerCount,
+            numLevels: 1,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            usage: GfxTextureUsage.Sampled,
+        });
+        const lightmapBytes = new Uint8Array(lightmapLayerCount * 8 * 8 * 4);
+        for (let i = 0; i < mesh.lightmapTileCount; i++)
+            lightmapBytes.set(mesh.lightmapTiles[i], i * 8 * 8 * 4);
+        device.uploadTextureData(this.lightmapTexture, 0, [lightmapBytes]);
 
         this.baseSamplerLinear = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
