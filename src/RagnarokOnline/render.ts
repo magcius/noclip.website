@@ -12,7 +12,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { makeAttachmentClearDescriptor, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers.js";
 import { colorNewFromRGBA } from "../Color.js";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInstList, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
@@ -1260,7 +1260,14 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private prepareTerrain(viewerInput: ViewerRenderInput, lit: { diffuse: vec3, ambient: vec3, envDiff: vec3 }, fogColor: [number, number, number, number]): void {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 2 }]);
+        template.setBindingLayouts([{
+            numUniformBuffers: 1,
+            numSamplers: 2,
+            samplerEntries: [
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float },
+            ],
+        }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         template.setMegaStateFlags({ cullMode: GfxCullMode.None });
