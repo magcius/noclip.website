@@ -5,12 +5,14 @@
 // occlude the transparent layers drawn over it (sprites, water, effects).
 
 import { mat4, vec3 } from "gl-matrix";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { makeSoftDiscImage } from "./weather.js";
 
@@ -23,6 +25,8 @@ const SHADOW_LIFT = 0.4;
 // 3 floats pos + 2 floats uv = 20 bytes. Color is constant in the shader.
 const SHADOW_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4;
 const SHADOW_FLOATS_PER_VERTEX = 5;
+const VERTS_PER_QUAD = 4;
+const INDICES_PER_QUAD = 6;
 
 export interface ShadowInstance {
     worldPos: vec3;
@@ -69,25 +73,20 @@ const SHADOW_CORNER_OX = [-1, 1, -1, 1];
 const SHADOW_CORNER_OZ = [-1, -1, 1, 1];
 const SHADOW_CORNER_U = [0, 1, 0, 1];
 const SHADOW_CORNER_V = [0, 0, 1, 1];
-const SHADOW_TRI = [0, 1, 2, 1, 3, 2];
 
 export class ShadowRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
     private sampler: GfxSampler;
-    private device: GfxDevice;
     private texture: GfxTexture;
 
     private instances: ShadowInstance[] = [];
 
-    private vertexBuffer: GfxIndexBufferDescriptor["buffer"] | null = null;
-    private vertexCapacityVerts = 0;
     private cpuData: ArrayBuffer = new ArrayBuffer(0);
     private cpuF32: Float32Array = new Float32Array(0);
     private cpuU8: Uint8Array = new Uint8Array(0);
 
-    constructor(device: GfxDevice, cache: GfxRenderHelper["renderCache"]) {
-        this.device = device;
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.program = cache.createProgram(new ShadowProgram());
 
         this.inputLayout = cache.createInputLayout({
@@ -98,7 +97,7 @@ export class ShadowRenderer {
             vertexBufferDescriptors: [
                 { byteStride: SHADOW_VERTEX_STRIDE_BYTES, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
-            indexBufferFormat: null,
+            indexBufferFormat: GfxFormat.U16_R,
         });
 
         this.sampler = cache.createSampler({
@@ -151,7 +150,8 @@ export class ShadowRenderer {
         if (this.instances.length === 0)
             return;
 
-        const vertexCount = this.instances.length * 6;
+        const vertexCount = this.instances.length * VERTS_PER_QUAD;
+        const indexCount = this.instances.length * INDICES_PER_QUAD;
         const byteCount = vertexCount * SHADOW_VERTEX_STRIDE_BYTES;
         if (byteCount > this.cpuData.byteLength) {
             this.cpuData = new ArrayBuffer(byteCount);
@@ -166,8 +166,7 @@ export class ShadowRenderer {
             const wy = inst.worldPos[1] + SHADOW_LIFT;
             const wz = inst.worldPos[2];
             const s = inst.size;
-            for (let n = 0; n < 6; n++) {
-                const c = SHADOW_TRI[n];
+            for (let c = 0; c < VERTS_PER_QUAD; c++) {
                 const o = vi * SHADOW_FLOATS_PER_VERTEX;
                 f32[o + 0] = wx + SHADOW_CORNER_OX[c] * s;
                 f32[o + 1] = wy;
@@ -178,23 +177,16 @@ export class ShadowRenderer {
             }
         }
 
-        if (vertexCount > this.vertexCapacityVerts) {
-            if (this.vertexBuffer !== null)
-                this.device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = this.device.createBuffer(vertexCount * SHADOW_VERTEX_STRIDE_BYTES, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-            this.vertexCapacityVerts = vertexCount;
-        }
-        if (this.vertexBuffer === null)
-            return;
-        this.device.uploadBufferData(this.vertexBuffer, 0, this.cpuU8.subarray(0, byteCount));
-
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        const cache = renderHelper.renderCache;
+        const vertexBufferDescriptors = [cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, this.cpuU8.subarray(0, byteCount))];
+        const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, vertexCount);
+        const indexBufferDescriptor = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Index, new Uint8Array(indexData.buffer));
 
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
-        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
+        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
         // OPAQUE layer so shadows draw BEFORE the sprite billboards (sprite
         // renderer's depthWrite would clobber a later-drawn shadow). Stable
         // sort preserves submission order within the layer.
@@ -216,7 +208,7 @@ export class ShadowRenderer {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.texture, gfxSampler: this.sampler }]);
-        renderInst.setDrawCount(vertexCount, 0);
+        renderInst.setDrawCount(indexCount, 0);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplate();
@@ -224,7 +216,5 @@ export class ShadowRenderer {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.texture);
-        if (this.vertexBuffer !== null)
-            device.destroyBuffer(this.vertexBuffer);
     }
 }
