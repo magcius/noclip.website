@@ -104,7 +104,7 @@ function computeActorFootPxY(act: ActModel, spr: SprModel): number {
             let cy = c.y;
             if (act.version < 0x0205) {
                 const tmp = { ...c };
-                recalcClipXY(tmp, img.width, img.height, false, false);
+                recalcClipXY(tmp, img.width, img.height);
                 cy = tmp.y;
             }
             const visRow = visibleBottomRowOf(img);
@@ -222,7 +222,7 @@ export class SpriteActor {
             let clipX = src.x, clipY = src.y;
             if (this.act.version < 0x0205) {
                 const tmp = { ...src };
-                recalcClipXY(tmp, img.width, img.height, false, false);
+                recalcClipXY(tmp, img.width, img.height);
                 clipX = tmp.x;
                 clipY = tmp.y;
             }
@@ -269,7 +269,7 @@ export class SpriteActor {
             let cy = c.y;
             if (this.act.version < 0x0205) {
                 const tmp = { ...c };
-                recalcClipXY(tmp, img.width, img.height, false, false);
+                recalcClipXY(tmp, img.width, img.height);
                 cy = tmp.y;
             }
             const topRow = visibleTopRowOf(img);
@@ -384,7 +384,7 @@ export class SpriteActor {
             let clipX = src.x, clipY = src.y;
             if (this.act.version < 0x0205) {
                 const tmp = { ...src };
-                recalcClipXY(tmp, img.width, img.height, false, false);
+                recalcClipXY(tmp, img.width, img.height);
                 clipX = tmp.x;
                 clipY = tmp.y;
             }

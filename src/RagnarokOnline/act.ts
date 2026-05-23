@@ -55,15 +55,10 @@ class Reader {
 const MAX_VERSION = 0x0206;
 
 // Recenters a clip whose stored origin is the sprite's top-left to one centered
-// on the sprite, matching the original loader's ReCalcClipXY. From version
-// 0x0205 the half-size flags are forced off (the clip carries its own w/h).
-export function recalcClipXY(clip: ActClip, w: number, h: number, halfW: boolean, halfH: boolean): void {
-    let cx = w;
-    let cy = h;
-    if (halfW) cx *= 2;
-    if (halfH) cy *= 2;
-    clip.x = ((clip.x - (((cx / 2) | 0) + (cx % 2)) * clip.zoomX) / clip.zoomX) | 0;
-    clip.y = ((clip.y - (((cy / 2) | 0) + (cy % 2)) * clip.zoomY) / clip.zoomY) | 0;
+// on the sprite, matching the original loader's ReCalcClipXY.
+export function recalcClipXY(clip: ActClip, w: number, h: number): void {
+    clip.x = ((clip.x - (((w / 2) | 0) + (w % 2)) * clip.zoomX) / clip.zoomX) | 0;
+    clip.y = ((clip.y - (((h / 2) | 0) + (h % 2)) * clip.zoomY) / clip.zoomY) | 0;
 }
 
 export function parseACT(buffer: ArrayBufferSlice): ActModel {
@@ -130,7 +125,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
                         const w = r.i32();
                         const h = r.i32();
                         if (clip.sprIndex !== -1)
-                            recalcClipXY(clip, w, h, false, false);
+                            recalcClipXY(clip, w, h);
                     }
                 }
 
