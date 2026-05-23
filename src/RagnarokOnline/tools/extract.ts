@@ -6,10 +6,6 @@
 // the viewer can fetch them via DataFetcher at `RagnarokOnline/maps/<map>.gnd`.
 //
 // Run with: tsx src/RagnarokOnline/tools/extract.ts
-//
-// Later phases extend this into the two-pass pipeline described in PORTING.md:
-// an asset pass (RSW/GND/GAT/RSM/SPR/textures + a generated maps manifest) and
-// a Hercules pass (per-map entity manifests). For now it just copies a triplet.
 
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import * as path from "path";
@@ -138,7 +134,7 @@ const ASSET_MAP_NAME_TABLE = path.resolve("../client_data/assets/data/misc/mapna
 
 // Destination: the committed, generated manifest the scene registry maps over.
 // It lives in source (not data/) because main.ts builds the scene groups
-// synchronously at module load — see PORTING.md "Map auto-discovery".
+// synchronously at module load.
 const OUT_MAP_MANIFEST = path.resolve("src/RagnarokOnline/maps.ts");
 
 // Maps whose base assets (rsw/gnd/gat + textures/models/water) are staged. By
