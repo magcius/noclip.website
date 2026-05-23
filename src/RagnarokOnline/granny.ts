@@ -10,13 +10,14 @@
 //
 // 32-bit LE only — RO ships no 64-bit or BE variants.
 //
-// RO corpus uses Granny compression type 1 (Oodle0), a DIFFERENT codec from
-// type 2 (Oodle1, implemented below). Running the Oodle1 decoder on Oodle0
-// yields garbage that fails to parse — looks like a parse bug but isn't. No
-// open Oodle0 decoder exists, so RO .gr2 must be expanded offline; parseGranny
-// throws GrannyOodle0Error on type 1.
+// Compression: this parser only handles NoCompression sections. RO .gr2 ship
+// with Granny compression type 1 (Oodle0), which has no open decoder, so the
+// offline tool `tools/gr2_decompress.c` (wine + granny2.dll) expands every
+// section to NoCompression at extraction time. Both Oodle0 and Oodle1 sections
+// throw at runtime — they shouldn't appear in baked files.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assertExists, readString } from "../util.js";
 
 // Type-tree node "type" field.
 const enum GrannyType {
@@ -73,6 +74,7 @@ interface GrannySection {
 
 export interface GrannyFile {
     blob: Uint8Array;
+    slice: ArrayBufferSlice; // same memory as `blob`, for readString
     view: DataView;
     sectionBase: number[];
     fixups: Map<number, number>; // abs src -> abs dst (both in `blob`)
@@ -147,13 +149,9 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         } else if (s.compression === GrannyCompression.None) {
             blob.set(bytes.subarray(s.dataOffset, s.dataOffset + s.decompressedSize), cursor);
         } else if (s.compression === GrannyCompression.Oodle1) {
-            const comp = new Uint8Array(s.compressedSize + 4);
-            comp.set(bytes.subarray(s.dataOffset, s.dataOffset + s.compressedSize));
-            const out = blob.subarray(cursor, cursor + s.decompressedSize);
-            decompressOodle1(comp, s.compressedSize, out, s.decompressedSize, s.oodleStop0, s.oodleStop1);
+            throw new Error(`Granny: Oodle1 compressed section unexpected; baked .gr2 should have all sections expanded to NoCompression by tools/gr2_decompress`);
         } else if (s.compression === GrannyCompression.Oodle0) {
-            // RO's monster files land here; no open Oodle0 decoder. See header note.
-            throw new GrannyOodle0Error(`Granny: section uses Oodle0 compression, which has no open decoder (RO monster .gr2 are blocked on this)`);
+            throw new Error(`Granny: Oodle0 compressed section unexpected; baked .gr2 should have all sections expanded to NoCompression by tools/gr2_decompress`);
         } else {
             throw new Error(`Granny: unsupported section compression ${s.compression}`);
         }
@@ -178,6 +176,7 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
 
     return {
         blob,
+        slice: new ArrayBufferSlice(blob.buffer, blob.byteOffset, blob.byteLength),
         view: new DataView(blob.buffer, blob.byteOffset, blob.byteLength),
         sectionBase,
         fixups,
@@ -186,9 +185,6 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         version,
     };
 }
-
-// Distinguishes the undecodable-Oodle0 case from a real parse failure.
-class GrannyOodle0Error extends Error {}
 
 // Walks a list of 32-byte type nodes (terminated by type==0) at `typeAbs`,
 // consuming matching data sequentially from `dataAbs`. Returns members by name.
@@ -208,18 +204,6 @@ interface GrannyMember {
 
 // 32-bit: type(4) name(4) children(4) arraySize(4) extra[12] extra4(4).
 const TYPE_NODE_SIZE = 32;
-
-function readCString(blob: Uint8Array, off: number | null): string | null {
-    if (off === null || off < 0 || off >= blob.length)
-        return null;
-    let e = off;
-    while (e < blob.length && blob[e] !== 0)
-        e++;
-    let s = "";
-    for (let i = off; i < e; i++)
-        s += String.fromCharCode(blob[i]);
-    return s;
-}
 
 // Data-stream byte size of a member (32-bit). Inline embeds its child struct
 // in place; without this the walker desyncs after any inline member.
@@ -285,7 +269,7 @@ function walkType(gr: GrannyFile, typeAbs: number, dataAbs: number): Map<string,
         const nameP = ptr(t + 4);
         const childP = ptr(t + 8);
         const arraySize = view.getInt32(t + 12, true);
-        const name = readCString(blob, nameP);
+        const name = nameP === null ? null : readString(gr.slice, nameP);
 
         const m: GrannyMember = { type: ntype, name, childTypeAbs: childP, arraySize };
 
@@ -294,9 +278,12 @@ function walkType(gr: GrannyFile, typeAbs: number, dataAbs: number): Map<string,
         case GrannyType.EmptyReference:
             m.ref = ptr(d); d += 4;
             break;
-        case GrannyType.String:
-            m.str = readCString(blob, ptr(d)); d += 4;
+        case GrannyType.String: {
+            const sp = ptr(d);
+            m.str = sp === null ? null : readString(gr.slice, sp);
+            d += 4;
             break;
+        }
         case GrannyType.ReferenceToArray:
             m.count = view.getUint32(d, true); d += 4;
             m.arrAbs = ptr(d); d += 4;
@@ -429,7 +416,7 @@ function readVertexFormat(gr: GrannyFile, typeAbs: number): { fields: GrannyVert
         if (ntype === GrannyType.None || ntype > GrannyType.EmptyReference)
             break;
         const nameP = fixups.get(t + 4);
-        const name = readCString(blob, nameP === undefined ? null : nameP);
+        const name = nameP === undefined ? null : readString(gr.slice, nameP);
         const arraySize = view.getInt32(t + 12, true);
         const elemSize = TYPE_SCALAR_SIZE[ntype] ?? 0;
         const count = Math.max(1, arraySize);
@@ -480,7 +467,7 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
     const boneWeights = new Float32Array(vertexCount * 4);
     const boneIndices = new Uint8Array(vertexCount * 4);
 
-    const fPos = fields.find((f) => f.name === "Position");
+    const fPos = assertExists(fields.find((f) => f.name === "Position"), "Position field on mesh vertex layout");
     const fNrm = fields.find((f) => f.name === "Normal");
     const fUV = fields.find((f) => f.name === "TextureCoordinates0" || f.name === "TextureCoordinates");
     const fBoneW = fields.find((f) => f.name === "BoneWeights");
@@ -488,7 +475,7 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
 
     for (let v = 0; v < vertexCount; v++) {
         const base = arr + v * stride;
-        if (fPos !== undefined) readVertexFloats(view, base, fPos, positions, v * 3, 3);
+        readVertexFloats(view, base, fPos, positions, v * 3, 3);
         if (fNrm !== undefined) readVertexFloats(view, base, fNrm, normals, v * 3, 3);
         if (fUV !== undefined) readVertexFloats(view, base, fUV, uvs, v * 2, 2);
         if (fBoneW !== undefined) {
@@ -581,8 +568,11 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
     const strideField = scI(mw.get("Stride"));
     const rowStride = strideField && strideField > 0 ? strideField : width * bytesPerPixel;
 
-    // RO ships RAD-encoded pixels (Encoding != raw) that only granny2.dll
-    // expands; those are baked offline. Only decode genuinely raw data here.
+    // RO's monster .gr2 ship RAD-encoded inline pixels that the offline section
+    // decompressor does NOT expand (only tools/gr2_texbake.c does, into separate
+    // <name>.<i>.tex files that the loader fetches alongside the .gr2). When the
+    // inline pixel blob is undersized, fall through: the caller will resolve the
+    // texture from the external .tex.
     if (pixels.count < width * height * bytesPerPixel)
         return null;
 
@@ -736,7 +726,8 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     const bonesM = sw.get("Bones");
     const bones: GrannyBone[] = [];
     // Bone struct: Name + ParentIndex + Transform(68B) + InverseWorldTransform[16]
-    // + ignored pointers. Stride comes from computeInlineSize over the bone type.
+    // (the inverse bind-pose matrix) + ignored pointers. Stride comes from
+    // computeInlineSize over the bone type.
     if (bonesM !== undefined && bonesM.arrAbs !== null && bonesM.arrAbs !== undefined && bonesM.childTypeAbs !== null && bonesM.count !== undefined) {
         const stride = computeInlineSize(gr, bonesM.childTypeAbs);
         for (let i = 0; i < bonesM.count; i++) {
@@ -756,7 +747,7 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
                 for (let k = 0; k < 9; k++)
                     scaleShear[k] = view.getFloat32(o + 32 + k * 4, true);
             }
-            // InverseWorldTransform is laid out column-major; copy verbatim.
+            // Inverse bind-pose matrix; column-major, copy verbatim.
             const inverseWorld = new Float32Array(16);
             const iw = bw.get("InverseWorldTransform");
             if (iw !== undefined && iw.scalarAbs !== undefined) {
@@ -771,17 +762,11 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     return { name, bones };
 }
 
-// Accepts either form: (a) Knots/Controls inline (every RO baked .gr2), or
-// (b) a CurveData VariantReference to the keyframes struct (SDK files).
+// Only handles inline Knots/Controls — the form every RO baked .gr2 uses.
+// SDK files have a CurveData VariantReference indirection we don't need.
 function extractCurve(gr: GrannyFile, curveTypeAbs: number, curveDataAbs: number, dimension: number): GrannyCurve | null {
     const { view } = gr;
-    let cw = walkType(gr, curveTypeAbs, curveDataAbs);
-    if (!cw.has("Knots") || !cw.has("Controls")) {
-        const cd = cw.get("CurveData");
-        if (cd === undefined || cd.ref === null || cd.ref === undefined || cd.variantTypeAbs === null || cd.variantTypeAbs === undefined)
-            return null;
-        cw = walkType(gr, cd.variantTypeAbs, cd.ref);
-    }
+    const cw = walkType(gr, curveTypeAbs, curveDataAbs);
     const degree = cw.get("Degree")?.scalarAbs !== undefined ? view.getInt32(cw.get("Degree")!.scalarAbs!, true) : 0;
     const knotsM = cw.get("Knots");
     const controlsM = cw.get("Controls");
@@ -838,269 +823,4 @@ function extractAnimation(gr: GrannyFile, animTypeAbs: number, animDataAbs: numb
         }
     }
     return { name, duration, tracks };
-}
-
-// Oodle1 decompressor (Granny compression type 2). Three-layer codec:
-// arithmetic-style bitstream + adaptive multi-symbol coder + LZSS dictionary.
-// Section header has three 12-byte parameter blocks; decoding runs in three
-// passes split at the "stop" offsets, each with its own params + dictionary.
-// Does NOT decode RO's Oodle0 (type 1) sections.
-
-interface OodleParams {
-    decodedValueMax: number;
-    backrefValueMax: number;
-    decodedCount: number;
-    highbitCount: number;
-    sizesCount: number[];
-}
-
-class OodleDecoder {
-    private R: number;
-    private M = 0x80;
-    private L: number;
-    private p: number;
-    private sScale = 1;
-
-    constructor(private s: Uint8Array, pos: number) {
-        this.R = s[pos] >>> 1;
-        this.L = s[pos] & 1;
-        this.p = pos + 1;
-    }
-
-    private ingest(): void {
-        while (this.M <= 0x800000) {
-            this.R = (((this.R << 1) | this.L) >>> 0);
-            this.R = (((this.R << 7) | (this.s[this.p] >>> 1)) >>> 0);
-            this.L = this.s[this.p] & 1;
-            this.M = (this.M * 256) % 0x1000000000000;
-            this.p++;
-        }
-    }
-
-    public decode(max: number): number {
-        this.ingest();
-        this.sScale = Math.floor(this.M / max);
-        const z = Math.floor(this.R / this.sScale);
-        return z < max - 1 ? z : max - 1;
-    }
-
-    public commit(max: number, val: number, err: number): number {
-        const sz = val * this.sScale;
-        this.R = this.R - sz;
-        if (this.R < 0) this.R = (this.R >>> 0);
-        if (val + err < max)
-            this.M = err * this.sScale;
-        else
-            this.M = this.M - sz;
-        return val;
-    }
-
-    public decodeCommit(max: number): number {
-        return this.commit(max, this.decode(max), 1);
-    }
-}
-
-class WeighWindow {
-    private countCap: number;
-    private ranges: number[] = [0, 0x4000];
-    private values: number[] = [0];
-    private weights: number[] = [4];
-    private weightTotal = 4;
-    private threshIncrease = 4;
-    private threshIncreaseCap: number;
-    private threshRangeRebuild = 8;
-    private threshWeightRebuild: number;
-
-    constructor(maxValue: number, countCap: number) {
-        this.countCap = countCap + 1;
-        this.threshWeightRebuild = Math.max(256, Math.min(32 * maxValue, 15160));
-        if (maxValue > 64)
-            this.threshIncreaseCap = Math.min(2 * maxValue, Math.floor(this.threshWeightRebuild / 2) - 32);
-        else
-            this.threshIncreaseCap = 128;
-    }
-
-    private rebuildRanges(): void {
-        const n = this.weights.length;
-        this.ranges.length = n;
-        const rangeWeight = Math.floor((8 * 0x4000) / this.weightTotal);
-        let rangeStart = 0;
-        for (let i = 0; i < n; i++) {
-            this.ranges[i] = rangeStart & 0xFFFF;
-            rangeStart += Math.floor((this.weights[i] * rangeWeight) / 8);
-        }
-        this.ranges.push(0x4000);
-        if (this.threshIncrease > Math.floor(this.threshIncreaseCap / 2)) {
-            this.threshRangeRebuild = this.weightTotal + this.threshIncreaseCap;
-        } else {
-            this.threshIncrease *= 2;
-            this.threshRangeRebuild = this.weightTotal + this.threshIncrease;
-        }
-    }
-
-    private rebuildWeights(): void {
-        let wt = 0;
-        for (let i = 0; i < this.weights.length; i++) {
-            this.weights[i] = Math.floor(this.weights[i] / 2);
-            wt += this.weights[i];
-        }
-        this.weightTotal = wt & 0xFFFF;
-        for (let i = 1; i < this.weights.length; i++) {
-            while (i < this.weights.length && this.weights[i] === 0) {
-                this.weights[i] = this.weights[this.weights.length - 1];
-                this.values[i] = this.values[this.values.length - 1];
-                this.weights.pop();
-                this.values.pop();
-            }
-        }
-        let it = 1, mx = 0;
-        for (let i = 1; i < this.weights.length; i++)
-            if (this.weights[i] > mx) { mx = this.weights[i]; it = i; }
-        if (it < this.weights.length) {
-            const tw = this.weights[it]; this.weights[it] = this.weights[this.weights.length - 1]; this.weights[this.weights.length - 1] = tw;
-            const tv = this.values[it]; this.values[it] = this.values[this.values.length - 1]; this.values[this.values.length - 1] = tv;
-        }
-        if (this.weights.length < this.countCap && this.weights[0] === 0) {
-            this.weights[0] = 1;
-            this.weightTotal = (this.weightTotal + 1) & 0xFFFF;
-        }
-    }
-
-    // Returns [newSlotIndex, value]; newSlotIndex >= 0 means decode+store, -1 = use value.
-    public tryDecode(dec: OodleDecoder): [number, number] {
-        if (this.weightTotal >= this.threshRangeRebuild) {
-            if (this.threshRangeRebuild >= this.threshWeightRebuild)
-                this.rebuildWeights();
-            this.rebuildRanges();
-        }
-        const value = dec.decode(0x4000);
-        let rangeit = this.ranges.length - 1;
-        for (let i = 0; i < this.ranges.length; i++) {
-            if (this.ranges[i] > value) { rangeit = i; break; }
-        }
-        rangeit -= 1;
-        if (rangeit < 0) rangeit = 0;
-        dec.commit(0x4000, this.ranges[rangeit], this.ranges[rangeit + 1] - this.ranges[rangeit]);
-        const index = rangeit;
-        this.weights[index] = (this.weights[index] + 1) & 0xFFFF;
-        this.weightTotal = (this.weightTotal + 1) & 0xFFFF;
-        if (index > 0)
-            return [-1, this.values[index]];
-        if (this.weights.length >= this.ranges.length && dec.decodeCommit(2) === 1) {
-            const idx = this.ranges.length + dec.decodeCommit(this.weights.length - this.ranges.length + 1) - 1;
-            this.weights[idx] = (this.weights[idx] + 2) & 0xFFFF;
-            this.weightTotal = (this.weightTotal + 2) & 0xFFFF;
-            return [-1, this.values[idx]];
-        }
-        this.values.push(0);
-        this.weights.push(2);
-        this.weightTotal = (this.weightTotal + 2) & 0xFFFF;
-        if (this.weights.length === this.countCap) {
-            this.weightTotal = (this.weightTotal - this.weights[0]) & 0xFFFF;
-            this.weights[0] = 0;
-        }
-        return [this.values.length - 1, 0];
-    }
-
-    public setValue(index: number, v: number): void {
-        this.values[index] = v;
-    }
-}
-
-class OodleDictionary {
-    private static readonly SIZES = [128, 192, 256, 512];
-    private decodedSize = 0;
-    private backrefSize = 0;
-    private decodedValueMax: number;
-    private backrefValueMax: number;
-    private lowbitValueMax: number;
-    private midbitValueMax: number;
-    private highbitValueMax: number;
-    private lowbit: WeighWindow;
-    private highbit: WeighWindow;
-    private midbit: WeighWindow[];
-    private decoded: WeighWindow[];
-    private sizeWindows: WeighWindow[];
-
-    constructor(p: OodleParams) {
-        this.decodedValueMax = p.decodedValueMax;
-        this.backrefValueMax = p.backrefValueMax;
-        this.lowbitValueMax = Math.min(this.backrefValueMax + 1, 4);
-        this.midbitValueMax = Math.min(Math.floor(this.backrefValueMax / 4) + 1, 256);
-        this.highbitValueMax = Math.floor(this.backrefValueMax / 1024) + 1;
-        this.lowbit = new WeighWindow(this.lowbitValueMax - 1, this.lowbitValueMax);
-        this.highbit = new WeighWindow(this.highbitValueMax - 1, p.highbitCount + 1);
-        this.midbit = [];
-        for (let i = 0; i < this.highbitValueMax; i++)
-            this.midbit.push(new WeighWindow(this.midbitValueMax - 1, this.midbitValueMax));
-        this.decoded = [];
-        for (let i = 0; i < 4; i++)
-            this.decoded.push(new WeighWindow(this.decodedValueMax - 1, p.decodedCount));
-        this.sizeWindows = [];
-        for (let i = 0; i < 4; i++)
-            for (let j = 0; j < 16; j++)
-                this.sizeWindows.push(new WeighWindow(64, p.sizesCount[3 - i]));
-        this.sizeWindows.push(new WeighWindow(64, p.sizesCount[0]));
-    }
-
-    public block(dec: OodleDecoder, out: Uint8Array, outpos: number): number {
-        const sw = this.sizeWindows[this.backrefSize];
-        let [d1i, d1v] = sw.tryDecode(dec);
-        if (d1i >= 0) { d1v = dec.decodeCommit(65); sw.setValue(d1i, d1v); }
-        this.backrefSize = d1v;
-
-        if (this.backrefSize > 0) {
-            const br = this.backrefSize < 61 ? this.backrefSize + 1 : OodleDictionary.SIZES[this.backrefSize - 61];
-            const range = Math.min(this.backrefValueMax, this.decodedSize);
-
-            let [d3i, d3v] = this.lowbit.tryDecode(dec);
-            if (d3i >= 0) { d3v = dec.decodeCommit(this.lowbitValueMax); this.lowbit.setValue(d3i, d3v); }
-            let [d4i, d4v] = this.highbit.tryDecode(dec);
-            if (d4i >= 0) { d4v = dec.decodeCommit(Math.floor(range / 1024) + 1); this.highbit.setValue(d4i, d4v); }
-            const mw = this.midbit[d4v];
-            let [d5i, d5v] = mw.tryDecode(dec);
-            if (d5i >= 0) { d5v = dec.decodeCommit(Math.min(Math.floor(range / 4) + 1, 256)); mw.setValue(d5i, d5v); }
-
-            const backrefOffset = (d4v << 10) + (d5v << 2) + d3v + 1;
-            this.decodedSize += br;
-            const n = Math.min(br, out.length - outpos);
-            for (let i = 0; i < n; i++)
-                out[outpos + i] = out[outpos - backrefOffset + (i % backrefOffset)];
-            return br;
-        } else {
-            const i = outpos % 4;
-            const dw = this.decoded[i];
-            let [d2i, d2v] = dw.tryDecode(dec);
-            if (d2i >= 0) { d2v = dec.decodeCommit(this.decodedValueMax); dw.setValue(d2i, d2v); }
-            out[outpos] = d2v & 0xff;
-            this.decodedSize++;
-            return 1;
-        }
-    }
-}
-
-function decompressOodle1(comp: Uint8Array, compLen: number, out: Uint8Array, outLen: number, stop0: number, stop1: number): void {
-    if (compLen === 0)
-        return;
-    const cv = new DataView(comp.buffer, comp.byteOffset, comp.byteLength);
-    const params: OodleParams[] = [];
-    for (let i = 0; i < 3; i++) {
-        const w0 = cv.getUint32(i * 12 + 0, true);
-        const w1 = cv.getUint32(i * 12 + 4, true);
-        params.push({
-            decodedValueMax: w0 & 0x1FF,
-            backrefValueMax: (w0 >>> 9) & 0x7FFFFF,
-            decodedCount: w1 & 0x1FF,
-            highbitCount: (w1 >>> 19) & 0x1FFF,
-            sizesCount: [comp[i * 12 + 8], comp[i * 12 + 9], comp[i * 12 + 10], comp[i * 12 + 11]],
-        });
-    }
-    const dec = new OodleDecoder(comp, 36);
-    const steps = [stop0, stop1, outLen];
-    let pos = 0;
-    for (let i = 0; i < 3; i++) {
-        const dict = new OodleDictionary(params[i]);
-        while (pos < steps[i])
-            pos += dict.block(dec, out, pos);
-    }
 }
