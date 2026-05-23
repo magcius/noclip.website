@@ -69,9 +69,9 @@ void main() {
 `;
 }
 
-const SHADOW_CORNER_OX = [-1, 1, -1, 1];
+const SHADOW_CORNER_OX = [-1, 1, 1, -1];
 const SHADOW_CORNER_OZ = [-1, -1, 1, 1];
-const SHADOW_CORNER_U = [0, 1, 0, 1];
+const SHADOW_CORNER_U = [0, 1, 1, 0];
 const SHADOW_CORNER_V = [0, 0, 1, 1];
 
 export class ShadowRenderer {

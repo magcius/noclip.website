@@ -38,9 +38,9 @@ interface DustParticle {
 const DUST_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 4 * 4;
 const DUST_FLOATS_PER_VERTEX = 9;
 
-const DUST_CORNER_OX = [-1, 1, -1, 1];
+const DUST_CORNER_OX = [-1, 1, 1, -1];
 const DUST_CORNER_OY = [-1, -1, 1, 1];
-const DUST_CORNER_U = [0, 1, 0, 1];
+const DUST_CORNER_U = [0, 1, 1, 0];
 const DUST_CORNER_V = [1, 1, 0, 0];
 
 class DustProgram extends DeviceProgram {

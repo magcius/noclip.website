@@ -378,15 +378,18 @@ export class SpriteActor {
             colors[vi] = color;
         };
 
-        // 4 verts per quad (TL, TR, BL, BR); the renderer's quad index buffer
-        // expands each into two triangles (0,1,2 + 0,2,3).
+        // 4 verts per quad in perimeter CCW order (TL, TR, BR, BL); the
+        // renderer's quad index buffer expands each into two triangles
+        // (0,1,2 + 0,2,3), which under this ordering share the TL-BR diagonal.
+        // c.cx[k]/c.cy[k] for k=0..3 remain TL, TR, BL, BR — only the emit
+        // slot for BL and BR is swapped here.
         for (const c of clips) {
             const verts = new Float32Array(VERTS_PER_QUAD * SPRITE_FLOATS_PER_VERTEX);
             const colors = new Uint32Array(VERTS_PER_QUAD);
             emit(verts, colors, 0, c.cx[0], c.cy[0], 0.0, 0.0, c.color);
             emit(verts, colors, 1, c.cx[1], c.cy[1], 1.0, 0.0, c.color);
-            emit(verts, colors, 2, c.cx[2], c.cy[2], 0.0, 1.0, c.color);
-            emit(verts, colors, 3, c.cx[3], c.cy[3], 1.0, 1.0, c.color);
+            emit(verts, colors, 2, c.cx[3], c.cy[3], 1.0, 1.0, c.color);
+            emit(verts, colors, 3, c.cx[2], c.cy[2], 0.0, 1.0, c.color);
             // sheet is filled by the renderer (the actor only knows its own
             // sprite, not its index in the renderer's sheet registry).
             out.push({ sheet: 0, clipType: c.clipType, sprIndex: c.sprIndex, verts, colors });

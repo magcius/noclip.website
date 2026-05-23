@@ -45,9 +45,9 @@ const FLOATS_PER_VERTEX = 6;
 const DEG2RAD = Math.PI / 180;
 
 // Hoisted out of emitSpark so we don't allocate them per spark.
-const SPARK_CORNER_H = [-1, 1, -1, 1];
+const SPARK_CORNER_H = [-1, 1, 1, -1];
 const SPARK_CORNER_V = [1, 1, -1, -1];
-const SPARK_UV_U = [0, 1, 0, 1];
+const SPARK_UV_U = [0, 1, 1, 0];
 const SPARK_UV_V = [0, 0, 1, 1];
 
 interface CastArm {
