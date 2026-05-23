@@ -57,15 +57,6 @@ function parseTex(data: ArrayBufferSlice): DecodedImage | null {
     return { width, height, rgba };
 }
 
-// No-GAT fallback. With a GAT, prefer gatCellSurfaceHeight (follows platforms).
-function gndGroundHeight(gnd: GndMap, gatX: number, gatY: number): number {
-    const gx = gatX >> 1, gy = gatY >> 1;
-    if (gx < 0 || gy < 0 || gx >= gnd.width || gy >= gnd.height)
-        return 0;
-    const c = gnd.cells[gy * gnd.width + gx];
-    return (c.height[0] + c.height[1] + c.height[2] + c.height[3]) * 0.25;
-}
-
 // Granny is Z-up, render frame is Y-up. (cx, cy) recentres the footprint on the cell.
 function placement(worldX: number, worldY: number, worldZ: number, scale: number, cx: number, cy: number): mat4 {
     const m = mat4.create();
@@ -89,28 +80,19 @@ function footprintCentre(meshes: { positions: Float32Array, vertexCount: number 
     return [(minX + maxX) / 2, (minY + maxY) / 2];
 }
 
-export function isWoeCastleMap(mapId: string): boolean {
-    return /_cas\d/.test(mapId) || mapId.includes("_cas");
-}
-
 export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: string, mapId: string, gnd: GndMap, gat: GatMap | null): Promise<GrannyInstance[]> {
-    if (!isWoeCastleMap(mapId))
+    const anchor = EMPERIUM_ROOM[mapId];
+    if (anchor === undefined)
         return [];
-
-    // GAT is 2x GND, so the centre cell is (gnd.width, gnd.height).
-    const anchor = EMPERIUM_ROOM[mapId] ?? [gnd.width, gnd.height];
+    if (gat === null)
+        return [];
 
     const instances: GrannyInstance[] = [];
     for (const layout of WOE_LAYOUT) {
         const name = layout.name;
-        let gr2Data: ArrayBufferSlice;
-        try {
-            gr2Data = await dataFetcher.fetchData(`${pathBase}/model3d/${name}.gr2`, { allow404: true });
-        } catch {
-            continue;
-        }
         let model;
         try {
+            const gr2Data = await dataFetcher.fetchData(`${pathBase}/model3d/${name}.gr2`, { allow404: true });
             model = extractGrannyModel(parseGranny(gr2Data));
         } catch {
             continue;
@@ -134,8 +116,7 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
         // X is mirrored about the map centre (see coord.ts).
         const worldX = gnd.width * GND_CELL_SIZE - (gatX + 0.5) * GAT_CELL_SIZE;
         const worldZ = (gatY + 0.5) * GAT_CELL_SIZE;
-        const surfaceHeight = gat !== null ? gatCellSurfaceHeight(gat, gatX, gatY) : gndGroundHeight(gnd, gatX, gatY);
-        const worldY = -surfaceHeight;
+        const worldY = -gatCellSurfaceHeight(gat, gatX, gatY);
 
         const animations: GrannyAnimation[] = [];
         if (!STATIC_MODELS.has(name)) {
