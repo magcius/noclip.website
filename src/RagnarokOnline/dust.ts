@@ -4,7 +4,7 @@
 // we keep a parallel lastSeenEpoch per mob and spawn when it advances.
 
 import { mat4, vec3 } from "gl-matrix";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -91,7 +91,6 @@ export class DustRenderer {
     private inputLayout: GfxInputLayout;
     private sampler: GfxSampler;
     private texture: GfxTexture;
-    private device: GfxDevice;
 
     private mobs: MobEntity[] = [];
     private lastSeenEpoch: number[] = [];
@@ -99,14 +98,11 @@ export class DustRenderer {
     private particles: DustParticle[] = [];
     private freeList: number[] = [];
 
-    private vertexBuffer: GfxIndexBufferDescriptor["buffer"] | null = null;
-    private vertexCapacityVerts = 0;
     private cpuData: ArrayBuffer = new ArrayBuffer(0);
     private cpuF32: Float32Array = new Float32Array(0);
     private cpuU8: Uint8Array = new Uint8Array(0);
 
     constructor(device: GfxDevice, cache: GfxRenderHelper["renderCache"]) {
-        this.device = device;
         this.program = cache.createProgram(new DustProgram());
 
         this.inputLayout = cache.createInputLayout({
@@ -255,17 +251,7 @@ export class DustRenderer {
             }
         }
 
-        if (vertexCount > this.vertexCapacityVerts) {
-            if (this.vertexBuffer !== null)
-                this.device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = this.device.createBuffer(vertexCount * DUST_VERTEX_STRIDE_BYTES, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-            this.vertexCapacityVerts = vertexCount;
-        }
-        if (this.vertexBuffer === null)
-            return;
-        this.device.uploadBufferData(this.vertexBuffer, 0, this.cpuU8.subarray(0, byteCount));
-
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        const vertexBufferDescriptors = [renderHelper.renderCache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, this.cpuU8.subarray(0, byteCount))];
 
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderHelper.pushTemplateRenderInst();
@@ -298,7 +284,5 @@ export class DustRenderer {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.texture);
-        if (this.vertexBuffer !== null)
-            device.destroyBuffer(this.vertexBuffer);
     }
 }
