@@ -112,7 +112,6 @@ import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_RatchetAndClank1 from './RatchetAndClank/scenes.js';
-import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
 import * as Scenes_RumbleRacing from "./RumbleRacing/Scenes.js";
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
@@ -142,6 +141,7 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
     Scenes_Example.sceneGroup,
+
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
@@ -231,7 +231,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_CasperSD.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
-    Scenes_PaperMarioTheOrigamiKing.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SpongebobRevengeOfTheFlyingDutchman.sceneGroup,
     Scenes_SonicColors.sceneGroup,
@@ -321,12 +320,17 @@ class SceneDatabase {
         return this.idToSceneDesc.get(sceneDescId) ?? null;
     }
 
+    public getSceneDescForGroupAndId(sceneGroupId: string, sceneId: string): SceneDesc | null {
+        const sceneDescId = `${sceneGroupId}/${sceneId}`;
+        return this.getSceneDescForId(sceneDescId);
+    }
+
     public addSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc): void {
         assert(sceneGroup.sceneDescs.includes(sceneDesc));
-        const id = this._makeSceneDescId(sceneGroup, sceneDesc);
+        const sceneDescId = this._makeSceneDescId(sceneGroup, sceneDesc);
         this.sceneDescToGroup.set(sceneDesc, sceneGroup);
-        this.sceneDescToId.set(sceneDesc, id);
-        this.idToSceneDesc.set(id, sceneDesc);
+        this.sceneDescToId.set(sceneDesc, sceneDescId);
+        this.idToSceneDesc.set(sceneDescId, sceneDesc);
 
         if (this.onchanged !== null)
             this.onchanged();
@@ -1006,12 +1010,13 @@ class Main {
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
+        const sceneLoader = this;
 
         const timeState = IS_DEVELOPMENT ? this._loadTimeState(this.sceneDatabase.getSceneDescId(sceneDesc)) : null;
         const initialSceneTime = timeState !== null ? timeState.sceneTime : 0;
 
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, initialSceneTime,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, sceneLoader, initialSceneTime,
         };
 
         // We save loadSceneDelta's worth of old objects -- the idea being that if you're navigating between similar
@@ -1047,6 +1052,12 @@ class Main {
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
     }
 
+    // SceneLoader API
+    public loadSceneById(sceneGroup: string, sceneId: string, sceneSaveState: string | null): void {
+        const sceneDesc = assertExists(this.sceneDatabase.getSceneDescForGroupAndId(sceneGroup, sceneId));
+        this._loadSceneDesc(sceneDesc, sceneSaveState, true);
+    }
+
     private _makeUI() {
         this.ui = new UI(this.viewer);
         this.ui.setEmbedMode(this.isEmbedMode);
@@ -1063,13 +1074,6 @@ class Main {
 
     private _toggleUI(visible?: boolean) {
         this.ui.toggleUI(visible);
-    }
-
-    private _getSceneDownloadPrefix() {
-        const sceneGroup = this.sceneDatabase.getSceneDescGroup(this.currentSceneDesc!);
-        const sceneId = this.currentSceneDesc!.id;
-        const date = new Date();
-        return `${sceneGroup.id}_${sceneId}_${date.toISOString()}`;
     }
 
     // Hooks for people who want to mess with stuff.
