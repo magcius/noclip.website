@@ -57,6 +57,19 @@ layout(std140) uniform ub_SceneParams {
     `,
     LightingFunctions: `
 
+vec3 normalFromAzumithElevation(float azimuth, float elevation) {
+    float cosAzimuth = cos(azimuth);
+    float sinAzimuth = sin(azimuth);
+    float cosElevation = cos(elevation);
+    float sinElevation = sin(elevation);
+
+    return vec3(
+        sinAzimuth * cosElevation,
+        cosAzimuth * cosElevation,
+        sinElevation
+    );
+}
+
 bool isNullLight(int position, int dirLightIndex) {
     if (dirLightIndex == 15) return true;
     if (position > 0 && dirLightIndex == 0) return true;

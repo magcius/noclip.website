@@ -105,7 +105,7 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
             }
         }
         if (rgbaRemap) {
-            assert(rgbaRemapIndex === rgbaRemap.length);
+            // assert(rgbaRemapIndex === rgbaRemap.length);
         }
 
         packets.push(packetsInThisLod);
@@ -338,16 +338,18 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
         // align 0x10
         TieRegularVertex regularVerts[tieVuHeader.regularVertexCount];
         TieMorphingVertex morphingVerts[tieVuHeader.morphingVertexCount];
+        if (gn === 1) {
+            // align 0x10
+            uint8 regularNormalIndices[tieVuHeader.regularVertexCount];
+            // align 0x4
+            uint8vec4 morphingNormalIndices[tieVuHeader.morphingVertexCount];
+            // align 0x10
+            uint8 regularRgbaIndices[tieVuHeader.regularVertexCount];
+            // align 0x4
+            uint8vec4 morphingRgbaIndices[tieVuHeader.morphingVertexCount];
+        }
         // align 0x10
-        uint8 regularNormalIndices[tieVuHeader.regularVertexCount];
-        // align 0x4
-        uint8vec4 morphingNormalIndices[tieVuHeader.morphingVertexCount];
-        // align 0x10
-        uint8 regularRgbaIndices[tieVuHeader.regularVertexCount];
-        // align 0x4
-        uint8vec4 morphingRgbaIndices[tieVuHeader.morphingVertexCount];
-        // align 0x10
-        uint8 unknown[?];
+        uint8 unknownFlags[until the (stripCount + 1)'th flag that is either 0x7, 0xFC, or 0xF6];
     }
     */
 
@@ -380,7 +382,6 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
     const morphingVertexCount = tieVuHeader.morphingVertexCount;
     const morphingVerts = view.subdivide(ptr, morphingVertexCount, SIZEOF_TIE_MORPHING_VERTEX).map(readTieMorphingVertex);
     ptr += morphingVertexCount * SIZEOF_TIE_MORPHING_VERTEX;
-    alignTo(0x10);
 
     // normal and rgba indices for rac1 only
     let regularNormalIndices: number[] = [];
@@ -389,6 +390,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
     let morphingRgbaIndices: { x: number, y: number, z: number }[] = [];
     if (gn === 1) {
         // indices into the tie's normal array
+        alignTo(0x10);
         regularNormalIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
         ptr += tieVuHeader.regularVertexCount * 0x1;
         alignTo(0x4);
@@ -1802,5 +1804,382 @@ export function readHeroCollisionGroups(view: DataViewExt): HeroCollisionGroups 
     return {
         header,
         groupData,
+    }
+}
+
+export type MobyClass = {
+    oClass: number,
+    header: MobyClassHeader,
+    mesh: MobyMesh | null,
+};
+export function readMobyClass(gn: GN, view: DataViewExt, oClass: number): MobyClass {
+    const header = readMobyClassHeader(view);
+
+    // downgrade to rac1 format in rac2 if the flag is set
+    let meshGn = gn;
+    if (gn === 2 && header.rac12ByteB !== 0) meshGn = 1;
+
+    let mesh: MobyMesh | null = null;
+    if (header.packetTableOffset !== 0) {
+        mesh = readMobyMesh(meshGn, view, header.packetTableOffset, header.meshInfo);
+    }
+
+    return {
+        oClass,
+        header,
+        mesh,
+    };
+}
+
+export type MobyClassHeader = {
+    packetTableOffset: number,
+    meshInfo: MobyMeshInfo,
+    jointCount: number,
+    unknown9: number,
+    rac1ByteA: number,
+    rac12ByteB: number, // rac12 -> if 0 use rac2 format, else 1; rac34 -> team textures
+    sequenceCount: number,
+    soundCount: number,
+    lodTrans: number,
+    shadow: number,
+    collision: number,
+    skeleton: number,
+    commonTrans: number,
+    joints: number,
+    gifUsage: number,
+    scale: number,
+    soundDefs: number,
+    bangles: number,
+    mipDist: number,
+    corncob: number,
+    boundingSphere: { x: number, y: number, z: number, w: number },
+    glowRgba: number,
+    modeBits: number,
+    type: number,
+    modeBits2: number,
+}
+export const SIZEOF_MOBY_CLASS = 0x48;
+export function readMobyClassHeader(view: DataViewExt): MobyClassHeader {
+    return {
+        packetTableOffset: view.getInt32(0x0),
+        meshInfo: readMobyMeshInfo(view.subview(0x4)),
+        jointCount: view.getUint8(0x8),
+        unknown9: view.getUint8(0x9),
+        rac1ByteA: view.getUint8(0xa),
+        rac12ByteB: view.getUint8(0xb), // rac12 -> if 0 use rac2 format, else 1; rac34 -> team textures
+        sequenceCount: view.getUint8(0xc),
+        soundCount: view.getUint8(0xd),
+        lodTrans: view.getUint8(0xe),
+        shadow: view.getUint8(0xf),
+        collision: view.getInt32(0x10),
+        skeleton: view.getInt32(0x14),
+        commonTrans: view.getInt32(0x18),
+        joints: view.getInt32(0x1c),
+        gifUsage: view.getInt32(0x20),
+        scale: view.getFloat32(0x24),
+        soundDefs: view.getInt32(0x28),
+        bangles: view.getUint8(0x2c),
+        mipDist: view.getUint8(0x2d),
+        corncob: view.getInt16(0x2e),
+        boundingSphere: view.getFloat32_Xyzw(0x30),
+        glowRgba: view.getInt32(0x40),
+        modeBits: view.getInt16(0x44),
+        type: view.getUint8(0x46),
+        modeBits2: view.getUint8(0x47),
+    };
+}
+
+export type MobyMeshInfo = {
+    highLodCount: number,
+    lowLodCount: number,
+    metalCount: number,
+    metalBegin: number,
+};
+
+export function readMobyMeshInfo(view: DataViewExt): MobyMeshInfo {
+    return {
+        highLodCount: view.getUint8(0x0),
+        lowLodCount: view.getUint8(0x1),
+        metalCount: view.getUint8(0x2),
+        metalBegin: view.getUint8(0x3),
+    }
+}
+
+export interface MobyMesh {
+    packetHeaders: MobyMeshPacketHeader[],
+    packetsLod0: MobyMeshPacket[],
+    packetsLod1: MobyMeshPacket[],
+};
+export function readMobyMesh(gn: GN, mobyView: DataViewExt, packetTableOffset: number, meshInfo: MobyMeshInfo): MobyMesh {
+    const packetHeaders = mobyView.subdivide(packetTableOffset, meshInfo.highLodCount + meshInfo.lowLodCount, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
+    const packets = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader));
+    const packetsLod0 = packets.slice(0, meshInfo.highLodCount);
+    const packetsLod1 = packets.slice(meshInfo.highLodCount);
+
+    // const metalPacketHeaders = mobyView.subdivide(packetTableOffset + meshInfo.metalBegin * 0x10, meshInfo.metalCount, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
+    // const metalPackets = metalPacketHeaders.map(header => mobyView.subview(header.vertexOffset, header.vertexDataSize * 0x10)).map(readMobyMeshPacket);
+
+    return {
+        packetHeaders,
+        packetsLod0,
+        packetsLod1,
+        // metalPacketHeaders,
+        // metalPackets,
+    };
+}
+
+export type MobyMeshPacketHeader = {
+    vifListOffset: number,
+    vifListSize: number, // In 16 byte units.
+    vifListTextureUnpackOffset: number, // No third UNPACK if zero.
+    vertexOffset: number,
+    vertexDataSize: number, // Includes header, in 16 byte units.
+    unknownD: number, // unknown_d == (0xf + transfer_vertex_count * 6) / 0x10
+    unknownE: number, // unknown_e == (3 + transfer_vertex_count) / 4
+    transferVertexCount: number, // Number of vertices sent to VU1.
+};
+export const SIZEOF_MOBY_MESH_PACKET_HEADER = 0x10;
+export function readMobyMeshPacketHeader(view: DataViewExt): MobyMeshPacketHeader {
+    return {
+        vifListOffset: view.getInt32(0x0),
+        vifListSize: view.getUint16(0x4),
+        vifListTextureUnpackOffset: view.getUint16(0x6),
+        vertexOffset: view.getInt32(0x8),
+        vertexDataSize: view.getUint8(0xc),
+        unknownD: view.getUint8(0xd),
+        unknownE: view.getUint8(0xe),
+        transferVertexCount: view.getUint8(0xf),
+    };
+}
+
+export interface MobyMeshPacket {
+    texcoords: { s: number, t: number }[],
+    indicesHeader: MobyIndicesHeader,
+    indices: Int8Array,
+    secretIndices: number[],
+    textures: MobyTexturePrimitive[],
+    vertices: MobyVertex[],
+    duplicateVertices: number[],
+};
+export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader): MobyMeshPacket {
+    const vifCommands = readVifCommandList(packetView.subview(packetHeader.vifListOffset, packetHeader.vifListSize * 0x10));
+    console.log(vifCommands.map(cmd => cmd.debug));
+    const unpackReader = new VifUnpackReader(vifCommands);
+
+    const unpack1 = unpackReader.next();
+    const texcoords = unpack1.subdivide(0, 0xFFFF, 0x4).map(view => ({
+        s: view.getInt16(0x0),
+        t: view.getInt16(0x2),
+    }));
+
+    const unpack2 = unpackReader.next();
+    const indicesHeader = readMobyIndicesHeader(unpack2);
+    const indices = unpack2.subview(0x4).getTypedArrayView(Int8Array);
+
+    const secretIndices: number[] = [indicesHeader.secretIndex];
+
+    const textures: MobyTexturePrimitive[] = [];
+
+    assert(!!packetHeader.vifListTextureUnpackOffset === !!unpackReader.hasNext());
+    if (packetHeader.vifListTextureUnpackOffset) {
+        const unpack3 = unpackReader.next();
+        assert(unpack3.byteLength % 0x40 === 0);
+        for (let i = 0; i < unpack3.byteLength / 0x40; i++) {
+            secretIndices.push(unpack3.getInt8(i * 0x10 + 0xc));
+            textures.push(readMobyTexturePrimitive(unpack3.subview(i * 0x40)));
+        }
+    }
+
+    const vertexTable = readMobyVertexTable(meshGn, packetView, packetHeader);
+
+    return {
+        texcoords,
+        indicesHeader,
+        indices,
+        secretIndices,
+        textures,
+        vertices: vertexTable.vertices,
+        duplicateVertices: vertexTable.duplicateVertices,
+    };
+}
+
+export function readMobyVertexTable(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader) {
+    let arrayOffset = packetHeader.vertexOffset;
+    const vertexTableHeader = readVertexTableHeader(meshGn, packetView.subview(arrayOffset));
+    arrayOffset += SIZEOF_VERTEX_TABLE_HEADER(meshGn);
+
+    assert(vertexTableHeader.vertexTableOffset / 0x10 <= packetHeader.vertexDataSize);
+    assert(vertexTableHeader.transferVertexCount === packetHeader.transferVertexCount);
+    assert(packetHeader.unknownD === Math.floor((0xf + packetHeader.transferVertexCount * 6) / 0x10));
+    assert(packetHeader.unknownE === Math.floor((3 + packetHeader.transferVertexCount) / 4));
+
+    let vertexOffset = packetHeader.vertexOffset + vertexTableHeader.vertexTableOffset;
+    const vertexCount = vertexTableHeader.twoWayBlendVertexCount + vertexTableHeader.threeWayBlendVertexCount + vertexTableHeader.mainVertexCount;
+    const vertices = packetView.subview(vertexOffset).subdivide(0, vertexCount, SIZEOF_MOBY_VERTEX).map(view => readMobyVertex(view));
+    vertexOffset += vertexCount * SIZEOF_MOBY_VERTEX;
+
+    const matrixTransfers = packetView.subdivide(arrayOffset, vertexTableHeader.matrixTransferCount, SIZEOF_MOBY_MATRIX_TRANSFER).map(view => readMobyMatrixTransfer(view));
+    arrayOffset += vertexTableHeader.matrixTransferCount * SIZEOF_MOBY_MATRIX_TRANSFER;
+
+    // align 8
+    if (arrayOffset % 4 != 0) {
+        arrayOffset += 2;
+    }
+    if (arrayOffset % 8 != 0) {
+        arrayOffset += 4;
+    }
+
+    const duplicateVertices = packetView.getArrayOfNumbers(arrayOffset, vertexTableHeader.duplicateVertexCount, Uint16Array).map(value => value >> 7);
+
+    // fix write addr
+    for (let i = 7; i < vertices.length; i++) {
+        vertices[i - 7].cacheAddress = vertices[i].cacheAddress;
+    }
+
+    let epilogueVertexCount = 0;
+    if (meshGn === 1) {
+        epilogueVertexCount = (vertexTableHeader.unknownE - vertexTableHeader.vertexTableOffset) / 0x10 - vertexCount;
+    } else {
+        epilogueVertexCount = packetHeader.vertexDataSize - vertexTableHeader.vertexTableOffset / 0x10 - vertexCount;
+    }
+    assert(epilogueVertexCount < 7);
+    vertexOffset += Math.max(7 - vertexCount, 0) * SIZEOF_MOBY_VERTEX;
+    for (let i = Math.max(7 - vertexCount, 0); i < epilogueVertexCount; i++) {
+        const vertex = readMobyEpilogueVertex(packetView.subview(vertexOffset));
+        vertexOffset += SIZEOF_MOBY_VERTEX;
+        const dest = vertexCount + i - 7;
+        vertices[dest].cacheAddress = vertex.writeAddress;
+    }
+    const last = readMobyEpilogueVertex(packetView.subview(vertexOffset - 0x10));
+    for (let i = Math.max(7 - vertexCount - epilogueVertexCount, 0); i < 6; i++) {
+        const dest = vertexCount + epilogueVertexCount + i - 7;
+        if (dest < vertices.length) {
+            vertices[dest].cacheAddress = last.additionalIndices[i];
+        }
+    }
+
+    return {
+        vertexTableHeader,
+        vertices,
+        matrixTransfers,
+        duplicateVertices,
+    };
+}
+
+export interface MobyIndicesHeader {
+    unknown0: number,
+    textureUnpackOffsetQuadwords: number,
+    secretIndex: number,
+}
+export const SIZEOF_MOBY_INDICES_HEADER = 0x4;
+export function readMobyIndicesHeader(view: DataViewExt): MobyIndicesHeader {
+    return {
+        unknown0: view.getUint8(0x0),
+        textureUnpackOffsetQuadwords: view.getUint8(0x1),
+        secretIndex: view.getInt8(0x2),
+    };
+}
+
+export interface MobyTexturePrimitive {
+    tex1: GifAd,
+    superSecretIndex1: number,
+    clamp: GifAd,
+    superSecretIndex2: number,
+    tex0: GifAd,
+    superSecretIndex3: number,
+    miptbp1: GifAd,
+    superSecretIndex4: number,
+};
+export const SIZEOF_MOBY_TEXTURE_PRIMITIVE = 0x40;
+export function readMobyTexturePrimitive(view: DataViewExt): MobyTexturePrimitive {
+    return {
+        tex1: readGifAdData(view.subview(0x0)),
+        superSecretIndex1: view.getInt32(0xc),
+        clamp: readGifAdData(view.subview(0x10)),
+        superSecretIndex2: view.getInt32(0x1c),
+        tex0: readGifAdData(view.subview(0x20)),
+        superSecretIndex3: view.getInt32(0x2c),
+        miptbp1: readGifAdData(view.subview(0x30)),
+        superSecretIndex4: view.getInt32(0x3c),
+    };
+}
+
+export type VertexTableHeader = {
+    matrixTransferCount: number,
+    twoWayBlendVertexCount: number,
+    threeWayBlendVertexCount: number,
+    mainVertexCount: number,
+    duplicateVertexCount: number,
+    transferVertexCount: number,
+    vertexTableOffset: number,
+    unknownE: number,
+};
+export const SIZEOF_VERTEX_TABLE_HEADER = (meshGn: GN) => meshGn === 1 ? 0x20 : 0x10;
+export function readVertexTableHeader(gn: GN, view: DataViewExt): VertexTableHeader {
+    if (gn === 1) {
+        return {
+            matrixTransferCount: view.getInt32(0x0),
+            twoWayBlendVertexCount: view.getInt32(0x4),
+            threeWayBlendVertexCount: view.getInt32(0x8),
+            mainVertexCount: view.getInt32(0xc),
+            duplicateVertexCount: view.getInt32(0x10),
+            transferVertexCount: view.getInt32(0x14),
+            vertexTableOffset: view.getInt32(0x18),
+            unknownE: view.getInt32(0x1c),
+        };
+    } else {
+        // same but with 16 bit fields instead of 32 bit
+        return {
+            matrixTransferCount: view.getInt16(0x0),
+            twoWayBlendVertexCount: view.getInt16(0x2),
+            threeWayBlendVertexCount: view.getInt16(0x4),
+            mainVertexCount: view.getInt16(0x6),
+            duplicateVertexCount: view.getInt16(0x8),
+            transferVertexCount: view.getInt16(0xa),
+            vertexTableOffset: view.getInt16(0xc),
+            unknownE: view.getInt16(0xe),
+        };
+    }
+}
+
+export type MobyVertex = {
+    cacheAddress: number,
+    normalAzumith: number,
+    normalElevation: number,
+    x: number,
+    y: number,
+    z: number,
+}
+export const SIZEOF_MOBY_VERTEX = 0x10;
+export function readMobyVertex(view: DataViewExt): MobyVertex {
+    /*
+    Skip skinning data for now because it's very complicated
+    */
+    return {
+        cacheAddress: view.getUint16(0x0) & 0x1FF, // 9 bit
+        normalAzumith: view.getInt8(0x8),
+        normalElevation: view.getInt8(0x9),
+        x: view.getInt16(0xa),
+        y: view.getInt16(0xc),
+        z: view.getInt16(0xe),
+    };
+}
+
+export function readMobyEpilogueVertex(view: DataViewExt) {
+    return {
+        writeAddress: view.getUint16(0x0) & 0x1FF, // 9 bit
+        additionalIndices: view.getArrayOfNumbers(0x4, 6, Uint16Array),
+    };
+}
+
+export type MobyMatrixTransfer = {
+    sprJointIndex: number,
+    vu0DestAddr: number,
+};
+export const SIZEOF_MOBY_MATRIX_TRANSFER = 0x2;
+export function readMobyMatrixTransfer(view: DataViewExt) {
+    return {
+        sprJointIndex: view.getUint8(0x0),
+        vu0DestAddr: view.getUint8(0x1),
     }
 }

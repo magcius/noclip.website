@@ -205,7 +205,7 @@ export class ShrubGeometry {
         const vertexArrayBuffer = new Float32Array(vertexCount * ShrubProgram.elementsPerVertex);
         let vertexPtr = 0;
         let currentMaterial: { texture: number, clamp: number } | undefined;
-        let tri = [null, null, null] as [ShrubVertex | null, ShrubVertex | null, ShrubVertex | null];
+        const tri = [null, null, null] as [ShrubVertex | null, ShrubVertex | null, ShrubVertex | null];
 
         for (let packetIndex = 0; packetIndex < shrub.body.packets.length; packetIndex++) {
             const commandBuffer = shrub.body.packets[packetIndex];

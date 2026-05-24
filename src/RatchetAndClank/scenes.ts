@@ -22,6 +22,7 @@ import { createGfxTextureForPaletteTexture, createTextureAtlases, createTieRgbaT
 import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
+import { MobyGeometry, MobyRenderer } from "./render-moby";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
@@ -41,11 +42,12 @@ class RatchetAndClankScene implements SceneGfx {
         showCollision: false,
         enableTfrag: true,
         enableTies: true,
-        enableMobys: false,
+        enableMobys: true,
         enableShrubs: true,
         enableSky: true,
         enableFog: true,
         enableTextures: true,
+        showInvisibleMobyPositions: false,
         showPaths: false,
     };
 
@@ -59,7 +61,8 @@ class RatchetAndClankScene implements SceneGfx {
 
     private geometries: {
         tfrag: TfragGeometry | null,
-        ties: Map<number, (TieGeometry | null)[]>, // map of oClass to array of LOD geometries
+        ties: Map<number, (TieGeometry | null)[]>, // 3 lods, lod 0 is always present
+        mobys: Map<number, (MobyGeometry | null)[]>, // 2 lods, both may be null
         shrubs: Map<number, ShrubGeometry>,
         skyShells: Map<number, SkyGeometry>,
         collision: CollisionGeometry | null,
@@ -68,6 +71,7 @@ class RatchetAndClankScene implements SceneGfx {
     private renderers: {
         tfrag: TfragRenderer,
         tie: TieRenderer,
+        moby: MobyRenderer,
         shrub: ShrubRenderer,
         sky: SkyRenderer,
         collision: CollisionRenderer,
@@ -98,6 +102,10 @@ class RatchetAndClankScene implements SceneGfx {
             tieInstances: null,
             tieInstancesByOClass: null,
             tieAmbientRgbas: null,
+            mobyOClasses: null,
+            mobyClasses: null,
+            mobyInstances: null,
+            mobyInstancesByOClass: null,
             shrubTextures: null,
             shrubOClasses: null,
             shrubClasses: null,
@@ -106,7 +114,6 @@ class RatchetAndClankScene implements SceneGfx {
             shrubInstancesByOClass: null,
             sky: null,
             skyTextures: null,
-            mobyInstances: null,
         };
 
         this.samplerGeneral = cache.createSampler({
@@ -134,6 +141,7 @@ class RatchetAndClankScene implements SceneGfx {
         this.geometries = {
             tfrag: null,
             ties: new Map(),
+            mobys: new Map(),
             shrubs: new Map(),
             skyShells: new Map(),
             collision: null,
@@ -142,6 +150,7 @@ class RatchetAndClankScene implements SceneGfx {
         this.renderers = {
             tfrag: new TfragRenderer(this.renderHelper),
             tie: new TieRenderer(this.renderHelper),
+            moby: new MobyRenderer(this.renderHelper),
             shrub: new ShrubRenderer(this.renderHelper),
             sky: new SkyRenderer(this.renderHelper),
             collision: new CollisionRenderer(this.renderHelper),
@@ -189,6 +198,24 @@ class RatchetAndClankScene implements SceneGfx {
         }
         this.geometries.ties.set(oClass, tieGeometry);
         return tieGeometry;
+    }
+
+    getOrCreateMobyGeometry(oClass: number): (MobyGeometry | null)[] | null {
+        const existing = this.geometries.mobys.get(oClass);
+        if (existing) return existing;
+
+        const mobyClass = this.levelResources.mobyClasses?.get(oClass);
+        if (!mobyClass) return null;
+        if (!mobyClass.mesh) return null;
+        const mobyTextureIndices: number[] = []; // nyi
+
+        const mobyGeometry: (MobyGeometry | null)[] = [
+            new MobyGeometry(this.renderHelper.renderCache, mobyClass, mobyTextureIndices),
+            null,
+        ]
+        if (mobyClass.mesh.packetsLod0.length === 0) return null;
+        this.geometries.mobys.set(oClass, mobyGeometry);
+        return mobyGeometry;
     }
 
     getOrCreateShrubGeometry(oClass: number): ShrubGeometry | null {
@@ -458,19 +485,16 @@ class RatchetAndClankScene implements SceneGfx {
 
         // mobys
         if (this.settings.enableMobys) {
-            const mobyInstances = this.levelResources.mobyInstances ?? [];
-            for (let i = 0; i < mobyInstances.length; i++) {
-                const mobyInstance = mobyInstances[i];
-                const pos = vec3.fromValues(mobyInstance.position.x, mobyInstance.position.y, mobyInstance.position.z);
-                vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
-                this.renderHelper.debugDraw.drawLocator(pos, 0.3, White);
-                const mat = mat4.fromTranslation(mat4.create(), pos);
-                const rotation = quat.create();
-                mat4.getRotation(rotation, viewerInput.camera.worldMatrix);
-                mat4.fromRotationTranslationScale(mat, rotation, pos, vec3.fromValues(0.01, 0.01, 0.01));
-                if (vec3.distance(pos, cameraPosition) < 40) {
-                    this.renderHelper.debugDraw.drawWorldTextMtx(String(mobyInstance.oClass), mat, White);
-                }
+            const mobyOClasses = this.levelResources.mobyOClasses ?? [];
+            for (let i = 0; i < mobyOClasses.length; i++) {
+                const oClass = mobyOClasses[i];
+                const mobyInstances = this.levelResources.mobyInstancesByOClass?.get(oClass);
+                if (!mobyInstances) continue;
+                const mobyGeometryArr = this.getOrCreateMobyGeometry(oClass);
+                if (!mobyGeometryArr) continue;
+                const mobyGeometry = mobyGeometryArr[0];
+                if (!mobyGeometry) continue;
+                this.renderers.moby.renderMoby(this.renderInstList, mobyGeometry, mobyInstances, [], cameraPosition, cameraFrustum, this.instanceDataBuffer);
             }
         }
 
@@ -484,6 +508,26 @@ class RatchetAndClankScene implements SceneGfx {
                 const geometry = this.getOrCreateShrubGeometry(oClass);
                 if (!geometry) continue;
                 this.renderers.shrub.renderShrub(this.renderInstList, geometry, instances, atlasTextures, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
+            }
+        }
+
+        // invisible moby positions
+        if (this.settings.showInvisibleMobyPositions) {
+            const mobyInstances = this.levelResources.mobyInstances ?? [];
+            for (let i = 0; i < mobyInstances.length; i++) {
+                const mobyInstance = mobyInstances[i];
+                const mobyClass = this.levelResources.mobyClasses?.get(mobyInstance.oClass);
+                if (mobyClass && mobyClass.mesh) continue;
+                const pos = vec3.fromValues(mobyInstance.position.x, mobyInstance.position.y, mobyInstance.position.z);
+                vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
+                this.renderHelper.debugDraw.drawLocator(pos, 0.3, White);
+                const mat = mat4.fromTranslation(mat4.create(), pos);
+                const rotation = quat.create();
+                mat4.getRotation(rotation, viewerInput.camera.worldMatrix);
+                mat4.fromRotationTranslationScale(mat, rotation, pos, vec3.fromValues(0.01, 0.01, 0.01));
+                if (vec3.distance(pos, cameraPosition) < 40) {
+                    this.renderHelper.debugDraw.drawWorldTextMtx(String(mobyInstance.oClass), mat, White);
+                }
             }
         }
 
@@ -569,6 +613,12 @@ class RatchetAndClankScene implements SceneGfx {
         };
         renderSettingsPanel.contents.appendChild(enableTies.elem);
 
+        const enableMobys = new UI.Checkbox('Enable Mobys', this.settings.enableMobys);
+        enableMobys.onchanged = () => {
+            this.settings.enableMobys = enableMobys.checked;
+        };
+        renderSettingsPanel.contents.appendChild(enableMobys.elem);
+
         const enableShrubs = new UI.Checkbox('Enable Shrubs', this.settings.enableShrubs);
         enableShrubs.onchanged = () => {
             this.settings.enableShrubs = enableShrubs.checked;
@@ -593,11 +643,11 @@ class RatchetAndClankScene implements SceneGfx {
         };
         renderSettingsPanel.contents.appendChild(enableSky.elem);
 
-        const enableMobys = new UI.Checkbox('Show Moby Positions', this.settings.enableMobys);
-        enableMobys.onchanged = () => {
-            this.settings.enableMobys = enableMobys.checked;
+        const showInvisibleMobyPositions = new UI.Checkbox('Show Moby Positions', this.settings.showInvisibleMobyPositions);
+        showInvisibleMobyPositions.onchanged = () => {
+            this.settings.showInvisibleMobyPositions = showInvisibleMobyPositions.checked;
         };
-        renderSettingsPanel.contents.appendChild(enableMobys.elem);
+        renderSettingsPanel.contents.appendChild(showInvisibleMobyPositions.elem);
 
         const showPaths = new UI.Checkbox('Show Paths', this.settings.showPaths);
         showPaths.onchanged = () => {
