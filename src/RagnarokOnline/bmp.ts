@@ -3,9 +3,8 @@
 // 24-bit BI_RGB (no compression); TGA is uncompressed (type 2) or RLE (type 10)
 // 24/32-bit BGR(A). Both decode to top-down RGBA8.
 //
-// RO uses magenta (255,0,255) as a transparency color key on BMPs. The original
-// client keyed against a 16-bit 565 surface, which gave the key implicit
-// tolerance, so we widen the match window to absorb the dithered fringe.
+// RO BMPs key (255,0,255) as transparent. Some shipped textures store the key
+// off-by-one (e.g. (254,0,255), (255,1,254)) so we widen the match slightly.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
@@ -16,7 +15,7 @@ export interface DecodedImage {
 }
 
 function isMagicPink(r: number, g: number, b: number): boolean {
-    return r >= 220 && g <= 16 && b >= 220;
+    return r >= 248 && g <= 4 && b >= 248;
 }
 
 export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
