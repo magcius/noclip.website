@@ -12,7 +12,7 @@ import { DecodedImage, decodeBMP, decodeTGA } from "./bmp.js";
 import { parseGND, textureNameToUrl } from "./gnd.js";
 import { GatMap, parseGAT } from "./gat.js";
 import { AnimatedModelMesh, buildAnimatedModelMesh, buildModelMesh, buildPlacementMatrix, modelIsAnimated, ModelMesh } from "./model.js";
-import { AnimatedModelInstance, FogSceneData, LightSceneData, ModelInstance, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
+import { AnimatedModelPlacement, FogSceneData, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
 import { parseRSM } from "./rsm.js";
 import { computeLightDir, parseRSW } from "./rsw.js";
 import { decodeImageBitmapRGBA } from "./water.js";
@@ -143,8 +143,8 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const mapOffX = gnd.width * GND_CELL_SIZE * 0.5;
         const mapOffZ = gnd.height * GND_CELL_SIZE * 0.5;
 
-        const instances: ModelInstance[] = [];
-        const animatedInstances: AnimatedModelInstance[] = [];
+        const instances: ModelPlacement[] = [];
+        const animatedInstances: AnimatedModelPlacement[] = [];
         for (const p of rsw.models) {
             const staticEntry = meshes.get(p.modelName);
             if (staticEntry !== undefined) {
