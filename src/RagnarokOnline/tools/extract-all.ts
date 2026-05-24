@@ -6,10 +6,10 @@
 //   npx tsx src/RagnarokOnline/tools/extract-all.ts [mapId ...]
 //
 // Inputs:
-//   data/RagnarokOnline_raw/assets/data/   <- iRO client GRF (unpack with tools/iro-grf/)
-//   data/RagnarokOnline_raw/iro_effecttool <- iRO client effecttool dir (separate dump)
-//   ../Hercules                            <- sibling checkout of github.com/HerculesWS/Hercules
-//   data/RagnarokOnline/maps               <- produced by the extract stage above
+//   data/RagnarokOnline_raw/grf/data.grf      <- iRO 2026 client GRF (unpack into _raw/assets/ with tools/iro-grf/)
+//   data/RagnarokOnline_raw/assets/data/maps  <- .rsw/.gnd/.gat from the GRF above
+//   data/RagnarokOnline_raw/iro_effecttool    <- iRO client effecttool dir (separate dump)
+//   ../Hercules                               <- sibling checkout of github.com/HerculesWS/Hercules
 
 import { spawnSync } from "child_process";
 import { existsSync } from "fs";
@@ -28,10 +28,10 @@ const passthrough = process.argv.slice(2);
 
 const stages: Stage[] = [
     { name: "extract",            script: "extract.ts",            args: passthrough, requires: "data/RagnarokOnline_raw/assets/data/maps" },
-    { name: "patch-malangdo-yut", script: "patch-malangdo-yut.ts", requires: "data/RagnarokOnline/maps/malangdo.gnd" },
+    { name: "patch-malangdo-yut", script: "patch-malangdo-yut.ts", requires: "data/RagnarokOnline_raw/assets/data/maps/malangdo.gnd" },
     { name: "extract-emitters",   script: "extract-emitters.ts",   requires: "data/RagnarokOnline_raw/iro_effecttool" },
     { name: "extract-entities",   script: "extract-entities.ts",   requires: "../Hercules" },
-    { name: "regen-maps",         script: "regen-maps.ts",         requires: "data/RagnarokOnline/maps" },
+    { name: "regen-maps",         script: "regen-maps.ts",         requires: "data/RagnarokOnline_raw/assets/data/maps" },
 ];
 
 for (const stage of stages) {

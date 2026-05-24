@@ -41,7 +41,7 @@ function classifyMap(id: string): MapCategory {
     return "other";
 }
 
-const MAPS_DIR = path.resolve("data/RagnarokOnline/maps");
+const MAPS_DIR = path.resolve("data/RagnarokOnline_raw/assets/data/maps");
 const ENTITIES_DIR = path.resolve("data/RagnarokOnline/entities");
 const IRO_NAMETABLE = path.resolve("data/RagnarokOnline-iro-tables/mapnametable.txt");
 const KRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
