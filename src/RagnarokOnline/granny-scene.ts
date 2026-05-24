@@ -102,12 +102,8 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
 
         const texImages: (DecodedImage | null)[] = [];
         for (let t = 0; t < model.textureNames.length; t++) {
-            try {
-                const td = await dataFetcher.fetchData(`${pathBase}/model3d/${name}.${t}.tex`, { allow404: true });
-                texImages.push(parseTex(td));
-            } catch {
-                texImages.push(null);
-            }
+            const td = await dataFetcher.fetchData(`${pathBase}/model3d/${name}.${t}.tex`);
+            texImages.push(parseTex(td));
         }
         const meshTextures = model.meshes.map((m) => (m.textureIndex >= 0 && m.textureIndex < texImages.length) ? texImages[m.textureIndex] : null);
 
