@@ -90,15 +90,8 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
     const instances: GrannyInstance[] = [];
     for (const layout of WOE_LAYOUT) {
         const name = layout.name;
-        let model;
-        try {
-            const gr2Data = await dataFetcher.fetchData(`${pathBase}/model3d/${name}.gr2`, { allow404: true });
-            model = extractGrannyModel(parseGranny(gr2Data));
-        } catch {
-            continue;
-        }
-        if (model.meshes.length === 0)
-            continue;
+        const gr2Data = await dataFetcher.fetchData(`${pathBase}/model3d/${name}.gr2`);
+        const model = extractGrannyModel(parseGranny(gr2Data));
 
         const texImages: (DecodedImage | null)[] = [];
         for (let t = 0; t < model.textureNames.length; t++) {
