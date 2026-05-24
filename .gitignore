@@ -58,3 +58,7 @@ data/*
 dist/
 
 .wireit
+
+__pycache__/
+*.pyc
+.venv/
