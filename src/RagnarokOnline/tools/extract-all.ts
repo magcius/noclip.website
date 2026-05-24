@@ -28,7 +28,6 @@ const passthrough = process.argv.slice(2);
 
 const stages: Stage[] = [
     { name: "extract",            script: "extract.ts",            args: passthrough, requires: "data/RagnarokOnline_raw/assets/data/maps" },
-    { name: "patch-malangdo-yut", script: "patch-malangdo-yut.ts", requires: "data/RagnarokOnline_raw/assets/data/maps/malangdo.gnd" },
     { name: "extract-emitters",   script: "extract-emitters.ts",   requires: "data/RagnarokOnline_raw/iro_effecttool" },
     { name: "extract-entities",   script: "extract-entities.ts",   requires: "../Hercules" },
     { name: "regen-maps",         script: "regen-maps.ts",         requires: "data/RagnarokOnline_raw/assets/data/maps" },
