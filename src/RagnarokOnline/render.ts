@@ -19,6 +19,7 @@ import { GfxRendererLayer, GfxRenderInstList, makeSortKey } from "../gfx/render/
 import { DeviceProgram } from "../Program.js";
 import InputManager from "../InputManager.js";
 import * as UI from "../ui.js";
+import { SceneLoader } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { DecodedImage } from "./bmp.js";
 import { GndMap, GndSurface } from "./gnd.js";
@@ -745,7 +746,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.pendingClick = { x: this.pressX, y: this.pressY };
     };
 
-    constructor(device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm) {
+    constructor(device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm, private sceneLoader: SceneLoader) {
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -1541,7 +1542,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.frameArrivalAt(viewerInput, best.arrivalWorldPos);
             return;
         }
-        triggerTravel(best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
+        triggerTravel(this.sceneLoader, best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
     }
 
     // Fixed framing of the arrival cell — scaling with map radius produced a

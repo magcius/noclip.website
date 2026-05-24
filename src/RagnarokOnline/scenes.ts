@@ -312,7 +312,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const bgm = new Bgm("RagnarokOnline");
         void bgm.setMap(dataFetcher, eraSharedKey(this.id));
 
-        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm);
+        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, context.sceneLoader);
     }
 }
 
