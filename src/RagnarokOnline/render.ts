@@ -36,7 +36,6 @@ import { WeatherParams, WeatherRenderer } from "./weather.js";
 import { gatCellGroundHeight, gatCellToWorld, GND_CELL_SIZE } from "./coord.js";
 import { ShadowRenderer } from "./shadow.js";
 import { SkyDomeRenderer, SkySceneData } from "./sky.js";
-import { LensflareRenderer } from "./lensflare.js";
 import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
 import { Bgm } from "./bgm.js";
@@ -647,7 +646,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         sunDir: [0, 1, 0],
     };
     private skyDomeRenderer: SkyDomeRenderer | null = null;
-    private lensflareRenderer: LensflareRenderer | null = null;
 
     // 0 = full day, 1 = full night.
     private nightDegree = 0;
@@ -758,10 +756,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (skyData !== null)
             this.sky = skyData;
         this.bgm = bgm;
-        if (this.sky.enableDome) {
+        if (this.sky.enableDome)
             this.skyDomeRenderer = new SkyDomeRenderer(cache);
-            this.lensflareRenderer = new LensflareRenderer(device, cache);
-        }
 
         this.program = cache.createProgram(new TerrainProgram());
 
@@ -1268,8 +1264,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         // Mob hits consume the click so a mob on a portal dies rather than travels.
         this.processMobClick(viewerInput);
         this.processWarpClick(viewerInput);
-
-        this.lensflareRenderer?.prepare(this.renderHelper, viewerInput.camera, this.light.lightDir as vec3);
 
         this.renderHelper.prepareToRender();
     }
@@ -1836,7 +1830,5 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.shadowRenderer.destroy(device);
         if (this.dustRenderer !== null)
             this.dustRenderer.destroy(device);
-        if (this.lensflareRenderer !== null)
-            this.lensflareRenderer.destroy(device);
     }
 }

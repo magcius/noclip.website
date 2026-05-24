@@ -69,7 +69,7 @@ function makeRng(seed: number): () => number {
 }
 
 // Small soft-round RGBA texture (constant RGB, radial alpha falloff). Shared
-// with shadow.ts (black) and lensflare.ts (white).
+// with shadow.ts (black).
 export function makeSoftDiscImage(r: number, g: number, b: number): { width: number, height: number, rgba: Uint8Array } {
     const N = 16;
     const rgba = new Uint8Array(N * N * 4);
