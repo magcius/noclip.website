@@ -8,7 +8,27 @@ The reverse engineering of model formats was done by many people. See the applic
 
 Contributions are very welcome! New games, new features, and bug fixes are all very appreciated. Even small contributions like proper map names, grouping maps and new default savestates are extremely helpful.
 
-If you would like contribute, there is a Getting Started guide in the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv), pinned in the #development channel. A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
+## Development Guide
+
+To develop for noclip.website, you'll need these requisites:
+
+* Your code editor of choice (for example, [Visual Studio Code](https://code.visualstudio.com/), [WebStorm](https://www.jetbrains.com/webstorm/)),
+* [Node.js](https://nodejs.org/en/download). Choose the latest LTS version and choose the `pnpm` package manager,
+* [rustup](https://rust-lang.org/learn/get-started/).
+
+Then, use the following commands to set up your environment (only needed every so often):
+* Install dependencies from npm: `pnpm install`,
+* Set up the required rust binaries:
+  ```shell
+  rustup target add wasm32-unknown-unknown
+  cd rust
+  cargo install cargo-run-bin
+  cargo bin --install
+  ```
+
+Finally, to build and run the project, use `pnpm start`. This will start a live-reloading environment and uses filesystem watchers to auto-build the project.
+
+For any questions related to development, see the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv)'s #development channel. A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
 
 ## Controls
 
