@@ -6,9 +6,9 @@
 //   npx tsx src/RagnarokOnline/tools/regen-maps.ts
 //
 // Inputs:
-//   data/RagnarokOnline/maps/*.rsw            (scanned for the id list)
-//   data/RagnarokOnline-iro-tables/mapnametable.txt  (English names; preferred)
-//   data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt  (Korean kRO; fallback)
+//   data/RagnarokOnline/maps/*.rsw                              (scanned for the id list)
+//   data/RagnarokOnline_raw/iro_tables/mapnametable.txt         (English names; preferred — iRO side dump, not from the GRF)
+//   data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt   (Korean kRO; fallback — from the GRF)
 // Output:
 //   src/RagnarokOnline/maps.ts (committed; the scene registry maps over it)
 
@@ -43,7 +43,7 @@ function classifyMap(id: string): MapCategory {
 
 const MAPS_DIR = path.resolve("data/RagnarokOnline_raw/assets/data/maps");
 const ENTITIES_DIR = path.resolve("data/RagnarokOnline/entities");
-const IRO_NAMETABLE = path.resolve("data/RagnarokOnline-iro-tables/mapnametable.txt");
+const IRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/iro_tables/mapnametable.txt");
 const KRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
 const OUT = path.resolve("src/RagnarokOnline/maps.ts");
 
