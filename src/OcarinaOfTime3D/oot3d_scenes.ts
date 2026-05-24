@@ -1543,6 +1543,9 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("whoops");
             }
+        } else if (actor.actorId === ActorId.En_Yukabyun) {
+            const zar = await fetchArchive('zelda_yukabyun.zar');
+            buildModel(zar, 'model/trap_yukabyun_model.cmb', 1);
         } else if (actor.actorId === ActorId.Bg_Toki_Swd) {
             const zar = await fetchArchive(`zelda_toki_objects.zar`);
             const b = buildModel(zar, `model/master_sword_model.cmb`, 0.025);
@@ -1571,6 +1574,12 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("whoops");
             }
+        } else if (actor.actorId === ActorId.En_Honotrap) {
+            const zar = await fetchArchive('zelda_dangeon_keep.zar');
+            buildModel(zar, 'model/switch_5_model.cmb', 0.1);
+        } else if (actor.actorId === ActorId.En_Tubo_Trap) {
+            const zar = await fetchArchive('zelda_dangeon_keep.zar');
+            buildModel(zar, 'model/tubo_model.cmb', 0.1);
         } else if (actor.actorId === ActorId.Bg_Spot03_Taki) {
             const zar = await fetchArchive(`zelda_spot03_object.zar`);
             const b = buildModel(zar, `model/c_s03bigtaki_modelT.cmb`, 0.1);
@@ -1919,7 +1928,12 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive('zelda_du.zar');
             const b = buildModel(zar, `model/darunia.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/du_matsu.csab`));
-
+        } else if (actor.actorId === ActorId.En_Fd) {
+            const zar = await fetchArchive('zelda_fw.zar');
+            const b = buildModel(zar, 'model/flaredancer.cmb', 0.01);
+            b.bindCSAB(parseCSAB(zar, 'anim/fire_dancer_run.csab'));
+            b.bindCMAB(parseCMAB(zar, 'misc/flaredancer.cmab'));
+            b.setConstantColor(3, colorNewFromRGBA(1, 0.35, 0)); // Approximation
         } else if (actor.actorId === ActorId.En_Sa) {
             const zar = await fetchArchive(`zelda_sa.zar`);
             const b = buildModel(zar, `model/saria.cmb`);
@@ -1935,7 +1949,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_owl.zar`);
             const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
-
+        } else if (actor.actorId === ActorId.En_Gm) {
+            const zar = await fetchArchive('zelda_gm.zar');
+            const b = buildModel(zar, 'model/goronpeople.cmb', 0.05);
+            b.bindCSAB(parseCSAB(zar, 'anim/of1d_chyu_goron.csab'));
         } else if (actor.actorId === ActorId.En_Ms) {
             const zar = await fetchArchive(`zelda_ms.zar`);
             const b = buildModel(zar, `model/beanmaster.cmb`);
@@ -2350,9 +2367,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
         } else if (actor.actorId === ActorId.En_Bw) {
             const zar = await fetchArchive('zelda_bw.zar');
-            const b = buildModel(zar, `model/torchsrag.cmb`);
+            const b = buildModel(zar, `model/torchsrag.cmb`, 0.012999999);
             b.bindCSAB(parseCSAB(zar, `anim/bw_aruku.csab`));
             b.bindCMAB(parseCMAB(zar, `Misc/torchsrag.cmab`));
+            b.setConstantColor(4, colorNewFromRGBA(1, 0, 0));
 
         } else if (actor.actorId === ActorId.En_Bili) {
             const zar = await fetchArchive('zelda_bl.zar');
@@ -2434,6 +2452,8 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/tectite.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/tt_wait.csab`));
 
+            if (actor.variable == 65535)
+                b.bindCMAB(parseCMAB(zar, 'misc/pt_tectite.cmab'));
         } else if (actor.actorId === ActorId.En_Rd) {
             const zar = await fetchArchive(`zelda_rd.zar`);
             const whichEnemy = (actor.variable >>> 7) & 0x01;
