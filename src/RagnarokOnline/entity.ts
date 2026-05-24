@@ -116,8 +116,8 @@ const WALK_MOTION_SCALE = 1.48;
 function moveDirToFacing(dx: number, dz: number): number {
     if (dx === 0 && dz === 0)
         return 0;
-    const deg = Math.atan2(dx, dz) * 180 / Math.PI;
-    return ((-Math.round(deg / 45)) % 8 + 8) % 8;
+    const oct = -Math.round(Math.atan2(dx, dz) * 4 / Math.PI);
+    return (oct % 8 + 8) % 8;
 }
 
 // Grounded on the walkable surface: prefer GAT cell corner heights (they
