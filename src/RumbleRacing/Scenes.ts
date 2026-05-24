@@ -52,6 +52,7 @@ class RumbleRacingScene implements SceneGfx {
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
+  private wireframe: boolean = false;
 
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
@@ -251,6 +252,9 @@ class RumbleRacingScene implements SceneGfx {
 
     const template = this.renderHelper.pushTemplateRenderInst();
     template.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 2 }]);
+
+    if (this.wireframe) template.setMegaStateFlags({ wireframe: true });
+
     this.fillSceneParams(template, viewerInput);
 
     this.renderMap();
@@ -322,6 +326,15 @@ class RumbleRacingScene implements SceneGfx {
     showActorsCheckbox.onchanged = () => {
       this.showActors = showActorsCheckbox.checked;
     };
+
+    if (this.renderHelper.device.queryLimits().wireframeSupported) {
+      const wireframe = new UI.Checkbox("Wireframe", false);
+      wireframe.onchanged = () => {
+        const v = wireframe.checked;
+        this.wireframe = v;
+      };
+      renderSettingsPanel.contents.appendChild(wireframe.elem);
+    }
 
     renderSettingsPanel.contents.appendChild(showActorsCheckbox.elem);
 
