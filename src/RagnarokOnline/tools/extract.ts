@@ -166,7 +166,7 @@ const FILELIST_TYPE_FILE = 0x01;
 const FILELIST_TYPE_ENCRYPT_MIXED = 0x02;
 const FILELIST_TYPE_ENCRYPT_HEADER = 0x04;
 
-export interface GrfEntry {
+interface GrfEntry {
     compressedSize: number;
     lengthAligned: number;
     realSize: number;
@@ -174,7 +174,7 @@ export interface GrfEntry {
     offset: number;
 }
 
-export class Grf {
+class Grf {
     public readonly version: number;
     public readonly files: Map<string, GrfEntry> = new Map();
     private readonly fd: number;
