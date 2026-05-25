@@ -5,7 +5,7 @@
 //
 // 1014 entries (992 bare + 22
 // pre-renewal classic variants with rebuilt geometry). 931 with an iRO
-// English name, 0 kRO Korean fallback, 61 unnamed.
+// English name, 61 unnamed.
 
 import type { MapCategory } from "./mapcategory.js";
 

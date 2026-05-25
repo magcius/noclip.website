@@ -1,7 +1,7 @@
 
 // Classifies a map by its id. Consumed by the scene list (grouping), the sky
 // renderer (dome enable + default sky tint), and the fog path (dungeons only).
-// The category for each known map is baked into the manifest by extract.ts (Stage 5);
+// The category for each known map is baked into the manifest by extract.ts (Stage 4);
 // the runtime is just a lookup. Ids outside the manifest fall back to "other".
 
 import { maps } from "./maps.js";
