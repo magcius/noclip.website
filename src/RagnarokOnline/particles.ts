@@ -1,6 +1,6 @@
 
 // Per-map particle emitters from each map's compiled effecttool LUB. Offline,
-// `tools/extract-emitters.ts` runs the patched Lua 5.1 binary to dump emitter
+// `tools/extract.ts` (Stage 3) runs the patched Lua 5.1 binary to dump emitter
 // tables to `<mapId>.emitters.json` next to the .rsw. At runtime we fetch the
 // JSON, decode textures, transform to the render frame, and own a particle pool
 // per emitter.
