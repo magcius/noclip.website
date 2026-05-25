@@ -2,6 +2,7 @@
 // Offline pipeline that produces data/RagnarokOnline/ (the CDN tree the
 // renderer fetches at runtime). One script; runs every stage in order:
 //
+//   npx tsx src/RagnarokOnline/tools/extract.ts --bulk-extract   (one-time bootstrap)
 //   npx tsx src/RagnarokOnline/tools/extract.ts [mapId ...]
 //   npx tsx src/RagnarokOnline/tools/extract.ts --only=extract,gen-maps
 //
@@ -16,37 +17,40 @@
 //
 //   data/RagnarokOnline_raw/grf/data.grf
 //     iRO Mar-11-2026 client GRF (~4.4 GiB, Event Horizon v0x300). Install
-//     latest iRO; data.grf is at the install root. Contributes 990/992 maps
-//     and all Episode 15+ content. (Stage 1 reads this directly.)
+//     latest iRO; data.grf is at the install root. Source of every asset the
+//     renderer ships except the items called out below. The first run wants
+//     `--bulk-extract` to dump it into assets/ (this is what the now-removed
+//     tools/iro-grf/ Python extractor used to do); subsequent runs of Stage 1
+//     just top up missing files incrementally.
 //
 //   data/RagnarokOnline_raw/assets/
-//     Bulk-extracted GRF contents. Use tools/iro-grf/ (Python) for the iRO
-//     GRF; any standard reader works for legacy/. Layout mirrors the GRF.
-//     Stages 2 and 5 read this (data/maps, graphics/{texture,model,sprite},
-//     data/misc/{mapnametable,fogparametertable}.txt).
+//     Output of `--bulk-extract` (or an equivalent dump). Layout mirrors the
+//     GRF. Stages 2, 3 and 5 read from here.
 //
 //   data/RagnarokOnline_raw/iro_effecttool/
-//     iRO effecttool .lub/.lua dump (per-map particle emitter specs). Side-
-//     channel client dump, not in the GRF.
-//
-//   data/RagnarokOnline_raw/iro_eff_textures_all/
-//     Pre-extracted effect textures the .lub emitters reference. Stage 3
-//     copies the referenced subset into data/RagnarokOnline/textures/effect/.
+//     iRO effecttool .lub/.lua dump (per-map particle emitter specs). Not in
+//     the GRF; copy from an iRO client install's effecttool/ dir.
 //
 //   data/RagnarokOnline_raw/bin/lua-5.1-iro
 //     Patched 32-bit Lua 5.1 binary (built once from /tmp/lua-5.1.5 with the
 //     size_t read tweak; see dump-emitters.lua). Stage 3 spawns this to
 //     execute the iRO .lub scripts.
 //
-//   data/RagnarokOnline_raw/iro_tables/mapnametable.txt
-//     iRO English map name table. Stage 5 prefers this over the kRO Korean
-//     fallback at assets/data/misc/mapnametable.txt (which ships in the GRF).
-//
 //   data/RagnarokOnline_raw/baked/gr2/, baked/gr2tex/
-//     WoE Granny models pre-expanded offline. RO ships them Oodle0-compressed
-//     with RAD-encoded textures only granny2.dll can decode; tools/gr2_de
-//     compress.c + tools/gr2_texbake.c (build for Win32, run under wine)
-//     produce these. Optional; missing -> WoE props skipped.
+//     WoE Granny models pre-expanded offline (RO ships them Oodle0-compressed
+//     with RAD-encoded textures only granny2.dll can decode). Build steps,
+//     one-time, on an x86 host with mingw + wine:
+//       i686-w64-mingw32-gcc -O2 -o gr2_decompress.exe tools/gr2_decompress.c
+//       i686-w64-mingw32-gcc -O2 -o gr2_texbake.exe   tools/gr2_texbake.c
+//       # drop granny2.dll (lift from any iRO/kRO client install root)
+//       # beside both .exes
+//     For each WoE model (empelium90_0, [a|s|k]guardian90_{7,8,9},
+//     guildflag90_1, treasurebox_2) and each shared clip
+//     ({7,8,9}_{move,attack,damage}):
+//       wine gr2_decompress.exe <src>.gr2 baked/gr2/<name>.gr2
+//       wine gr2_texbake.exe   baked/gr2/<name>.gr2 baked/gr2tex/<name>
+//     texbake emits one baked/gr2tex/<name>.<i>.tex per texture. Optional;
+//     missing -> WoE props skipped.
 //
 //   ../Hercules
 //     Sibling checkout of github.com/HerculesWS/Hercules for NPC/mob spawn
@@ -310,6 +314,42 @@ function topUp(grf: Grf, names: Set<string>, rootDir: string, grfPrefix: string,
         copied++;
     }
     console.log(`  ${kind}: ${copied} copied, ${skipped} already present, ${missing} not in GRF, ${errors} errors`);
+}
+
+// Full GRF dump: write every entry to data/RagnarokOnline_raw/assets/ under
+// its CP949-decoded path. Use this once to bootstrap the assets/ tree (was
+// previously tools/iro-grf/read_grf.py); the runExtractFromGrf top-up below
+// then maintains it incrementally.
+function runBulkExtractGrf(): void {
+    if (!existsSync(GRF_PATH)) {
+        console.error(`GRF not found: ${GRF_PATH}`);
+        throw new Error("stage aborted");
+    }
+    const ASSETS_ROOT = path.resolve("data/RagnarokOnline_raw/assets");
+
+    console.log(`Loading ${GRF_PATH}...`);
+    const grf = new Grf(GRF_PATH);
+    console.log(`  v0x${grf.version.toString(16)}, ${grf.files.size} files`);
+
+    let copied = 0, errors = 0;
+    for (const filename of grf.files.keys()) {
+        const dst = path.join(ASSETS_ROOT, ...filename.split("\\"));
+        let buf: Buffer | null = null;
+        try {
+            buf = grf.read(filename);
+        } catch (e) {
+            console.warn(`  read failed: ${filename}: ${(e as Error).message}`);
+            errors++;
+            continue;
+        }
+        if (buf === null) continue;
+        mkdirSync(path.dirname(dst), { recursive: true });
+        writeFileSync(dst, buf);
+        copied++;
+        if (copied % 10000 === 0) console.log(`  ${copied} files...`);
+    }
+    grf.close();
+    console.log(`Bulk extract: ${copied} files written to ${ASSETS_ROOT}, ${errors} errors`);
 }
 
 function runExtractFromGrf(mapIdFilter: string[]): void {
@@ -840,7 +880,7 @@ const LUB_ROOT = path.resolve("data/RagnarokOnline_raw/iro_effecttool");
 
 // Source: the 133 textures the LUBs reference, pre-extracted from the GRF
 // into a flat `data/texture/effect/` layout.
-const EFFECT_TEX_ROOT = path.resolve("data/RagnarokOnline_raw/iro_eff_textures_all/data/texture/effect");
+const EFFECT_TEX_ROOT = path.resolve("data/RagnarokOnline_raw/assets/graphics/texture/effect");
 
 // Destination: per-map emitter JSON lives next to the staged .rsw/.gnd/.gat
 // so the scene loader can fetch it with `${mapId}.emitters.json`.
@@ -1901,17 +1941,14 @@ function classifyMap(id: string): MapCategory {
     return "other";
 }
 
-const IRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/iro_tables/mapnametable.txt");
 const KRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
 const OUT = path.resolve("src/RagnarokOnline/maps.ts");
 
 // mapnametable.txt: `<map_id>.rsw#<display name>#`. kRO is CP949; iRO is ASCII
 // (which decodes through CP949 unchanged). WHATWG's "euc-kr" label is the CP949 index.
-function parseMapNameTable(file: string): Map<string, string> {
+function parseMapNameTable(buf: Buffer): Map<string, string> {
     const out = new Map<string, string>();
-    if (!existsSync(file))
-        return out;
-    const text = new TextDecoder("euc-kr").decode(readFileSync(file));
+    const text = new TextDecoder("euc-kr").decode(buf);
     for (const raw of text.split(/\r?\n/)) {
         const s = raw.trim();
         if (s.length === 0 || s.startsWith("//"))
@@ -1932,9 +1969,20 @@ function runGenMaps(): void {
         console.error(`no maps dir: ${ASSET_MAPS_DIR}`);
         throw new Error("stage aborted");
     }
+    if (!existsSync(GRF_PATH)) {
+        console.error(`GRF not found: ${GRF_PATH}`);
+        throw new Error("stage aborted");
+    }
 
-    const iro = parseMapNameTable(IRO_NAMETABLE);
-    const kro = parseMapNameTable(KRO_NAMETABLE);
+    // iRO English nametable lives at data\mapnametable.txt inside the iRO GRF;
+    // kRO Korean fallback is whatever assets/data/misc/mapnametable.txt the
+    // legacy GRF extraction left behind (may be absent on iRO-only setups).
+    const grf = new Grf(GRF_PATH);
+    const iroBuf = grf.read("data\\mapnametable.txt") ?? Buffer.alloc(0);
+    grf.close();
+    const kroBuf = existsSync(KRO_NAMETABLE) ? readFileSync(KRO_NAMETABLE) : Buffer.alloc(0);
+    const iro = parseMapNameTable(iroBuf);
+    const kro = parseMapNameTable(kroBuf);
     console.log(`iRO names: ${iro.size}  kRO names: ${kro.size}`);
 
     // Bare ids: one per `<id>.rsw`. Era-suffixed files (`<id>@classic.rsw`)
@@ -2037,12 +2085,19 @@ function main(): void {
     const flags = args.filter((a) => a.startsWith("-"));
     const mapIdFilter = args.filter((a) => !a.startsWith("-"));
 
+    const bulkExtract = flags.includes("--bulk-extract");
     const onlyFlags = flags.filter((f) => f === "--only" || f.startsWith("--only="));
-    const unknownFlags = flags.filter((f) => !onlyFlags.includes(f));
+    const unknownFlags = flags.filter((f) => !onlyFlags.includes(f) && f !== "--bulk-extract");
     if (unknownFlags.length > 0) {
         console.error(`unknown flag(s): ${unknownFlags.join(" ")}`);
-        console.error(`supported: --only=stage1,stage2 (repeatable)`);
+        console.error(`supported: --bulk-extract, --only=stage1,stage2 (repeatable)`);
         process.exit(1);
+    }
+    if (bulkExtract) {
+        // One-shot bootstrap: dump the entire iRO GRF into assets/ then exit.
+        // The regular pipeline assumes assets/ already exists and is incremental.
+        runBulkExtractGrf();
+        return;
     }
 
     // Merge all --only= flags into one set; --only with no `=` value (or with
