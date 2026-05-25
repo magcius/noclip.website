@@ -73,7 +73,7 @@ function writeIMGZ(path: string, assets: Asset[], size: number) {
     writeFileSync(path, gz); // somehow using fs.writeFile here hangs...
 }
 
-const pathBase = '../../../data/GrandTheftAutoSanAndreas';
+const pathBase = './data/GrandTheftAutoSanAndreas';
 
 async function main() {
     const texturesOpaque: string[] = [];
