@@ -28,6 +28,12 @@ import { buildWaterMesh, WaterAnimator, WaterParams, WATER_VERTEX_STRIDE_BYTES }
 import { SpriteActor, SpriteKind, SpriteRenderer } from "./sprite.js";
 import { SprModel } from "./spr.js";
 import { EntitySceneData, MobEntity } from "./entity.js";
+
+export interface EntityLayerBundle {
+    entityData: EntitySceneData;
+    warpPortalData: WarpPortalSceneData | null;
+    warpClickData: WarpClickSceneData;
+}
 import { NameLabelRenderer, NPC_LABEL_STYLE, MOB_LABEL_STYLE } from "./nametag.js";
 import { ParticleRenderer, ParticleSceneData } from "./particles.js";
 import { WarpPortalRenderer, WarpPortalSceneData } from "./warp-portal.js";
@@ -39,6 +45,7 @@ import { ShadowRenderer } from "./shadow.js";
 import { SkyDomeRenderer, SkySceneData } from "./sky.js";
 import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
+import { currentEra, setEra } from "./era.js";
 import { Bgm } from "./bgm.js";
 import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
@@ -812,7 +819,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.pendingClick = { x: this.pressX, y: this.pressY };
     };
 
-    constructor(device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm, private sceneLoader: SceneLoader) {
+    constructor(private device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm, private sceneLoader: SceneLoader, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null = null) {
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -1024,6 +1031,35 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.dustRenderer?.setMobs(this.mobs);
     }
 
+    private reloadToken = 0;
+
+    private async reloadEntities(): Promise<void> {
+        if (this.rebuildEntityLayer === null)
+            return;
+        const token = ++this.reloadToken;
+        const { entityData, warpPortalData, warpClickData } = await this.rebuildEntityLayer();
+        if (token !== this.reloadToken)
+            return; // a newer reload superseded us
+        const device = this.device;
+        const cache = this.renderHelper.renderCache;
+
+        if (this.spriteRenderer !== null) { this.spriteRenderer.destroy(device); this.spriteRenderer = null; }
+        if (this.shadowRenderer !== null) { this.shadowRenderer.destroy(device); this.shadowRenderer = null; }
+        if (this.dustRenderer !== null) { this.dustRenderer.destroy(device); this.dustRenderer = null; }
+        if (this.npcLabelRenderer !== null) { this.npcLabelRenderer.destroy(device); this.npcLabelRenderer = null; }
+        if (this.mobLabelRenderer !== null) { this.mobLabelRenderer.destroy(device); this.mobLabelRenderer = null; }
+        if (this.warpPortalRenderer !== null) { this.warpPortalRenderer.destroy(device); this.warpPortalRenderer = null; }
+        this.mobs = [];
+        this.npcShadowAnchors = [];
+        this.mobShadowAnchors = [];
+
+        this.setupEntities(device, cache, entityData);
+        if (warpPortalData !== null)
+            this.warpPortalRenderer = new WarpPortalRenderer(device, cache, warpPortalData);
+        this.warpTargets = warpClickData.targets;
+        this.wantsMouseListeners = this.warpTargets.length > 0 || this.mobs.length > 0;
+    }
+
     private setupWater(device: GfxDevice, cache: GfxRenderHelper["renderCache"], waterData: WaterSceneData): void {
         const hasFrame = waterData.frames.some((f) => f !== null);
         if (!hasFrame)
@@ -1177,12 +1213,18 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const hasParticles = this.particleRenderer !== null;
         const hasWarpPortals = this.warpPortalRenderer !== null;
         const hasLabels = hasNPC || hasMob;
-        if (!(hasNPC || hasMob || hasEffect || hasProps || hasWater || hasGranny || hasParticles || hasWarpPortals))
-            return null;
 
         const panel = new UI.Panel();
         panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         panel.setTitle(UI.LAYER_ICON, "Layers");
+
+        const classicToggle = new UI.Checkbox("Pre-Renewal Era", currentEra() === "classic");
+        classicToggle.onchanged = () => {
+            setEra(classicToggle.checked ? "classic" : "renewal");
+            void this.reloadEntities();
+        };
+        panel.contents.appendChild(classicToggle.elem);
+
         if (spr !== null && hasNPC)
             this.addCheckbox(panel, "Show NPCs", spr.isKindEnabled("npc"), (v) => spr.setKindEnabled("npc", v));
         if (spr !== null && hasMob)

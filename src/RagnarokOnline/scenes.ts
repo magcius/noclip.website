@@ -12,7 +12,7 @@ import { DecodedImage, decodeBMP, decodeTGA } from "./bmp.js";
 import { parseGND, textureNameToUrl } from "./gnd.js";
 import { GatMap, parseGAT } from "./gat.js";
 import { AnimatedModelMesh, buildAnimatedModelMesh, buildModelMesh, buildPlacementMatrix, modelIsAnimated, ModelMesh } from "./model.js";
-import { AnimatedModelPlacement, FogSceneData, FOG_DEFAULT_COLOR_UNFOGGED, FOG_DEFAULT_TINT_UNFOGGED, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
+import { AnimatedModelPlacement, EntityLayerBundle, FogSceneData, FOG_DEFAULT_COLOR_UNFOGGED, FOG_DEFAULT_TINT_UNFOGGED, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
 import { parseRSM } from "./rsm.js";
 import { parseRSW } from "./rsw.js";
 import { decodeImageBitmapRGBA } from "./water.js";
@@ -24,7 +24,7 @@ import { loadWoeGrannyModels } from "./granny-scene.js";
 import { loadPointLights } from "./lights.js";
 import { maps } from "./maps.js";
 import { mapCategory, MapCategory, mapWantsFog, mapWeather } from "./mapcategory.js";
-import { eraOf, eraSharedKey, eraSuffix, fetchEraOrBare, resolveWarpDest } from "./era.js";
+import { currentEra } from "./era.js";
 import { SNOW_PARAMS, WeatherParams } from "./weather.js";
 import { buildSkyData } from "./sky.js";
 import { loadParticles } from "./particles.js";
@@ -54,20 +54,16 @@ class RagnarokMapSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
-        // Era-aware: try the era-specific asset first, fall back to the bare
-        // file. Most era-divergent maps share geometry (only the NPC manifest
-        // differs); a genuinely-rebuilt map ships its own .rsw/.gnd/.gat.
         let rswData;
         try {
-            rswData = await fetchEraOrBare(dataFetcher, `${pathBase}/maps`, this.id, ".rsw");
+            rswData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.rsw`);
         } catch {
             throw new Error(`Ragnarok map "${this.id}" is not available (its assets aren't on the CDN).`);
         }
         const rsw = parseRSW(rswData);
 
-        const baseGnd = rsw.gndFile !== "" ? rsw.gndFile.replace(/\.gnd$/i, "") : eraSharedKey(this.id);
-        const gndAssetId = `${baseGnd}${eraSuffix(this.id)}`;
-        const gndData = await fetchEraOrBare(dataFetcher, `${pathBase}/maps`, gndAssetId, ".gnd");
+        const baseGnd = rsw.gndFile !== "" ? rsw.gndFile.replace(/\.gnd$/i, "") : this.id;
+        const gndData = await dataFetcher.fetchData(`${pathBase}/maps/${baseGnd}.gnd`);
         const gnd = parseGND(gndData);
 
         // Missing texture: silently skip the draw group. Decode failure: log
@@ -218,12 +214,12 @@ class RagnarokMapSceneDesc implements SceneDesc {
         };
 
         // Fog table doubles as the sky colour (always applied when present).
-        // The fog *tint* over geometry only reads as atmosphere inside
-        // dungeons, so it's gated by mapWantsFog. Era-shared: bare base id.
+        // The fog tint over geometry only reads as atmosphere inside dungeons,
+        // so it's gated by mapWantsFog.
         let fogTableColor: vec3 | null = null;
         let fogTableDensity: number = 0;
         try {
-            const fogRaw = await dataFetcher.fetchData(`${pathBase}/maps/${eraSharedKey(this.id)}.fog.json`, { allow404: true });
+            const fogRaw = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.fog.json`, { allow404: true });
             const fogText = new TextDecoder().decode(fogRaw.createTypedArray(Uint8Array));
             const fog = JSON.parse(fogText) as { start: number, end: number, color: string, density: number };
             const argb = parseInt(fog.color, 16) >>> 0;
@@ -247,57 +243,53 @@ class RagnarokMapSceneDesc implements SceneDesc {
         // A missing/unparseable GAT just disables mob wandering.
         let gat: GatMap | null = null;
         try {
-            const gatData = await fetchEraOrBare(dataFetcher, `${pathBase}/maps`, this.id, ".gat");
+            const gatData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.gat`);
             gat = parseGAT(gatData);
         } catch {
             gat = null;
         }
 
-        const entityData = await loadEntities(dataFetcher, pathBase, this.id, gnd, gat);
-
-        // Effect sources share the entity sprite renderer; offset their
-        // placement indices past the existing entity sprites.
+        // Effect sources are era-invariant (loaded once, merged into the entity
+        // sprite layer on every era swap).
         const effectSources = await loadEffectSources(dataFetcher, pathBase, rsw.effects, mapOffX, mapOffZ);
-        if (effectSources.sprites.length > 0) {
-            const spriteBase = entityData.sprites.length;
-            for (const ls of effectSources.sprites)
-                entityData.sprites.push(ls);
-            for (const p of effectSources.placements)
-                entityData.placements.push({ ...p, spriteIndex: p.spriteIndex + spriteBase });
-        }
 
-        const warpPortalData = await loadWarpPortals(dataFetcher, pathBase, entityData.warps, gnd, gat);
-
-        // Stays in sync with the portal renderer's placement choice.
         const gatHeight = (gatX: number, gatY: number): number =>
             gat !== null ? gatCellSurfaceHeight(gat, gatX, gatY) : gatCellGroundHeight(gnd, gatX, gatY);
-        const sourceEra = eraOf(this.id);
-        const warpTargets: WarpTarget[] = entityData.warps.map((w) => {
+        const buildWarpTargets = (warps: typeof entityData.warps): WarpTarget[] => warps.map((w) => {
             const wp = gatCellToWorld(w.cellX, w.cellY, gatHeight(w.cellX, w.cellY), gnd.width);
             const spanCells = Math.max(w.spanX, w.spanY);
             const radius = Math.max(spanCells * GAT_CELL_SIZE, WARP_MIN_HIT_RADIUS);
-            const dest = resolveWarpDest(w.dest, w.destEra, sourceEra);
-            // Intra-map warps: pre-resolve arrival world pos so the click
-            // teleports without a scene reload. Compare the RESOLVED dest so
-            // era-aware self-warps still match.
             let arrivalWorldPos: vec3 | undefined;
-            if (dest === this.id && w.destX !== undefined && w.destY !== undefined) {
+            if (w.dest === this.id && w.destX !== undefined && w.destY !== undefined) {
                 const ap = gatCellToWorld(w.destX, w.destY, gatHeight(w.destX, w.destY), gnd.width);
                 arrivalWorldPos = vec3.fromValues(ap[0], ap[1], ap[2]);
             }
             return {
                 worldPos: vec3.fromValues(wp[0], wp[1], wp[2]),
                 radius,
-                dest,
+                dest: w.dest,
                 arrivalCellX: w.destX,
                 arrivalCellY: w.destY,
                 arrivalWorldPos,
             };
         });
 
-        const warpClickData: WarpClickSceneData = { targets: warpTargets };
+        const buildLayer = async (): Promise<EntityLayerBundle> => {
+            const ed = await loadEntities(dataFetcher, pathBase, this.id, currentEra(), gnd, gat);
+            if (effectSources.sprites.length > 0) {
+                const spriteBase = ed.sprites.length;
+                for (const ls of effectSources.sprites)
+                    ed.sprites.push(ls);
+                for (const p of effectSources.placements)
+                    ed.placements.push({ ...p, spriteIndex: p.spriteIndex + spriteBase });
+            }
+            const wpd = await loadWarpPortals(dataFetcher, pathBase, ed.warps, gnd, gat);
+            return { entityData: ed, warpPortalData: wpd, warpClickData: { targets: buildWarpTargets(ed.warps) } };
+        };
 
-        const grannyData = await loadWoeGrannyModels(dataFetcher, pathBase, eraSharedKey(this.id), gnd, gat);
+        const { entityData, warpPortalData, warpClickData } = await buildLayer();
+
+        const grannyData = await loadWoeGrannyModels(dataFetcher, pathBase, this.id, gnd, gat);
 
         let weatherParams: WeatherParams | null = null;
         if (mapWeather(this.id) === "snow")
@@ -305,12 +297,12 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
         const pointLights = loadPointLights(rsw, gnd);
 
-        const particleData = await loadParticles(dataFetcher, pathBase, eraSharedKey(this.id), mapOffX, mapOffZ);
+        const particleData = await loadParticles(dataFetcher, pathBase, this.id, mapOffX, mapOffZ);
 
         const bgm = new Bgm("RagnarokOnline");
-        void bgm.setMap(dataFetcher, eraSharedKey(this.id));
+        void bgm.setMap(dataFetcher, this.id);
 
-        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, context.sceneLoader);
+        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, context.sceneLoader, buildLayer);
     }
 }
 

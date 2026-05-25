@@ -14,6 +14,7 @@ import { parseACT, ActModel } from "./act.js";
 import { SpriteActor, computeActorFootPxY, SpriteKind } from "./sprite.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coord.js";
 import { RswEffectSource } from "./rsw.js";
+import { Era } from "./era.js";
 
 // A zero area (cellX=cellY=spanX=spanY=0) is a whole-map random spawn.
 interface MobSpawn {
@@ -48,9 +49,6 @@ export interface WarpEntry {
     // Arrival cell on the destination map. Older manifests omit these.
     destX?: number;
     destY?: number;
-    // Hint for resolving the destination's era when it has both classic and
-    // renewal variants. See era.ts:resolveWarpDest.
-    destEra?: "classic" | "renewal";
 }
 
 interface EntityManifest {
@@ -504,16 +502,22 @@ function randomWalkableInRect(gat: GatMap, x0: number, y0: number, x1: number, y
     return null;
 }
 
-export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, mapId: string, gnd: GndMap, gat: GatMap | null): Promise<EntitySceneData> {
+export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, mapId: string, era: Era, gnd: GndMap, gat: GatMap | null): Promise<EntitySceneData> {
     const empty: EntitySceneData = { sprites: [], placements: [], mobs: [], warps: [] };
 
-    let manifest: EntityManifest;
-    try {
-        const raw = await dataFetcher.fetchData(`${pathBase}/entities/${mapId}.json`, { allow404: true });
-        manifest = JSON.parse(new TextDecoder().decode(raw.createTypedArray(Uint8Array))) as EntityManifest;
-    } catch {
+    const tryFetch = async (name: string): Promise<EntityManifest | null> => {
+        const raw = await dataFetcher.fetchData(`${pathBase}/entities/${name}.json`, { allow404: true });
+        if (raw.byteLength === 0) return null;
+        try {
+            return JSON.parse(new TextDecoder().decode(raw.createTypedArray(Uint8Array))) as EntityManifest;
+        } catch {
+            return null;
+        }
+    };
+
+    const manifest = (await tryFetch(`${mapId}@${era}`)) ?? (await tryFetch(mapId));
+    if (manifest === null)
         return empty;
-    }
 
     const npcs = manifest.npcs ?? [];
     const mobSpawns = manifest.mobs ?? [];
