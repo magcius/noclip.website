@@ -59,7 +59,6 @@ import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_Metroi
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum.js';
 import * as Scenes_PokemonHGSS from './nns_g3d/Scenes_PokemonHGSS.js';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool.js';
-import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007.js';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes.js';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater.js';
 import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource.js';
@@ -237,7 +236,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
-    Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,

@@ -45,7 +45,6 @@
     "build:TheWitness": "tsx src/TheWitness/tools/extractor.ts",
     "build:Fez": "tsx src/Fez/tools/extractor.ts",
     "build:RatchetAndClank": "tsx src/RatchetAndClank/tools/extractor.ts",
-    "test:DeBlob2": "tsx src/DeBlob2/tools/systest.ts",
     "typecheck": "tsc -w --noEmit"
   },
   "wireit": {
