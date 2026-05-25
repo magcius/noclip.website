@@ -346,6 +346,8 @@ export interface MobyInstance {
     updateDistance: number,
     position: { x: number, y: number, z: number },
     rotation: { x: number, y: number, z: number },
+    color: { r: number, g: number, b: number },
+    directionalLights: number[],
     [unknown: string]: unknown,
 };
 
@@ -362,12 +364,13 @@ export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
         case 1: {
             /*
             https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L58
+            (drawDistance is incorrectly a float in the linked code)
             */
             return {
                 size: view.getInt32(0x0),
                 oClass: view.getInt32(0x18),
                 scale: view.getFloat32(0x1c),
-                drawDistance: view.getFloat32(0x20),
+                drawDistance: view.getInt32(0x20),
                 updateDistance: view.getInt32(0x24),
                 position: view.getFloat32_Xyz(0x30),
                 rotation: view.getFloat32_Xyz(0x3c),
@@ -378,7 +381,7 @@ export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
                 occlusion: view.getInt32(0x5c),
                 modeBits: view.getInt32(0x60),
                 color: view.getInt32_Rgb(0x64),
-                light: view.getInt32(0x70),
+                directionalLights: view.getNibbleArray(0x70, 2),
             }
         }
         case 2:
@@ -393,7 +396,7 @@ export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
                 bolts: view.getInt32(0x14),
                 oClass: view.getInt32(0x28),
                 scale: view.getFloat32(0x2c),
-                drawDistance: view.getFloat32(0x30),
+                drawDistance: view.getInt32(0x30),
                 updateDistance: view.getInt32(0x34),
                 position: view.getFloat32_Xyz(0x40),
                 rotation: view.getFloat32_Xyz(0x4c),
@@ -403,8 +406,8 @@ export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
                 pvarIndex: view.getInt32(0x68),
                 occlusion: view.getInt32(0x6c),
                 modeBits: view.getInt32(0x70),
-                lightColor: view.getInt32_Rgb(0x74),
-                light: view.getInt32(0x80),
+                color: view.getInt32_Rgb(0x74), // wrench calls this lightColor, not sure if different from the color field in rac1
+                directionalLights: view.getNibbleArray(0x80, 2),
             };
         }
         default: {

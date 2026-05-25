@@ -1907,8 +1907,7 @@ export function readMobyMeshInfo(view: DataViewExt): MobyMeshInfo {
 
 export interface MobyMesh {
     packetHeaders: MobyMeshPacketHeader[],
-    packetsLod0: MobyMeshPacket[],
-    packetsLod1: MobyMeshPacket[],
+    packetsByLod: [MobyMeshPacket[], MobyMeshPacket[]],
 };
 export function readMobyMesh(gn: GN, mobyView: DataViewExt, packetTableOffset: number, meshInfo: MobyMeshInfo): MobyMesh {
     const packetHeaders = mobyView.subdivide(packetTableOffset, meshInfo.highLodCount + meshInfo.lowLodCount, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
@@ -1921,8 +1920,7 @@ export function readMobyMesh(gn: GN, mobyView: DataViewExt, packetTableOffset: n
 
     return {
         packetHeaders,
-        packetsLod0,
-        packetsLod1,
+        packetsByLod: [packetsLod0, packetsLod1],
         // metalPacketHeaders,
         // metalPackets,
     };
@@ -1963,7 +1961,6 @@ export interface MobyMeshPacket {
 };
 export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader): MobyMeshPacket {
     const vifCommands = readVifCommandList(packetView.subview(packetHeader.vifListOffset, packetHeader.vifListSize * 0x10));
-    console.log(vifCommands.map(cmd => cmd.debug));
     const unpackReader = new VifUnpackReader(vifCommands);
 
     const unpack1 = unpackReader.next();

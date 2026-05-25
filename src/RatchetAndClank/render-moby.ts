@@ -1,6 +1,6 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxSamplerFormatKind, GfxTextureDimension, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { RatchetShaderLib } from "./shader-lib";
@@ -9,7 +9,7 @@ import { MegaBuffer, noclipSpaceFromRatchetSpace } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, vec3 } from "gl-matrix";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { MobyInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
 import { assert } from "../util";
@@ -18,15 +18,19 @@ export class MobyProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_NormalAzimuthElevationRad = 1;
     public static a_ST = 2;
+    public static a_TextureParams = 3; // x = texture index, y = clamp flag
 
-    public static elementsPerVertex = 7; // position (3) + normal (2) + st (2)
+    public static elementsPerVertex = 9; // position (3), normal (2), st (2), texture params (2)
 
-    public static a_InstanceTransform0 = 3;
-    public static a_InstanceTransform1 = 4;
-    public static a_InstanceTransform2 = 5;
-    public static a_InstanceTransform3 = 6;
+    public static a_InstanceTransform0 = 4;
+    public static a_InstanceTransform1 = 5;
+    public static a_InstanceTransform2 = 6;
+    public static a_InstanceTransform3 = 7;
+    public static a_InstanceAmbientRgba = 8;
+    public static a_InstanceDirectionLights = 9;
+    public static a_InstanceLodAlpha = 10; // x = lod alpha
 
-    public static elementsPerInstance = 16; // transform (16)
+    public static elementsPerInstance = 28; // transform (16), direction lights (4), ambient rgba (4), lod alpha (4)
 
     public static ub_SceneParams = 0;
     public static ub_MobyParams = 1;
@@ -38,6 +42,12 @@ precision highp sampler2DArray;
 ${GfxShaderLibrary.MatrixLibrary}
 ${RatchetShaderLib.SceneParams}
 
+layout(location = 0) uniform sampler2DArray u_Texture_16;
+layout(location = 1) uniform sampler2DArray u_Texture_32;
+layout(location = 2) uniform sampler2DArray u_Texture_64;
+layout(location = 3) uniform sampler2DArray u_Texture_128;
+layout(location = 4) uniform sampler2DArray u_Texture_256;
+
 `;
 
     public override vert = `
@@ -45,11 +55,15 @@ ${RatchetShaderLib.SceneParams}
 layout(location = ${MobyProgram.a_Position}) in vec3 a_Position;
 layout(location = ${MobyProgram.a_NormalAzimuthElevationRad}) in vec2 a_NormalAzimuthElevationRad;
 layout(location = ${MobyProgram.a_ST}) in vec2 a_ST;
+layout(location = ${MobyProgram.a_TextureParams}) in vec2 a_TextureParams; // x = texture index, y = clamp flag
 
 layout(location = ${MobyProgram.a_InstanceTransform0}) in vec4 a_InstanceTransform0;
 layout(location = ${MobyProgram.a_InstanceTransform1}) in vec4 a_InstanceTransform1;
 layout(location = ${MobyProgram.a_InstanceTransform2}) in vec4 a_InstanceTransform2;
 layout(location = ${MobyProgram.a_InstanceTransform3}) in vec4 a_InstanceTransform3;
+layout(location = ${MobyProgram.a_InstanceAmbientRgba}) in vec4 a_InstanceAmbientRgba;
+layout(location = ${MobyProgram.a_InstanceDirectionLights}) in vec4 a_InstanceDirectionLights;
+layout(location = ${MobyProgram.a_InstanceLodAlpha}) in vec4 a_InstanceLodAlpha; // x = lod alpha
 
 ${RatchetShaderLib.LightingFunctions}
 
@@ -57,38 +71,63 @@ out vec3 v_PositionWorld;
 out vec4 v_Rgba;
 out vec3 v_Normal;
 out vec2 v_ST;
+out float v_FogFactor;
+flat out int v_TextureIndex;
+flat out int v_Clamp;
 
 void main() {
     Mat4x4 _instanceTransform = Mat4x4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, a_InstanceTransform3);
     mat4 instanceTransform = UnpackMatrix(_instanceTransform);
     vec4 positionWorld = instanceTransform * vec4(a_Position.xyz, 1.0f);
+
+    vec3 normal = normalFromAzumithElevation(a_NormalAzimuthElevationRad.x, a_NormalAzimuthElevationRad.y);
+    normal = normalize(inverse(transpose(mat3(instanceTransform))) * normal);
+
+    float lodAlpha = a_InstanceLodAlpha.x;
+    vec4 rgba = commonVertexLighting(a_InstanceAmbientRgba, normal, a_InstanceDirectionLights);
+    rgba.a *= lodAlpha;
+
     gl_Position = UnpackMatrix(u_ClipFromWorld) * positionWorld;
     v_PositionWorld = positionWorld.xyz;
-    v_Rgba = vec4(vec3(gl_VertexID) * 0.005, 1.0);
-    v_Normal = normalFromAzumithElevation(a_NormalAzimuthElevationRad.x, a_NormalAzimuthElevationRad.y);
+    v_Rgba = rgba;
+    v_Normal = normal;
     v_ST = a_ST;
+    v_FogFactor = fogFactor(positionWorld.xyz);
+    v_TextureIndex = int(a_TextureParams.x);
+    v_Clamp = int(a_TextureParams.y);
 }
 `;
 
     public override frag = `
 
+${RatchetShaderLib.CommonFragmentShader}
+${RatchetShaderLib.Sampler}
+
 in vec3 v_PositionWorld;
 in vec4 v_Rgba;
 in vec3 v_Normal;
 in vec2 v_ST;
+in float v_FogFactor;
+flat in int v_TextureIndex;
+flat in int v_Clamp;
 
 void main() {
-    // vec3 tangentX = dFdx(v_PositionWorld);
-    // vec3 tangentY = dFdy(v_PositionWorld);
-    // vec3 faceNormal = normalize(cross(tangentX, tangentY));
-    vec3 faceNormal = normalize(v_Normal);
-    float light = 0.3
-        + 0.4 * max(dot(faceNormal, u_DirectionLights[0].directionA.xyz), 0.0)
-        + 0.4 * max(dot(faceNormal, u_DirectionLights[0].directionB.xyz), 0.0);
-
-    gl_FragColor = vec4(vec3(light), 1.0);
+    // gl_FragColor = vec4(vec3(v_TextureIndex) / 8.0, 1.0);
+    // gl_FragColor = vec4(vec3(light), 1.0);
     // gl_FragColor = v_Rgba;
     // gl_FragColor = vec4(vec2(light) * v_ST, 0.0, v_Rgba.a);
+    // return;
+
+    if (v_TextureIndex < 0) {
+        // some objects have negative textures
+        // used on water, triggers, and sometimes for seemingly no reason
+        discard;
+    }
+
+    if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
+    vec2 texRemap = u_TextureRemaps.mobys[v_TextureIndex].xy;
+    vec4 textureSample = ratchetSampler(texRemap.x, texRemap.y, v_Clamp, v_ST);
+    gl_FragColor = commonFragmentShader(vec4(v_Rgba.rgb / 2.0, v_Rgba.a), textureSample, v_FogFactor);
 }
 
 `;
@@ -101,18 +140,22 @@ export class MobyGeometry {
     private vertexBuffer: GfxBuffer | null = null;
     private vertexCount: number | null = null;
 
-    constructor(private cache: GfxRenderCache, public moby: MobyClass, private textureIndices: number[]) {
+    constructor(private cache: GfxRenderCache, public oClass: number, public moby: MobyClass, public lod: number, private textureIndices: number[]) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 // per vertex
                 { location: MobyProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
                 { location: MobyProgram.a_NormalAzimuthElevationRad, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 4, bufferIndex: 0, },
                 { location: MobyProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 5 * 4, bufferIndex: 0, },
+                { location: MobyProgram.a_TextureParams, format: GfxFormat.F32_RG, bufferByteOffset: 7 * 4, bufferIndex: 0, },
                 // per instance
                 { location: MobyProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 4, bufferIndex: 1, },
                 { location: MobyProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
                 { location: MobyProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
                 { location: MobyProgram.a_InstanceTransform3, format: GfxFormat.F32_RGBA, bufferByteOffset: 12 * 4, bufferIndex: 1, },
+                { location: MobyProgram.a_InstanceAmbientRgba, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: 1, },
+                { location: MobyProgram.a_InstanceDirectionLights, format: GfxFormat.F32_RGBA, bufferByteOffset: 20 * 4, bufferIndex: 1, },
+                { location: MobyProgram.a_InstanceLodAlpha, format: GfxFormat.F32_RGBA, bufferByteOffset: 24 * 4, bufferIndex: 1, },
             ],
             vertexBufferDescriptors: [
                 { byteStride: MobyProgram.elementsPerVertex * 0x4, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -148,18 +191,20 @@ export class MobyGeometry {
 
         assert(moby.mesh !== null);
 
-        interface MobyVertexWithTexcoords extends MobyVertex {
+        const lodPackets = moby.mesh.packetsByLod[this.lod];
+
+        interface MobyVertexWithST extends MobyVertex {
             s: number;
             t: number;
         }
-        const realPacketData: MobyVertexWithTexcoords[][] = [];
+        const realPacketData: MobyVertexWithST[][] = [];
 
         // emulate vertex caching system
-        const vertexCache: (MobyVertexWithTexcoords | null)[] = new Array(512).fill(null);
-        for (let packetIndex = 0; packetIndex < moby.mesh.packetsLod0.length; packetIndex++) {
+        const vertexCache: (MobyVertexWithST | null)[] = new Array(512).fill(null);
+        for (let packetIndex = 0; packetIndex < lodPackets.length; packetIndex++) {
             // packet verts
-            const packet = moby.mesh.packetsLod0[packetIndex];
-            const realPacket: MobyVertexWithTexcoords[] = [];
+            const packet = lodPackets[packetIndex];
+            const realPacket: MobyVertexWithST[] = [];
             for (let vertIndex = 0; vertIndex < packet.vertices.length; vertIndex++) {
                 let vertex = packet.vertices[vertIndex];
                 assert(!!vertex);
@@ -200,12 +245,20 @@ export class MobyGeometry {
         }
 
         // assemble vertex buffer
-        let outputVerts: MobyVertexWithTexcoords[] = [];
+        interface MobyVertexWithTex extends MobyVertexWithST {
+            textureIndex: number;
+            clamp: number;
+        }
+        let outputVerts: MobyVertexWithTex[] = [];
+        let currentMaterial = {
+            texture: 0,
+            clamp: 0,
+        };
 
-        for (let packetIndex = 0; packetIndex < moby.mesh.packetsLod0.length; packetIndex++) {
+        for (let packetIndex = 0; packetIndex < lodPackets.length; packetIndex++) {
 
-            const tri = [null, null, null] as [MobyVertexWithTexcoords | null, MobyVertexWithTexcoords | null, MobyVertexWithTexcoords | null];
-            const packet = moby.mesh.packetsLod0[packetIndex];
+            const tri = [null, null, null] as [MobyVertexWithST | null, MobyVertexWithST | null, MobyVertexWithST | null];
+            const packet = lodPackets[packetIndex];
             const realPacketVerts = realPacketData[packetIndex];
             let adGifIndex = 0;
 
@@ -226,6 +279,19 @@ export class MobyGeometry {
                     }
 
                     index = secretIndex - 0x80; // never kick here, texture changes are always primative restarts
+                    const adGif = packet.textures[adGifIndex];
+                    assert(adGif !== undefined);
+                    let textureIndex: number;
+                    if (adGif.tex0.low === -1) {
+                        textureIndex = -1;
+                    } else {
+                        textureIndex = textureIndices[adGif.tex0.low];
+                    }
+                    assert(textureIndex !== undefined);
+                    currentMaterial = {
+                        texture: textureIndex,
+                        clamp: adGif.clamp.low + (adGif.clamp.high << 2),
+                    };
                     adGifIndex++;
                 }
 
@@ -239,8 +305,13 @@ export class MobyGeometry {
 
                 if (kick) {
                     for (let j = 0; j < 3; j++) {
-                        assert(tri[j] !== null);
-                        outputVerts.push(tri[j]!);
+                        const v = tri[j];
+                        assert(!!v);
+                        outputVerts.push({
+                            ...v,
+                            textureIndex: currentMaterial.texture,
+                            clamp: currentMaterial.clamp, // TODO
+                        });
                     }
                 }
             }
@@ -259,6 +330,8 @@ export class MobyGeometry {
             vertexArrayBuffer[vertexPtr++] = angleScale * v.normalElevation;
             vertexArrayBuffer[vertexPtr++] = texcoordScale * v.s;
             vertexArrayBuffer[vertexPtr++] = texcoordScale * v.t;
+            vertexArrayBuffer[vertexPtr++] = v.textureIndex;
+            vertexArrayBuffer[vertexPtr++] = v.clamp;
         }
 
         return { vertexArrayBuffer, vertexCount: outputVerts.length };
@@ -276,11 +349,19 @@ const scratchVec3 = vec3.create();
 
 const bindingLayouts = [
     {
-        numSamplers: 0,
+        numSamplers: 5,
         numUniformBuffers: 2,
-        samplerEntries: [],
+        samplerEntries: [
+            { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
+        ],
     }
 ];
+
+const colorScale = 1 / 255 * 4;
 
 export class MobyRenderer {
     private mobyProgram: GfxProgram;
@@ -289,10 +370,13 @@ export class MobyRenderer {
         this.mobyProgram = renderHelper.renderCache.createProgram(new MobyProgram());
     }
 
-    renderMoby(renderInstList: GfxRenderInstList, mobyGeometry: MobyGeometry, mobyInstances: MobyInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, instanceDataBuffer: MegaBuffer): void {
-        type MobyDrawInstance = { objectMatrix: mat4, distanceToCamera: number };
+    renderMoby(renderInstList: GfxRenderInstList, mobyGeometriesByLod: (MobyGeometry | null)[], mobyClass: MobyClass, mobyInstances: MobyInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, lodSetting: number, lodBias: number, instanceDataBuffer: MegaBuffer): void {
+        type MobyDrawInstance = { objectMatrix: mat4, rgb: vec3, directionalLights: number[], lodAlpha: number };
 
-        const mobyInstancesToDraw: MobyDrawInstance[] = [];
+        if (mobyGeometriesByLod[0] === null) return;
+        const maxLod = mobyGeometriesByLod[1] ? 1 : 0;
+
+        const mobyInstancesToDrawByLod: MobyDrawInstance[][] = [[], []];
         for (let i = 0; i < mobyInstances.length; i++) {
             const mobyInstance = mobyInstances[i];
 
@@ -305,44 +389,83 @@ export class MobyRenderer {
             );
             mat4.mul(objectMatrix, noclipSpaceFromRatchetSpace, objectMatrix);
 
+            // color
+            const rgb = vec3.fromValues(mobyInstance.color.r * colorScale, mobyInstance.color.g * colorScale, mobyInstance.color.b * colorScale);
+
+            // lights
+            const directionalLights = mobyInstance.directionalLights;
+
             // distance to camera
             const position = scratchVec3;
             mat4.getTranslation(position, objectMatrix);
             const distanceToCamera = vec3.distance(position, cameraPosition);
 
-            mobyInstancesToDraw.push({
+            let lod: number;
+            let lodAlpha = 1.0;
+            if (lodSetting === -1) {
+                let farDist = mobyInstance.drawDistance + lodBias * 2.0;
+                let midDist: number;
+                if (mobyClass.header.lodTrans !== 255) {
+                    midDist = mobyClass.header.lodTrans + lodBias * 1.5;
+                } else {
+                    midDist = farDist * 0.75;
+                }
+                if (midDist >= farDist) {
+                    farDist = midDist * 1.25;
+                };
+                if (distanceToCamera > farDist) continue;
+                lod = distanceToCamera < midDist ? 0 : 1;
+                lodAlpha = 1.0 - (distanceToCamera - midDist) / (farDist - midDist);
+            } else {
+                lod = lodSetting;
+            }
+            lod = Math.min(lod, maxLod);
+
+            mobyInstancesToDrawByLod[lod].push({
                 objectMatrix,
-                distanceToCamera,
-            })
+                rgb,
+                directionalLights,
+                lodAlpha,
+            });
         }
 
-        if (!mobyInstancesToDraw.length) return;
+        for (let lod = 0; lod < mobyInstancesToDrawByLod.length; lod++) {
+            const mobyInstancesToDraw = mobyInstancesToDrawByLod[lod];
+            if (!mobyInstancesToDraw.length) continue;
+            const mobyGeometry = mobyGeometriesByLod[lod];
+            if (!mobyGeometry) continue;
 
-        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-        renderInst.setGfxProgram(this.mobyProgram);
-        renderInst.setBindingLayouts(bindingLayouts);
+            const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+            renderInst.setGfxProgram(this.mobyProgram);
+            renderInst.setBindingLayouts(bindingLayouts);
 
-        // per instance data
-        const instanceDataStartBytes = instanceDataBuffer.ptr * 4;
-        for (let i = 0; i < mobyInstancesToDraw.length; i++) {
-            const inst = mobyInstancesToDraw[i];
-            instanceDataBuffer.ptr += fillMatrix4x4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.objectMatrix);
+            // per instance data
+            const instanceDataStartBytes = instanceDataBuffer.ptr * 4;
+            for (let i = 0; i < mobyInstancesToDraw.length; i++) {
+                const inst = mobyInstancesToDraw[i];
+                const color = inst.rgb;
+                instanceDataBuffer.ptr += fillMatrix4x4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.objectMatrix);
+                instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, color[0], color[1], color[2], 1.0);
+                instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.directionalLights[0], inst.directionalLights[1], inst.directionalLights[2], inst.directionalLights[3]);
+                instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.lodAlpha, 0, 0, 0);
+            }
+
+            const vertexData = mobyGeometry.getOrCreateVertexBuffer();
+            assert(vertexData.vertexBuffer !== null);
+
+            renderInst.setVertexInput(
+                mobyGeometry.inputLayout,
+                [
+                    { buffer: vertexData.vertexBuffer, byteOffset: 0 },
+                    { buffer: instanceDataBuffer.gfxBuffer, byteOffset: instanceDataStartBytes },
+                ],
+                null,
+            );
+            renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
+            renderInst.setDrawCount(vertexData.vertexCount, 0);
+            renderInst.setInstanceCount(mobyInstancesToDraw.length);
+            renderInstList.submitRenderInst(renderInst);
+
         }
-
-        const vertexData = mobyGeometry.getOrCreateVertexBuffer();
-        assert(vertexData.vertexBuffer !== null);
-
-        renderInst.setVertexInput(
-            mobyGeometry.inputLayout,
-            [
-                { buffer: vertexData.vertexBuffer, byteOffset: 0 },
-                { buffer: instanceDataBuffer.gfxBuffer, byteOffset: instanceDataStartBytes },
-            ],
-            null,
-        );
-        renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
-        renderInst.setDrawCount(vertexData.vertexCount, 0);
-        renderInst.setInstanceCount(mobyInstancesToDraw.length);
-        renderInstList.submitRenderInst(renderInst);
     }
 }

@@ -1,6 +1,6 @@
 import { ChunkPlane, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readLevelSettings, readMobyInstance, readPathBlock, readPointLightInstance, readShrubInstance, readTieAmbientRgbaBlock, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
 import { DataViewExt } from "./DataViewExt";
-import { MobyClass, readCollision, readMobyClass, readShrubClass, readSky, readTfrag, readTfragBlockHeader, readTfragHeader, readTieClass, ShrubClass, SIZEOF_TFRAG_HEADER, TieClass } from "./bin-core";
+import { GsRamTableEntry, MobyClass, readCollision, readGsRamTableEntry, readMobyClass, readShrubClass, readSky, readTfrag, readTfragBlockHeader, readTfragHeader, readTieClass, ShrubClass, SIZEOF_GS_RAM_TABLE_ENTRY, SIZEOF_TFRAG_HEADER, TieClass } from "./bin-core";
 import { filterInstancesByChunkPlane, filterMobyInstancesByChunkPlane, GN, makeClassOClassMap, makeInstanceOClassMap, makeTextureIndicesByOClassMap, noclipSpaceFromRatchetSpace } from "./utils";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readPalette8TextureSky, readPalette8TextureWithPaletteInGsRam } from "./textures";
@@ -17,6 +17,7 @@ export interface LevelResources {
     levelCoreHeader: LevelCoreHeader | null,
     gameplayHeader: GameplayHeader | null,
 
+    gsTable: GsRamTableEntry[] | null,
     levelSettings: LevelSettings | null,
     paths: Spline[] | null,
     grindPaths: Spline[] | null,
@@ -35,8 +36,11 @@ export interface LevelResources {
     tieInstancesByOClass: Map<number, TieInstance[]> | null,
     tieAmbientRgbas: TieAmbientRgbaBlock | null,
 
+    mobyTextures: PaletteTexture[] | null,
+    mobyGsStashList: number[] | null,
     mobyOClasses: number[] | null,
     mobyClasses: Map<number, MobyClass | null> | null,
+    mobyClassTextureIndices: Map<number, number[]> | null,
     mobyInstances: MobyInstance[] | null,
     mobyInstancesByOClass: Map<number, MobyInstance[]> | null,
 
@@ -126,6 +130,7 @@ export function load(gn: GN, filterChunk: number | null, out: LevelResources, fi
         instanceDataPromise,
         tfragDataPromise,
         tieDataPromise,
+        mobyDataPromise,
         shrubDataPromise,
         textureDataPromise,
         collisionDataPromise,
@@ -141,6 +146,7 @@ type LoadIndexDataResult = {
     shrubClassEntries: ClassEntry[],
     tfragTextureEntries: TextureEntry[],
     tieTextureEntries: TextureEntry[],
+    mobyTextureEntries: TextureEntry[],
     shrubTextureEntries: TextureEntry[],
 };
 export async function loadIndexData(gn: GN, out: LevelResources, coreIndexFilePromise: Promise<DataViewExt>): Promise<LoadIndexDataResult> {
@@ -155,9 +161,15 @@ export async function loadIndexData(gn: GN, out: LevelResources, coreIndexFilePr
 
     const tfragTextureEntries = coreIndexFile.subdivide(levelCoreHeader.tfragTextures.offset, levelCoreHeader.tfragTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
     const tieTextureEntries = coreIndexFile.subdivide(levelCoreHeader.tieTextures.offset, levelCoreHeader.tieTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
+    const mobyTextureEntries = coreIndexFile.subdivide(levelCoreHeader.mobyTextures.offset, levelCoreHeader.mobyTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
     const shrubTextureEntries = coreIndexFile.subdivide(levelCoreHeader.shrubTextures.offset, levelCoreHeader.shrubTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
 
+    const mobyStashCount = gn === 1 ? 0 : levelCoreHeader.gadgetOffsetOrMobyStashCount;
+    out.gsTable = coreIndexFile.subdivide(levelCoreHeader.gsRam.offset, levelCoreHeader.gsRam.count + mobyStashCount, SIZEOF_GS_RAM_TABLE_ENTRY).map(view => readGsRamTableEntry(view));
+    out.mobyGsStashList = coreIndexFile.subdivide(levelCoreHeader.mobyGsStashList, mobyStashCount, 2).map(view => view.getUint16(0)).filter(oClass => !(oClass & 0x8000));
+
     out.tieClassTextureIndices = makeTextureIndicesByOClassMap(tieClassEntries);
+    out.mobyClassTextureIndices = makeTextureIndicesByOClassMap(mobyClassEntries);
     out.shrubClassTextureIndices = makeTextureIndicesByOClassMap(shrubClassEntries);
 
     return {
@@ -167,6 +179,7 @@ export async function loadIndexData(gn: GN, out: LevelResources, coreIndexFilePr
         shrubClassEntries,
         tfragTextureEntries,
         tieTextureEntries,
+        mobyTextureEntries,
         shrubTextureEntries,
     };
 }
@@ -248,6 +261,7 @@ async function loadTextureData(gn: GN, out: LevelResources, coreDataFilePromise:
     const textureData = coreDataFile.subview(indexData.levelCoreHeader.texturesBaseOffset);
     out.tfragTextures = indexData.tfragTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(entry, textureData, gsRamFile, "Tfrag", i));
     out.tieTextures = indexData.tieTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(entry, textureData, gsRamFile, "Tie", i));
+    out.mobyTextures = indexData.mobyTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(entry, textureData, gsRamFile, "Moby", i));
     out.shrubTextures = indexData.shrubTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(entry, textureData, gsRamFile, "Shrub", i));
 }
 
