@@ -7,9 +7,13 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString } from "../util.js";
 
 // Normalises a GND texture path (backslash-separated CP949) to a URL relative
-// to the textures root. Mirrors what the extractor writes.
+// to the textures root. Mirrors what the extractor writes. Lowercased because
+// the CDN is case-sensitive and asset names come in mixed case (e.g.
+// `BACKSIDE.bmp`, `RC_OB002.bmp`); Korean dir names have no case mapping so
+// `.toLowerCase()` leaves them alone. Keep the extractor's destination paths
+// in sync (see copyTexture in tools/extract.ts).
 export function textureNameToUrl(name: string): string {
-    return name.split("\\").map(encodeURIComponent).join("/");
+    return name.toLowerCase().split("\\").map(encodeURIComponent).join("/");
 }
 
 export interface GndSurface {

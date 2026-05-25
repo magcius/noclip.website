@@ -40,7 +40,7 @@ const pathBase = `RagnarokOnline`;
 const WARP_MIN_HIT_RADIUS = 8;
 
 function modelNameToUrl(name: string): string {
-    return name.split("\\").map(encodeURIComponent).join("/");
+    return name.toLowerCase().split("\\").map(encodeURIComponent).join("/");
 }
 
 function decodeTexture(name: string, data: ArrayBufferSlice): DecodedImage {

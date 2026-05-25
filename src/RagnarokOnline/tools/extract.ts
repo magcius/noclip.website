@@ -251,13 +251,17 @@ function toSlice(buf: Buffer): ArrayBufferSlice {
 // Copies one texture BMP from the client tree, given its CP949-decoded name (the
 // SAME decode the parsers use). Skips names already copied this run. Returns
 // true if it copied a file. `copied` is the dedupe set, `missing` accumulates
-// names whose source BMP was absent.
+// names whose source BMP was absent. The destination is lowercased so the
+// staged tree matches the case-sensitive CDN: asset names come in mixed case
+// (e.g. `BACKSIDE.bmp`); the renderer's textureNameToUrl lowercases too.
+// macOS APFS is case-insensitive for the source read, so reading the original
+// case still resolves the on-disk file.
 function copyTexture(name: string, copied: Set<string>, missing: Set<string>): boolean {
     if (name === "" || copied.has(name) || missing.has(name))
         return false;
     const segments = name.split("\\");
     const src = path.join(ASSET_TEXTURE_DIR, ...segments);
-    const dst = path.join(OUT_TEXTURE_DIR, ...segments);
+    const dst = path.join(OUT_TEXTURE_DIR, ...segments.map((s) => s.toLowerCase()));
     if (!existsSync(src)) {
         missing.add(name);
         return false;
@@ -305,7 +309,9 @@ function extractModels(mapName: string, copied: Set<string>, missing: Set<string
     for (const modelName of uniqueModels) {
         const segments = modelName.split("\\");
         const src = path.join(ASSET_MODEL_DIR, ...segments);
-        const dst = path.join(OUT_MODEL_DIR, ...segments);
+        // Lowercase dst to match the case-sensitive CDN; the renderer's
+        // modelNameToUrl lowercases too. See copyTexture for the same rationale.
+        const dst = path.join(OUT_MODEL_DIR, ...segments.map((s) => s.toLowerCase()));
         if (!existsSync(src)) {
             console.warn(`  skip (missing model): ${src}`);
             modelMisses++;
