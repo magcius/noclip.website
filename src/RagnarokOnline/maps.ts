@@ -1,7 +1,7 @@
 
 // Generated map manifest for the Ragnarok Online scene registry. Do not edit
 // by hand: regenerate by running
-//   npx tsx src/RagnarokOnline/tools/regen-maps.ts
+//   npx tsx src/RagnarokOnline/tools/gen-maps.ts
 //
 // 1014 entries (992 bare + 22
 // pre-renewal classic variants with rebuilt geometry). 931 with an iRO

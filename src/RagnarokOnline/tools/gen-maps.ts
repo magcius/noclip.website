@@ -1,9 +1,9 @@
 
-// Regenerates src/RagnarokOnline/maps.ts from the staged map tree and the iRO
+// Generates src/RagnarokOnline/maps.ts from the staged map tree and the iRO
 // English mapnametable (with kRO Korean as fallback). Run after staging iRO
 // maps so the scene list picks up the new ids and English display names.
 //
-//   npx tsx src/RagnarokOnline/tools/regen-maps.ts
+//   npx tsx src/RagnarokOnline/tools/gen-maps.ts
 //
 // Inputs:
 //   data/RagnarokOnline/maps/*.rsw                              (scanned for the id list)
@@ -135,7 +135,7 @@ function main(): void {
     const contents = `
 // Generated map manifest for the Ragnarok Online scene registry. Do not edit
 // by hand: regenerate by running
-//   npx tsx src/RagnarokOnline/tools/regen-maps.ts
+//   npx tsx src/RagnarokOnline/tools/gen-maps.ts
 //
 // ${entries.length} entries (${bareIds.length} bare + ${classicBaseIds.length}
 // pre-renewal classic variants with rebuilt geometry). ${namedEn} with an iRO
