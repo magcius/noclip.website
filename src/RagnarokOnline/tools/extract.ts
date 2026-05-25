@@ -126,17 +126,6 @@ const SPRITES_TO_EXTRACT = ["몬스터/poring", "이팩트/torch_01", "이팩트
 // compact per-map JSON the extractor writes alongside the map files.
 const ASSET_FOG_TABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/fogparametertable.txt");
 
-// Source: the map display-name table. One '#'-delimited record per line in the
-// form `<rsw>#<display name>#` (the key keeps its `.rsw` extension). The file is
-// CP949 (EUC-KR) encoded; names are Korean. The committed manifest cross-
-// references it so each map gets a human-readable label, falling back to its id.
-const ASSET_MAP_NAME_TABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
-
-// Destination: the committed, generated manifest the scene registry maps over.
-// It lives in source (not data/) because main.ts builds the scene groups
-// synchronously at module load.
-const OUT_MAP_MANIFEST = path.resolve("src/RagnarokOnline/maps.ts");
-
 // Maps whose base assets (rsw/gnd/gat + textures/models/water) are staged. By
 // default every map on disk, so any entry in the generated manifest loads;
 // pass map ids as CLI args to stage only those (faster for iterating on one).
@@ -437,91 +426,6 @@ function extractSprite(name: string): void {
     console.log(`  sprite ${name}: ${copied}/2 files copied`);
 }
 
-// Parses mapnametable.txt into a map of base map id -> display name. The file is
-// CP949 (EUC-KR); we decode it with TextDecoder so the Korean names land as
-// proper UTF-8. Each line is `<rsw>#<display name>#`; we drop the `.rsw` from the
-// key and the trailing `#` from the name. Blank/short lines are ignored.
-function parseMapNameTable(): Map<string, string> {
-    const out = new Map<string, string>();
-    if (!existsSync(ASSET_MAP_NAME_TABLE))
-        return out;
-
-    const raw = readFileSync(ASSET_MAP_NAME_TABLE);
-    const text = new TextDecoder("euc-kr").decode(raw);
-    for (const rawLine of text.split(/\r?\n/)) {
-        const line = rawLine.trim();
-        if (line.length === 0)
-            continue;
-        // `<rsw>#<display name>#`. The key keeps its extension, the name may
-        // itself contain no '#', so a simple split on the first '#' suffices.
-        const hash = line.indexOf("#");
-        if (hash < 0)
-            continue;
-        const key = line.slice(0, hash).trim();
-        if (!key.toLowerCase().endsWith(".rsw"))
-            continue;
-        const id = key.slice(0, -".rsw".length).toLowerCase();
-        const name = line.slice(hash + 1).replace(/#\s*$/, "").trim();
-        if (name.length > 0)
-            out.set(id, name);
-    }
-    return out;
-}
-
-// Scans the maps dir for every `*.rsw`, derives each map id (its lowercase
-// basename), looks up a display name from mapnametable.txt (falling back to the
-// id), and writes the committed `src/RagnarokOnline/maps.ts`. The list is sorted
-// by id so the generated file is stable across runs.
-function generateMapManifest(): void {
-    if (!existsSync(ASSET_MAPS_DIR)) {
-        console.warn(`  skip manifest (no maps dir): ${ASSET_MAPS_DIR}`);
-        return;
-    }
-
-    const nameTable = parseMapNameTable();
-
-    const ids = readdirSync(ASSET_MAPS_DIR)
-        .filter((f) => f.toLowerCase().endsWith(".rsw"))
-        .map((f) => f.slice(0, -".rsw".length).toLowerCase());
-    ids.sort((a, b) => a.localeCompare(b));
-
-    let named = 0;
-    const entries = ids.map((id) => {
-        const display = nameTable.get(id);
-        if (display !== undefined)
-            named++;
-        // Label by the map id (prontera, geffen, prt_fild08, ...), the western
-        // RO-standard names players use, with the Korean display name appended
-        // as a hint for the cryptic ids.
-        const name = display !== undefined ? `${id} - ${display}` : id;
-        return { id, name };
-    });
-
-    const body = entries
-        .map((e) => `    { id: ${JSON.stringify(e.id)}, name: ${JSON.stringify(e.name)} },`)
-        .join("\n");
-
-    const contents = `
-// Generated map manifest for the Ragnarok Online scene registry. Do not edit by
-// hand: regenerate by running the extraction tool (it scans the maps dir for
-// *.rsw and cross-references mapnametable.txt for the display names).
-//
-// ${entries.length} maps (${named} with a mapnametable entry, ${entries.length - named} falling back to the id).
-
-export interface RagnarokMapEntry {
-    id: string;
-    name: string;
-}
-
-export const maps: RagnarokMapEntry[] = [
-${body}
-];
-`;
-
-    writeFileSync(OUT_MAP_MANIFEST, contents.replace(/^\n/, ""));
-    console.log(`  manifest: ${entries.length} maps (${named} named, ${entries.length - named} id-only) -> ${OUT_MAP_MANIFEST}`);
-}
-
 function main(): void {
     if (!existsSync(ASSET_MAPS_DIR)) {
         console.error(`Source maps dir not found: ${ASSET_MAPS_DIR}`);
@@ -565,9 +469,8 @@ function main(): void {
     // WoE 3D Granny models (baked offline; copied once, not per-map).
     extractGrannyModels();
 
-    // Generate the committed map manifest covering the whole corpus (every
-    // *.rsw on disk), independent of which maps had their assets staged above.
-    generateMapManifest();
+    // Map manifest (src/RagnarokOnline/maps.ts) is generated by
+    // tools/gen-maps.ts in the extract-all pipeline.
 
     console.log(`Done. ${copied.size} textures copied, ${missing.size} textures missing.`);
 }
