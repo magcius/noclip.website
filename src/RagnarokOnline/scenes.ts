@@ -12,7 +12,7 @@ import { DecodedImage, decodeBMP, decodeTGA } from "./bmp.js";
 import { parseGND, textureNameToUrl } from "./gnd.js";
 import { GatMap, parseGAT } from "./gat.js";
 import { AnimatedModelMesh, buildAnimatedModelMesh, buildModelMesh, buildPlacementMatrix, modelIsAnimated, ModelMesh } from "./model.js";
-import { AnimatedModelPlacement, FogSceneData, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
+import { AnimatedModelPlacement, FogSceneData, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer as RaganarokRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
 import { parseRSM } from "./rsm.js";
 import { computeLightDir, parseRSW } from "./rsw.js";
 import { decodeImageBitmapRGBA } from "./water.js";
@@ -312,7 +312,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const bgm = new Bgm("RagnarokOnline");
         void bgm.setMap(dataFetcher, eraSharedKey(this.id));
 
-        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, context.sceneLoader);
+        return new RaganarokRenderer(context, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm);
     }
 }
 
