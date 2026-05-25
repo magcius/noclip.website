@@ -28,12 +28,6 @@ import { buildWaterMesh, WaterAnimator, WaterParams, WATER_VERTEX_STRIDE_BYTES }
 import { SpriteActor, SpriteKind, SpriteRenderer } from "./sprite.js";
 import { SprModel } from "./spr.js";
 import { EntitySceneData, MobEntity } from "./entity.js";
-
-export interface EntityLayerBundle {
-    entityData: EntitySceneData;
-    warpPortalData: WarpPortalSceneData | null;
-    warpClickData: WarpClickSceneData;
-}
 import { NameLabelRenderer, NPC_LABEL_STYLE, MOB_LABEL_STYLE } from "./nametag.js";
 import { ParticleRenderer, ParticleSceneData } from "./particles.js";
 import { WarpPortalRenderer, WarpPortalSceneData } from "./warp-portal.js";
@@ -47,6 +41,12 @@ import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
 import { currentEra, setEra } from "./era.js";
 import { Bgm } from "./bgm.js";
+
+export interface EntityLayerBundle {
+    entityData: EntitySceneData;
+    warpPortalData: WarpPortalSceneData | null;
+    warpClickData: WarpClickSceneData;
+}
 import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
 import { assertExists } from "../util.js";
@@ -1058,6 +1058,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.warpPortalRenderer = new WarpPortalRenderer(device, cache, warpPortalData);
         this.warpTargets = warpClickData.targets;
         this.wantsMouseListeners = this.warpTargets.length > 0 || this.mobs.length > 0;
+        if (!this.wantsMouseListeners)
+            this.detachMouseListeners();
     }
 
     private setupWater(device: GfxDevice, cache: GfxRenderHelper["renderCache"], waterData: WaterSceneData): void {
@@ -1225,12 +1227,14 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         };
         panel.contents.appendChild(classicToggle.elem);
 
+        // Indirect through this.spriteRenderer so the toggles still target the
+        // current renderer after reloadEntities replaces it.
         if (spr !== null && hasNPC)
-            this.addCheckbox(panel, "Show NPCs", spr.isKindEnabled("npc"), (v) => spr.setKindEnabled("npc", v));
+            this.addCheckbox(panel, "Show NPCs", spr.isKindEnabled("npc"), (v) => this.spriteRenderer?.setKindEnabled("npc", v));
         if (spr !== null && hasMob)
-            this.addCheckbox(panel, "Show Monsters", spr.isKindEnabled("mob"), (v) => spr.setKindEnabled("mob", v));
+            this.addCheckbox(panel, "Show Monsters", spr.isKindEnabled("mob"), (v) => this.spriteRenderer?.setKindEnabled("mob", v));
         if (spr !== null && hasEffect)
-            this.addCheckbox(panel, "Show Effect Sprites", spr.isKindEnabled("effect"), (v) => spr.setKindEnabled("effect", v));
+            this.addCheckbox(panel, "Show Effect Sprites", spr.isKindEnabled("effect"), (v) => this.spriteRenderer?.setKindEnabled("effect", v));
         if (hasProps)
             this.addCheckbox(panel, "Show Map Props", this.showProps, (v) => { this.showProps = v; });
         if (hasWater)

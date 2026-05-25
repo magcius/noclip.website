@@ -5,8 +5,9 @@
 
 import { mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DataFetcher } from "../DataFetcher.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
 import { DecodedImage, decodeBMP, decodeTGA } from "./bmp.js";
 import { parseGND, textureNameToUrl } from "./gnd.js";
@@ -47,12 +48,59 @@ function decodeTexture(name: string, data: ArrayBufferSlice): DecodedImage {
     return name.toLowerCase().endsWith(".tga") ? decodeTGA(data) : decodeBMP(data);
 }
 
+// Cross-scene cache held in DataShare. Adjacent maps reuse the same terrain
+// BMPs, model RSMs and water frames; without this every map switch re-fetched
+// and re-decoded them. Stored as in-flight Promises so concurrent requests
+// collapse to a single fetch. Holds no GPU state (GfxTextures live on the
+// per-scene renderer), so destroy() is a no-op; DataShare prunes by age.
+interface SharedModelEntry {
+    mesh: ModelMesh | null;
+    animatedMesh: AnimatedModelMesh | null;
+    textures: (DecodedImage | null)[];
+}
+
+class RagnarokSharedCache implements Destroyable {
+    public textures = new Map<string, Promise<DecodedImage | null>>();
+    public waterFrames = new Map<number, Promise<(DecodedImage | null)[]>>();
+    public models = new Map<string, Promise<SharedModelEntry | null>>();
+
+    public fetchTexture(dataFetcher: DataFetcher, url: string): Promise<DecodedImage | null> {
+        let p = this.textures.get(url);
+        if (p !== undefined)
+            return p;
+        p = (async (): Promise<DecodedImage | null> => {
+            let data;
+            try {
+                data = await dataFetcher.fetchData(url);
+            } catch {
+                return null;
+            }
+            try {
+                return decodeTexture(url, data);
+            } catch (e) {
+                console.error(`RagnarokOnline: failed to decode texture ${url}:`, e);
+                return null;
+            }
+        })();
+        this.textures.set(url, p);
+        return p;
+    }
+
+    public destroy(_device: GfxDevice): void {
+        // CPU-only data; GC reclaims it once the cache is dropped.
+    }
+}
+
 class RagnarokMapSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
+        const shared = await context.dataShare.ensureObject(
+            `${pathBase}/SharedCache`,
+            async () => new RagnarokSharedCache(),
+        );
 
         let rswData;
         try {
@@ -67,72 +115,62 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const gnd = parseGND(gndData);
 
         // Missing texture: silently skip the draw group. Decode failure: log
-        // (real bug we want to see) rather than swallow alongside 404s.
-        const textureImages: (DecodedImage | null)[] = await Promise.all(gnd.textureNames.map(async (name): Promise<DecodedImage | null> => {
-            const url = `${pathBase}/textures/${textureNameToUrl(name)}`;
-            let data;
-            try {
-                data = await dataFetcher.fetchData(url);
-            } catch {
-                return null;
-            }
-            try {
-                return decodeTexture(name, data);
-            } catch (e) {
-                console.error(`RagnarokOnline: failed to decode terrain texture ${url}:`, e);
-                return null;
-            }
-        }));
+        // (real bug we want to see) rather than swallow alongside 404s. The
+        // shared cache dedupes within and across maps.
+        const fetchTextureByName = (name: string): Promise<DecodedImage | null> =>
+            shared.fetchTexture(dataFetcher, `${pathBase}/textures/${textureNameToUrl(name)}`);
+        const textureImages: (DecodedImage | null)[] = await Promise.all(
+            gnd.textureNames.map((n) => fetchTextureByName(n)),
+        );
 
-        // Shared decoded-texture cache: many models reference the same BMPs.
-        const texCache = new Map<string, DecodedImage | null>();
-        const fetchTexture = async (name: string): Promise<DecodedImage | null> => {
-            const url = textureNameToUrl(name);
-            if (texCache.has(url))
-                return texCache.get(url)!;
-            const fullUrl = `${pathBase}/textures/${url}`;
-            let img: DecodedImage | null = null;
-            let data;
-            try {
-                data = await dataFetcher.fetchData(fullUrl);
-            } catch {
-                texCache.set(url, null);
-                return null;
-            }
-            try {
-                img = decodeTexture(name, data);
-            } catch (e) {
-                console.error(`RagnarokOnline: failed to decode model texture ${fullUrl}:`, e);
-                img = null;
-            }
-            texCache.set(url, img);
-            return img;
-        };
-
-        // Models with keyframe tracks take the animated path.
-        const meshes = new Map<string, { mesh: ModelMesh, textures: (DecodedImage | null)[] }>();
-        const animatedMeshes = new Map<string, { mesh: AnimatedModelMesh, textures: (DecodedImage | null)[] }>();
+        // Models with keyframe tracks take the animated path. The cache stores
+        // the parsed mesh + resolved textures, so a revisit skips fetch + parse.
         const uniqueModels = new Set<string>();
         for (const p of rsw.models)
             if (p.modelName !== "")
                 uniqueModels.add(p.modelName);
 
-        await Promise.all(Array.from(uniqueModels).map(async (modelName) => {
-            try {
-                const data = await dataFetcher.fetchData(`${pathBase}/model/${modelNameToUrl(modelName)}`);
-                const rsm = parseRSM(data);
-                if (modelIsAnimated(rsm)) {
-                    const mesh = buildAnimatedModelMesh(rsm);
-                    const textures = await Promise.all(mesh.textureNames.map((n) => fetchTexture(n)));
-                    animatedMeshes.set(modelName, { mesh, textures });
-                } else {
-                    const mesh = buildModelMesh(rsm);
-                    const textures = await Promise.all(mesh.textureNames.map((n) => fetchTexture(n)));
-                    meshes.set(modelName, { mesh, textures });
+        const loadModel = (modelName: string): Promise<SharedModelEntry | null> => {
+            const key = modelName.toLowerCase();
+            let p = shared.models.get(key);
+            if (p !== undefined)
+                return p;
+            p = (async (): Promise<SharedModelEntry | null> => {
+                let data;
+                try {
+                    data = await dataFetcher.fetchData(`${pathBase}/model/${modelNameToUrl(modelName)}`);
+                } catch {
+                    return null;
                 }
-            } catch {
-                // Skip unreadable/unparseable models; placements drop out.
-            }
+                try {
+                    const rsm = parseRSM(data);
+                    if (modelIsAnimated(rsm)) {
+                        const animatedMesh = buildAnimatedModelMesh(rsm);
+                        const textures = await Promise.all(animatedMesh.textureNames.map((n) => fetchTextureByName(n)));
+                        return { mesh: null, animatedMesh, textures };
+                    } else {
+                        const mesh = buildModelMesh(rsm);
+                        const textures = await Promise.all(mesh.textureNames.map((n) => fetchTextureByName(n)));
+                        return { mesh, animatedMesh: null, textures };
+                    }
+                } catch {
+                    return null;
+                }
+            })();
+            shared.models.set(key, p);
+            return p;
+        };
+
+        const meshes = new Map<string, { mesh: ModelMesh, textures: (DecodedImage | null)[] }>();
+        const animatedMeshes = new Map<string, { mesh: AnimatedModelMesh, textures: (DecodedImage | null)[] }>();
+        await Promise.all(Array.from(uniqueModels).map(async (modelName) => {
+            const entry = await loadModel(modelName);
+            if (entry === null)
+                return;
+            if (entry.animatedMesh !== null)
+                animatedMeshes.set(modelName, { mesh: entry.animatedMesh, textures: entry.textures });
+            else if (entry.mesh !== null)
+                meshes.set(modelName, { mesh: entry.mesh, textures: entry.textures });
         }));
 
         // Half the map extent: RSW is map-centred, terrain is corner-origin.
@@ -173,18 +211,25 @@ class RagnarokMapSceneDesc implements SceneDesc {
             waveHeight: rsw.waveHeight,
         };
         const waterParams = gnd.water ?? rswWater;
-        const loadWaterFrames = async (waterType: number): Promise<(DecodedImage | null)[]> => Promise.all(
-            Array.from({ length: WATER_FRAME_COUNT }, (_unused, i) => i).map(async (i): Promise<DecodedImage | null> => {
-                const nn = i.toString().padStart(2, "0");
-                const url = `${WATER_DIR}/water${waterType}${nn}.jpg`.split("/").map(encodeURIComponent).join("/");
-                try {
-                    const data = await dataFetcher.fetchData(`${pathBase}/textures/${url}`);
-                    return decodeImageBitmapRGBA(data.createTypedArray(Uint8Array));
-                } catch {
-                    return null;
-                }
-            }),
-        );
+        const loadWaterFrames = (waterType: number): Promise<(DecodedImage | null)[]> => {
+            let p = shared.waterFrames.get(waterType);
+            if (p !== undefined)
+                return p;
+            p = Promise.all(
+                Array.from({ length: WATER_FRAME_COUNT }, (_unused, i) => i).map(async (i): Promise<DecodedImage | null> => {
+                    const nn = i.toString().padStart(2, "0");
+                    const url = `${WATER_DIR}/water${waterType}${nn}.jpg`.split("/").map(encodeURIComponent).join("/");
+                    try {
+                        const data = await dataFetcher.fetchData(`${pathBase}/textures/${url}`);
+                        return decodeImageBitmapRGBA(data.createTypedArray(Uint8Array));
+                    } catch {
+                        return null;
+                    }
+                }),
+            );
+            shared.waterFrames.set(waterType, p);
+            return p;
+        };
         let frames = await loadWaterFrames(waterParams.type);
         if (!frames.some((f) => f !== null) && gnd.water !== undefined && rswWater.type !== waterParams.type) {
             const fallback = await loadWaterFrames(rswWater.type);
