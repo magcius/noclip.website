@@ -134,10 +134,10 @@ layout(std140) uniform ub_SceneParams {
 };
 
 uniform sampler2D u_BaseTexture;
-uniform sampler2DArray u_Lightmap;
+uniform sampler2D u_Lightmap;
 
 varying vec2 v_TexCoord;
-varying vec3 v_LightCoord;
+varying vec2 v_LightCoord;
 varying vec4 v_Color;
 varying vec3 v_WorldPos;
 
@@ -147,7 +147,7 @@ ${FOG_GLSL}
     public override vert = `
 layout(location = ${TerrainProgram.a_Position}) in vec3 a_Position;
 layout(location = ${TerrainProgram.a_TexCoord}) in vec2 a_TexCoord;
-layout(location = ${TerrainProgram.a_LightCoord}) in vec3 a_LightCoord;
+layout(location = ${TerrainProgram.a_LightCoord}) in vec2 a_LightCoord;
 layout(location = ${TerrainProgram.a_Color}) in vec4 a_Color;
 
 void main() {
@@ -164,7 +164,7 @@ void main() {
     vec4 t_Base = texture(SAMPLER_2D(u_BaseTexture), v_TexCoord);
     if (t_Base.a < 0.5)
         discard;
-    vec4 t_Light = texture(SAMPLER_2DArray(u_Lightmap), v_LightCoord);
+    vec4 t_Light = texture(SAMPLER_2D(u_Lightmap), v_LightCoord);
     // Lightmap intensity rides in alpha; the rgb tint is additive.
     float t_Intensity = t_Light.a;
     vec3 t_Lit = t_Base.rgb * v_Color.rgb * t_Intensity + t_Light.rgb;
@@ -359,8 +359,13 @@ void main() {
 `;
 }
 
-// pos (3 f32) + baseUV (2 f32) + lightmapUV (3 f32: u, v, tileIndex) + color (4 u8) = 36 bytes.
-const VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 3 * 4 + 4;
+// pos (3 f32) + baseUV (2 f32) + lightmapUV (2 f32: atlas u, v) + color (4 u8) = 32 bytes.
+const VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 2 * 4 + 4;
+
+// Side of the square tile grid for an `n`-tile lightmap atlas (at least 1).
+function lightmapAtlasGridSide(n: number): number {
+    return Math.max(1, Math.ceil(Math.sqrt(Math.max(n, 1))));
+}
 
 interface TerrainDrawGroup {
     textureId: number;
@@ -372,8 +377,12 @@ interface TerrainMesh {
     vertexData: ArrayBuffer;
     indexData: Uint32Array;
     groups: TerrainDrawGroup[];
-    lightmapTiles: Uint8Array[];
-    lightmapTileCount: number;
+    // Atlas-packed lightmap: a square grid of 8x8 RGBA tiles. We pack into a
+    // 2D atlas instead of a 2D array texture because large maps (e.g. WoE
+    // castles, prontera) blow past WebGL2's MAX_ARRAY_TEXTURE_LAYERS (256
+    // guaranteed; many caps at 2048). Atlas size is gridSide*8 per side.
+    lightmapAtlas: Uint8Array;
+    lightmapAtlasGridSide: number;
     min: vec3;
     max: vec3;
 }
@@ -399,14 +408,35 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
     const lightmapTiles = buildLightmapTiles(gnd);
     const n = lightmapTiles.length;
 
-    // Sample at texel 1 and 7 to skip the 1-texel border the GND reserves.
-    const lightmapUV = (lightmapId: number, k: number, out: [number, number, number]): void => {
+    // Pack the 8x8 tiles into a square 2D atlas, row-major. The GND reserves
+    // a 1-texel border per tile so bilinear sampling at the inner [1/8, 7/8]
+    // range never leaks across tile boundaries inside the atlas.
+    const gridSide = lightmapAtlasGridSide(n);
+    const atlasSize = gridSide * 8;
+    const lightmapAtlas = new Uint8Array(atlasSize * atlasSize * 4);
+    for (let i = 0; i < n; i++) {
+        const col = i % gridSide;
+        const row = Math.floor(i / gridSide);
+        const tile = lightmapTiles[i];
+        for (let r = 0; r < 8; r++) {
+            const srcOff = r * 8 * 4;
+            const dstOff = ((row * 8 + r) * atlasSize + col * 8) * 4;
+            lightmapAtlas.set(tile.subarray(srcOff, srcOff + 8 * 4), dstOff);
+        }
+    }
+
+    // Sample at texel 1 and 7 (tile-local) to skip the 1-texel border the GND
+    // reserves; remap into atlas coords by adding the tile's grid position.
+    const lightmapUV = (lightmapId: number, k: number, out: [number, number]): void => {
         let idx = lightmapId;
         if (n === 0 || idx >= n)
             idx = 0;
-        out[0] = (k & 1) ? 7 / 8 : 1 / 8;
-        out[1] = (k & 2) ? 7 / 8 : 1 / 8;
-        out[2] = idx;
+        const col = idx % gridSide;
+        const row = Math.floor(idx / gridSide);
+        const localU = (k & 1) ? 7 / 8 : 1 / 8;
+        const localV = (k & 2) ? 7 / 8 : 1 / 8;
+        out[0] = (col + localU) / gridSide;
+        out[1] = (row + localV) / gridSide;
     };
 
     // X mirrored about the map centre (see coord.ts).
@@ -448,7 +478,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
     const buckets = new Map<number, number[]>();
 
     const p0 = vec3.create(), p1 = vec3.create(), p2 = vec3.create(), p3 = vec3.create();
-    const luv: [number, number, number] = [0, 0, 0];
+    const luv: [number, number] = [0, 0];
 
     const min = vec3.fromValues(Infinity, Infinity, Infinity);
     const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
@@ -465,7 +495,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
 
         const base = vertexCursor;
         for (let k = 0; k < 4; k++) {
-            const fo = (base + k) * 9;
+            const fo = (base + k) * 8;
             const px = p[k][0], py = p[k][1], pz = p[k][2];
             fview[fo + 0] = px;
             fview[fo + 1] = py;
@@ -475,8 +505,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
             lightmapUV(s.lightmapId, k, luv);
             fview[fo + 5] = luv[0];
             fview[fo + 6] = luv[1];
-            fview[fo + 7] = luv[2];
-            uview[fo + 8] = packed;
+            uview[fo + 7] = packed;
             if (px < min[0]) min[0] = px; if (px > max[0]) max[0] = px;
             if (py < min[1]) min[1] = py; if (py > max[1]) max[1] = py;
             if (pz < min[2]) min[2] = pz; if (pz > max[2]) max[2] = pz;
@@ -540,8 +569,8 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         vertexData,
         indexData,
         groups,
-        lightmapTiles,
-        lightmapTileCount: n,
+        lightmapAtlas,
+        lightmapAtlasGridSide: gridSide,
         min, max,
     };
 }
@@ -855,8 +884,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             vertexAttributeDescriptors: [
                 { location: TerrainProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0 },
                 { location: TerrainProgram.a_TexCoord, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 4, bufferIndex: 0 },
-                { location: TerrainProgram.a_LightCoord, format: GfxFormat.F32_RGB, bufferByteOffset: 5 * 4, bufferIndex: 0 },
-                { location: TerrainProgram.a_Color, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 8 * 4, bufferIndex: 0 },
+                { location: TerrainProgram.a_LightCoord, format: GfxFormat.F32_RG, bufferByteOffset: 5 * 4, bufferIndex: 0 },
+                { location: TerrainProgram.a_Color, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 7 * 4, bufferIndex: 0 },
             ],
             vertexBufferDescriptors: [
                 { byteStride: VERTEX_STRIDE_BYTES, frequency: GfxVertexBufferFrequency.PerVertex },
@@ -869,19 +898,16 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.textures = textureImages.map((img) => img !== null ? createRGBATexture(device, img.width, img.height, img.rgba) : null);
 
-        const lightmapLayerCount = Math.max(mesh.lightmapTileCount, 1);
+        const lightmapAtlasSize = mesh.lightmapAtlasGridSide * 8;
         this.lightmapTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2DArray,
-            width: 8, height: 8,
-            depthOrArrayLayers: lightmapLayerCount,
+            dimension: GfxTextureDimension.n2D,
+            width: lightmapAtlasSize, height: lightmapAtlasSize,
+            depthOrArrayLayers: 1,
             numLevels: 1,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
             usage: GfxTextureUsage.Sampled,
         });
-        const lightmapBytes = new Uint8Array(lightmapLayerCount * 8 * 8 * 4);
-        for (let i = 0; i < mesh.lightmapTileCount; i++)
-            lightmapBytes.set(mesh.lightmapTiles[i], i * 8 * 8 * 4);
-        device.uploadTextureData(this.lightmapTexture, 0, [lightmapBytes]);
+        device.uploadTextureData(this.lightmapTexture, 0, [mesh.lightmapAtlas]);
 
         this.baseSamplerLinear = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
