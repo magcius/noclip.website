@@ -19,7 +19,7 @@ if (gameNumber !== 1) {
     process.exit(1);
 }
 
-const baseDataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), `../../../data`);
+const baseDataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), `./data`);
 
 const outputDir = path.join(baseDataDir, `RatchetAndClank${gameNumber}`);
 await fs.mkdir(outputDir, { recursive: true });

@@ -10,8 +10,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `../../../data/JetSetRadio_Raw`;
-const pathBaseOut = `../../../data/JetSetRadio`;
+const pathBaseIn  = `./data/JetSetRadio_Raw`;
+const pathBaseOut = `./data/JetSetRadio`;
 
 const EXECUTABLE_ALLOCATION_ADDRESS = 0x8C010000;
 const STAGE_ALLOCATION_ADDRESS = 0x8CB00000;
