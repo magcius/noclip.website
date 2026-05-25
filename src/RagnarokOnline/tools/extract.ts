@@ -20,15 +20,14 @@
 //     renderer ships except the items below. Stages read entries straight
 //     out of it; no intermediate filesystem dump required.
 //
-//   data/RagnarokOnline_raw/legacy_maps/
-//     Pre-renewal (kRO) versions of maps whose modern iRO geometry differs
-//     enough to warrant a dedicated scene: poring_c01.{rsw,gnd,gat},
-//     poring_c02.{rsw,gnd,gat}, and 22 `<id>@classic.{rsw,gnd,gat}` triples
-//     (alberta, alde_gld, brasilis, ...; see gen-maps Stage 4 output for
-//     the full set). Not in the modern GRF; extract from a pre-renewal kRO
-//     client install once and drop the files here. Optional: missing -> the
-//     classic scene entries don't get generated and the modern map renders
-//     under its bare id only.
+//   data/RagnarokOnline_raw/grf/legacy/*.grf
+//     kRO 2008/2009 snapshot GRFs. data.grf (v0x200, SAK) ships the 22
+//     CLASSIC_MAPS' pre-renewal geometry; sdata.grf (v0x200, sound overlay)
+//     also contains the two LEGACY_ONLY_MAPS (poring_c01/c02). data_hp.grf
+//     (HighPriest patch, v0x102) is harmlessly skipped: the parser doesn't
+//     handle v0x102 and no map we use lives there. Optional; missing -> the
+//     classic/legacy scene entries don't appear in maps.ts and the modern
+//     map renders under its bare id only.
 //
 //   data/RagnarokOnline_raw/iro_effecttool/
 //     iRO effecttool .lub/.lua dump (per-map particle emitter specs). Not in
@@ -44,7 +43,9 @@
 //       patch -p0 < ../src/RagnarokOnline/tools/lua-5.1.5-iro.patch
 //       make <platform>            # e.g. macosx, linux
 //       mv src/lua data/RagnarokOnline_raw/bin/lua-5.1-iro
-//     Stage 2 spawns this to execute the iRO .lub scripts.
+//     Stage 2 spawns this to execute the iRO .lub scripts. Also requires
+//     `iconv` on PATH (standard on macOS/Linux) for CP949 -> UTF-8 transcoding
+//     of emitter strings.
 //
 //   data/RagnarokOnline_raw/baked/gr2/, baked/gr2tex/
 //     WoE Granny models pre-expanded offline (RO ships them Oodle0-compressed
@@ -98,41 +99,67 @@ function toSlice(buf: Buffer): ArrayBufferSlice {
 
 const GRF_PATH = path.resolve("data/RagnarokOnline_raw/grf/data.grf");
 
-// Pre-renewal (kRO) map geometry that isn't in the modern iRO GRF. See the
-// header for what lives here and why it can't come from the same source.
-const LEGACY_MAPS_DIR = path.resolve("data/RagnarokOnline_raw/legacy_maps");
+// Pre-renewal kRO 2008/2009 GRFs (v0x200). The Grf class reads them the same
+// way as the modern iRO GRF; we open each in order and treat them as an
+// overlay set when a map id isn't in the modern GRF or is `<id>@classic`.
+const LEGACY_GRF_DIR = path.resolve("data/RagnarokOnline_raw/grf/legacy");
+function legacyGrfPaths(): string[] {
+    if (!existsSync(LEGACY_GRF_DIR)) return [];
+    return readdirSync(LEGACY_GRF_DIR)
+        .filter((f) => f.toLowerCase().endsWith(".grf"))
+        .map((f) => path.join(LEGACY_GRF_DIR, f));
+}
+
+// Pre-renewal maps with meaningful geometry differences from the modern iRO
+// versions, exposed as separate `<id>@classic` scene entries. List discovered
+// by hash-diffing the kRO 2009 GRFs against the iRO renewal GRF (commit
+// f2b1c12a). Update if Gravity rebuilds another map's geometry in a future
+// patch and we want to expose both vintages.
+const CLASSIC_MAPS = new Set<string>([
+    "alberta", "alde_gld", "aru_gld", "bat_c01", "bra_in01", "brasilis",
+    "cmd_fild08", "ein_fild01", "gl_cas02", "iz_dun03", "izlude", "manuk",
+    "moc_castle", "moc_fild20", "morocc", "prt_fild05", "prt_in", "ra_in01",
+    "rachel", "spl_fild01", "splendide", "ve_fild02",
+]);
+
+// Pre-renewal-only maps absent from the modern iRO GRF; exposed under their
+// bare id, sourced from the legacy GRFs.
+const LEGACY_ONLY_MAPS = new Set<string>(["poring_c01", "poring_c02"]);
 
 // ============================================================================
 // Grf reader
 // ============================================================================
 
-// Reader for the modern Ragnarok Online data.grf (signature "Event Horizon",
-// version 0x300). This is the same archive Gravity ships, with a custom magic
-// string and a 4-byte-wider header layout to accommodate 4 GiB+ archives.
+// Reader for Gravity's GRF archive format. Handles both v0x200 (the long-
+// standing kRO/iRO layout, including the legacy kRO 2008/2009 snapshots) and
+// v0x300 (the "Event Horizon" variant iRO ships since ~Oct 2024 to accommodate
+// 4 GiB+ archives).
 //
-// Layout (deduced empirically; standard v0x200 with three changes):
-//   header (46 bytes):
-//     0x00..0x0E  signature (15 bytes, ignored)
-//     0x0F..0x1D  padding/key (15 bytes, unused)
-//     0x1E..0x25  fileTableOffset (u64 LE)  -- was u32 + u32 reservedFiles
-//     0x26..0x29  fileCountPre   (u32 LE)
-//     0x2A..0x2D  version        (u32 LE, == 0x300)
-//   file table header at HEADER_SIZE + fileTableOffset:
-//     u32 _reserved (= 0; new in v0x300)
-//     u32 packedSize
-//     u32 realSize
-//     packedSize bytes of zlib-deflated entries
-//   each entry:
-//     CP949 filename, null-terminated
-//     u32 compressedSize
-//     u32 lengthAligned
-//     u32 realSize
-//     u8  type
-//     u64 offset (from end of header) -- was u32
-//   file data at HEADER_SIZE + entry.offset:
-//     lengthAligned bytes; zlib-deflate when realSize !== compressedSize.
-//     The DES encryption modes (type bits 0x02 / 0x04) used in pre-v0x200
-//     archives don't appear in this GRF; entries we've sampled are all type 0x01.
+// Header (46 bytes), v0x200:
+//   0x00..0x0E  signature (15 bytes, ignored)
+//   0x0F..0x1D  padding/key
+//   0x1E..0x21  fileTableOffset (u32 LE)
+//   0x22..0x25  seed           (i32 LE)
+//   0x26..0x29  fileCountRaw   (i32 LE; real count = raw - seed - 7)
+//   0x2A..0x2D  version        (u32 LE; 0x200, 0x103, etc.)
+//
+// Header, v0x300 (only when bytes 35..37 are all zero AND version == 0x300):
+//   0x1E..0x25  fileTableOffset (u64 LE)
+//   0x26..0x29  fileCountPre    (u32 LE; real count = this value directly)
+//
+// File table at HEADER_SIZE + fileTableOffset:
+//   v0x300 prefixes a 4-byte zero word, then both versions have
+//   u32 packedSize + u32 realSize + packedSize bytes of zlib-deflated entries.
+//
+// Each entry:
+//   CP949 filename, null-terminated; u32 compressedSize; u32 lengthAligned;
+//   u32 realSize; u8 type; then a u32 offset in v0x200 or u64 in v0x300
+//   (post-name stride 17 vs 21).
+//
+// File data at HEADER_SIZE + entry.offset:
+//   lengthAligned bytes; zlib-deflate when realSize !== compressedSize.
+//   DES-encrypted entries (type bits 0x02 / 0x04) used in pre-v0x200 archives
+//   aren't implemented; we'd throw on read if we ever hit one.
 
 const HEADER_SIZE = 46;
 const FILELIST_TYPE_FILE = 0x01;
@@ -158,19 +185,37 @@ export class Grf {
         const header = Buffer.alloc(HEADER_SIZE);
         readSync(this.fd, header, 0, HEADER_SIZE, 0);
 
-        const fileTableOffset = Number(header.readBigUInt64LE(0x1E));
-        const fileCountPre = header.readUInt32LE(0x26);
         this.version = header.readUInt32LE(0x2A);
-        if (this.version !== 0x300)
-            throw new Error(`${this.path}: only v0x300 supported, got 0x${this.version.toString(16)}`);
 
-        const tableHeader = Buffer.alloc(12);
-        readSync(this.fd, tableHeader, 0, 12, HEADER_SIZE + fileTableOffset);
-        const packedSize = tableHeader.readUInt32LE(4);
-        const realSize = tableHeader.readUInt32LE(8);
+        // v0x300 "Event Horizon" uses a u64 file-table offset only when bytes
+        // 35..37 are all zero (the guard distinguishes it from legacy v0x300
+        // builds that still used the old u32 + seed layout). Anything else
+        // falls through to the v0x200 layout. Best-effort for v0x103/v0x101/
+        // v0x102 (different prefixes, different encryption); those typically
+        // fail in inflateSync below and the caller decides whether to skip.
+        const isV3 = this.version === 0x300 && header[35] === 0 && header[36] === 0 && header[37] === 0;
+        const entryStride = isV3 ? 21 : 17;
+        let fileTableOffset: number;
+        let realFileCount: number;
+        if (isV3) {
+            fileTableOffset = Number(header.readBigUInt64LE(0x1E));
+            realFileCount = header.readUInt32LE(0x26);
+        } else {
+            fileTableOffset = header.readUInt32LE(0x1E);
+            const seed = header.readInt32LE(0x22);
+            const rawCount = header.readInt32LE(0x26);
+            realFileCount = rawCount - seed - 7;
+        }
+
+        // v0x300 prefixes the size header with a 4-byte zero word.
+        const tablePrefixLen = isV3 ? 4 : 0;
+        const tableHeader = Buffer.alloc(tablePrefixLen + 8);
+        readSync(this.fd, tableHeader, 0, tableHeader.length, HEADER_SIZE + fileTableOffset);
+        const packedSize = tableHeader.readUInt32LE(tablePrefixLen);
+        const realSize = tableHeader.readUInt32LE(tablePrefixLen + 4);
 
         const packed = Buffer.alloc(packedSize);
-        readSync(this.fd, packed, 0, packedSize, HEADER_SIZE + fileTableOffset + 12);
+        readSync(this.fd, packed, 0, packedSize, HEADER_SIZE + fileTableOffset + tableHeader.length);
         const raw = inflateSync(packed);
         if (raw.length !== realSize)
             throw new Error(`${this.path}: file table size mismatch (got ${raw.length}, expected ${realSize})`);
@@ -178,10 +223,10 @@ export class Grf {
         const decoder = new TextDecoder("euc-kr");
         let p = 0;
         let parsed = 0;
-        while (p < raw.length && parsed < fileCountPre) {
+        while (p < raw.length && parsed < realFileCount) {
             const start = p;
             while (p < raw.length && raw[p] !== 0) p++;
-            if (p + 1 + 17 > raw.length) break;
+            if (p + 1 + entryStride > raw.length) break;
             const filename = decoder.decode(raw.slice(start, p)).toLowerCase();
             p++;
             const entry: GrfEntry = {
@@ -189,9 +234,9 @@ export class Grf {
                 lengthAligned: raw.readUInt32LE(p + 4),
                 realSize: raw.readUInt32LE(p + 8),
                 type: raw[p + 12],
-                offset: Number(raw.readBigUInt64LE(p + 13)),
+                offset: isV3 ? Number(raw.readBigUInt64LE(p + 13)) : raw.readUInt32LE(p + 13),
             };
-            p += 21;
+            p += entryStride;
             parsed++;
             if (entry.type & FILELIST_TYPE_FILE)
                 this.files.set(filename, entry);
@@ -366,12 +411,24 @@ function extractGrannyModels(): void {
     console.log(`  granny models: ${models} gr2 + ${texs} textures + ${clips} action clips -> ${OUT_MODEL3D_DIR}`);
 }
 
+// Reads a file from the first GRF in the priority list that has it. Modern
+// iRO GRF is always first; legacy GRFs follow for `@classic` and LEGACY_ONLY
+// maps so `.gnd`/`.rsm` references to pre-renewal-only textures or models
+// fall back to legacy bytes when the name is gone in modern.
+function readFromGrfs(grfs: Grf[], filename: string): Buffer | null {
+    for (const g of grfs) {
+        const buf = g.read(filename);
+        if (buf !== null) return buf;
+    }
+    return null;
+}
+
 // Writes one GRF entry to the staged tree at `dstRel`. Backslashes in the GRF
 // path become OS separators on disk; basenames are lowercased so the
 // case-sensitive CDN serves them under a stable path. Returns true if it
 // wrote a file.
-function writeGrfEntry(grf: Grf, grfPath: string, outRoot: string, dstRel: string): boolean {
-    const buf = grf.read(grfPath);
+function writeGrfEntry(grfs: Grf[], grfPath: string, outRoot: string, dstRel: string): boolean {
+    const buf = readFromGrfs(grfs, grfPath);
     if (buf === null) return false;
     const segments = dstRel.split("\\");
     const dst = path.join(outRoot, ...segments.map((s) => s.toLowerCase()));
@@ -383,10 +440,10 @@ function writeGrfEntry(grf: Grf, grfPath: string, outRoot: string, dstRel: strin
 // Copies one texture, given its CP949-decoded name (the SAME decode the
 // parsers use). Skips names already copied this run. Returns true if it
 // copied a file; missing names accumulate in `missing` for a final report.
-function copyTexture(grf: Grf, name: string, copied: Set<string>, missing: Set<string>): boolean {
+function copyTexture(grfs: Grf[], name: string, copied: Set<string>, missing: Set<string>): boolean {
     if (name === "" || copied.has(name) || missing.has(name))
         return false;
-    if (writeGrfEntry(grf, `data\\texture\\${name}`, OUT_TEXTURE_DIR, name)) {
+    if (writeGrfEntry(grfs, `data\\texture\\${name}`, OUT_TEXTURE_DIR, name)) {
         copied.add(name);
         return true;
     }
@@ -394,18 +451,18 @@ function copyTexture(grf: Grf, name: string, copied: Set<string>, missing: Set<s
     return false;
 }
 
-function extractTextures(grf: Grf, gndBuf: Buffer, copied: Set<string>, missing: Set<string>): void {
+function extractTextures(grfs: Grf[], gndBuf: Buffer, copied: Set<string>, missing: Set<string>): void {
     const gnd = parseGND(toSlice(gndBuf));
     let n = 0;
     for (const name of gnd.textureNames)
-        if (copyTexture(grf, name, copied, missing)) n++;
+        if (copyTexture(grfs, name, copied, missing)) n++;
     console.log(`  terrain textures: ${n} copied`);
 }
 
 // Reads each model the RSW references, copies it to the staged tree, then
 // parses it for its texture references and copies those too. Dedupes textures
 // against `copied`.
-function extractModels(grf: Grf, rswBuf: Buffer, copied: Set<string>, missing: Set<string>): void {
+function extractModels(grfs: Grf[], rswBuf: Buffer, copied: Set<string>, missing: Set<string>): void {
     const rsw = parseRSW(toSlice(rswBuf));
     console.log(`  rsw v${rsw.major}.${rsw.minor}, ${rsw.models.length} placements`);
 
@@ -416,7 +473,7 @@ function extractModels(grf: Grf, rswBuf: Buffer, copied: Set<string>, missing: S
 
     let modelsCopied = 0, modelMisses = 0, texCopied = 0;
     for (const modelName of uniqueModels) {
-        const modelBuf = grf.read(`data\\model\\${modelName}`);
+        const modelBuf = readFromGrfs(grfs, `data\\model\\${modelName}`);
         if (modelBuf === null) {
             console.warn(`  skip (missing model): ${modelName}`);
             modelMisses++;
@@ -431,7 +488,7 @@ function extractModels(grf: Grf, rswBuf: Buffer, copied: Set<string>, missing: S
         try {
             const rsm = parseRSM(toSlice(modelBuf));
             for (const texName of rsm.textures)
-                if (copyTexture(grf, texName, copied, missing)) texCopied++;
+                if (copyTexture(grfs, texName, copied, missing)) texCopied++;
         } catch (e) {
             console.warn(`  warn (rsm parse failed, textures skipped): ${modelName}: ${e}`);
         }
@@ -442,7 +499,7 @@ function extractModels(grf: Grf, rswBuf: Buffer, copied: Set<string>, missing: S
 
 // Copies all 32 water frames for the map's water type into OUT_TEXTURE_DIR at
 // the same relative path the renderer fetches.
-function extractWater(grf: Grf, rswBuf: Buffer, gndBuf: Buffer | null): void {
+function extractWater(grfs: Grf[], rswBuf: Buffer, gndBuf: Buffer | null): void {
     const rsw = parseRSW(toSlice(rswBuf));
     // RSW 2.6 moved the water block into the GND (1.8/1.9); rsw.waterType is
     // 0 on those maps. Prefer the GND's parsed water.type when present so
@@ -462,7 +519,7 @@ function extractWater(grf: Grf, rswBuf: Buffer, gndBuf: Buffer | null): void {
     for (let i = 0; i < WATER_FRAME_COUNT; i++) {
         const nn = i.toString().padStart(2, "0");
         const file = `water${waterType}${nn}.jpg`;
-        if (writeGrfEntry(grf, `data\\texture\\${WATER_DIR}\\${file}`, OUT_TEXTURE_DIR, `${WATER_DIR}\\${file}`))
+        if (writeGrfEntry(grfs, `data\\texture\\${WATER_DIR}\\${file}`, OUT_TEXTURE_DIR, `${WATER_DIR}\\${file}`))
             copied++;
         else
             missing++;
@@ -581,11 +638,9 @@ function extractEffect(grf: Grf, strName: string): void {
     console.log(`  effect ${strName}: ${effect.layers.length} layers, ${texCopied} textures copied (${texMissing} missing)`);
 }
 
-// Enumerates every staged map id, optionally filtered to `mapIdFilter`. The
-// union of GRF entries matching `data\<id>.rsw` and any .rsw in
-// data/RagnarokOnline_raw/legacy_maps/ (pre-renewal classic variants the
-// modern GRF doesn't ship). Names returned are lowercased; the GRF table is
-// already lowercased and disk names follow suit.
+// Enumerates every staged map id, optionally filtered. Bare ids come from
+// `data\<id>.rsw` entries in the modern iRO GRF plus LEGACY_ONLY_MAPS;
+// CLASSIC_MAPS contribute a `<id>@classic` variant each. Returned lowercased.
 function enumerateMapIds(grf: Grf, mapIdFilter: string[]): string[] {
     if (mapIdFilter.length > 0)
         return mapIdFilter.map((s) => s.toLowerCase());
@@ -594,23 +649,46 @@ function enumerateMapIds(grf: Grf, mapIdFilter: string[]): string[] {
         const m = /^data\\([^\\]+)\.rsw$/i.exec(key);
         if (m !== null) ids.add(m[1].toLowerCase());
     }
-    if (existsSync(LEGACY_MAPS_DIR)) {
-        for (const f of readdirSync(LEGACY_MAPS_DIR))
-            if (f.toLowerCase().endsWith(".rsw"))
-                ids.add(f.slice(0, -".rsw".length).toLowerCase());
-    }
+    for (const id of LEGACY_ONLY_MAPS)
+        ids.add(id);
+    for (const id of CLASSIC_MAPS)
+        ids.add(`${id}@classic`);
     return Array.from(ids).sort((a, b) => a.localeCompare(b));
 }
 
-// Reads one of the three per-map files (rsw/gnd/gat). Prefers the GRF; falls
-// back to LEGACY_MAPS_DIR for pre-renewal-only ids. Returns null when the map
-// has no such file at all (gat is sometimes absent for instance dungeons).
+// Reads one per-map file (rsw/gnd/gat) for a given id. CLASSIC and LEGACY_ONLY
+// ids resolve against the legacy GRFs (opened lazily and cached); everything
+// else against the modern GRF. Returns null when no archive has the file (gat
+// is sometimes absent for instance dungeons).
+const legacyGrfCache = new Map<string, Grf | null>();
+function openLegacyGrfs(): Grf[] {
+    const out: Grf[] = [];
+    for (const p of legacyGrfPaths()) {
+        let g = legacyGrfCache.get(p);
+        if (g === undefined) {
+            // Skip archives whose version this parser doesn't handle (e.g.
+            // v0x102 sound overlays). Cache the null so we don't retry.
+            try { g = new Grf(p); }
+            catch (e) { console.warn(`  skip legacy GRF ${path.basename(p)}: ${(e as Error).message}`); g = null; }
+            legacyGrfCache.set(p, g);
+        }
+        if (g !== null) out.push(g);
+    }
+    return out;
+}
+function legacyGrfHas(filename: string): boolean {
+    return openLegacyGrfs().some((g) => g.has(filename));
+}
 function readMapFile(grf: Grf, mapId: string, ext: string): Buffer | null {
-    const buf = grf.read(`data\\${mapId}${ext}`);
-    if (buf !== null) return buf;
-    const legacyPath = path.join(LEGACY_MAPS_DIR, `${mapId}${ext}`);
-    if (existsSync(legacyPath))
-        return readFileSync(legacyPath);
+    const classicMatch = /^(.+)@classic$/i.exec(mapId);
+    const isLegacy = classicMatch !== null || LEGACY_ONLY_MAPS.has(mapId);
+    if (!isLegacy)
+        return grf.read(`data\\${mapId}${ext}`);
+    const baseId = classicMatch !== null ? classicMatch[1] : mapId;
+    for (const lg of openLegacyGrfs()) {
+        const buf = lg.read(`data\\${baseId}${ext}`);
+        if (buf !== null) return buf;
+    }
     return null;
 }
 
@@ -627,6 +705,8 @@ function runExtract(mapIdFilter: string[]): void {
 
     for (const mapId of enumerateMapIds(grf, mapIdFilter)) {
         console.log(`\n${mapId}:`);
+        const isLegacy = /@classic$/i.test(mapId) || LEGACY_ONLY_MAPS.has(mapId);
+        const assetGrfs: Grf[] = isLegacy ? [grf, ...openLegacyGrfs()] : [grf];
         const buffers: Record<string, Buffer | null> = {};
         for (const ext of MAP_EXTENSIONS) {
             const buf = readMapFile(grf, mapId, ext);
@@ -639,10 +719,10 @@ function runExtract(mapIdFilter: string[]): void {
             writeFileSync(dst, buf);
         }
         if (buffers[".gnd"] !== null)
-            extractTextures(grf, buffers[".gnd"]!, copied, missing);
+            extractTextures(assetGrfs, buffers[".gnd"]!, copied, missing);
         if (buffers[".rsw"] !== null) {
-            extractModels(grf, buffers[".rsw"]!, copied, missing);
-            extractWater(grf, buffers[".rsw"]!, buffers[".gnd"]);
+            extractModels(assetGrfs, buffers[".rsw"]!, copied, missing);
+            extractWater(assetGrfs, buffers[".rsw"]!, buffers[".gnd"]);
         }
         extractFog(mapId, fogTable);
     }
@@ -815,7 +895,7 @@ function dumpOne(file: string): RawEmitterDump | null {
 function runExtractEmitters(): void {
     if (!existsSync(LUA_BIN)) {
         console.error(`missing patched lua binary: ${LUA_BIN}`);
-        console.error(`(rebuild from /tmp/lua-5.1.5; see notes at top of dump-emitters.lua)`);
+        console.error(`(see the lua-5.1-iro section of the header comment at the top of this file for the build steps)`);
         throw new Error("stage aborted");
     }
     if (!existsSync(DUMP_LUA)) {
@@ -1664,10 +1744,9 @@ function runExtractEntities(): void {
 //   data/RagnarokOnline_raw/grf/data.grf
 //     `data\<id>.rsw` (the id list)
 //     `data\mapnametable.txt` (English display names)
-//   data/RagnarokOnline_raw/legacy_maps/*@classic.rsw
-//     Pre-renewal-only ids that earn dedicated scene entries with rebuilt
-//     geometry. The bare-id equivalent (modern iRO version) comes from the
-//     GRF and gets its own entry.
+//   CLASSIC_MAPS / LEGACY_ONLY_MAPS (compiled-in lists; see the constants
+//   for the curation rationale). Their geometry comes from the legacy kRO
+//   GRFs at the runtime; gen-maps only consumes the names.
 // Output:
 //   src/RagnarokOnline/maps.ts (committed; the scene registry maps over it)
 
@@ -1725,38 +1804,22 @@ function runGenMaps(): void {
     const iro = parseMapNameTable(iroBuf);
     console.log(`iRO names: ${iro.size}`);
 
-    // Bare ids: one per `data\<id>.rsw` in the GRF. Instance maps
+    // Bare ids: one per `data\<id>.rsw` in the iRO GRF plus any LEGACY_ONLY
+    // map whose .rsw actually lives in one of the legacy GRFs. Instance maps
     // (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and stay in the bare
-    // list. Classic variants come from LEGACY_MAPS_DIR (see header).
+    // list. CLASSIC_MAPS contribute a `<id>@classic` each, gated likewise.
     const bareIds = new Set<string>();
     for (const key of grf.files.keys()) {
         const m = /^data\\([^\\]+)\.rsw$/i.exec(key);
         if (m !== null) bareIds.add(m[1].toLowerCase());
     }
     grf.close();
+    for (const id of LEGACY_ONLY_MAPS)
+        if (legacyGrfHas(`data\\${id}.rsw`)) bareIds.add(id);
 
-    // Legacy poring_c0{1,2} maps live in legacy_maps/ alongside the @classic
-    // variants but lack the @classic suffix; they're regular bare ids whose
-    // geometry happens not to be in the iRO GRF.
-    if (existsSync(LEGACY_MAPS_DIR)) {
-        for (const f of readdirSync(LEGACY_MAPS_DIR)) {
-            if (!f.toLowerCase().endsWith(".rsw")) continue;
-            if (/@classic\.rsw$/i.test(f)) continue;
-            bareIds.add(f.slice(0, -".rsw".length).toLowerCase());
-        }
-    }
-
-    const classicBaseIds: string[] = [];
-    if (existsSync(LEGACY_MAPS_DIR)) {
-        for (const f of readdirSync(LEGACY_MAPS_DIR)) {
-            const m = /^(.+)@classic\.rsw$/i.exec(f);
-            if (m === null) continue;
-            const base = m[1].toLowerCase();
-            if (bareIds.has(base))
-                classicBaseIds.push(base);
-        }
-    }
-    classicBaseIds.sort((a, b) => a.localeCompare(b));
+    const classicBaseIds = Array.from(CLASSIC_MAPS)
+        .filter((id) => bareIds.has(id) && legacyGrfHas(`data\\${id}.rsw`))
+        .sort((a, b) => a.localeCompare(b));
 
     const sortedBare = Array.from(bareIds).sort((a, b) => a.localeCompare(b));
 
