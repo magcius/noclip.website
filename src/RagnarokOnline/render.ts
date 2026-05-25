@@ -488,14 +488,23 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
 
     let vertexCursor = 0;
 
-    const emitQuad = (s: GndSurface, p: vec3[]): void => {
+    // Per-corner color sampled from the cell owning that corner so shared
+    // corners agree across tiles (orig 3dGround.cpp; alpha is always opaque).
+    const cellTopColor = (cx: number, cy: number): number => {
+        if (cx < 0 || cy < 0 || cx >= gnd.width || cy >= gnd.height)
+            return 0;
+        const cell = gnd.cells[cy * gnd.width + cx];
+        const s = surfaceOk(cell.topSurface);
+        if (s === null)
+            return 0;
         const argb = s.color >>> 0;
-        const a = (argb >>> 24) & 0xff;
         const r = (argb >>> 16) & 0xff;
         const g = (argb >>> 8) & 0xff;
         const b = argb & 0xff;
-        const packed = (r | (g << 8) | (b << 16) | (a << 24)) >>> 0;
+        return (r | (g << 8) | (b << 16) | (0xff << 24)) >>> 0;
+    };
 
+    const emitQuad = (s: GndSurface, p: vec3[], cornerColors: number[]): void => {
         const base = vertexCursor;
         for (let k = 0; k < 4; k++) {
             const fo = (base + k) * 8;
@@ -508,7 +517,7 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
             lightmapUV(s.lightmapId, k, luv);
             fview[fo + 5] = luv[0];
             fview[fo + 6] = luv[1];
-            uview[fo + 7] = packed;
+            uview[fo + 7] = cornerColors[k];
             if (px < min[0]) min[0] = px; if (px > max[0]) max[0] = px;
             if (py < min[1]) min[1] = py; if (py > max[1]) max[1] = py;
             if (pz < min[2]) min[2] = pz; if (pz > max[2]) max[2] = pz;
@@ -533,7 +542,12 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
                 cornerWorld(x, y, 1, c.height, p1);
                 cornerWorld(x, y, 2, c.height, p2);
                 cornerWorld(x, y, 3, c.height, p3);
-                emitQuad(top, [p0, p1, p2, p3]);
+                emitQuad(top, [p0, p1, p2, p3], [
+                    cellTopColor(x, y),
+                    cellTopColor(x + 1, y),
+                    cellTopColor(x, y + 1),
+                    cellTopColor(x + 1, y + 1),
+                ]);
             }
 
             const front = surfaceOk(c.frontSurface);
@@ -543,7 +557,9 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
                 cornerWorld(x, y, 3, c.height, p1);
                 cornerWorld(x, y + 1, 0, nc.height, p2);
                 cornerWorld(x, y + 1, 1, nc.height, p3);
-                emitQuad(front, [p0, p1, p2, p3]);
+                const cL = cellTopColor(x, y + 1);
+                const cR = cellTopColor(x + 1, y + 1);
+                emitQuad(front, [p0, p1, p2, p3], [cL, cR, cL, cR]);
             }
 
             const right = surfaceOk(c.rightSurface);
@@ -553,7 +569,9 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
                 cornerWorld(x, y, 3, c.height, p1);
                 cornerWorld(x + 1, y, 0, rc.height, p2);
                 cornerWorld(x + 1, y, 2, rc.height, p3);
-                emitQuad(right, [p0, p1, p2, p3]);
+                const cT = cellTopColor(x + 1, y);
+                const cB = cellTopColor(x + 1, y + 1);
+                emitQuad(right, [p0, p1, p2, p3], [cT, cB, cT, cB]);
             }
         }
     }
