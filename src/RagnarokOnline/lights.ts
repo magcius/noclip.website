@@ -25,7 +25,7 @@ export interface PointLight {
 
 // Render-frame conversion: RSW X is centered in [-mapOffX, +mapOffX], so the
 // corner-origin shift + mirror collapse to `mapOffX - pos.x`. (Using
-// `worldWidth - pos.x` parks every light past the right edge — invisible.)
+// `worldWidth - pos.x` would park every light past the right edge.)
 export function loadPointLights(rsw: RswWorld, gnd: GndMap): PointLight[] {
     const mapOffX = gnd.width * GND_CELL_SIZE * 0.5;
     const mapOffZ = gnd.height * GND_CELL_SIZE * 0.5;

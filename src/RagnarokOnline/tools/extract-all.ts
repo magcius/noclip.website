@@ -41,5 +41,5 @@ for (const stage of stages) {
     }
     const res = spawnSync("npx", ["tsx", path.join(HERE, stage.script), ...(stage.args ?? [])], { stdio: "inherit" });
     if (res.status !== 0)
-        console.error(`  ${stage.name} exited ${res.status} — continuing`);
+        console.error(`  ${stage.name} exited ${res.status}; continuing`);
 }

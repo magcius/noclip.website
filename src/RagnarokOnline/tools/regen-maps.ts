@@ -7,8 +7,8 @@
 //
 // Inputs:
 //   data/RagnarokOnline/maps/*.rsw                              (scanned for the id list)
-//   data/RagnarokOnline_raw/iro_tables/mapnametable.txt         (English names; preferred — iRO side dump, not from the GRF)
-//   data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt   (Korean kRO; fallback — from the GRF)
+//   data/RagnarokOnline_raw/iro_tables/mapnametable.txt         (English names, preferred; iRO side dump, not from the GRF)
+//   data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt   (Korean kRO fallback, from the GRF)
 // Output:
 //   src/RagnarokOnline/maps.ts (committed; the scene registry maps over it)
 
@@ -81,7 +81,7 @@ function main(): void {
     console.log(`iRO names: ${iro.size}  kRO names: ${kro.size}`);
 
     // Bare ids come from the staged .rsw set. Exclude era-suffixed asset
-    // files (`<id>@classic.rsw`) — they're inferred from the entity manifest
+    // files (`<id>@classic.rsw`); they're inferred from the entity manifest
     // pass below so we don't double-count Gravity-rebuilt maps. Note the
     // `@` test is anchored to "@<era>" at the tail; engine instance maps
     // (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and must stay in the
@@ -122,7 +122,7 @@ function main(): void {
         if (en !== undefined) { display = en; namedEn++; }
         else if (kr !== undefined) { display = kr; namedKr++; }
         else unnamed++;
-        const name = display !== undefined ? `${id} — ${display}` : id;
+        const name = display !== undefined ? `${id} - ${display}` : id;
         return { display, name };
     };
 
@@ -134,10 +134,10 @@ function main(): void {
         entries.push({ id, name: lookup.name, category });
         // Classic variant: same display name with a " (Classic)" suffix so the
         // user can tell them apart at a glance. The bare entry IS the renewal
-        // alias (no separate @renewal variant — see the comment above).
+        // alias (no separate @renewal variant; see the comment above).
         if (classicSet.has(id)) {
             const classicName = lookup.display !== undefined
-                ? `${id} — ${lookup.display} (Classic)`
+                ? `${id} - ${lookup.display} (Classic)`
                 : `${id} (classic)`;
             entries.push({ id: `${id}@classic`, name: classicName, category, era: "classic" });
         }
@@ -167,7 +167,7 @@ function main(): void {
 // name, ${namedKr} kRO Korean fallback, ${unnamed} unnamed.
 //
 // Era-aware entries (those with an \`era\` field) coexist with their bare
-// alias — the bare id is the renewal-era alias (see PRIMARY_ERA in
+// alias. The bare id is the renewal-era alias (see PRIMARY_ERA in
 // mapcategory.ts), so both \`geffen\` and \`geffen@classic\` are valid scene
 // ids. The bare alias stays in the list for backward compatibility with
 // shared URLs and Hercules warp scripts; the explicit \`@classic\` variant
@@ -185,7 +185,7 @@ export interface RagnarokMapEntry {
     // classifyMap in tools/regen-maps.ts for the classification rules.
     category: MapCategory;
     // Set on non-primary-era variants (e.g. \`{ id: "geffen@classic", era: "classic" }\`).
-    // Bare alias entries leave this unset — they resolve to PRIMARY_ERA at
+    // Bare alias entries leave this unset; they resolve to PRIMARY_ERA at
     // scene-load time.
     era?: "classic" | "renewal";
 }

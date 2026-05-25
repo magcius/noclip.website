@@ -9,7 +9,7 @@ import { GrannyAnimation, GrannyBone, GrannyCurve, GrannySkeleton, GrannyTransfo
 // WoE models top out at 43 bones; 64 leaves headroom.
 export const GRANNY_MAX_BONES = 64;
 
-// Hitch cap — a long pause shouldn't fast-forward the clip.
+// Hitch cap. A long pause shouldn't fast-forward the clip.
 const MAX_DT = 0.25;
 
 // RO clips are dense enough that piecewise-linear is visually indistinguishable

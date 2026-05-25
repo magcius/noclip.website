@@ -352,7 +352,7 @@ export class NameLabelRenderer {
         const mapped = template.mapUniformBufferF32(LabelProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
 
-        // Depth test against the scene but don't write — 3D geometry occludes
+        // Depth test against the scene but don't write. 3D geometry occludes
         // text per-pixel and labels never occlude each other.
         const megaState = template.setMegaStateFlags({
             cullMode: GfxCullMode.None,

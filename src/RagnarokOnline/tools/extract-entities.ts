@@ -19,7 +19,7 @@ import * as path from "path";
 // ---- Source roots ----------------------------------------------------------
 
 const HERCULES = path.resolve("../Hercules");
-// Mob DB: read pre-renewal first, then renewal — renewal is the modern source
+// Mob DB: read pre-renewal first, then renewal. Renewal is the modern source
 // of truth (it adds ~750 mobs unique to renewal-era maps and updates the stats
 // of existing ones), so the second pass overrides the first on shared ids.
 // Both eras' mob ids match for the classic mobs (Poring=1002, etc.).
@@ -88,7 +88,7 @@ interface MobDbEntry { sprite: string; speed: number; canMove: boolean; }
 // The libconfig-style mob_db lists records with `Id: <n>`, `SpriteName:
 // "<NAME>"`, `MoveSpeed: <ms>`, and a `Mode: { ... }` block of behavior flags.
 // We need the sprite, the walk speed, and the Mode.CanMove flag (mobs whose Mode
-// lacks CanMove — Pupa, plants, eggs, mushrooms — never wander; their MoveSpeed
+// lacks CanMove (Pupa, plants, eggs, mushrooms) never wander; their MoveSpeed
 // is meaningless). A line scan suffices: Id leads each record; SpriteName,
 // MoveSpeed and the Mode block follow within it. CanMove is only honored while
 // inside that record's Mode block. The record commits when the next Id is seen.
@@ -140,7 +140,7 @@ function mobSpriteRel(spriteName: string): string {
 
 // NPC sprite: the script's SPRITE-constant name lowercased, under the npc dir
 // (4_F_KAFRA1 -> npc/4_f_kafra1.spr). A few constants have no visible sprite
-// (HIDDEN_NPC, FAKE_NPC, INVISIBLE_NPC) — those are placeable triggers, not
+// (HIDDEN_NPC, FAKE_NPC, INVISIBLE_NPC); those are placeable triggers, not
 // drawable, so we skip them.
 const INVISIBLE_NPC_SPRITES = new Set(["HIDDEN_NPC", "FAKE_NPC", "INVISIBLE_NPC", "HIDDEN_WARP_NPC", "WARPNPC", "CLEAR_NPC"]);
 
@@ -163,7 +163,7 @@ function spriteExists(rel: string): boolean {
 
 // ---- Hercules script load list ---------------------------------------------
 
-// Hercules does not load every .txt under npc/ — it loads exactly the files
+// Hercules does not load every .txt under npc/; it loads exactly the files
 // named in its config, following the era-specific entry point. A raw directory
 // walk pulls in content the live server never loads: seasonal events and
 // especially npc/custom/ (the sample Healer, Warper, Stylist, Job Master,
@@ -175,7 +175,7 @@ function spriteExists(rel: string): boolean {
 // whose `npc_global_list` tuples list script files as bare quoted paths and
 // pull in further lists via `@include`. Lines beginning with `//` are disabled.
 // Following the includes and collecting the live (non-commented) quoted paths
-// yields exactly the set the server loads — which excludes npc/custom/ because
+// yields exactly the set the server loads, which excludes npc/custom/ because
 // scripts_custom.conf, while included, has all of its entries commented out by
 // default.
 //
@@ -203,7 +203,7 @@ function quotedTokens(line: string): string[] {
 
 // Strips `/* ... */` block comments from `src`, preserving newlines (so line
 // numbers + the line-by-line parsers downstream stay aligned). `/*` inside a
-// double-quoted string literal is NOT a comment opener — required so e.g.
+// double-quoted string literal is NOT a comment opener; required so e.g.
 // an NPC `mes "/* hint */"` line doesn't toggle global comment state.
 function stripBlockComments(src: string): string {
     let out = "";
@@ -227,7 +227,7 @@ function stripBlockComments(src: string): string {
         if (c === "/" && src[i + 1] === "*") { inCom = true; i += 2; continue; }
         if (c === '"') { inStr = true; out += c; i++; continue; }
         // A `//` line comment is also a comment opener but we leave it intact
-        // here — the line-by-line parsers handle `//` themselves.
+        // here; the line-by-line parsers handle `//` themselves.
         out += c;
         i++;
     }
@@ -342,9 +342,9 @@ function splitLine(raw: string): Line | null {
 }
 
 // Which load-list a script file came from. Drives era assignment for every
-// entity the file declares — see emitManifests for the per-(map, era) fan-out.
+// entity the file declares (see emitManifests for the per-(map, era) fan-out).
 // "shared" = a script that both eras' main.conf @includes (npc/cities/*.txt
-// etc. — Gravity-authored once, used in both vintages); "pre-re" or "re" =
+// etc., Gravity-authored once, used in both vintages); "pre-re" or "re" =
 // scripts unique to that era's subtree (npc/pre-re/* or npc/re/*).
 type EntryEra = "pre-re" | "re" | "shared";
 
@@ -403,7 +403,7 @@ function scanScriptedSpawns(text: string, mobIdByName: Map<string, number>):
         // Literal coords + count only; skip script-variable args.
         const x = parseInt(xRaw, 10), y = parseInt(yRaw, 10), count = parseInt(countRaw, 10);
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(count)) continue;
-        // mapId may also be a variable — script.c accepts strings only there,
+        // mapId may also be a variable; script.c accepts strings only there,
         // but we already required a literal "..." so this is safe.
         // Resolve mob: numeric -> direct; constant -> SpriteName lookup.
         let mobId: number;
@@ -511,7 +511,7 @@ function scanAllScripts(files: { file: string, era: EntryEra }[], mobIdByName: M
 // resulting warps with `destEra` so cross-map warps from this manifest carry
 // the right era hint into the runtime resolver. A "shared" warp leaves
 // destEra undefined regardless (the runtime falls back to the source scene's
-// own era when no hint is set — see era.ts:resolveWarpDest).
+// own era when no hint is set; see era.ts:resolveWarpDest).
 function filterByEra(scan: ScanResult, allowed: EntryEra[], destEra: "classic" | "renewal"): ScanResult {
     const ok = (e: { era: EntryEra }): boolean => allowed.includes(e.era);
     return {
@@ -529,11 +529,11 @@ function hasContent(scan: ScanResult): boolean {
 }
 
 // A map's entries are era-divergent when classic and renewal would produce
-// meaningfully different manifests — i.e. there exists at least one entry
+// meaningfully different manifests, i.e. there exists at least one entry
 // from an era-specific script (pre-re-only or re-only). Maps with only
 // "shared" entries collapse to a single manifest because both eras would
 // produce byte-identical content. We use this signal to decide whether to
-// emit per-era manifests at all (most cities + dungeons don't diverge — no
+// emit per-era manifests at all (most cities + dungeons don't diverge; no
 // point writing three identical .json files).
 function isEraDivergent(scan: ScanResult): boolean {
     const eraSpecific = (e: { era: EntryEra }): boolean => e.era !== "shared";
@@ -546,7 +546,7 @@ function isEraDivergent(scan: ScanResult): boolean {
 //
 // Era-divergent maps produce THREE files: <id>@classic.json (pre-re + shared),
 // <id>@renewal.json (re + shared), and a bare <id>.json that aliases the
-// primary (renewal) era — so existing URLs and inter-map warp scripts naming
+// primary (renewal) era, so existing URLs and inter-map warp scripts naming
 // bare ids keep working without knowing about era variants.
 //
 // Non-divergent maps produce ONE bare <id>.json (no point emitting redundant
@@ -619,7 +619,7 @@ function main(): void {
         mobIdByName.set(e.sprite.toUpperCase(), id);
 
     // Resolve each era's load list; the eras share many files (npc/cities/*,
-    // npc/quests/*, etc. — Gravity-authored once and @included by both
+    // npc/quests/*, etc., Gravity-authored once and @included by both
     // scripts_main.conf). Tag each unique file with its origin: in BOTH
     // lists = "shared" (entries are era-shared and duplicate into both
     // sides), in pre-re only = "pre-re", in re only = "re".

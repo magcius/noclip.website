@@ -44,7 +44,7 @@ const OUT_MODEL_DIR = path.resolve("data/RagnarokOnline/model");
 
 const MAP_EXTENSIONS = [".rsw", ".gnd", ".gat"];
 
-// Granny (.gr2) 3D models — the WoE objects (Emperium, guardians, guild flag,
+// Granny (.gr2) 3D models. The WoE objects (Emperium, guardians, guild flag,
 // treasure box). RO ships these Oodle0-compressed with RAD-encoded textures that
 // only granny2.dll can decode, so they're expanded OFFLINE (see gr2_decompress.c
 // + gr2_texbake.c, run under wine on x86) into data/RagnarokOnline_raw/baked/. This stage
@@ -163,7 +163,7 @@ function normalizeMapName(name: string): string {
     // Runtime resolves map ids in lowercase (see maps.ts + the scene loader);
     // lowercase the staged basename so a mixed-case asset filename never
     // produces a mixed-case staged file. Nothing in the corpus has uppercase
-    // ids today — pure robustness for future content. CP949 transcoding
+    // ids today; pure robustness for future content. CP949 transcoding
     // hooks in here later.
     return name.toLowerCase();
 }
@@ -446,7 +446,7 @@ function parseMapNameTable(): Map<string, string> {
         const line = rawLine.trim();
         if (line.length === 0)
             continue;
-        // `<rsw>#<display name>#` — the key keeps its extension, the name may
+        // `<rsw>#<display name>#`. The key keeps its extension, the name may
         // itself contain no '#', so a simple split on the first '#' suffices.
         const hash = line.indexOf("#");
         if (hash < 0)
@@ -484,10 +484,10 @@ function generateMapManifest(): void {
         const display = nameTable.get(id);
         if (display !== undefined)
             named++;
-        // Label by the map id (prontera, geffen, prt_fild08, ...) — the western,
-        // RO-standard names players use — with the Korean display name appended
+        // Label by the map id (prontera, geffen, prt_fild08, ...), the western
+        // RO-standard names players use, with the Korean display name appended
         // as a hint for the cryptic ids.
-        const name = display !== undefined ? `${id} — ${display}` : id;
+        const name = display !== undefined ? `${id} - ${display}` : id;
         return { id, name };
     });
 

@@ -93,7 +93,7 @@ void main() {
 
     // Granny actors use a fixed bright directional light (not the RSW ambient/
     // diffuse), so a glowing prop like the gold Emperium stays vivid at night.
-    // RO's per-vertex shade is mix(0.5, 1.0, clamp(dot(N, sunDir), 0, 1)) — a
+    // RO's per-vertex shade is mix(0.5, 1.0, clamp(dot(N, sunDir), 0, 1)): a
     // wrapped half-Lambert with the floor as shadow brightness.
     public override frag = `
 const float GRANNY_LIGHT_FLOOR = 0.5;

@@ -26,8 +26,8 @@ export function resolveWarpDest(rawDest: string, destEra: Era | undefined, sourc
         return rawDest;
     if (!eraAwareBases.has(parsed.base))
         return rawDest;
-    // Fall through to the bare id when the requested era variant isn't registered —
-    // the bare id IS that era's alias, so rewriting would 404.
+    // Fall through to the bare id when the requested era variant isn't registered.
+    // The bare id IS that era's alias, so rewriting would 404.
     const qualified = `${parsed.base}@${destEra ?? sourceMapEra}`;
     return eraQualifiedIds.has(qualified) ? qualified : rawDest;
 }

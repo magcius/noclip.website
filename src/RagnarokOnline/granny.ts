@@ -8,13 +8,13 @@
 // fixup map rewrites stored pointers. A self-describing type tree is walked in
 // lockstep with root data to pull out typed members.
 //
-// 32-bit LE only — RO ships no 64-bit or BE variants.
+// 32-bit LE only. RO ships no 64-bit or BE variants.
 //
 // Compression: this parser only handles NoCompression sections. RO .gr2 ship
 // with Granny compression type 1 (Oodle0), which has no open decoder, so the
 // offline tool `tools/gr2_decompress.c` (wine + granny2.dll) expands every
 // section to NoCompression at extraction time. Both Oodle0 and Oodle1 sections
-// throw at runtime — they shouldn't appear in baked files.
+// throw at runtime; they shouldn't appear in baked files.
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assertExists, readString } from "../util.js";
@@ -762,7 +762,7 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     return { name, bones };
 }
 
-// Only handles inline Knots/Controls — the form every RO baked .gr2 uses.
+// Only handles inline Knots/Controls, the form every RO baked .gr2 uses.
 // SDK files have a CurveData VariantReference indirection we don't need.
 function extractCurve(gr: GrannyFile, curveTypeAbs: number, curveDataAbs: number, dimension: number): GrannyCurve | null {
     const { view } = gr;

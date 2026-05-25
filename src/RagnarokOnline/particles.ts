@@ -445,7 +445,7 @@ export class ParticleRenderer {
         sceneOffs += fillVec4(sceneMapped, sceneOffs, camUp[0], camUp[1], camUp[2], 0);
 
         // Megastate goes on the renderInst (not the template) so each emitter
-        // gets its own blend mode — see warp-portal.ts:drawBatch.
+        // gets its own blend mode (see warp-portal.ts:drawBatch).
         for (const r of ranges) {
             const e = r.emitter;
             if (e.texture === null) continue;

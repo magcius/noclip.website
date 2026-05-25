@@ -2,7 +2,7 @@ import { GndMap } from "./gnd.js";
 import { GatMap } from "./gat.js";
 
 // RO's world is left-handed D3D9 (Y-down heights); noclip is right-handed
-// Y-up. We negate Y and mirror X about the map centre — picking the centre
+// Y-up. We negate Y and mirror X about the map centre. Picking the centre
 // over a plain `-x` keeps the [0,0] corner at world origin instead of at
 // -worldWidth. The terrain mesh (render.ts) and model placement matrix
 // (model.ts) apply the same flip.

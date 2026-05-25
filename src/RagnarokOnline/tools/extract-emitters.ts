@@ -17,7 +17,7 @@
 // This tool drives that:
 //   1. Enumerate the LUB/LUA files under data/RagnarokOnline_raw/iro_effecttool.
 //   2. For each, invoke the patched Lua to dump JSON.
-//   3. Filter out non-map files (libraries, utilities — basename not in the
+//   3. Filter out non-map files (libraries, utilities whose basename isn't in the
 //      maps.ts manifest).
 //   4. Write one <mapId>.emitters.json per map next to the existing .rsw.
 //   5. Also stage the textures the emitters reference (already extracted
@@ -61,7 +61,7 @@ const EFFECT_TEX_OUT = path.resolve("data/RagnarokOnline/textures/effect");
 // prefix. Each map's own LUB defines its specific spawn points; the shared
 // LUB defines extras (e.g. prt_lib carries the chimney smokestack emitters
 // that show up across every prontera-family map). We mirror that merge here
-// at extract time so the per-map JSON contains the full union — the runtime
+// at extract time so the per-map JSON contains the full union. The runtime
 // stays a single-map fetch with no library logic.
 //
 // Mapping is by map-id prefix. Anything that matches one of these prefixes
@@ -71,7 +71,7 @@ const EFFECT_TEX_OUT = path.resolve("data/RagnarokOnline/textures/effect");
 // suggested prt_lib.lub holds the prontera chimney smokestacks (it carries
 // 2 smoke2.bmp emitters at coordinates that look reasonable as map offsets),
 // but a visual check on prontera placed those particles floating mid-plaza
-// rather than at any chimney — so prt_lib isn't authored against prontera's
+// rather than at any chimney, so prt_lib isn't authored against prontera's
 // world frame, or it's keyed to a different map entirely (an instance/event
 // variant, maybe), or the iRO runtime applies a different coordinate
 // transform to library emitters than to map-owned ones. Without confirmed
@@ -88,7 +88,7 @@ function loadMapIds(): Set<string> {
     const ids = new Set<string>();
     // The manifest lists each map as a quoted id followed by ", " plus its
     // English name string. A loose regex finds them in either entries[] or
-    // a Map literal — we don't depend on the exact shape.
+    // a Map literal; we don't depend on the exact shape.
     for (const m of text.matchAll(/["']([a-z0-9_@\-]+)["']\s*[,:]/gi)) {
         const id = m[1].toLowerCase();
         if (id.length >= 2)
@@ -187,7 +187,7 @@ function dumpOne(file: string): RawEmitterDump | null {
 function main(): void {
     if (!existsSync(LUA_BIN)) {
         console.error(`missing patched lua binary: ${LUA_BIN}`);
-        console.error(`(rebuild from /tmp/lua-5.1.5 — see notes at top of dump-emitters.lua)`);
+        console.error(`(rebuild from /tmp/lua-5.1.5; see notes at top of dump-emitters.lua)`);
         process.exit(1);
     }
     if (!existsSync(DUMP_LUA)) {
@@ -248,7 +248,7 @@ function main(): void {
         const curIsLub = /\.lub$/i.test(file);
         if (prevIsLub && !curIsLub) { conflicts.push(`${id}: keeping ${prev} over ${file}`); continue; }
         if (!prevIsLub && curIsLub) { byId.set(id, file); conflicts.push(`${id}: keeping ${file} over ${prev}`); continue; }
-        // Same extension on both — likely two paths under different subtrees.
+        // Same extension on both, likely two paths under different subtrees.
         // Keep the first seen; log so the operator notices.
         conflicts.push(`${id}: duplicate (${prev} and ${file}); keeping first`);
     }
@@ -276,7 +276,7 @@ function main(): void {
         }
         // Defensive: dump-emitters.lua emits arrays for contiguous int-keyed
         // tables and objects otherwise. A few LUBs that mix numeric + string
-        // keys come through as objects — coerce to a value array here.
+        // keys come through as objects; coerce to a value array here.
         const arr: Partial<EmitterSpec>[] = Array.isArray(raw.emitters)
             ? raw.emitters
             : Object.values(raw.emitters);

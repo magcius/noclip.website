@@ -208,7 +208,7 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_FogColor;       // rgb: fog/background color, a: 1 = fog on, 0 = off
     vec4 u_FogParams;
     vec4 u_EyePos;         // xyz: camera world position (render frame)
-    // Point lights — same layout as TerrainProgram's block.
+    // Point lights. Same layout as TerrainProgram's block.
     vec4 u_PointLightParams;
     vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];
     vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];
@@ -1360,7 +1360,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.prepareSprites(viewerInput);
 
         // TRANSLUCENT so they sort after the depth-writing sprite pass (otherwise
-        // a sprite's depth clobbers a particle drawn earlier — original sort bug).
+        // a sprite's depth clobbers a particle drawn earlier; original sort bug).
         this.prepareParticles(viewerInput);
 
         this.prepareDust(viewerInput);
@@ -1648,7 +1648,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         triggerTravel(this.sceneLoader, best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
     }
 
-    // Fixed framing of the arrival cell — scaling with map radius produced a
+    // Fixed framing of the arrival cell. Scaling with map radius produced a
     // whole-map overview on big indoor maps (e.g. prt_in).
     private frameArrivalAt(viewerInput: ViewerRenderInput, target: vec3): void {
         const back = 50;
@@ -1952,7 +1952,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.prepareToRender(viewerInput);
 
-        // Per-map sky colour — see sky.ts for the policy.
+        // Per-map sky colour (see sky.ts for the policy).
         const sky = this.sky;
         const clearDescriptor = makeAttachmentClearDescriptor(
             colorNewFromRGBA(sky.color[0], sky.color[1], sky.color[2], 1.0));

@@ -67,7 +67,7 @@ export interface StrLayer {
 export interface StrEffect {
     fps: number;
     frameCount: number;   // file's cFrame field (authoring metadata, see keyframeSpan)
-    keyframeSpan: number; // highest keyframe frame across all layers — the true length
+    keyframeSpan: number; // highest keyframe frame across all layers; the true length
     layers: StrLayer[];
 }
 

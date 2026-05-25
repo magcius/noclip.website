@@ -45,8 +45,8 @@ export function defaultSkyForMap(id: string): vec3 {
     return vec3.clone(DEFAULT_OUTDOOR_SKY);
 }
 
-// RO fog-table colours are an atmospheric tint over geometry, not a sky colour
-// — so the zenith is mostly clear blue with only a hint of the map's tint.
+// RO fog-table colours are an atmospheric tint over geometry, not a sky colour,
+// so the zenith is mostly clear blue with only a hint of the map's tint.
 function deriveZenith(horizon: vec3): vec3 {
     return vec3.lerp(vec3.create(), SKY_BLUE, horizon, 0.15);
 }
@@ -161,8 +161,8 @@ export class SkyDomeRenderer {
         if (!sky.enableDome)
             return;
 
-        // Pre-translate by eye so the inverse maps NDC to (world - eye) — i.e.
-        // a ray direction — directly. Works for both perspective and ortho:
+        // Pre-translate by eye so the inverse maps NDC to (world - eye), i.e.
+        // a ray direction, directly. Works for both perspective and ortho:
         // clipFromWorld * T(eye) cancels the view's T(-eye), leaving P * R.
         mat4.translate(this.scratchClip, clipFromWorld, eyePos);
         mat4.invert(this.scratchInv, this.scratchClip);

@@ -2,7 +2,7 @@
 // Entity layer: places NPCs and monsters from the per-map manifest as animated,
 // grounded billboards. NPCs are static; monsters wander via the ported FindPath
 // on the GAT walkability grid (target selection and idle cadence are our own
-// synthesis — the real client only displayed server-streamed positions).
+// synthesis; the real client only displayed server-streamed positions).
 
 import { vec3 } from "gl-matrix";
 import { DataFetcher } from "../DataFetcher.js";

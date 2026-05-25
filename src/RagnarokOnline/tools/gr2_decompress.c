@@ -28,7 +28,7 @@
 #include <string.h>
 #include <stdint.h>
 
-// granny2.dll v6 stdcall export "_GrannyDecompressData@28" — 7 args:
+// granny2.dll v6 stdcall export "_GrannyDecompressData@28", 7 args:
 //   (Format, CompressedBytesSize, CompressedBytes, Stop0, Stop1, Stop2,
 //    DecompressedBytes)
 // This older granny build has no FileIsByteReversed flag but takes three oodle
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     uint32_t headerEnd = sectionArrayOffset + sectionCount * 44;
 
     // Validate the section table itself sits inside the file before we walk
-    // it — a malformed header with a huge sectionCount would otherwise read
+    // it. A malformed header with a huge sectionCount would otherwise read
     // garbage past the buffer end.
     if ((size_t)sectionArrayOffset > (size_t)sz || (size_t)headerEnd > (size_t)sz) {
         fprintf(stderr, "ERROR: section table @%u..%u exceeds file size %ld\n",

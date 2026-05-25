@@ -26,7 +26,7 @@ typedef void(__stdcall *CopyTexFn)(void *tex, int imageIndex, int mipIndex, void
 typedef int(__stdcall *HasAlphaFn)(void *tex);
 typedef void(__stdcall *FreeFileFn)(void *file);
 
-// granny_file_info / granny_texture field offsets (32-bit, granny v6 — verified
+// granny_file_info / granny_texture field offsets (32-bit, granny v6, verified
 // against the engine struct layout).
 #define FI_TEXTURE_COUNT 16
 #define FI_TEXTURES 20
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     CopyTexFn CopyTex = (CopyTexFn)GetProcAddress(h, "_GrannyCopyTextureImage@32");
     HasAlphaFn HasAlpha = (HasAlphaFn)GetProcAddress(h, "_GrannyTextureHasAlpha@4");
     FreeFileFn FreeFile = (FreeFileFn)GetProcAddress(h, "_GrannyFreeFile@4");
-    // Exported global: granny_pixel_layout* GrannyRGBA8888PixelFormat — the proc
+    // Exported global: granny_pixel_layout* GrannyRGBA8888PixelFormat. The proc
     // address is the variable's address, so deref once for the layout pointer.
     void **ppLayout = (void **)GetProcAddress(h, "GrannyRGBA8888PixelFormat");
     if (!ReadFromMem || !GetFileInfo || !CopyTex || !ppLayout) {

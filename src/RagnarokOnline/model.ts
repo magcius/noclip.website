@@ -3,7 +3,7 @@
 // RO's fixed-function math is row-vector (v' = v * M, transforms compose
 // left-to-right); gl-matrix is column-vector (v' = M * v, compose right-to-left).
 // We rebuild the same transforms in column-major form by reversing the source
-// order — e.g. row-vector L = S * R * P (scale, then rotate, then translate)
+// order, e.g. row-vector L = S * R * P (scale, then rotate, then translate)
 // becomes the column-major sequence T * R * S built via post-multiplying helpers.
 // Per-placement world matrix is applied at draw time, not baked here.
 
@@ -344,7 +344,7 @@ export function buildPlacementMatrix(
 }
 
 // Keyframe-animated models: nodes with rotation/position/scale tracks. Such
-// models can't be baked statically — geometry stays in NODE-LOCAL space and is
+// models can't be baked statically; geometry stays in NODE-LOCAL space and is
 // grouped per (node, texture); the renderer composes M_node(t) per frame.
 
 export function modelIsAnimated(model: RsmModel): boolean {

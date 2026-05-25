@@ -201,7 +201,7 @@ export class SpriteActor {
 
     // World-Y from the anchor up to the topmost VISIBLE pixel. Tighter than
     // currentFrameWorldSize().height (which includes hem/cape below the foot
-    // row) — use this to land a label at the head exactly.
+    // row). Use this to land a label at the head exactly.
     public currentFrameTopAboveAnchor(anchor: SpriteAnchor = "feet"): number | null {
         if (this.act.actions.length === 0)
             return null;
@@ -291,7 +291,7 @@ export class SpriteActor {
     }
 
     // `anchor`: "feet" plants the frame's foot row on worldPos; "center"
-    // places the .act attach point on worldPos — correct for effect sprites
+    // places the .act attach point on worldPos, correct for effect sprites
     // (torch flames etc.) authored around their emit point.
     public buildQuads(camRight: vec3, camUp: vec3, worldPos: vec3, anchor: SpriteAnchor = "feet"): SpriteQuad[] {
         const out: SpriteQuad[] = [];
@@ -381,7 +381,7 @@ export class SpriteActor {
         // 4 verts per quad in perimeter CCW order (TL, TR, BR, BL); the
         // renderer's quad index buffer expands each into two triangles
         // (0,1,2 + 0,2,3), which under this ordering share the TL-BR diagonal.
-        // c.cx[k]/c.cy[k] for k=0..3 remain TL, TR, BL, BR — only the emit
+        // c.cx[k]/c.cy[k] for k=0..3 remain TL, TR, BL, BR; only the emit
         // slot for BL and BR is swapped here.
         for (const c of clips) {
             const verts = new Float32Array(VERTS_PER_QUAD * SPRITE_FLOATS_PER_VERTEX);
@@ -585,7 +585,7 @@ export class SpriteRenderer {
 
         // Back-to-front: depth-write prevents far sprites painting over near
         // ones, but the near sprite's cutout edges still blend against the
-        // framebuffer — drawing far first kills the halo at the silhouette.
+        // framebuffer. Drawing far first kills the halo at the silhouette.
         const camX = cameraWorldMatrix[12], camY = cameraWorldMatrix[13], camZ = cameraWorldMatrix[14];
         this.instances.sort((a, b) => {
             const ax = a.worldPos[0] - camX, ay = a.worldPos[1] - camY, az = a.worldPos[2] - camZ;
