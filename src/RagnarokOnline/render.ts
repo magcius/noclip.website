@@ -17,9 +17,8 @@ import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInstList, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
-import InputManager from "../InputManager.js";
 import * as UI from "../ui.js";
-import { SceneLoader } from "../SceneBase.js";
+import { SceneContext } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { DecodedImage } from "./bmp.js";
 import { GndMap, GndSurface } from "./gnd.js";
@@ -827,32 +826,10 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private pressY = 0;
     private pressMoved = 0;
     private pressActive = false;
-    private mouseListenersAttached = false;
     private mouseListenerTarget: HTMLElement | null = null;
-    private wantsMouseListeners = false;
-    private onMouseDown = (e: MouseEvent): void => {
-        if (e.button !== 0)
-            return;
-        this.pressActive = true;
-        this.pressX = e.clientX;
-        this.pressY = e.clientY;
-        this.pressMoved = 0;
-    };
-    private onMouseMove = (e: MouseEvent): void => {
-        if (!this.pressActive)
-            return;
-        // movementX/Y keeps accumulating under pointer lock (where clientX/Y freeze).
-        this.pressMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
-    };
-    private onMouseUp = (e: MouseEvent): void => {
-        if (e.button !== 0 || !this.pressActive)
-            return;
-        this.pressActive = false;
-        if (this.pressMoved <= WARP_CLICK_MOVE_THRESHOLD_PX)
-            this.pendingClick = { x: this.pressX, y: this.pressY };
-    };
 
-    constructor(private device: GfxDevice, private mapId: string, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null, waterData: WaterSceneData | null, lightData: LightSceneData | null, fogData: FogSceneData | null, entityData: EntitySceneData | null, warpPortalData: WarpPortalSceneData | null, grannyData: GrannyInstance[] | null, weatherParams: WeatherParams | null, warpClickData: WarpClickSceneData | null, pointLights: PointLight[] | null, skyData: SkySceneData | null, particleData: ParticleSceneData | null, bgm: Bgm, private sceneLoader: SceneLoader, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null) {
+    constructor(private sceneContext: SceneContext, private mapId: string, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null, waterData: WaterSceneData | null, lightData: LightSceneData | null, fogData: FogSceneData | null, entityData: EntitySceneData | null, warpPortalData: WarpPortalSceneData | null, grannyData: GrannyInstance[] | null, weatherParams: WeatherParams | null, warpClickData: WarpClickSceneData | null, pointLights: PointLight[] | null, skyData: SkySceneData | null, particleData: ParticleSceneData | null, bgm: Bgm, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null) {
+        const device = sceneContext.device;
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -960,32 +937,45 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (warpClickData !== null)
             this.warpTargets = warpClickData.targets;
 
-        // Bound on the first render frame, off InputManager.toplevel (the canvas).
-        this.wantsMouseListeners = this.warpTargets.length > 0 || this.mobs.length > 0;
+        if (this.warpTargets.length > 0 || this.mobs.length > 0) {
+            const inputManager = sceneContext.inputManager, toplevel = inputManager.toplevel;
+            toplevel.addEventListener("mousedown", this.onMouseDown);
+            toplevel.addEventListener("mousemove", this.onMouseMove);
+            toplevel.addEventListener("mouseup", this.onMouseUp);
+            this.mouseListenerTarget = toplevel;
+        }
 
         if (pointLights !== null)
             this.pointLights = pointLights;
     }
 
-    private attachMouseListeners(target: HTMLElement): void {
-        if (this.mouseListenersAttached)
+    private onMouseDown = (e: MouseEvent): void => {
+        if (e.button !== 0)
             return;
-        target.addEventListener("mousedown", this.onMouseDown);
-        target.addEventListener("mousemove", this.onMouseMove);
-        target.addEventListener("mouseup", this.onMouseUp);
-        this.mouseListenerTarget = target;
-        this.mouseListenersAttached = true;
-    }
+        this.pressActive = true;
+        this.pressX = e.clientX;
+        this.pressY = e.clientY;
+        this.pressMoved = 0;
+    };
+    private onMouseMove = (e: MouseEvent): void => {
+        if (!this.pressActive)
+            return;
+        // movementX/Y keeps accumulating under pointer lock (where clientX/Y freeze).
+        this.pressMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
+    };
+    private onMouseUp = (e: MouseEvent): void => {
+        if (e.button !== 0 || !this.pressActive)
+            return;
+        this.pressActive = false;
+        if (this.pressMoved <= WARP_CLICK_MOVE_THRESHOLD_PX)
+            this.pendingClick = { x: this.pressX, y: this.pressY };
+    };
 
     private detachMouseListeners(): void {
-        if (!this.mouseListenersAttached || this.mouseListenerTarget === null)
-            return;
-        const target = this.mouseListenerTarget;
-        target.removeEventListener("mousedown", this.onMouseDown);
-        target.removeEventListener("mousemove", this.onMouseMove);
-        target.removeEventListener("mouseup", this.onMouseUp);
-        this.mouseListenerTarget = null;
-        this.mouseListenersAttached = false;
+        const inputManager = this.sceneContext.inputManager, toplevel = inputManager.toplevel;
+        toplevel.removeEventListener("mousedown", this.onMouseDown);
+        toplevel.removeEventListener("mousemove", this.onMouseMove);
+        toplevel.removeEventListener("mouseup", this.onMouseUp);
     }
 
     private setupEntities(device: GfxDevice, cache: GfxRenderHelper["renderCache"], entityData: EntitySceneData): void {
@@ -1070,7 +1060,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const { entityData, warpPortalData, warpClickData } = await this.rebuildEntityLayer();
         if (token !== this.reloadToken)
             return; // a newer reload superseded us
-        const device = this.device;
+        const device = this.sceneContext.device;
         const cache = this.renderHelper.renderCache;
 
         if (this.spriteRenderer !== null) { this.spriteRenderer.destroy(device); this.spriteRenderer = null; }
@@ -1087,9 +1077,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (warpPortalData !== null)
             this.warpPortalRenderer = new WarpPortalRenderer(device, cache, warpPortalData);
         this.warpTargets = warpClickData.targets;
-        this.wantsMouseListeners = this.warpTargets.length > 0 || this.mobs.length > 0;
-        if (!this.wantsMouseListeners)
-            this.detachMouseListeners();
     }
 
     private setupWater(device: GfxDevice, cache: GfxRenderHelper["renderCache"], waterData: WaterSceneData): void {
@@ -1725,7 +1712,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.frameArrivalAt(viewerInput, best.arrivalWorldPos);
             return;
         }
-        triggerTravel(this.sceneLoader, best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
+        triggerTravel(this.sceneContext.sceneLoader, best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
     }
 
     // Fixed framing of the arrival cell. Scaling with map radius produced a
@@ -2010,14 +1997,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        // mouseLocation is typed as a {mouseX, mouseY} shim but is actually
-        // the InputManager (which exposes `toplevel` = the rendering canvas).
-        if (!this.mouseListenersAttached && this.wantsMouseListeners) {
-            const im = viewerInput.mouseLocation as unknown as InputManager;
-            if (im.toplevel !== undefined)
-                this.attachMouseListeners(im.toplevel);
-        }
-
         if (!this.cameraInitialized) {
             // Arrival framing overrides whatever the framework's save-state load
             // (or getDefaultWorldMatrix) put on the camera. Clear the fields so

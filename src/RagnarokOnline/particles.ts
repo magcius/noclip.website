@@ -17,6 +17,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 import { decodeBMP, decodeTGA, DecodedImage } from "./bmp.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 interface RawEmitterSpec {
     pos: vec3;
@@ -248,15 +249,10 @@ export class ParticleRenderer {
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
     private sampler: GfxSampler;
-    private device: GfxDevice;
 
     private emitters: ResolvedEmitter[];
 
-    private vertexBuffer: GfxIndexBufferDescriptor["buffer"] | null = null;
-    private vertexCapacityVerts = 0;
-
-    constructor(device: GfxDevice, cache: GfxRenderHelper["renderCache"], data: ParticleSceneData) {
-        this.device = device;
+    constructor(device: GfxDevice, cache: GfxRenderCache, data: ParticleSceneData) {
         this.program = cache.createProgram(new ParticleProgram());
 
         this.inputLayout = cache.createInputLayout({
@@ -417,23 +413,14 @@ export class ParticleRenderer {
                 ranges.push({ start: startV, count, emitter: e });
         }
 
-        if (vertexCount > this.vertexCapacityVerts) {
-            if (this.vertexBuffer !== null)
-                this.device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = this.device.createBuffer(vertexCount * PARTICLE_VERTEX_STRIDE_BYTES, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-            this.vertexCapacityVerts = vertexCount;
-        }
-        if (this.vertexBuffer === null)
-            return;
-        this.device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(data));
-
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        const cache = renderHelper.renderCache;
+        const vertexBufferDescriptor = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, new Uint8Array(data));
 
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
-        template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
+        template.setVertexInput(this.inputLayout, [vertexBufferDescriptor], null);
         // TRANSLUCENT so we sort after the depth-writing sprite pass (otherwise
         // a sprite's depth clobbers a particle drawn earlier).
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
@@ -477,7 +464,5 @@ export class ParticleRenderer {
                 device.destroyTexture(e.texture);
             }
         }
-        if (this.vertexBuffer !== null)
-            device.destroyBuffer(this.vertexBuffer);
     }
 }
