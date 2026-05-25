@@ -654,20 +654,6 @@ function uploadModelGeometry(
     };
 }
 
-function writeColor(view: DataView, offs: number, rgb: ArrayLike<number>): number {
-    view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(rgb[0] * 255))));
-    view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(rgb[1] * 255))));
-    view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(rgb[2] * 255))));
-    return offs;
-}
-
-function readColor(view: DataView, offs: number, out: vec3): number {
-    out[0] = view.getUint8(offs++) / 255;
-    out[1] = view.getUint8(offs++) / 255;
-    out[2] = view.getUint8(offs++) / 255;
-    return offs;
-}
-
 export class RagnarokTerrainRenderer implements SceneGfx {
     // Fire after every panel mutation so URL bookmarks capture the tweak.
     public onstatechanged: (() => void) | undefined;
@@ -1162,8 +1148,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (layers !== null)
             panels.push(layers);
         panels.push(this.buildRenderHacksPanel());
-        panels.push(this.buildMusicPanel());
-        panels.push(this.buildTimeOfDayPanel());
         return panels;
     }
 
@@ -1180,13 +1164,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         s.setValue(initial);
         s.onvalue = (v) => { set(v); this.onstatechanged?.(); };
         panel.contents.appendChild(s.elem);
-    }
-
-    private addColor(panel: UI.Panel, label: string, target: vec3): void {
-        const p = new UI.ColorPicker(label, target);
-        p.onvalue = (rgb) => { target[0] = rgb[0]; target[1] = rgb[1]; target[2] = rgb[2]; };
-        p.onchange = () => { this.onstatechanged?.(); };
-        panel.contents.appendChild(p.elem);
     }
 
     private buildLayersPanel(): UI.Panel | null {
@@ -1242,7 +1219,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.addCheckbox(panel, "Enable Weather", this.weatherEnabled, (v) => { this.weatherEnabled = v; });
 
         this.addCheckbox(panel, "Enable Fog", this.fogEnabled, (v) => { this.fogEnabled = v; });
-        this.addColor(panel, "Fog Color", this.fog.color);
         this.addSlider(panel, "Fog Intensity", 0, 1, 0.01, this.fog.tint, (v) => { this.fog.tint = v; });
         this.addCheckbox(panel, "Distance-Based Fog", this.fogDistanceMode, (v) => { this.fogDistanceMode = v; });
         const distMax = Math.max(this.radius * FOG_DIST_SLIDER_MAX_MULT, FOG_DIST_SLIDER_MAX_FLOOR);
@@ -1254,63 +1230,20 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.addSlider(panel, "Sun Longitude", -180, 180, 1, this.light.longitudeDeg, (v) => { this.light.longitudeDeg = v; this.updateSunDir(); });
         this.addSlider(panel, "Sun Pitch", -90, 90, 1, this.light.pitchDeg, (v) => { this.light.pitchDeg = v; this.updateSunDir(); });
 
-        if (this.sky.enableDome) {
-            this.addColor(panel, "Horizon Color", this.sky.horizonColor);
-            this.addColor(panel, "Zenith Color", this.sky.zenithColor);
-            this.addColor(panel, "Ground Color", this.sky.groundColor);
-        } else {
-            this.addColor(panel, "Background Color", this.sky.color);
-        }
+        this.addSlider(panel, "Night", 0, 1, 0.01, this.nightDegree, (v) => { this.nightDegree = v; });
 
-        return panel;
-    }
-
-    private buildMusicPanel(): UI.Panel {
-        const panel = new UI.Panel();
-        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        panel.setTitle(UI.MUSIC_ICON, "Music");
-
-        const bgmToggle = new UI.Checkbox("Enable Background Music", this.bgm.isEnabled());
+        const bgmToggle = new UI.Checkbox("BGM (per-map music)", this.bgm.isEnabled());
         // The toggle counts as the user gesture browsers require to start playback.
         bgmToggle.onchanged = () => this.bgm.setEnabled(bgmToggle.checked, null);
         panel.contents.appendChild(bgmToggle.elem);
 
         const bgmVol = new UI.Slider();
-        bgmVol.setLabel("Music Volume");
+        bgmVol.setLabel("BGM volume");
         bgmVol.setRange(0, 1, 0.01);
         bgmVol.setValue(this.bgm.getVolume());
         bgmVol.onvalue = (v: number) => this.bgm.setVolume(v);
         panel.contents.appendChild(bgmVol.elem);
 
-        const trackSelect = new UI.SingleSelect();
-        trackSelect.setStrings(["Loading…"]);
-        trackSelect.setHighlighted(0);
-        let trackFilenames: string[] = [];
-        trackSelect.onselectionchange = (index: number) => {
-            if (trackFilenames.length === 0)
-                return;
-            this.bgm.setTrackOverride(index === 0 ? null : trackFilenames[index - 1]);
-        };
-        panel.contents.appendChild(trackSelect.elem);
-
-        Promise.all([this.bgm.listLabelledTracks(), this.bgm.getMapDefaultTrack()]).then(([labelled, def]) => {
-            trackFilenames = labelled.map((t) => t.filename);
-            trackSelect.setStrings(["Default (this map's BGM)", ...labelled.map((t) => t.label)]);
-            const defIdx = def !== null ? trackFilenames.indexOf(def) : -1;
-            trackSelect.setHighlighted(defIdx >= 0 ? defIdx + 1 : 0);
-        }, (e) => {
-            console.error("BGM: failed to load track list", e);
-            trackSelect.setStrings(["(unavailable)"]);
-        });
-
-        return panel;
-    }
-
-    private buildTimeOfDayPanel(): UI.Panel {
-        const panel = new UI.Panel();
-        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        panel.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
-        this.addSlider(panel, "Night", 0, 1, 0.01, this.nightDegree, (v) => { this.nightDegree = v; });
         return panel;
     }
 
@@ -1916,18 +1849,12 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (this.fogEnabled)      fogPacked |= 0x01;
         if (this.fogDistanceMode) fogPacked |= 0x02;
         view.setUint8(offs++, fogPacked);
-        offs = writeColor(view, offs, this.fog.color);
         view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(this.fog.tint * 255))));
         view.setUint16(offs, Math.max(0, Math.min(0xffff, Math.round(this.fogNear))), true); offs += 2;
         view.setUint16(offs, Math.max(0, Math.min(0xffff, Math.round(this.fogFar))), true); offs += 2;
 
         view.setInt16(offs, Math.round(this.light.longitudeDeg), true); offs += 2;
         view.setInt16(offs, Math.round(this.light.pitchDeg), true); offs += 2;
-
-        offs = writeColor(view, offs, this.sky.color);
-        offs = writeColor(view, offs, this.sky.horizonColor);
-        offs = writeColor(view, offs, this.sky.zenithColor);
-        offs = writeColor(view, offs, this.sky.groundColor);
 
         view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(this.nightDegree * 255))));
 
@@ -1961,12 +1888,11 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.arrivalCellY = view.getInt16(offs, true); offs += 2;
         }
 
-        if (byteLength - offs < 9)
+        if (byteLength - offs < 6)
             return offs;
         const fogPacked = view.getUint8(offs++);
         this.fogEnabled = (fogPacked & 0x01) !== 0;
         this.fogDistanceMode = (fogPacked & 0x02) !== 0;
-        offs = readColor(view, offs, this.fog.color);
         this.fog.tint = view.getUint8(offs++) / 255;
         this.fogNear = view.getUint16(offs, true); offs += 2;
         this.fogFar = view.getUint16(offs, true); offs += 2;
@@ -1976,13 +1902,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.light.longitudeDeg = view.getInt16(offs, true); offs += 2;
         this.light.pitchDeg = view.getInt16(offs, true); offs += 2;
         this.updateSunDir();
-
-        if (byteLength - offs < 12)
-            return offs;
-        offs = readColor(view, offs, this.sky.color);
-        offs = readColor(view, offs, this.sky.horizonColor);
-        offs = readColor(view, offs, this.sky.zenithColor);
-        offs = readColor(view, offs, this.sky.groundColor);
 
         if (byteLength - offs < 1)
             return offs;

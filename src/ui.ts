@@ -1,7 +1,6 @@
 
 // New UI system
 
-import type { vec3 } from 'gl-matrix';
 import { GIT_SHORT_REVISION, GITHUB_REVISION_URL, GITHUB_URL, IS_DEVELOPMENT } from './BuildVersion.js';
 import { Camera, CameraController, CameraControllerClass, FPSCameraController, OrbitCameraController, OrthoCameraController } from './Camera.js';
 import { Color, colorToCSS } from './Color.js';
@@ -59,7 +58,6 @@ export const SAND_CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox=
 export const VR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" height="20" fill="white"><g><path d="M29,8H3A1,1,0,0,0,2,9V23a1,1,0,0,0,1,1H13a1,1,0,0,0,1-.83l.66-4A1.36,1.36,0,0,1,16,18a1.38,1.38,0,0,1,1.36,1.26L18,23.17A1,1,0,0,0,19,24H29a1,1,0,0,0,1-1V9A1,1,0,0,0,29,8ZM8.5,19A3.5,3.5,0,1,1,12,15.5,3.5,3.5,0,0,1,8.5,19Zm15,0A3.5,3.5,0,1,1,27,15.5,3.5,3.5,0,0,1,23.5,19Z"/></g></svg>`;
 export const CUTSCENE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 142.448 142.448" height="20" fill="white"><g><path d="M142.411,68.9C141.216,31.48,110.968,1.233,73.549,0.038c-20.361-0.646-39.41,7.104-53.488,21.639 C6.527,35.65-0.584,54.071,0.038,73.549c1.194,37.419,31.442,67.667,68.861,68.861c0.779,0.025,1.551,0.037,2.325,0.037 c19.454,0,37.624-7.698,51.163-21.676C135.921,106.799,143.033,88.377,142.411,68.9z M111.613,110.336 c-10.688,11.035-25.032,17.112-40.389,17.112c-0.614,0-1.228-0.01-1.847-0.029c-29.532-0.943-53.404-24.815-54.348-54.348 c-0.491-15.382,5.122-29.928,15.806-40.958c10.688-11.035,25.032-17.112,40.389-17.112c0.614,0,1.228,0.01,1.847,0.029 c29.532,0.943,53.404,24.815,54.348,54.348C127.91,84.76,122.296,99.306,111.613,110.336z"></path> <path d="M94.585,67.086L63.001,44.44c-3.369-2.416-8.059-0.008-8.059,4.138v45.293 c0,4.146,4.69,6.554,8.059,4.138l31.583-22.647C97.418,73.331,97.418,69.118,94.585,67.086z"></path> </g></svg>`
 export const EYE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M15.0007 12C15.0007 13.6569 13.6576 15 12.0007 15C10.3439 15 9.00073 13.6569 9.00073 12C9.00073 10.3431 10.3439 9 12.0007 9C13.6576 9 15.0007 10.3431 15.0007 12Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.0012 5C7.52354 5 3.73326 7.94288 2.45898 12C3.73324 16.0571 7.52354 19 12.0012 19C16.4788 19 20.2691 16.0571 21.5434 12C20.2691 7.94291 16.4788 5 12.0012 5Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-export const MUSIC_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="20" fill="white"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
 
 export function setChildren(parent: Element, children: Element[]): void {
     // We want to swap children around without removing them, since removing them will cause
@@ -1558,66 +1556,6 @@ export class Slider implements Widget {
     public setT(t: number): void {
         const v = lerp(+this.sliderInput.min, +this.sliderInput.max, t);
         this.setValue(v);
-    }
-}
-
-export class ColorPicker implements Widget {
-    public elem: HTMLElement;
-    public onvalue: ((rgb: vec3) => void) | null = null;
-    public onchange: ((rgb: vec3) => void) | null = null;
-
-    private label: HTMLElement;
-    private input: HTMLInputElement;
-
-    constructor(label?: string, initial?: ArrayLike<number>) {
-        const wrap = document.createElement("div");
-        wrap.style.display = "grid";
-        wrap.style.gridTemplateColumns = "1fr 60px";
-        wrap.style.alignItems = "center";
-        wrap.style.padding = "4px 0";
-        wrap.style.gap = "8px";
-
-        this.label = document.createElement("div");
-        this.label.style.fontWeight = "bold";
-        this.label.style.userSelect = "none";
-
-        this.input = document.createElement("input");
-        this.input.type = "color";
-        this.input.style.height = "24px";
-        this.input.style.cursor = "pointer";
-        this.input.style.border = "none";
-        this.input.style.background = "transparent";
-        this.input.oninput = () => {
-            if (this.onvalue !== null)
-                this.onvalue(this.getValue());
-        };
-        this.input.onchange = () => {
-            if (this.onchange !== null)
-                this.onchange(this.getValue());
-        };
-
-        wrap.appendChild(this.label);
-        wrap.appendChild(this.input);
-        this.elem = wrap;
-
-        if (label !== undefined)
-            this.setLabel(label);
-        if (initial !== undefined)
-            this.setValue(initial);
-    }
-
-    public setLabel(label: string): void {
-        this.label.textContent = label;
-    }
-
-    public setValue(rgb: ArrayLike<number>): void {
-        const toHex = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, "0");
-        this.input.value = "#" + toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
-    }
-
-    public getValue(): vec3 {
-        const v = parseInt(this.input.value.slice(1), 16);
-        return [((v >>> 16) & 0xff) / 255, ((v >>> 8) & 0xff) / 255, (v & 0xff) / 255];
     }
 }
 
