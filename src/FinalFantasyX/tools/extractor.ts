@@ -56,8 +56,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/ffx_raw`;
-const pathBaseOut = `../../../data/FinalFantasyX`;
+const pathBaseIn  = `./data/ffx_raw`;
+const pathBaseOut = `./data/FinalFantasyX`;
 
 function writeBufferSync(path: string, buffer: ArrayBufferSlice): void {
     writeFileSync(path, Buffer.from(buffer.copyToBuffer()));

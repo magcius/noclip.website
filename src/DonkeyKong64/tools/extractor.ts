@@ -11,8 +11,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `../../../data/DonkeyKong64_Raw`;
-const pathBaseOut = `../../../data/DonkeyKong64`;
+const pathBaseIn  = `./data/DonkeyKong64_Raw`;
+const pathBaseOut = `./data/DonkeyKong64`;
 
 function determineSizeOfZlibStream(buffer: ArrayBufferSlice, srcOffs: number): number {
     const view = buffer.createDataView();

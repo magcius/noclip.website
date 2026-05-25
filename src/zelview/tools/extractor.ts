@@ -11,8 +11,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/zelview_beta_raw`;
-const pathBaseOut = `../../../data/zelview_beta`;
+const pathBaseIn  = `./data/zelview_beta_raw`;
+const pathBaseOut = `./data/zelview_beta`;
 
 interface ZELVIEW0File {
     filename: string;

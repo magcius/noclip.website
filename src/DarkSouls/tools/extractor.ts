@@ -20,8 +20,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `../../../data/dks_raw`;
-const pathBaseOut = `../../../data/dks`;
+const pathBaseIn  = `./data/dks_raw`;
+const pathBaseOut = `./data/dks`;
 
 function hashString(str: string): number {
     let h: number = 0;

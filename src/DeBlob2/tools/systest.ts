@@ -13,8 +13,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `../../../data/Deblob_Raw`;
-const pathBaseOut = `../../../data/Deblob`;
+const pathBaseIn  = `./data/Deblob_Raw`;
+const pathBaseOut = `./data/Deblob`;
 
 const data = TRB.parse(fetchDataSync(`${pathBaseOut}/LEVELS/PRODUCTION_BLOB2/Singleplayer/01_SP_PARADISE_ISLAND/terrain.trb`));
 const data2 = fetchDataSync(`${pathBaseOut}/test1.dds`)
