@@ -3,12 +3,18 @@
 // shared HTMLAudioElement; the id -> filename map is lazy-loaded once.
 
 import { DataFetcher } from "../DataFetcher.js";
-import { maps } from "./maps.js";
+import { maps, RagnarokMapEntry } from "./maps.js";
+import { MapCategory } from "./mapcategory.js";
+
+// Picks the most canonical map to name a shared BGM file after.
+const BGM_CATEGORY_RANK: Record<MapCategory, number> = {
+    city: 0, field: 1, dungeon: 2, castle: 3, indoor: 4, instance: 5, other: 6,
+};
 
 export class Bgm {
     private static enabled = false;
     private static currentVolume = 0.5;
-    private static mapNameById: Map<string, string> | null = null;
+    private static mapById: Map<string, RagnarokMapEntry> | null = null;
 
     private audio: HTMLAudioElement | null = null;
     private currentMapId: string | null = null;
@@ -102,21 +108,46 @@ export class Bgm {
         const idx = await this.loadIndex(this.lastFetcher);
         if (idx === null)
             return [];
-        // A single file can be shared by multiple maps; use the first map's
-        // human-readable name as the label.
-        const byFile = new Map<string, string>();
-        for (const [mapId, file] of idx)
-            if (!byFile.has(file))
-                byFile.set(file, mapId);
-        if (Bgm.mapNameById === null) {
-            Bgm.mapNameById = new Map();
-            for (const m of maps)
-                Bgm.mapNameById.set(m.id, m.name);
+
+        const byFile = new Map<string, string[]>();
+        for (const [mapId, file] of idx) {
+            let list = byFile.get(file);
+            if (list === undefined) byFile.set(file, list = []);
+            list.push(mapId);
         }
-        const names = Bgm.mapNameById;
-        const labelled = Array.from(byFile, ([filename, mapId]) => {
-            const name = names.get(mapId);
-            return { filename, label: name !== undefined ? `${name} (${filename})` : filename };
+
+        if (Bgm.mapById === null) {
+            Bgm.mapById = new Map();
+            for (const m of maps)
+                Bgm.mapById.set(m.id, m);
+        }
+        const byId = Bgm.mapById;
+
+        const isInstanceId = (id: string) => /^\d+@/.test(id);
+        const rankOf = (id: string): number => {
+            const m = byId.get(id);
+            return m !== undefined ? BGM_CATEGORY_RANK[m.category] : 99;
+        };
+        const compareIds = (a: string, b: string): number =>
+            (rankOf(a) - rankOf(b))
+            || ((isInstanceId(a) ? 1 : 0) - (isInstanceId(b) ? 1 : 0))
+            || (a.length - b.length)
+            || a.localeCompare(b);
+
+        // Manifest name is "<id> — <Long Name, Maybe With Subtitle>"; show just
+        // the long name, trimmed at the first comma so labels stay short.
+        const friendlyOf = (id: string): string => {
+            const m = byId.get(id);
+            if (m === undefined) return id;
+            const dash = m.name.indexOf(" — ");
+            const after = dash >= 0 ? m.name.substring(dash + 3) : m.name;
+            const comma = after.indexOf(",");
+            return comma >= 0 ? after.substring(0, comma) : after;
+        };
+
+        const labelled = Array.from(byFile, ([filename, mapIds]) => {
+            const primary = mapIds.reduce((best, id) => compareIds(id, best) < 0 ? id : best, mapIds[0]);
+            return { filename, label: `${friendlyOf(primary)} BGM` };
         });
         labelled.sort((a, b) => a.label.localeCompare(b.label));
         return labelled;

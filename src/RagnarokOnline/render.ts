@@ -1162,6 +1162,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (layers !== null)
             panels.push(layers);
         panels.push(this.buildRenderHacksPanel());
+        panels.push(this.buildMusicPanel());
         panels.push(this.buildTimeOfDayPanel());
         return panels;
     }
@@ -1261,12 +1262,14 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.addColor(panel, "Background Color", this.sky.color);
         }
 
-        this.buildMusicRows(panel);
-
         return panel;
     }
 
-    private buildMusicRows(panel: UI.Panel): void {
+    private buildMusicPanel(): UI.Panel {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.MUSIC_ICON, "Music");
+
         const bgmToggle = new UI.Checkbox("Enable Background Music", this.bgm.isEnabled());
         // The toggle counts as the user gesture browsers require to start playback.
         bgmToggle.onchanged = () => this.bgm.setEnabled(bgmToggle.checked, null);
@@ -1299,6 +1302,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             console.error("BGM: failed to load track list", e);
             trackSelect.setStrings(["(unavailable)"]);
         });
+
+        return panel;
     }
 
     private buildTimeOfDayPanel(): UI.Panel {
