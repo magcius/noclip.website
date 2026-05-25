@@ -35,9 +35,16 @@
 //     the GRF; copy from an iRO client install's effecttool/ dir.
 //
 //   data/RagnarokOnline_raw/bin/lua-5.1-iro
-//     Patched 32-bit Lua 5.1 binary (built once from /tmp/lua-5.1.5 with the
-//     size_t read tweak; see dump-emitters.lua). Stage 2 spawns this to
-//     execute the iRO .lub scripts.
+//     Patched Lua 5.1 binary. iRO ships its effecttool .lub files precompiled
+//     with 32-bit Lua, so a vanilla 64-bit lua refuses to load them ("bad
+//     header" on the size_t width byte; "bad size" on the string length read).
+//     Build once:
+//       curl -O https://www.lua.org/ftp/lua-5.1.5.tar.gz
+//       tar xf lua-5.1.5.tar.gz && cd lua-5.1.5
+//       patch -p0 < ../src/RagnarokOnline/tools/lua-5.1.5-iro.patch
+//       make <platform>            # e.g. macosx, linux
+//       mv src/lua data/RagnarokOnline_raw/bin/lua-5.1-iro
+//     Stage 2 spawns this to execute the iRO .lub scripts.
 //
 //   data/RagnarokOnline_raw/baked/gr2/, baked/gr2tex/
 //     WoE Granny models pre-expanded offline (RO ships them Oodle0-compressed
