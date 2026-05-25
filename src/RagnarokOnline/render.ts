@@ -79,8 +79,9 @@ const enum LayerBit {
     Particles = 6,
     NameLabels = 7,
     Weather = 8,
+    WarpPortals = 9,
 }
-const NUM_LAYER_BITS = 9;
+const NUM_LAYER_BITS = 10;
 
 const scratchClip = vec4.create();
 const scratchOffset = vec3.create();
@@ -728,6 +729,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private showWater = true;
     private showGrannyModels = true;
     private showParticles = true;
+    private showWarpPortals = true;
 
     private scratchEye = vec3.create();
     private scratchRight = vec3.create();
@@ -1195,8 +1197,9 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const hasWater = this.waterProgram !== null;
         const hasGranny = this.grannyModels.length > 0;
         const hasParticles = this.particleRenderer !== null;
+        const hasWarpPortals = this.warpPortalRenderer !== null;
         const hasLabels = hasNPC || hasMob;
-        if (!(hasNPC || hasMob || hasEffect || hasProps || hasWater || hasGranny || hasParticles))
+        if (!(hasNPC || hasMob || hasEffect || hasProps || hasWater || hasGranny || hasParticles || hasWarpPortals))
             return null;
 
         const panel = new UI.Panel();
@@ -1216,6 +1219,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.addCheckbox(panel, "Show WoE Models", this.showGrannyModels, (v) => { this.showGrannyModels = v; });
         if (hasParticles)
             this.addCheckbox(panel, "Show Particles", this.showParticles, (v) => { this.showParticles = v; });
+        if (hasWarpPortals)
+            this.addCheckbox(panel, "Show Warp Portals", this.showWarpPortals, (v) => { this.showWarpPortals = v; });
         if (hasLabels)
             this.addCheckbox(panel, "Show Name Labels", this.showNameLabels, (v) => { this.showNameLabels = v; });
         return panel;
@@ -1715,7 +1720,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareWarpPortals(viewerInput: ViewerRenderInput): void {
-        if (this.warpPortalRenderer === null)
+        if (this.warpPortalRenderer === null || !this.showWarpPortals)
             return;
         this.warpPortalRenderer.prepare(
             this.renderHelper,
@@ -1932,6 +1937,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         bits.setBit(LayerBit.Particles, this.showParticles);
         bits.setBit(LayerBit.NameLabels, this.showNameLabels);
         bits.setBit(LayerBit.Weather, this.weatherEnabled);
+        bits.setBit(LayerBit.WarpPortals, this.showWarpPortals);
         offs = bitMapSerialize(view, offs, bits);
 
         return offs;
@@ -1994,6 +2000,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.showParticles = bits.getBit(LayerBit.Particles);
         this.showNameLabels = bits.getBit(LayerBit.NameLabels);
         this.weatherEnabled = bits.getBit(LayerBit.Weather);
+        this.showWarpPortals = bits.getBit(LayerBit.WarpPortals);
         return offs;
     }
 
