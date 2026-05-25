@@ -30,6 +30,7 @@ const TOWNS = new Set([
 const NAMED_DUNGEON_RE = /^(gl_|abyss|abbey|juperos|jupe_|gefenia|cave\b|izlu2dun|anthell|in_sphinx|in_orcs|in_rogue|orcsdun|c_tower|tha_t|thana|treasure|kh_|ra_san|thor_v|moc_pryd|prt_sew|prt_maze|spl_in|ecl_tdun|1@|2@)/;
 
 function classifyMap(id: string): MapCategory {
+    id = id.replace(/@classic$/, "");
     if (/_cas\d|g_cas/.test(id) || id.startsWith("nguild_") || /_gld\b|gld_/.test(id)) return "castle";
     if (/^\d+@/.test(id)) return "dungeon"; // instance dungeons read as dungeons for fog
     if (/^que_|^job_|^force_|^pvp_|^gvg|^arena|^ordeal|^poring_w|^guild_vs|^bat_|^job3|^turbo_|^sec_|^prt_are|auction/.test(id)) return "instance";
@@ -77,32 +78,58 @@ function main(): void {
     const kro = parseMapNameTable(KRO_NAMETABLE);
     console.log(`iRO names: ${iro.size}  kRO names: ${kro.size}`);
 
-    // Era-suffixed asset files (`<id>@classic.rsw`) are ignored; era variants
-    // diverge only in the entity manifest, not in geometry. Instance maps
-    // (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and stay in the bare list.
-    const ERA_SUFFIX_RE = /@(classic|renewal)\.rsw$/i;
-    const ids = readdirSync(MAPS_DIR)
-        .filter((f) => f.toLowerCase().endsWith(".rsw"))
+    // Bare ids: one per `<id>.rsw`. Era-suffixed files (`<id>@classic.rsw`)
+    // are emitted as separate scene entries because they ship distinct
+    // geometry (pre-renewal kRO snapshot); maps that differ only in entities
+    // share geometry with the bare id and are handled by the runtime era
+    // toggle. Instance maps (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and
+    // stay in the bare list.
+    const ERA_SUFFIX_RE = /@classic\.rsw$/i;
+    const allRsw = readdirSync(MAPS_DIR).filter((f) => f.toLowerCase().endsWith(".rsw"));
+    const bareIds = allRsw
         .filter((f) => !ERA_SUFFIX_RE.test(f))
         .map((f) => f.slice(0, -".rsw".length).toLowerCase())
         .sort((a, b) => a.localeCompare(b));
+    const bareSet = new Set(bareIds);
+    const classicBaseIds = allRsw
+        .filter((f) => ERA_SUFFIX_RE.test(f))
+        .map((f) => f.slice(0, -"@classic.rsw".length).toLowerCase())
+        .filter((id) => bareSet.has(id))
+        .sort((a, b) => a.localeCompare(b));
 
     let namedEn = 0, namedKr = 0, unnamed = 0;
-    type Entry = { id: string, name: string, category: MapCategory };
+    type Entry = { id: string, name: string, category: MapCategory, era?: "classic" };
     const entries: Entry[] = [];
-    for (const id of ids) {
+    const lookupName = (id: string): { display?: string, name: string } => {
         const en = iro.get(id);
         const kr = kro.get(id);
         let display: string | undefined;
         if (en !== undefined) { display = en; namedEn++; }
         else if (kr !== undefined) { display = kr; namedKr++; }
         else unnamed++;
-        const name = display !== undefined ? `${id} - ${display}` : id;
-        entries.push({ id, name, category: classifyMap(id) });
+        return { display, name: display !== undefined ? `${id} - ${display}` : id };
+    };
+    for (const id of bareIds)
+        entries.push({ id, ...lookupName(id), category: classifyMap(id) });
+    for (const base of classicBaseIds) {
+        const en = iro.get(base);
+        const kr = kro.get(base);
+        const display = en ?? kr;
+        const name = display !== undefined ? `${base} - ${display} (Pre-Renewal)` : `${base} (Pre-Renewal)`;
+        entries.push({ id: `${base}@classic`, name, category: classifyMap(base), era: "classic" });
     }
 
     const body = entries
-        .map((e) => `    { id: ${JSON.stringify(e.id)}, name: ${JSON.stringify(e.name)}, category: ${JSON.stringify(e.category)} },`)
+        .map((e) => {
+            const fields = [
+                `id: ${JSON.stringify(e.id)}`,
+                `name: ${JSON.stringify(e.name)}`,
+                `category: ${JSON.stringify(e.category)}`,
+            ];
+            if (e.era !== undefined)
+                fields.push(`era: ${JSON.stringify(e.era)}`);
+            return `    { ${fields.join(", ")} },`;
+        })
         .join("\n");
 
     const contents = `
@@ -110,8 +137,9 @@ function main(): void {
 // by hand: regenerate by running
 //   npx tsx src/RagnarokOnline/tools/regen-maps.ts
 //
-// ${entries.length} entries. ${namedEn} with an iRO English name, ${namedKr} kRO
-// Korean fallback, ${unnamed} unnamed.
+// ${entries.length} entries (${bareIds.length} bare + ${classicBaseIds.length}
+// pre-renewal classic variants with rebuilt geometry). ${namedEn} with an iRO
+// English name, ${namedKr} kRO Korean fallback, ${unnamed} unnamed.
 
 import type { MapCategory } from "./mapcategory.js";
 
@@ -119,6 +147,10 @@ export interface RagnarokMapEntry {
     id: string;
     name: string;
     category: MapCategory;
+    // Set on dedicated pre-renewal scene entries; their assets and entity
+    // manifest are loaded from the @classic-suffixed files regardless of the
+    // global era toggle.
+    era?: "classic";
 }
 
 export const maps: RagnarokMapEntry[] = [

@@ -3,8 +3,9 @@
 // by hand: regenerate by running
 //   npx tsx src/RagnarokOnline/tools/regen-maps.ts
 //
-// 992 entries. 931 with an iRO English name, 0 kRO
-// Korean fallback, 61 unnamed.
+// 1014 entries (992 bare + 22
+// pre-renewal classic variants with rebuilt geometry). 931 with an iRO
+// English name, 0 kRO Korean fallback, 61 unnamed.
 
 import type { MapCategory } from "./mapcategory.js";
 
@@ -12,6 +13,10 @@ export interface RagnarokMapEntry {
     id: string;
     name: string;
     category: MapCategory;
+    // Set on dedicated pre-renewal scene entries; their assets and entity
+    // manifest are loaded from the @classic-suffixed files regardless of the
+    // global era toggle.
+    era?: "classic";
 }
 
 export const maps: RagnarokMapEntry[] = [
@@ -1007,4 +1012,26 @@ export const maps: RagnarokMapEntry[] = [
     { id: "yuno_in04", name: "yuno_in04 - Republic Library", category: "indoor" },
     { id: "yuno_in05", name: "yuno_in05 - Power Plant of Ymir's Heart", category: "indoor" },
     { id: "yuno_pre", name: "yuno_pre - Schwaltzvalt Government Buildings", category: "city" },
+    { id: "alberta@classic", name: "alberta - Alberta (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "alde_gld@classic", name: "alde_gld - Luina the satellite of Al De Baran (Pre-Renewal)", category: "castle", era: "classic" },
+    { id: "aru_gld@classic", name: "aru_gld - Valfreyja (Pre-Renewal)", category: "castle", era: "classic" },
+    { id: "bat_c01@classic", name: "bat_c01 - Krieger von Midgards (Pre-Renewal)", category: "instance", era: "classic" },
+    { id: "bra_in01@classic", name: "bra_in01 - Inside Brasilis (Pre-Renewal)", category: "indoor", era: "classic" },
+    { id: "brasilis@classic", name: "brasilis - Brasilis (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "cmd_fild08@classic", name: "cmd_fild08 - Fortress Saint Darmain (East) (Pre-Renewal)", category: "field", era: "classic" },
+    { id: "ein_fild01@classic", name: "ein_fild01 - Einbroch Field (Pre-Renewal)", category: "field", era: "classic" },
+    { id: "gl_cas02@classic", name: "gl_cas02 - Glast Heim 2f (Pre-Renewal)", category: "castle", era: "classic" },
+    { id: "iz_dun03@classic", name: "iz_dun03 - Undersea Tunnel (Pre-Renewal)", category: "dungeon", era: "classic" },
+    { id: "izlude@classic", name: "izlude - Izlude Town (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "manuk@classic", name: "manuk - Manuk (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "moc_castle@classic", name: "moc_castle - Morroc Castle (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "moc_fild20@classic", name: "moc_fild20 - Sograt Desert - Continental Guard Quarantine (Pre-Renewal)", category: "field", era: "classic" },
+    { id: "morocc@classic", name: "morocc - Morroc Town (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "prt_fild05@classic", name: "prt_fild05 - Prontera Field (Pre-Renewal)", category: "field", era: "classic" },
+    { id: "prt_in@classic", name: "prt_in - Inside Prontera (Pre-Renewal)", category: "indoor", era: "classic" },
+    { id: "ra_in01@classic", name: "ra_in01 - Inside Rachel (Pre-Renewal)", category: "indoor", era: "classic" },
+    { id: "rachel@classic", name: "rachel - Capital of Arunafeltz States, Rachel (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "spl_fild01@classic", name: "spl_fild01 - Splendide Field (Pre-Renewal)", category: "field", era: "classic" },
+    { id: "splendide@classic", name: "splendide - Splendide (Pre-Renewal)", category: "city", era: "classic" },
+    { id: "ve_fild02@classic", name: "ve_fild02 - Veins Field (Pre-Renewal)", category: "field", era: "classic" },
 ];

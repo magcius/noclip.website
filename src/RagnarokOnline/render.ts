@@ -118,7 +118,6 @@ class TerrainProgram extends DeviceProgram {
 
     public override both = `
 precision highp float;
-precision highp sampler2DArray;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -848,7 +847,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.pendingClick = { x: this.pressX, y: this.pressY };
     };
 
-    constructor(private device: GfxDevice, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm, private sceneLoader: SceneLoader, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null = null) {
+    constructor(private device: GfxDevice, private mapId: string, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm, private sceneLoader: SceneLoader, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null = null) {
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -1246,12 +1245,16 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         panel.setTitle(UI.LAYER_ICON, "Layers");
 
-        const classicToggle = new UI.Checkbox("Pre-Renewal Era", currentEra() === "classic");
-        classicToggle.onchanged = () => {
-            setEra(classicToggle.checked ? "classic" : "renewal");
-            void this.reloadEntities();
-        };
-        panel.contents.appendChild(classicToggle.elem);
+        // Dedicated `<base>@classic` scenes ship pre-renewal geometry; the
+        // global toggle is moot there because the scene id already pins the era.
+        if (!this.mapId.endsWith("@classic")) {
+            const classicToggle = new UI.Checkbox("Pre-Renewal Era", currentEra() === "classic");
+            classicToggle.onchanged = () => {
+                setEra(classicToggle.checked ? "classic" : "renewal");
+                void this.reloadEntities();
+            };
+            panel.contents.appendChild(classicToggle.elem);
+        }
 
         // Indirect through this.spriteRenderer so the toggles still target the
         // current renderer after reloadEntities replaces it.
@@ -1456,7 +1459,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             numSamplers: 2,
             samplerEntries: [
                 { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
             ],
         }]);
         template.setGfxProgram(this.program);

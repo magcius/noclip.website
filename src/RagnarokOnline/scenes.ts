@@ -97,6 +97,9 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
+        // Dedicated `<base>@classic` scenes ship pre-renewal geometry; props
+        // and textures still resolve from the shared model/texture pool.
+        const baseId = this.id.replace(/@classic$/, "");
         const shared = await context.dataShare.ensureObject(
             `${pathBase}/SharedCache`,
             async () => new RagnarokSharedCache(),
@@ -110,7 +113,9 @@ class RagnarokMapSceneDesc implements SceneDesc {
         }
         const rsw = parseRSW(rswData);
 
-        const baseGnd = rsw.gndFile !== "" ? rsw.gndFile.replace(/\.gnd$/i, "") : this.id;
+        // Pre-renewal RSWs embed the bare `<base>.gnd` filename; for @classic
+        // scenes we must override to fetch the era-suffixed GND instead.
+        const baseGnd = baseId !== this.id ? this.id : (rsw.gndFile !== "" ? rsw.gndFile.replace(/\.gnd$/i, "") : this.id);
         const gndData = await dataFetcher.fetchData(`${pathBase}/maps/${baseGnd}.gnd`);
         const gnd = parseGND(gndData);
 
@@ -305,7 +310,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
             const spanCells = Math.max(w.spanX, w.spanY);
             const radius = Math.max(spanCells * GAT_CELL_SIZE, WARP_MIN_HIT_RADIUS);
             let arrivalWorldPos: vec3 | undefined;
-            if (w.dest === this.id && w.destX !== undefined && w.destY !== undefined) {
+            if (w.dest === baseId && w.destX !== undefined && w.destY !== undefined) {
                 const ap = gatCellToWorld(w.destX, w.destY, gatHeight(w.destX, w.destY), gnd.width);
                 arrivalWorldPos = vec3.fromValues(ap[0], ap[1], ap[2]);
             }
@@ -345,9 +350,9 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const particleData = await loadParticles(dataFetcher, pathBase, this.id, mapOffX, mapOffZ);
 
         const bgm = new Bgm("RagnarokOnline");
-        void bgm.setMap(dataFetcher, this.id);
+        void bgm.setMap(dataFetcher, baseId);
 
-        return new RagnarokTerrainRenderer(device, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, context.sceneLoader, buildLayer);
+        return new RagnarokTerrainRenderer(device, this.id, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, context.sceneLoader, buildLayer);
     }
 }
 
