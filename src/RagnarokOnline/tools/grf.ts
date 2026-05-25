@@ -48,8 +48,8 @@ export class Grf {
     public readonly files: Map<string, GrfEntry> = new Map();
     private readonly fd: number;
 
-    constructor(public readonly path: string) {
-        this.fd = openSync(path, "r");
+    constructor(private readonly path: string) {
+        this.fd = openSync(this.path, "r");
 
         const header = Buffer.alloc(HEADER_SIZE);
         readSync(this.fd, header, 0, HEADER_SIZE, 0);
@@ -58,7 +58,7 @@ export class Grf {
         const fileCountPre = header.readUInt32LE(0x26);
         this.version = header.readUInt32LE(0x2A);
         if (this.version !== 0x300)
-            throw new Error(`${path}: only v0x300 supported, got 0x${this.version.toString(16)}`);
+            throw new Error(`${this.path}: only v0x300 supported, got 0x${this.version.toString(16)}`);
 
         const tableHeader = Buffer.alloc(12);
         readSync(this.fd, tableHeader, 0, 12, HEADER_SIZE + fileTableOffset);
@@ -69,7 +69,7 @@ export class Grf {
         readSync(this.fd, packed, 0, packedSize, HEADER_SIZE + fileTableOffset + 12);
         const raw = inflateSync(packed);
         if (raw.length !== realSize)
-            throw new Error(`${path}: file table size mismatch (got ${raw.length}, expected ${realSize})`);
+            throw new Error(`${this.path}: file table size mismatch (got ${raw.length}, expected ${realSize})`);
 
         const decoder = new TextDecoder("euc-kr");
         let p = 0;

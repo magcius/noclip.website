@@ -72,7 +72,7 @@ export interface EntityPlacement {
     // "feet" (default, NPCs stand on the ground) or "center" (effect sprites
     // are authored around their emit point).
     anchor?: "feet" | "center";
-    kind?: SpriteKind;  // default "npc"
+    kind?: SpriteKind;
 }
 
 export interface EntitySceneData {

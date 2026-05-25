@@ -14,15 +14,14 @@
 //
 // CP949 path note: GND.textureNames and RSW model placements arrive in CP949
 // (e.g. `필드바닥\\grass01.bmp`). The GRF stores its file table CP949-decoded
-// AND lowercased internally; on disk we keep the UTF-8 form the existing dump
-// uses (Korean dirs as proper UTF-8) and let macOS APFS case-fold reads.
+// AND lowercased; on disk we keep the UTF-8 form the existing dump uses.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import * as path from "path";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { parseGND } from "../gnd.js";
 import { parseRSM } from "../rsm.js";
-import { parseRSW } from "../rsw.js";
+import { parseRSW, RswWorld } from "../rsw.js";
 import { Grf } from "./grf.js";
 
 const GRF_PATH = path.resolve("data/RagnarokOnline_raw/grf/data.grf");
@@ -58,7 +57,7 @@ function gatherRefs(mapIds: string[]): Refs {
 
         const rswPath = path.join(ASSET_MAPS_DIR, `${mapId}.rsw`);
         if (!existsSync(rswPath)) continue;
-        let rsw;
+        let rsw: RswWorld;
         try {
             rsw = parseRSW(toSlice(readFileSync(rswPath)));
         } catch (e) {

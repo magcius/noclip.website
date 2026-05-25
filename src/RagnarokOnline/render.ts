@@ -5,7 +5,7 @@
 
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
-import { MathConstants, Vec3UnitY } from "../MathHelpers.js";
+import { clamp, MathConstants, Vec3UnitY } from "../MathHelpers.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -41,15 +41,15 @@ import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
 import { currentEra, setEra } from "./era.js";
 import { Bgm } from "./bgm.js";
+import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
+import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
+import { assertExists } from "../util.js";
 
 export interface EntityLayerBundle {
     entityData: EntitySceneData;
     warpPortalData: WarpPortalSceneData | null;
     warpClickData: WarpClickSceneData;
 }
-import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
-import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
-import { assertExists } from "../util.js";
 
 // CSS px of drift allowed between mousedown/up before a click counts as a drag.
 const WARP_CLICK_MOVE_THRESHOLD_PX = 6;
@@ -62,6 +62,9 @@ const MOB_CLICK_PIXEL_SLOP = 10;
 const MOB_FALLBACK_HALF_HEIGHT = 3.0;
 const MOB_FALLBACK_RADIUS = 4.0;
 
+// Distance-fog defaults framed against the map's bounding-sphere radius: start
+// fading just past the camera, hit full fog past the far edge. The slider caps
+// give a usable range on small indoor maps without flooring at the map size.
 const FOG_NEAR_RADIUS_FRACTION = 0.05;
 const FOG_FAR_RADIUS_FRACTION = 1.5;
 const FOG_NEAR_FLOOR_UNITS = 50;
@@ -69,6 +72,8 @@ const FOG_FAR_MIN_DEPTH_UNITS = 100;
 const FOG_DIST_SLIDER_MAX_MULT = 4;
 const FOG_DIST_SLIDER_MAX_FLOOR = 2000;
 
+// Ambient/diffuse sliders cap at 4x so a stock-dim map can be cranked bright
+// without unbounded values blowing out the night-transition floor in resolveLighting.
 const LIGHT_MULTIPLIER_MAX = 4;
 
 export const FOG_DEFAULT_COLOR_UNFOGGED = vec3.fromValues(0.6, 0.6, 0.65);
@@ -847,7 +852,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.pendingClick = { x: this.pressX, y: this.pressY };
     };
 
-    constructor(private device: GfxDevice, private mapId: string, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null = null, waterData: WaterSceneData | null = null, lightData: LightSceneData | null = null, fogData: FogSceneData | null = null, entityData: EntitySceneData | null = null, warpPortalData: WarpPortalSceneData | null = null, grannyData: GrannyInstance[] | null = null, weatherParams: WeatherParams | null = null, warpClickData: WarpClickSceneData | null = null, pointLights: PointLight[] | null = null, skyData: SkySceneData | null = null, particleData: ParticleSceneData | null = null, bgm: Bgm, private sceneLoader: SceneLoader, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null = null) {
+    constructor(private device: GfxDevice, private mapId: string, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null, waterData: WaterSceneData | null, lightData: LightSceneData | null, fogData: FogSceneData | null, entityData: EntitySceneData | null, warpPortalData: WarpPortalSceneData | null, grannyData: GrannyInstance[] | null, weatherParams: WeatherParams | null, warpClickData: WarpClickSceneData | null, pointLights: PointLight[] | null, skyData: SkySceneData | null, particleData: ParticleSceneData | null, bgm: Bgm, private sceneLoader: SceneLoader, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null) {
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
@@ -1724,10 +1729,11 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     // Fixed framing of the arrival cell. Scaling with map radius produced a
-    // whole-map overview on big indoor maps (e.g. prt_in).
+    // whole-map overview on big indoor maps (e.g. prt_in). ~5 GAT cells of
+    // offset keeps the cell on-screen with the surrounding context visible.
     private frameArrivalAt(viewerInput: ViewerRenderInput, target: vec3): void {
-        const back = 50;
-        const eye = vec3.fromValues(target[0], target[1] + back, target[2] + back);
+        const ARRIVAL_CAMERA_OFFSET = 50;
+        const eye = vec3.fromValues(target[0], target[1] + ARRIVAL_CAMERA_OFFSET, target[2] + ARRIVAL_CAMERA_OFFSET);
         mat4.targetTo(viewerInput.camera.worldMatrix, eye, target, Vec3UnitY);
         viewerInput.camera.worldMatrixUpdated();
     }
@@ -1924,14 +1930,14 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (this.fogEnabled)      fogPacked |= 0x01;
         if (this.fogDistanceMode) fogPacked |= 0x02;
         view.setUint8(offs++, fogPacked);
-        view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(this.fog.tint * 255))));
-        view.setUint16(offs, Math.max(0, Math.min(0xffff, Math.round(this.fogNear))), true); offs += 2;
-        view.setUint16(offs, Math.max(0, Math.min(0xffff, Math.round(this.fogFar))), true); offs += 2;
+        view.setUint8(offs++, clamp(Math.round(this.fog.tint * 255), 0, 255));
+        view.setUint16(offs, clamp(Math.round(this.fogNear), 0, 0xffff), true); offs += 2;
+        view.setUint16(offs, clamp(Math.round(this.fogFar), 0, 0xffff), true); offs += 2;
 
         view.setInt16(offs, Math.round(this.light.longitudeDeg), true); offs += 2;
         view.setInt16(offs, Math.round(this.light.pitchDeg), true); offs += 2;
 
-        view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(this.nightDegree * 255))));
+        view.setUint8(offs++, clamp(Math.round(this.nightDegree * 255), 0, 255));
 
         const bits = new BitMap(NUM_LAYER_BITS);
         const spr = this.spriteRenderer;

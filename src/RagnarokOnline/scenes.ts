@@ -21,6 +21,7 @@ import { loadEntities, loadEffectSources } from "./entity.js";
 import { loadWarpPortals } from "./warp-portal.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight, GAT_CELL_SIZE, GND_CELL_SIZE } from "./coord.js";
 import { vec3 } from "gl-matrix";
+import { clamp } from "../MathHelpers.js";
 import { loadWoeGrannyModels } from "./granny-scene.js";
 import { loadPointLights } from "./lights.js";
 import { maps } from "./maps.js";
@@ -60,29 +61,81 @@ interface SharedModelEntry {
 }
 
 class RagnarokSharedCache implements Destroyable {
-    public textures = new Map<string, Promise<DecodedImage | null>>();
-    public waterFrames = new Map<number, Promise<(DecodedImage | null)[]>>();
-    public models = new Map<string, Promise<SharedModelEntry | null>>();
+    private textures = new Map<string, Promise<DecodedImage | null>>();
+    private waterFrames = new Map<number, Promise<(DecodedImage | null)[]>>();
+    private models = new Map<string, Promise<SharedModelEntry | null>>();
 
-    public fetchTexture(dataFetcher: DataFetcher, url: string): Promise<DecodedImage | null> {
+    public fetchTexture(dataFetcher: DataFetcher, name: string): Promise<DecodedImage | null> {
+        const url = `${pathBase}/textures/${textureNameToUrl(name)}`;
         let p = this.textures.get(url);
         if (p !== undefined)
             return p;
         p = (async (): Promise<DecodedImage | null> => {
-            let data;
+            let data: ArrayBufferSlice;
             try {
                 data = await dataFetcher.fetchData(url);
             } catch {
                 return null;
             }
             try {
-                return decodeTexture(url, data);
+                return decodeTexture(name, data);
             } catch (e) {
                 console.error(`RagnarokOnline: failed to decode texture ${url}:`, e);
                 return null;
             }
         })();
         this.textures.set(url, p);
+        return p;
+    }
+
+    public fetchModel(dataFetcher: DataFetcher, modelName: string): Promise<SharedModelEntry | null> {
+        const key = modelName.toLowerCase();
+        let p = this.models.get(key);
+        if (p !== undefined)
+            return p;
+        p = (async (): Promise<SharedModelEntry | null> => {
+            let data: ArrayBufferSlice;
+            try {
+                data = await dataFetcher.fetchData(`${pathBase}/model/${modelNameToUrl(modelName)}`);
+            } catch {
+                return null;
+            }
+            try {
+                const rsm = parseRSM(data);
+                if (modelIsAnimated(rsm)) {
+                    const animatedMesh = buildAnimatedModelMesh(rsm);
+                    const textures = await Promise.all(animatedMesh.textureNames.map((n) => this.fetchTexture(dataFetcher, n)));
+                    return { mesh: null, animatedMesh, textures };
+                } else {
+                    const mesh = buildModelMesh(rsm);
+                    const textures = await Promise.all(mesh.textureNames.map((n) => this.fetchTexture(dataFetcher, n)));
+                    return { mesh, animatedMesh: null, textures };
+                }
+            } catch {
+                return null;
+            }
+        })();
+        this.models.set(key, p);
+        return p;
+    }
+
+    public fetchWaterFrames(dataFetcher: DataFetcher, waterType: number): Promise<(DecodedImage | null)[]> {
+        let p = this.waterFrames.get(waterType);
+        if (p !== undefined)
+            return p;
+        p = Promise.all(
+            Array.from({ length: WATER_FRAME_COUNT }, (_unused, i) => i).map(async (i): Promise<DecodedImage | null> => {
+                const nn = i.toString().padStart(2, "0");
+                const url = `${WATER_DIR}/water${waterType}${nn}.jpg`.split("/").map(encodeURIComponent).join("/");
+                try {
+                    const data = await dataFetcher.fetchData(`${pathBase}/textures/${url}`);
+                    return decodeImageBitmapRGBA(data.createTypedArray(Uint8Array));
+                } catch {
+                    return null;
+                }
+            }),
+        );
+        this.waterFrames.set(waterType, p);
         return p;
     }
 
@@ -105,7 +158,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
             async () => new RagnarokSharedCache(),
         );
 
-        let rswData;
+        let rswData: ArrayBufferSlice;
         try {
             rswData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.rsw`);
         } catch {
@@ -122,10 +175,8 @@ class RagnarokMapSceneDesc implements SceneDesc {
         // Missing texture: silently skip the draw group. Decode failure: log
         // (real bug we want to see) rather than swallow alongside 404s. The
         // shared cache dedupes within and across maps.
-        const fetchTextureByName = (name: string): Promise<DecodedImage | null> =>
-            shared.fetchTexture(dataFetcher, `${pathBase}/textures/${textureNameToUrl(name)}`);
         const textureImages: (DecodedImage | null)[] = await Promise.all(
-            gnd.textureNames.map((n) => fetchTextureByName(n)),
+            gnd.textureNames.map((n) => shared.fetchTexture(dataFetcher, n)),
         );
 
         // Models with keyframe tracks take the animated path. The cache stores
@@ -135,41 +186,10 @@ class RagnarokMapSceneDesc implements SceneDesc {
             if (p.modelName !== "")
                 uniqueModels.add(p.modelName);
 
-        const loadModel = (modelName: string): Promise<SharedModelEntry | null> => {
-            const key = modelName.toLowerCase();
-            let p = shared.models.get(key);
-            if (p !== undefined)
-                return p;
-            p = (async (): Promise<SharedModelEntry | null> => {
-                let data;
-                try {
-                    data = await dataFetcher.fetchData(`${pathBase}/model/${modelNameToUrl(modelName)}`);
-                } catch {
-                    return null;
-                }
-                try {
-                    const rsm = parseRSM(data);
-                    if (modelIsAnimated(rsm)) {
-                        const animatedMesh = buildAnimatedModelMesh(rsm);
-                        const textures = await Promise.all(animatedMesh.textureNames.map((n) => fetchTextureByName(n)));
-                        return { mesh: null, animatedMesh, textures };
-                    } else {
-                        const mesh = buildModelMesh(rsm);
-                        const textures = await Promise.all(mesh.textureNames.map((n) => fetchTextureByName(n)));
-                        return { mesh, animatedMesh: null, textures };
-                    }
-                } catch {
-                    return null;
-                }
-            })();
-            shared.models.set(key, p);
-            return p;
-        };
-
         const meshes = new Map<string, { mesh: ModelMesh, textures: (DecodedImage | null)[] }>();
         const animatedMeshes = new Map<string, { mesh: AnimatedModelMesh, textures: (DecodedImage | null)[] }>();
         await Promise.all(Array.from(uniqueModels).map(async (modelName) => {
-            const entry = await loadModel(modelName);
+            const entry = await shared.fetchModel(dataFetcher, modelName);
             if (entry === null)
                 return;
             if (entry.animatedMesh !== null)
@@ -216,28 +236,9 @@ class RagnarokMapSceneDesc implements SceneDesc {
             waveHeight: rsw.waveHeight,
         };
         const waterParams = gnd.water ?? rswWater;
-        const loadWaterFrames = (waterType: number): Promise<(DecodedImage | null)[]> => {
-            let p = shared.waterFrames.get(waterType);
-            if (p !== undefined)
-                return p;
-            p = Promise.all(
-                Array.from({ length: WATER_FRAME_COUNT }, (_unused, i) => i).map(async (i): Promise<DecodedImage | null> => {
-                    const nn = i.toString().padStart(2, "0");
-                    const url = `${WATER_DIR}/water${waterType}${nn}.jpg`.split("/").map(encodeURIComponent).join("/");
-                    try {
-                        const data = await dataFetcher.fetchData(`${pathBase}/textures/${url}`);
-                        return decodeImageBitmapRGBA(data.createTypedArray(Uint8Array));
-                    } catch {
-                        return null;
-                    }
-                }),
-            );
-            shared.waterFrames.set(waterType, p);
-            return p;
-        };
-        let frames = await loadWaterFrames(waterParams.type);
+        let frames = await shared.fetchWaterFrames(dataFetcher, waterParams.type);
         if (!frames.some((f) => f !== null) && gnd.water !== undefined && rswWater.type !== waterParams.type) {
-            const fallback = await loadWaterFrames(rswWater.type);
+            const fallback = await shared.fetchWaterFrames(dataFetcher, rswWater.type);
             if (fallback.some((f) => f !== null))
                 frames = fallback;
         }
@@ -277,7 +278,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
             const g = ((argb >>> 8) & 0xff) / 255;
             const b = (argb & 0xff) / 255;
             fogTableColor = vec3.fromValues(r, g, b);
-            fogTableDensity = Math.min(Math.max(fog.density, 0), 0.45);
+            fogTableDensity = clamp(fog.density, 0, 0.45);
         } catch {
             // No fog entry: sky falls back to a category default, tint off.
         }
