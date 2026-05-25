@@ -11,7 +11,7 @@ import { GatMap, isWalkable } from "./gat.js";
 import { findPath, PathStep } from "./pathfinder.js";
 import { parseSPR, SprModel } from "./spr.js";
 import { parseACT, ActModel } from "./act.js";
-import { SpriteActor, computeActorFootPxY } from "./sprite.js";
+import { SpriteActor, computeActorFootPxY, SpriteKind } from "./sprite.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coord.js";
 import { RswEffectSource } from "./rsw.js";
 
@@ -74,6 +74,7 @@ export interface EntityPlacement {
     // "feet" (default, NPCs stand on the ground) or "center" (effect sprites
     // are authored around their emit point).
     anchor?: "feet" | "center";
+    kind?: SpriteKind;  // default "npc"
 }
 
 export interface EntitySceneData {
@@ -665,6 +666,7 @@ export async function loadEffectSources(
             worldPos: [mapOffX - e.pos.x, -e.pos.y, e.pos.z + mapOffZ],
             name: "",
             anchor: "center",
+            kind: "effect",
         });
     }
 

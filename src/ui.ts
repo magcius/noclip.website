@@ -1,6 +1,7 @@
 
 // New UI system
 
+import type { vec3 } from 'gl-matrix';
 import { GIT_SHORT_REVISION, GITHUB_REVISION_URL, GITHUB_URL, IS_DEVELOPMENT } from './BuildVersion.js';
 import { Camera, CameraController, CameraControllerClass, FPSCameraController, OrbitCameraController, OrthoCameraController } from './Camera.js';
 import { Color, colorToCSS } from './Color.js';
@@ -1556,6 +1557,66 @@ export class Slider implements Widget {
     public setT(t: number): void {
         const v = lerp(+this.sliderInput.min, +this.sliderInput.max, t);
         this.setValue(v);
+    }
+}
+
+export class ColorPicker implements Widget {
+    public elem: HTMLElement;
+    public onvalue: ((rgb: vec3) => void) | null = null;
+    public onchange: ((rgb: vec3) => void) | null = null;
+
+    private label: HTMLElement;
+    private input: HTMLInputElement;
+
+    constructor(label?: string, initial?: ArrayLike<number>) {
+        const wrap = document.createElement("div");
+        wrap.style.display = "grid";
+        wrap.style.gridTemplateColumns = "1fr 60px";
+        wrap.style.alignItems = "center";
+        wrap.style.padding = "4px 0";
+        wrap.style.gap = "8px";
+
+        this.label = document.createElement("div");
+        this.label.style.fontWeight = "bold";
+        this.label.style.userSelect = "none";
+
+        this.input = document.createElement("input");
+        this.input.type = "color";
+        this.input.style.height = "24px";
+        this.input.style.cursor = "pointer";
+        this.input.style.border = "none";
+        this.input.style.background = "transparent";
+        this.input.oninput = () => {
+            if (this.onvalue !== null)
+                this.onvalue(this.getValue());
+        };
+        this.input.onchange = () => {
+            if (this.onchange !== null)
+                this.onchange(this.getValue());
+        };
+
+        wrap.appendChild(this.label);
+        wrap.appendChild(this.input);
+        this.elem = wrap;
+
+        if (label !== undefined)
+            this.setLabel(label);
+        if (initial !== undefined)
+            this.setValue(initial);
+    }
+
+    public setLabel(label: string): void {
+        this.label.textContent = label;
+    }
+
+    public setValue(rgb: ArrayLike<number>): void {
+        const toHex = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, "0");
+        this.input.value = "#" + toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
+    }
+
+    public getValue(): vec3 {
+        const v = parseInt(this.input.value.slice(1), 16);
+        return [((v >>> 16) & 0xff) / 255, ((v >>> 8) & 0xff) / 255, (v & 0xff) / 255];
     }
 }
 

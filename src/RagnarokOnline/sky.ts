@@ -15,21 +15,22 @@ import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManage
 import { DeviceProgram } from "../Program.js";
 import { mapCategory } from "./mapcategory.js";
 
-const DEFAULT_OUTDOOR_SKY: [number, number, number] = [0.55, 0.75, 0.92];
-const DEFAULT_INDOOR_SKY: [number, number, number] = [0.12, 0.12, 0.14];
+const DEFAULT_OUTDOOR_SKY = vec3.fromValues(0.55, 0.75, 0.92);
+const DEFAULT_INDOOR_SKY = vec3.fromValues(0.12, 0.12, 0.14);
+
+const SKY_BLUE = vec3.fromValues(0.30, 0.50, 0.78);
+const HAZE = vec3.fromValues(0.78, 0.85, 0.88);
 
 const SUN_DISC_COS = Math.cos(0.0105);
 const SUN_HALO_EXP = 96.0;
-const SUN_COLOR: [number, number, number] = [1.0, 0.95, 0.85];
+const SUN_COLOR = vec3.fromValues(1.0, 0.95, 0.85);
 
 export interface SkySceneData {
-    color: [number, number, number];
+    color: vec3;
     enableDome: boolean;
-    horizonColor: [number, number, number];
-    zenithColor: [number, number, number];
-    groundColor: [number, number, number];
-    // Unit vector FROM ground TOWARD sun, pre-mirrored to the render frame.
-    sunDir: [number, number, number];
+    horizonColor: vec3;
+    zenithColor: vec3;
+    groundColor: vec3;
 }
 
 function categoryWantsDome(id: string): boolean {
@@ -37,44 +38,33 @@ function categoryWantsDome(id: string): boolean {
     return cat === "city" || cat === "field" || cat === "other";
 }
 
-export function defaultSkyForMap(id: string): [number, number, number] {
+export function defaultSkyForMap(id: string): vec3 {
     const cat = mapCategory(id);
     if (cat === "dungeon" || cat === "indoor" || cat === "castle")
-        return [...DEFAULT_INDOOR_SKY];
-    return [...DEFAULT_OUTDOOR_SKY];
-}
-
-function lerp3(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
-    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
-
-function scale3(a: [number, number, number], s: number): [number, number, number] {
-    return [a[0] * s, a[1] * s, a[2] * s];
+        return vec3.clone(DEFAULT_INDOOR_SKY);
+    return vec3.clone(DEFAULT_OUTDOOR_SKY);
 }
 
 // RO fog-table colours are an atmospheric tint over geometry, not a sky colour
 // — so the zenith is mostly clear blue with only a hint of the map's tint.
-function deriveZenith(horizon: [number, number, number]): [number, number, number] {
-    const SKY_BLUE: [number, number, number] = [0.30, 0.50, 0.78];
-    return lerp3(SKY_BLUE, horizon, 0.15);
+function deriveZenith(horizon: vec3): vec3 {
+    return vec3.lerp(vec3.create(), SKY_BLUE, horizon, 0.15);
 }
 
-function deriveGround(horizon: [number, number, number]): [number, number, number] {
-    return scale3(horizon, 0.55);
+function deriveGround(horizon: vec3): vec3 {
+    return vec3.scale(vec3.create(), horizon, 0.55);
 }
 
-function deriveHorizon(horizon: [number, number, number]): [number, number, number] {
-    const HAZE: [number, number, number] = [0.78, 0.85, 0.88];
-    return lerp3(horizon, HAZE, 0.35);
+function deriveHorizon(horizon: vec3): vec3 {
+    return vec3.lerp(vec3.create(), horizon, HAZE, 0.35);
 }
 
 export function buildSkyData(
     id: string,
-    fogColor: [number, number, number] | null,
-    sunDir: [number, number, number],
+    fogColor: vec3 | null,
 ): SkySceneData {
-    const horizon: [number, number, number] = fogColor !== null
-        ? [fogColor[0], fogColor[1], fogColor[2]]
+    const horizon: vec3 = fogColor !== null
+        ? vec3.clone(fogColor)
         : defaultSkyForMap(id);
 
     const softHorizon = deriveHorizon(horizon);
@@ -84,7 +74,6 @@ export function buildSkyData(
         horizonColor: softHorizon,
         zenithColor: deriveZenith(horizon),
         groundColor: deriveGround(softHorizon),
-        sunDir,
     };
 }
 
@@ -168,7 +157,7 @@ export class SkyDomeRenderer {
         this.program = cache.createProgram(new SkyDomeProgram());
     }
 
-    public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, eyePos: vec3, sky: SkySceneData): void {
+    public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4, eyePos: vec3, sky: SkySceneData, sunDir: vec3): void {
         if (!sky.enableDome)
             return;
 
@@ -196,7 +185,7 @@ export class SkyDomeRenderer {
         offs += fillVec4(mapped, offs, sky.horizonColor[0], sky.horizonColor[1], sky.horizonColor[2], 0);
         offs += fillVec4(mapped, offs, sky.zenithColor[0], sky.zenithColor[1], sky.zenithColor[2], 0);
         offs += fillVec4(mapped, offs, sky.groundColor[0], sky.groundColor[1], sky.groundColor[2], 0);
-        offs += fillVec4(mapped, offs, sky.sunDir[0], sky.sunDir[1], sky.sunDir[2], 0);
+        offs += fillVec4(mapped, offs, sunDir[0], sunDir[1], sunDir[2], 0);
         offs += fillVec4(mapped, offs, SUN_COLOR[0], SUN_COLOR[1], SUN_COLOR[2], 0);
         offs += fillVec4(mapped, offs, SUN_DISC_COS, SUN_HALO_EXP, 0, 0);
 

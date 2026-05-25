@@ -458,11 +458,14 @@ function createRGBATexture(device: GfxDevice, img: DecodedImage): GfxTexture {
 
 export type SpriteAnchor = "feet" | "center";
 
+export type SpriteKind = "npc" | "mob" | "effect";
+
 export interface SpriteInstance {
     sheet: number;
     actor: SpriteActor;
     worldPos: vec3;
     anchor?: SpriteAnchor;
+    kind: SpriteKind;
 }
 
 // Per-sheet GPU textures. Both clip-type-0 (indexed) and clip-type-!=0 (rgba)
@@ -482,6 +485,7 @@ export class SpriteRenderer {
     private device: GfxDevice;
 
     private instances: SpriteInstance[] = [];
+    private kindEnabled: Record<SpriteKind, boolean> = { npc: true, mob: true, effect: true };
     private scratchRight = vec3.create();
     private scratchUp = vec3.create();
 
@@ -525,6 +529,21 @@ export class SpriteRenderer {
 
     public addInstance(inst: SpriteInstance): void {
         this.instances.push(inst);
+    }
+
+    public setKindEnabled(kind: SpriteKind, enabled: boolean): void {
+        this.kindEnabled[kind] = enabled;
+    }
+
+    public isKindEnabled(kind: SpriteKind): boolean {
+        return this.kindEnabled[kind];
+    }
+
+    public hasKind(kind: SpriteKind): boolean {
+        for (const i of this.instances)
+            if (i.kind === kind)
+                return true;
+        return false;
     }
 
     private frameTexture(sheet: number, clipType: number, sprIndex: number): GfxTexture | null {
@@ -579,9 +598,13 @@ export class SpriteRenderer {
         // inline; quads whose frame texture isn't on disk are dropped here.
         // Only consecutive same-texture quads are coalesced into one draw.
         const drawQuads: { tex: GfxTexture, verts: Float32Array, colors: Uint32Array }[] = [];
+        // Tick actors/animators unconditionally so hidden entities don't jump-cut
+        // on re-enable; the kind filter only suppresses drawing.
         for (const inst of this.instances) {
             inst.actor.updateFacing(camDir);
             inst.actor.advance(dtSeconds);
+            if (!this.kindEnabled[inst.kind])
+                continue;
             const built = inst.actor.buildQuads(this.scratchRight, this.scratchUp, inst.worldPos, inst.anchor ?? "feet");
             for (const q of built) {
                 const tex = this.frameTexture(inst.sheet, q.clipType, q.sprIndex);

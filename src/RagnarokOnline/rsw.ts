@@ -4,7 +4,9 @@
 // objects (models, lights, sounds, effects). All values little-endian; names are
 // fixed-width CP949 (EUC-KR).
 
+import { vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { MathConstants } from "../MathHelpers.js";
 import { readString } from "../util.js";
 
 export interface RswVec3 {
@@ -112,24 +114,17 @@ class Reader {
     }
 }
 
-// Builds the world's directional sun vector from the RSW longitude/latitude,
-// matching the engine's row-vector composition: rotate (0,1,0) about X by
-// latitude, then about Y by longitude. The terrain render frame negates Y
-// (world_y = -height), so the returned vector is the render-frame direction.
-export function computeLightDir(longitudeDeg: number, latitudeDeg: number): [number, number, number] {
-    const deg = Math.PI / 180;
-    const latRad = latitudeDeg * deg;
-    const lonRad = longitudeDeg * deg;
-
-    const cx = Math.cos(latRad), sx = Math.sin(latRad);
-    let x = 0, y = cx, z = sx;
-
-    const cy = Math.cos(lonRad), sy = Math.sin(lonRad);
-    const rx = x * cy + z * sy;
-    const ry = y;
-    const rz = x * (-sy) + z * cy;
-
-    return [rx, -ry, rz];
+// lightDir is the propagation direction (X-mirrored against client space, see
+// coord.ts); sunDir is its negation (ground -> sun) for the sky dome.
+export function computeSunDirections(longitudeDeg: number, latitudeDeg: number, lightDir: vec3, sunDir: vec3): void {
+    const sx = Math.sin(latitudeDeg * MathConstants.DEG_TO_RAD), cx = Math.cos(latitudeDeg * MathConstants.DEG_TO_RAD);
+    const sy = Math.sin(longitudeDeg * MathConstants.DEG_TO_RAD), cy = Math.cos(longitudeDeg * MathConstants.DEG_TO_RAD);
+    lightDir[0] = -sx * sy;
+    lightDir[1] = -cx;
+    lightDir[2] = sx * cy;
+    sunDir[0] = -lightDir[0];
+    sunDir[1] = -lightDir[1];
+    sunDir[2] = -lightDir[2];
 }
 
 export function parseRSW(buffer: ArrayBufferSlice): RswWorld {

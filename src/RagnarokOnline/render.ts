@@ -25,7 +25,7 @@ import { DecodedImage } from "./bmp.js";
 import { GndMap, GndSurface } from "./gnd.js";
 import { AnimatedDrawGroup, AnimatedModelMesh, AnimatedPose, ModelAnimator, ModelDrawGroup, ModelMesh, MODEL_VERTEX_STRIDE_BYTES } from "./model.js";
 import { buildWaterMesh, WaterAnimator, WaterParams, WATER_VERTEX_STRIDE_BYTES } from "./water.js";
-import { SpriteActor, SpriteRenderer } from "./sprite.js";
+import { SpriteActor, SpriteKind, SpriteRenderer } from "./sprite.js";
 import { SprModel } from "./spr.js";
 import { EntitySceneData, MobEntity } from "./entity.js";
 import { NameLabelRenderer, NPC_LABEL_STYLE, MOB_LABEL_STYLE } from "./nametag.js";
@@ -34,12 +34,15 @@ import { WarpPortalRenderer, WarpPortalSceneData } from "./warp-portal.js";
 import { GrannyInstance, GrannyModelRenderer } from "./granny-render.js";
 import { WeatherParams, WeatherRenderer } from "./weather.js";
 import { gatCellGroundHeight, gatCellToWorld, GND_CELL_SIZE } from "./coord.js";
+import { computeSunDirections } from "./rsw.js";
 import { ShadowRenderer } from "./shadow.js";
 import { SkyDomeRenderer, SkySceneData } from "./sky.js";
 import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
 import { Bgm } from "./bgm.js";
 import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
+import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
+import { assertExists } from "../util.js";
 
 // CSS px of drift allowed between mousedown/up before a click counts as a drag.
 const WARP_CLICK_MOVE_THRESHOLD_PX = 6;
@@ -52,10 +55,50 @@ const MOB_CLICK_PIXEL_SLOP = 10;
 const MOB_FALLBACK_HALF_HEIGHT = 3.0;
 const MOB_FALLBACK_RADIUS = 4.0;
 
+const FOG_NEAR_RADIUS_FRACTION = 0.05;
+const FOG_FAR_RADIUS_FRACTION = 1.5;
+const FOG_NEAR_FLOOR_UNITS = 50;
+const FOG_FAR_MIN_DEPTH_UNITS = 100;
+const FOG_DIST_SLIDER_MAX_MULT = 4;
+const FOG_DIST_SLIDER_MAX_FLOOR = 2000;
+
+const LIGHT_MULTIPLIER_MAX = 4;
+
+export const FOG_DEFAULT_COLOR_UNFOGGED = vec3.fromValues(0.6, 0.6, 0.65);
+export const FOG_DEFAULT_TINT_UNFOGGED = 0.25;
+
+// Stable bit indices for the layer-toggle bitmap in serializeSaveState. Only
+// append; renumbering breaks existing share URLs.
+const enum LayerBit {
+    NPCs = 0,
+    Mobs = 1,
+    Effects = 2,
+    Props = 3,
+    Water = 4,
+    Granny = 5,
+    Particles = 6,
+    NameLabels = 7,
+    Weather = 8,
+}
+const NUM_LAYER_BITS = 9;
+
 const scratchClip = vec4.create();
 const scratchOffset = vec3.create();
 const scratchScreen: [number, number] = [0, 0];
 const scratchScreen2: [number, number] = [0, 0];
+
+// u_FogParams: x = tint amount, y = mode (0 even, 1 distance), z = near, w = far.
+const FOG_GLSL = `
+vec3 ApplyFog(vec3 t_Color, vec3 t_WorldPos, vec3 t_EyePos, vec4 t_FogColor, vec4 t_FogParams) {
+    if (t_FogColor.a < 0.5) return t_Color;
+    float t_FogAmt = t_FogParams.x;
+    if (t_FogParams.y > 0.5) {
+        float t_Dist = distance(t_WorldPos, t_EyePos);
+        t_FogAmt *= clamp((t_Dist - t_FogParams.z) / max(t_FogParams.w - t_FogParams.z, 1e-3), 0.0, 1.0);
+    }
+    return mix(t_Color, t_FogColor.rgb, t_FogAmt);
+}
+`;
 
 class TerrainProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -75,7 +118,7 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
     vec4 u_EnvDiff;    // rgb: day/night env-diffuse multiplier
     vec4 u_FogColor;   // rgb: fog/background color, a: 1 = fog on, 0 = off
-    vec4 u_FogParams;  // x: even fog tint amount (0..1)
+    vec4 u_FogParams;
     vec4 u_EyePos;     // xyz: camera world position (render frame)
     vec4 u_PointLightParams;                          // x: count, y: gain, z: falloff, w: enable
     vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];   // xyz: pos, w: range
@@ -89,6 +132,8 @@ varying vec2 v_TexCoord;
 varying vec3 v_LightCoord;
 varying vec4 v_Color;
 varying vec3 v_WorldPos;
+
+${FOG_GLSL}
 `;
 
     public override vert = `
@@ -118,9 +163,7 @@ void main() {
 
     t_Lit *= u_EnvDiff.rgb;
 
-    if (u_FogColor.a > 0.5) {
-        t_Lit = mix(t_Lit, u_FogColor.rgb, u_FogParams.x);
-    }
+    t_Lit = ApplyFog(t_Lit, v_WorldPos, u_EyePos.xyz, u_FogColor, u_FogParams);
 
     // Radial falloff added on top so dim baked areas glow under a torch.
     if (u_PointLightParams.w > 0.5) {
@@ -162,7 +205,7 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_DiffuseColor;   // rgb: directional diffuse (night-scaled)
     vec4 u_AmbientColor;   // rgb: ambient (night-scaled)
     vec4 u_FogColor;       // rgb: fog/background color, a: 1 = fog on, 0 = off
-    vec4 u_FogParams;      // x: even fog tint amount (0..1)
+    vec4 u_FogParams;
     vec4 u_EyePos;         // xyz: camera world position (render frame)
     // Point lights — same layout as TerrainProgram's block.
     vec4 u_PointLightParams;
@@ -180,6 +223,8 @@ varying vec2 v_TexCoord;
 varying vec4 v_Color;
 varying vec3 v_Normal;
 varying vec3 v_WorldPos;
+
+${FOG_GLSL}
 `;
 
     public override vert = `
@@ -220,9 +265,7 @@ void main() {
 
     vec3 t_Color = t_Base.rgb * v_Color.rgb * t_Shade;
 
-    if (u_FogColor.a > 0.5) {
-        t_Color = mix(t_Color, u_FogColor.rgb, u_FogParams.x);
-    }
+    t_Color = ApplyFog(t_Color, v_WorldPos, u_EyePos.xyz, u_FogColor, u_FogParams);
 
     // Unshaded models take the radial term flat so they still glow under a torch.
     if (u_PointLightParams.w > 0.5) {
@@ -263,7 +306,7 @@ layout(std140) uniform ub_WaterParams {
     Mat4x4 u_ClipFromWorld;
     vec4 u_WaveParams; // x: waterLevel, y: waveOffsetDeg, z: wavePitch, w: waveHeight
     vec4 u_FogColor;   // rgb: fog/background color, a: 1 = fog on, 0 = off
-    vec4 u_FogParams;  // x: even fog tint amount (0..1)
+    vec4 u_FogParams;
     vec4 u_EyePos;     // xyz: camera world position (render frame)
 };
 
@@ -271,6 +314,8 @@ uniform sampler2D u_FrameTexture;
 
 varying vec2 v_TexCoord;
 varying vec3 v_WorldPos;
+
+${FOG_GLSL}
 `;
 
     public override vert = `
@@ -299,11 +344,7 @@ void main() {
     public override frag = `
 void main() {
     vec4 t_Color = texture(SAMPLER_2D(u_FrameTexture), v_TexCoord);
-    vec3 t_Rgb = t_Color.rgb;
-
-    if (u_FogColor.a > 0.5) {
-        t_Rgb = mix(t_Rgb, u_FogColor.rgb, u_FogParams.x);
-    }
+    vec3 t_Rgb = ApplyFog(t_Color.rgb, v_WorldPos, u_EyePos.xyz, u_FogColor, u_FogParams);
 
     gl_FragColor = vec4(t_Rgb, 0.6);
 }
@@ -543,16 +584,17 @@ export interface ModelSceneData {
     animatedInstances: AnimatedModelPlacement[];
 }
 
-// RSW directional sun, in the render frame.
+// Angles are authoritative; light/sun vectors are derived in updateSunDir().
 export interface LightSceneData {
-    lightDir: [number, number, number];
-    diffuse: [number, number, number];
-    ambient: [number, number, number];
+    diffuse: vec3;
+    ambient: vec3;
+    longitudeDeg: number;
+    pitchDeg: number;
 }
 
 export interface FogSceneData {
     enabled: boolean;
-    color: [number, number, number];
+    color: vec3;
     tint: number;   // even blend amount toward the fog color (0..1)
 }
 
@@ -611,7 +653,24 @@ function uploadModelGeometry(
     };
 }
 
+function writeColor(view: DataView, offs: number, rgb: ArrayLike<number>): number {
+    view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(rgb[0] * 255))));
+    view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(rgb[1] * 255))));
+    view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(rgb[2] * 255))));
+    return offs;
+}
+
+function readColor(view: DataView, offs: number, out: vec3): number {
+    out[0] = view.getUint8(offs++) / 255;
+    out[1] = view.getUint8(offs++) / 255;
+    out[2] = view.getUint8(offs++) / 255;
+    return offs;
+}
+
 export class RagnarokTerrainRenderer implements SceneGfx {
+    // Fire after every panel mutation so URL bookmarks capture the tweak.
+    public onstatechanged: (() => void) | undefined;
+
     private renderHelper: GfxRenderHelper;
     private renderInstList = new GfxRenderInstList();
 
@@ -634,22 +693,41 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private cameraInitialized = false;
 
     // Neutral defaults so a map without these still renders.
-    private light: LightSceneData = { lightDir: [0, 1, 0], diffuse: [1, 1, 1], ambient: [0.3, 0.3, 0.3] };
-    private fog: FogSceneData = { enabled: false, color: [0, 0, 0], tint: 0 };
+    private light: LightSceneData = {
+        diffuse: vec3.fromValues(1, 1, 1),
+        ambient: vec3.fromValues(0.3, 0.3, 0.3),
+        longitudeDeg: 45,
+        pitchDeg: 45,
+    };
+    private fog: FogSceneData = { enabled: false, color: vec3.create(), tint: 0 };
 
     private sky: SkySceneData = {
-        color: [0.55, 0.75, 0.92],
+        color: vec3.fromValues(0.55, 0.75, 0.92),
         enableDome: false,
-        horizonColor: [0.55, 0.75, 0.92],
-        zenithColor: [0.30, 0.50, 0.78],
-        groundColor: [0.30, 0.41, 0.51],
-        sunDir: [0, 1, 0],
+        horizonColor: vec3.fromValues(0.55, 0.75, 0.92),
+        zenithColor: vec3.fromValues(0.30, 0.50, 0.78),
+        groundColor: vec3.fromValues(0.30, 0.41, 0.51),
     };
     private skyDomeRenderer: SkyDomeRenderer | null = null;
 
+    private sunLightDir = vec3.create();
+    private sunSkyDir = vec3.create();
+
     // 0 = full day, 1 = full night.
     private nightDegree = 0;
+
     private fogEnabled = true;
+    private fogDistanceMode = false;
+    private fogNear = 0;
+    private fogFar = 0;
+
+    private lightAmbientMul = 1.0;
+    private lightDiffuseMul = 1.0;
+
+    private showProps = true;
+    private showWater = true;
+    private showGrannyModels = true;
+    private showParticles = true;
 
     private scratchEye = vec3.create();
     private scratchRight = vec3.create();
@@ -699,7 +777,9 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     // mob walks each frame its shadow follows for free.
     private shadowRenderer: ShadowRenderer | null = null;
     private dustRenderer: DustRenderer | null = null;
-    private shadowAnchors: vec3[] = [];
+    private npcShadowAnchors: vec3[] = [];
+    private mobShadowAnchors: vec3[] = [];
+    private shadowAnchorsScratch: vec3[] = [];
     private shadowsEnabled = true;
 
     private pointLights: PointLight[] = [];
@@ -759,6 +839,9 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (this.sky.enableDome)
             this.skyDomeRenderer = new SkyDomeRenderer(cache);
 
+        this.updateSunDir();
+        this.fogEnabled = this.fog.enabled;
+
         this.program = cache.createProgram(new TerrainProgram());
 
         const mesh = buildTerrainMesh(gnd);
@@ -766,6 +849,9 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         vec3.lerp(this.center, mesh.min, mesh.max, 0.5);
         this.radius = Math.max(vec3.distance(mesh.min, mesh.max) * 0.5, 1.0);
+
+        this.fogNear = Math.max(this.radius * FOG_NEAR_RADIUS_FRACTION, FOG_NEAR_FLOOR_UNITS);
+        this.fogFar = Math.max(this.radius * FOG_FAR_RADIUS_FRACTION, this.fogNear + FOG_FAR_MIN_DEPTH_UNITS);
 
         const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mesh.vertexData);
         const indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexData.buffer);
@@ -904,15 +990,17 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             actor.setWorldDirection(p.direction);
             const worldPos = vec3.fromValues(p.worldPos[0], p.worldPos[1], p.worldPos[2]);
             const anchor = p.anchor ?? "feet";
+            const kind: SpriteKind = p.kind ?? "npc";
             this.spriteRenderer.addInstance({
                 sheet: sheetIndices[p.spriteIndex],
                 actor,
                 worldPos,
                 anchor,
+                kind,
             });
             // Effect sources (anchor === "center") get no shadow; RO doesn't shadow them.
-            if (anchor === "feet")
-                this.shadowAnchors.push(worldPos);
+            if (anchor === "feet" && kind === "npc")
+                this.npcShadowAnchors.push(worldPos);
             if (p.name.length > 0) {
                 // Lift the label to the topmost visible pixel of the idle frame.
                 const headHeight = actor.currentFrameTopAboveAnchor(anchor);
@@ -933,8 +1021,9 @@ export class RagnarokTerrainRenderer implements SceneGfx {
                 sheet,
                 actor: mob.actor,
                 worldPos: mob.worldPos,
+                kind: "mob",
             });
-            this.shadowAnchors.push(mob.worldPos);
+            this.mobShadowAnchors.push(mob.worldPos);
             if (mob.name.length > 0) {
                 const headHeight = mob.actor.currentFrameTopAboveAnchor("feet");
                 const heightAbove = headHeight !== null ? headHeight : 6;
@@ -1066,83 +1155,153 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        const renderHacks = new UI.Panel();
-        renderHacks.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacks.setTitle(UI.RENDER_HACKS_ICON, "Render Hacks");
+        const panels: UI.Panel[] = [];
+        const layers = this.buildLayersPanel();
+        if (layers !== null)
+            panels.push(layers);
+        panels.push(this.buildRenderHacksPanel());
+        panels.push(this.buildTimeOfDayPanel());
+        return panels;
+    }
 
-        const nearest = new UI.Checkbox("Crisp (nearest) texture filtering", this.useNearestFiltering);
-        nearest.onchanged = () => {
-            this.useNearestFiltering = nearest.checked;
-        };
-        renderHacks.contents.appendChild(nearest.elem);
+    private addCheckbox(panel: UI.Panel, label: string, initial: boolean, set: (v: boolean) => void): void {
+        const c = new UI.Checkbox(label, initial);
+        c.onchanged = () => { set(c.checked); this.onstatechanged?.(); };
+        panel.contents.appendChild(c.elem);
+    }
 
-        const fog = new UI.Checkbox("Fog (faithful; hides distance)", this.fogEnabled);
-        fog.onchanged = () => {
-            this.fogEnabled = fog.checked;
-        };
-        renderHacks.contents.appendChild(fog.elem);
+    private addSlider(panel: UI.Panel, label: string, min: number, max: number, step: number, initial: number, set: (v: number) => void): void {
+        const s = new UI.Slider();
+        s.setLabel(label);
+        s.setRange(min, max, step);
+        s.setValue(initial);
+        s.onvalue = (v) => { set(v); this.onstatechanged?.(); };
+        panel.contents.appendChild(s.elem);
+    }
 
-        const nameLabels = new UI.Checkbox("Name labels", this.showNameLabels);
-        nameLabels.onchanged = () => {
-            this.showNameLabels = nameLabels.checked;
-        };
-        renderHacks.contents.appendChild(nameLabels.elem);
+    private addColor(panel: UI.Panel, label: string, target: vec3): void {
+        const p = new UI.ColorPicker(label, target);
+        p.onvalue = (rgb) => { target[0] = rgb[0]; target[1] = rgb[1]; target[2] = rgb[2]; };
+        p.onchange = () => { this.onstatechanged?.(); };
+        panel.contents.appendChild(p.elem);
+    }
 
-        const shadows = new UI.Checkbox("Blob shadows", this.shadowsEnabled);
-        shadows.onchanged = () => {
-            this.shadowsEnabled = shadows.checked;
-        };
-        renderHacks.contents.appendChild(shadows.elem);
+    private buildLayersPanel(): UI.Panel | null {
+        const spr = this.spriteRenderer;
+        const hasNPC = spr !== null && spr.hasKind("npc");
+        const hasEffect = spr !== null && spr.hasKind("effect");
+        const hasMob = this.mobs.length > 0;
+        const hasProps = this.modelInstances.length > 0 || this.animatedInstances.length > 0;
+        const hasWater = this.waterProgram !== null;
+        const hasGranny = this.grannyModels.length > 0;
+        const hasParticles = this.particleRenderer !== null;
+        const hasLabels = hasNPC || hasMob;
+        if (!(hasNPC || hasMob || hasEffect || hasProps || hasWater || hasGranny || hasParticles))
+            return null;
 
-        if (this.warpTargets.length > 0) {
-            const warpTravel = new UI.Checkbox("Click warps to travel", this.warpTravelEnabled);
-            warpTravel.onchanged = () => {
-                this.warpTravelEnabled = warpTravel.checked;
-            };
-            renderHacks.contents.appendChild(warpTravel.elem);
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.LAYER_ICON, "Layers");
+        if (spr !== null && hasNPC)
+            this.addCheckbox(panel, "Show NPCs", spr.isKindEnabled("npc"), (v) => spr.setKindEnabled("npc", v));
+        if (spr !== null && hasMob)
+            this.addCheckbox(panel, "Show Monsters", spr.isKindEnabled("mob"), (v) => spr.setKindEnabled("mob", v));
+        if (spr !== null && hasEffect)
+            this.addCheckbox(panel, "Show Effect Sprites", spr.isKindEnabled("effect"), (v) => spr.setKindEnabled("effect", v));
+        if (hasProps)
+            this.addCheckbox(panel, "Show Map Props", this.showProps, (v) => { this.showProps = v; });
+        if (hasWater)
+            this.addCheckbox(panel, "Show Water", this.showWater, (v) => { this.showWater = v; });
+        if (hasGranny)
+            this.addCheckbox(panel, "Show WoE Models", this.showGrannyModels, (v) => { this.showGrannyModels = v; });
+        if (hasParticles)
+            this.addCheckbox(panel, "Show Particles", this.showParticles, (v) => { this.showParticles = v; });
+        if (hasLabels)
+            this.addCheckbox(panel, "Show Name Labels", this.showNameLabels, (v) => { this.showNameLabels = v; });
+        return panel;
+    }
+
+    private buildRenderHacksPanel(): UI.Panel {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.RENDER_HACKS_ICON, "Render Hacks");
+
+        this.addCheckbox(panel, "Crisp Texture Filtering", this.useNearestFiltering, (v) => { this.useNearestFiltering = v; });
+        this.addCheckbox(panel, "Enable Blob Shadows", this.shadowsEnabled, (v) => { this.shadowsEnabled = v; });
+        if (this.warpTargets.length > 0)
+            this.addCheckbox(panel, "Click Warps to Travel", this.warpTravelEnabled, (v) => { this.warpTravelEnabled = v; });
+        if (this.pointLights.length > 0)
+            this.addCheckbox(panel, "Enable Point Lights", this.pointLightsEnabled, (v) => { this.pointLightsEnabled = v; });
+        if (this.weatherRenderer !== null)
+            this.addCheckbox(panel, "Enable Weather", this.weatherEnabled, (v) => { this.weatherEnabled = v; });
+
+        this.addCheckbox(panel, "Enable Fog", this.fogEnabled, (v) => { this.fogEnabled = v; });
+        this.addColor(panel, "Fog Color", this.fog.color);
+        this.addSlider(panel, "Fog Intensity", 0, 1, 0.01, this.fog.tint, (v) => { this.fog.tint = v; });
+        this.addCheckbox(panel, "Distance-Based Fog", this.fogDistanceMode, (v) => { this.fogDistanceMode = v; });
+        const distMax = Math.max(this.radius * FOG_DIST_SLIDER_MAX_MULT, FOG_DIST_SLIDER_MAX_FLOOR);
+        this.addSlider(panel, "Fog Near", 0, distMax, 1, this.fogNear, (v) => { this.fogNear = v; });
+        this.addSlider(panel, "Fog Far", 0, distMax, 1, this.fogFar, (v) => { this.fogFar = v; });
+
+        this.addSlider(panel, "Ambient Light", 0, LIGHT_MULTIPLIER_MAX, 0.01, this.lightAmbientMul, (v) => { this.lightAmbientMul = v; });
+        this.addSlider(panel, "Diffuse Light", 0, LIGHT_MULTIPLIER_MAX, 0.01, this.lightDiffuseMul, (v) => { this.lightDiffuseMul = v; });
+        this.addSlider(panel, "Sun Longitude", -180, 180, 1, this.light.longitudeDeg, (v) => { this.light.longitudeDeg = v; this.updateSunDir(); });
+        this.addSlider(panel, "Sun Pitch", -90, 90, 1, this.light.pitchDeg, (v) => { this.light.pitchDeg = v; this.updateSunDir(); });
+
+        if (this.sky.enableDome) {
+            this.addColor(panel, "Horizon Color", this.sky.horizonColor);
+            this.addColor(panel, "Zenith Color", this.sky.zenithColor);
+            this.addColor(panel, "Ground Color", this.sky.groundColor);
+        } else {
+            this.addColor(panel, "Background Color", this.sky.color);
         }
 
-        if (this.weatherRenderer !== null) {
-            const weather = new UI.Checkbox("Weather (snow)", this.weatherEnabled);
-            weather.onchanged = () => {
-                this.weatherEnabled = weather.checked;
-            };
-            renderHacks.contents.appendChild(weather.elem);
-        }
+        this.buildMusicRows(panel);
 
-        if (this.pointLights.length > 0) {
-            const lights = new UI.Checkbox("Point lights", this.pointLightsEnabled);
-            lights.onchanged = () => {
-                this.pointLightsEnabled = lights.checked;
-            };
-            renderHacks.contents.appendChild(lights.elem);
-        }
+        return panel;
+    }
 
-        const bgmToggle = new UI.Checkbox("BGM (per-map music)", this.bgm.isEnabled());
-        bgmToggle.onchanged = () => {
-            // The toggle counts as the user gesture browsers require to start playback.
-            this.bgm.setEnabled(bgmToggle.checked, null);
-        };
-        renderHacks.contents.appendChild(bgmToggle.elem);
+    private buildMusicRows(panel: UI.Panel): void {
+        const bgmToggle = new UI.Checkbox("Enable Background Music", this.bgm.isEnabled());
+        // The toggle counts as the user gesture browsers require to start playback.
+        bgmToggle.onchanged = () => this.bgm.setEnabled(bgmToggle.checked, null);
+        panel.contents.appendChild(bgmToggle.elem);
+
         const bgmVol = new UI.Slider();
-        bgmVol.setLabel("BGM volume");
+        bgmVol.setLabel("Music Volume");
         bgmVol.setRange(0, 1, 0.01);
         bgmVol.setValue(this.bgm.getVolume());
-        bgmVol.onvalue = (v: number) => { this.bgm.setVolume(v); };
-        renderHacks.contents.appendChild(bgmVol.elem);
+        bgmVol.onvalue = (v: number) => this.bgm.setVolume(v);
+        panel.contents.appendChild(bgmVol.elem);
 
-        const timeOfDay = new UI.Panel();
-        timeOfDay.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        timeOfDay.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
-        const nightSlider = new UI.Slider("Night", this.nightDegree, 0, 1);
-        nightSlider.setRange(0, 1, 0.01);
-        nightSlider.setValue(this.nightDegree, false);
-        nightSlider.onvalue = (v: number) => {
-            this.nightDegree = v;
+        const trackSelect = new UI.SingleSelect();
+        trackSelect.setStrings(["Loading…"]);
+        trackSelect.setHighlighted(0);
+        let trackFilenames: string[] = [];
+        trackSelect.onselectionchange = (index: number) => {
+            if (trackFilenames.length === 0)
+                return;
+            this.bgm.setTrackOverride(index === 0 ? null : trackFilenames[index - 1]);
         };
-        timeOfDay.contents.appendChild(nightSlider.elem);
+        panel.contents.appendChild(trackSelect.elem);
 
-        return [renderHacks, timeOfDay];
+        Promise.all([this.bgm.listLabelledTracks(), this.bgm.getMapDefaultTrack()]).then(([labelled, def]) => {
+            trackFilenames = labelled.map((t) => t.filename);
+            trackSelect.setStrings(["Default (this map's BGM)", ...labelled.map((t) => t.label)]);
+            const defIdx = def !== null ? trackFilenames.indexOf(def) : -1;
+            trackSelect.setHighlighted(defIdx >= 0 ? defIdx + 1 : 0);
+        }, (e) => {
+            console.error("BGM: failed to load track list", e);
+            trackSelect.setStrings(["(unavailable)"]);
+        });
+    }
+
+    private buildTimeOfDayPanel(): UI.Panel {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
+        this.addSlider(panel, "Night", 0, 1, 0.01, this.nightDegree, (v) => { this.nightDegree = v; });
+        return panel;
     }
 
     public adjustCameraController(c: CameraController): void {
@@ -1151,27 +1310,34 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     // CWeather night transition: diffuse R&G pull toward a 0.5 floor (blue
-    // untouched). env-diffuse is the standard 1 - (1-diffuse)*(1-ambient).
+    // untouched). env-diffuse is the standard 1 - (1-diffuse)*(1-ambient);
+    // the user multipliers are clamped before that or a >1x mul flips the sign.
     private resolveLighting(): { diffuse: vec3, ambient: vec3, envDiff: vec3 } {
         const d = this.light.diffuse, a = this.light.ambient;
         const n = this.nightDegree;
-        const dr = d[0] + (Math.min(d[0], 0.5) - d[0]) * n;
-        const dg = d[1] + (Math.min(d[1], 0.5) - d[1]) * n;
-        const db = d[2];
+        const mD = this.lightDiffuseMul, mA = this.lightAmbientMul;
+        const dr = (d[0] + (Math.min(d[0], 0.5) - d[0]) * n) * mD;
+        const dg = (d[1] + (Math.min(d[1], 0.5) - d[1]) * n) * mD;
+        const db = d[2] * mD;
+        const ar = a[0] * mA, ag = a[1] * mA, ab = a[2] * mA;
         const diffuse = vec3.fromValues(dr, dg, db);
-        const ambient = vec3.fromValues(a[0], a[1], a[2]);
+        const ambient = vec3.fromValues(ar, ag, ab);
         const envDiff = vec3.fromValues(
-            1.0 - (1.0 - dr) * (1.0 - a[0]),
-            1.0 - (1.0 - dg) * (1.0 - a[1]),
-            1.0 - (1.0 - db) * (1.0 - a[2]),
+            1.0 - (1.0 - Math.min(dr, 1)) * (1.0 - Math.min(ar, 1)),
+            1.0 - (1.0 - Math.min(dg, 1)) * (1.0 - Math.min(ag, 1)),
+            1.0 - (1.0 - Math.min(db, 1)) * (1.0 - Math.min(ab, 1)),
         );
         return { diffuse, ambient, envDiff };
     }
 
-    // .a is the on/off flag.
-    private fogColorVec(): [number, number, number, number] {
-        const on = this.fog.enabled && this.fogEnabled;
-        return [this.fog.color[0], this.fog.color[1], this.fog.color[2], on ? 1.0 : 0.0];
+    private fillFogUniforms(d: Float32Array, offs: number): number {
+        offs += fillVec4(d, offs, this.fog.color[0], this.fog.color[1], this.fog.color[2], this.fogEnabled ? 1 : 0);
+        offs += fillVec4(d, offs, this.fog.tint, this.fogDistanceMode ? 1 : 0, this.fogNear, this.fogFar);
+        return offs;
+    }
+
+    private updateSunDir(): void {
+        computeSunDirections(this.light.longitudeDeg, this.light.pitchDeg, this.sunLightDir, this.sunSkyDir);
     }
 
     private refreshActiveLights(): void {
@@ -1222,25 +1388,24 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const camWorld = viewerInput.camera.worldMatrix;
         vec3.set(this.scratchEye, camWorld[12], camWorld[13], camWorld[14]);
 
-        this.skyDomeRenderer?.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.scratchEye, this.sky);
+        this.skyDomeRenderer?.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.scratchEye, this.sky, this.sunSkyDir);
 
         const lit = this.resolveLighting();
-        const fogColor = this.fogColorVec();
 
         // Done once here so all later passes (terrain, models, granny) share the set.
         this.refreshActiveLights();
 
-        this.prepareTerrain(viewerInput, lit, fogColor);
+        this.prepareTerrain(viewerInput, lit);
 
         this.prepareModels(viewerInput);
 
-        if (this.grannyModels.length > 0) {
+        if (this.grannyModels.length > 0 && this.showGrannyModels) {
             // Wrap so granny's inner pushTemplate inherits the OPAQUE sortKey
             // (it doesn't set one itself; default 0 = BACKGROUND).
             const opaque = this.renderHelper.pushTemplateRenderInst();
             opaque.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
             for (const g of this.grannyModels)
-                g.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.light.lightDir as vec3, lit.diffuse, lit.ambient, viewerInput.deltaTime / 1000, this.activeLights, this.activeLights.length);
+                g.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix, this.sunLightDir, lit.diffuse, lit.ambient, viewerInput.deltaTime / 1000, this.activeLights, this.activeLights.length);
             renderInstManager.popTemplate();
         }
 
@@ -1268,7 +1433,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.renderHelper.prepareToRender();
     }
 
-    private prepareTerrain(viewerInput: ViewerRenderInput, lit: { diffuse: vec3, ambient: vec3, envDiff: vec3 }, fogColor: [number, number, number, number]): void {
+    private prepareTerrain(viewerInput: ViewerRenderInput, lit: { diffuse: vec3, ambient: vec3, envDiff: vec3 }): void {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts([{
@@ -1289,8 +1454,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const mapped = template.mapUniformBufferF32(TerrainProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.clipFromWorldMatrix);
         offs += fillVec4(mapped, offs, lit.envDiff[0], lit.envDiff[1], lit.envDiff[2], 1.0);
-        offs += fillVec4(mapped, offs, fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
-        offs += fillVec4(mapped, offs, this.fog.tint, 0, 0, 0);
+        offs = this.fillFogUniforms(mapped, offs);
         offs += fillVec4(mapped, offs, this.scratchEye[0], this.scratchEye[1], this.scratchEye[2], 0);
         offs += this.fillPointLightUniforms(mapped, offs);
 
@@ -1315,6 +1479,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareWater(viewerInput: ViewerRenderInput): void {
+        if (!this.showWater)
+            return;
         if (this.waterProgram === null || this.waterInputLayout === null || this.waterSampler === null)
             return;
         if (this.waterVertexBufferDescriptors === null || this.waterIndexBufferDescriptor === null)
@@ -1351,14 +1517,12 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         const camWorld = viewerInput.camera.worldMatrix;
         vec3.set(this.scratchEye, camWorld[12], camWorld[13], camWorld[14]);
-        const fogColor = this.fogColorVec();
 
         let offs = renderInst.allocateUniformBuffer(WaterProgram.ub_WaterParams, 16 + 4 + 3 * 4);
         const mapped = renderInst.mapUniformBufferF32(WaterProgram.ub_WaterParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.clipFromWorldMatrix);
         offs += fillVec4(mapped, offs, this.waterParams.level, this.waterAnimator.waveOffsetDeg, this.waterParams.wavePitch, this.waterParams.waveHeight);
-        offs += fillVec4(mapped, offs, fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
-        offs += fillVec4(mapped, offs, this.fog.tint, 0, 0, 0);
+        offs = this.fillFogUniforms(mapped, offs);
         offs += fillVec4(mapped, offs, this.scratchEye[0], this.scratchEye[1], this.scratchEye[2], 0);
 
         renderInst.setSamplerBindingsFromTextureMappings([
@@ -1386,13 +1550,13 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         renderInstManager.popTemplate();
 
         if (this.showNameLabels) {
-            if (this.npcLabelRenderer !== null)
+            if (this.npcLabelRenderer !== null && this.spriteRenderer.isKindEnabled("npc"))
                 this.npcLabelRenderer.prepare(
                     this.renderHelper,
                     viewerInput.camera.clipFromWorldMatrix,
                     viewerInput.camera.worldMatrix,
                 );
-            if (this.mobLabelRenderer !== null)
+            if (this.mobLabelRenderer !== null && this.spriteRenderer.isKindEnabled("mob"))
                 this.mobLabelRenderer.prepare(
                     this.renderHelper,
                     viewerInput.camera.clipFromWorldMatrix,
@@ -1406,6 +1570,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private processMobClick(viewerInput: ViewerRenderInput): void {
         const click = this.pendingClick;
         if (click === null || this.mobs.length === 0)
+            return;
+        if (!assertExists(this.spriteRenderer).isKindEnabled("mob"))
             return;
 
         const clipFromWorld = viewerInput.camera.clipFromWorldMatrix;
@@ -1560,15 +1726,25 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareShadows(viewerInput: ViewerRenderInput): void {
-        if (this.shadowRenderer === null || !this.shadowsEnabled || this.shadowAnchors.length === 0)
+        if (this.shadowRenderer === null || !this.shadowsEnabled)
             return;
-        // The anchors are live mob/NPC worldPos vec3 refs.
-        this.shadowRenderer.setAnchors(this.shadowAnchors, ShadowRenderer.defaultHalfSize());
+        const spr = assertExists(this.spriteRenderer);
+        const showNpc = spr.isKindEnabled("npc");
+        const showMob = spr.isKindEnabled("mob");
+        if (!showNpc && !showMob)
+            return;
+        const out = this.shadowAnchorsScratch;
+        out.length = 0;
+        if (showNpc) for (const a of this.npcShadowAnchors) out.push(a);
+        if (showMob) for (const a of this.mobShadowAnchors) out.push(a);
+        if (out.length === 0)
+            return;
+        this.shadowRenderer.setAnchors(out, ShadowRenderer.defaultHalfSize());
         this.shadowRenderer.prepare(this.renderHelper, viewerInput.camera.clipFromWorldMatrix);
     }
 
     private prepareParticles(viewerInput: ViewerRenderInput): void {
-        if (this.particleRenderer === null)
+        if (this.particleRenderer === null || !this.showParticles)
             return;
         const dt = viewerInput.deltaTime / 1000;
         this.particleRenderer.update(dt);
@@ -1585,6 +1761,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     private prepareDust(viewerInput: ViewerRenderInput): void {
         if (this.dustRenderer === null)
+            return;
+        if (!assertExists(this.spriteRenderer).isKindEnabled("mob"))
             return;
         const dt = viewerInput.deltaTime / 1000;
         this.dustRenderer.update(dt);
@@ -1611,6 +1789,14 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareModels(viewerInput: ViewerRenderInput): void {
+        // Tick animators before the visibility gate, otherwise toggling props
+        // off freezes the animation cycle until re-enabled.
+        const dtSeconds = viewerInput.deltaTime / 1000;
+        for (const inst of this.animatedInstances)
+            inst.animator.update(dtSeconds);
+
+        if (!this.showProps)
+            return;
         if (this.modelProgram === null || this.modelInputLayout === null || this.modelSamplerLinear === null || this.modelSamplerNearest === null)
             return;
         if (this.modelInstances.length === 0 && this.animatedInstances.length === 0)
@@ -1630,8 +1816,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         vec3.set(this.scratchEye, camWorld[12], camWorld[13], camWorld[14]);
 
         const lit = this.resolveLighting();
-        const fogColor = this.fogColorVec();
-        const L = this.light.lightDir;
+        const L = this.sunLightDir;
 
         const pointLightVec4Count = 1 + 2 * MAX_POINT_LIGHTS;
         let sceneOffs = template.allocateUniformBuffer(ModelProgram.ub_SceneParams, 16 + 6 * 4 + pointLightVec4Count * 4);
@@ -1640,8 +1825,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         sceneOffs += fillVec4(sceneMapped, sceneOffs, L[0], L[1], L[2], 0);
         sceneOffs += fillVec4(sceneMapped, sceneOffs, lit.diffuse[0], lit.diffuse[1], lit.diffuse[2], 0);
         sceneOffs += fillVec4(sceneMapped, sceneOffs, lit.ambient[0], lit.ambient[1], lit.ambient[2], 0);
-        sceneOffs += fillVec4(sceneMapped, sceneOffs, fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
-        sceneOffs += fillVec4(sceneMapped, sceneOffs, this.fog.tint, 0, 0, 0);
+        sceneOffs = this.fillFogUniforms(sceneMapped, sceneOffs);
         sceneOffs += fillVec4(sceneMapped, sceneOffs, this.scratchEye[0], this.scratchEye[1], this.scratchEye[2], 0);
         sceneOffs += this.fillPointLightUniforms(sceneMapped, sceneOffs);
 
@@ -1668,9 +1852,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             }
         }
 
-        const dtSeconds = viewerInput.deltaTime / 1000;
         for (const inst of this.animatedInstances) {
-            inst.animator.update(dtSeconds);
             inst.data.pose.evaluate(inst.animator.currentFrame, this.animNodeMatrices);
 
             for (const group of inst.data.groups) {
@@ -1709,25 +1891,110 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         mat4.targetTo(dst, eye, this.center, Vec3UnitY);
     }
 
-    // Save-state payload: i16 arrival cellX/Y when a warp brought us here.
-    // Cleared on the first render after framing, so a panned-around camera
-    // bookmarks without re-snapping on reload.
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
-        if (this.arrivalCellX === null || this.arrivalCellY === null)
-            return offs;
         const view = new DataView(dst);
-        view.setInt16(offs, this.arrivalCellX, true);
-        view.setInt16(offs + 2, this.arrivalCellY, true);
-        return offs + 4;
+
+        if (this.arrivalCellX !== null && this.arrivalCellY !== null) {
+            view.setUint8(offs++, 1);
+            view.setInt16(offs, this.arrivalCellX, true); offs += 2;
+            view.setInt16(offs, this.arrivalCellY, true); offs += 2;
+        } else {
+            view.setUint8(offs++, 0);
+        }
+
+        let fogPacked = 0;
+        if (this.fogEnabled)      fogPacked |= 0x01;
+        if (this.fogDistanceMode) fogPacked |= 0x02;
+        view.setUint8(offs++, fogPacked);
+        offs = writeColor(view, offs, this.fog.color);
+        view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(this.fog.tint * 255))));
+        view.setUint16(offs, Math.max(0, Math.min(0xffff, Math.round(this.fogNear))), true); offs += 2;
+        view.setUint16(offs, Math.max(0, Math.min(0xffff, Math.round(this.fogFar))), true); offs += 2;
+
+        view.setInt16(offs, Math.round(this.light.longitudeDeg), true); offs += 2;
+        view.setInt16(offs, Math.round(this.light.pitchDeg), true); offs += 2;
+
+        offs = writeColor(view, offs, this.sky.color);
+        offs = writeColor(view, offs, this.sky.horizonColor);
+        offs = writeColor(view, offs, this.sky.zenithColor);
+        offs = writeColor(view, offs, this.sky.groundColor);
+
+        view.setUint8(offs++, Math.max(0, Math.min(255, Math.round(this.nightDegree * 255))));
+
+        const bits = new BitMap(NUM_LAYER_BITS);
+        const spr = this.spriteRenderer;
+        bits.setBit(LayerBit.NPCs, spr !== null && spr.isKindEnabled("npc"));
+        bits.setBit(LayerBit.Mobs, spr !== null && spr.isKindEnabled("mob"));
+        bits.setBit(LayerBit.Effects, spr !== null && spr.isKindEnabled("effect"));
+        bits.setBit(LayerBit.Props, this.showProps);
+        bits.setBit(LayerBit.Water, this.showWater);
+        bits.setBit(LayerBit.Granny, this.showGrannyModels);
+        bits.setBit(LayerBit.Particles, this.showParticles);
+        bits.setBit(LayerBit.NameLabels, this.showNameLabels);
+        bits.setBit(LayerBit.Weather, this.weatherEnabled);
+        offs = bitMapSerialize(view, offs, bits);
+
+        return offs;
     }
 
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(src);
+
+        if (byteLength - offs < 1)
+            return offs;
+        const hasArrival = view.getUint8(offs++);
+        if (hasArrival === 1) {
+            if (byteLength - offs < 4)
+                return offs;
+            this.arrivalCellX = view.getInt16(offs, true); offs += 2;
+            this.arrivalCellY = view.getInt16(offs, true); offs += 2;
+        }
+
+        if (byteLength - offs < 9)
+            return offs;
+        const fogPacked = view.getUint8(offs++);
+        this.fogEnabled = (fogPacked & 0x01) !== 0;
+        this.fogDistanceMode = (fogPacked & 0x02) !== 0;
+        offs = readColor(view, offs, this.fog.color);
+        this.fog.tint = view.getUint8(offs++) / 255;
+        this.fogNear = view.getUint16(offs, true); offs += 2;
+        this.fogFar = view.getUint16(offs, true); offs += 2;
+
         if (byteLength - offs < 4)
             return offs;
-        const view = new DataView(src);
-        this.arrivalCellX = view.getInt16(offs, true);
-        this.arrivalCellY = view.getInt16(offs + 2, true);
-        return offs + 4;
+        this.light.longitudeDeg = view.getInt16(offs, true); offs += 2;
+        this.light.pitchDeg = view.getInt16(offs, true); offs += 2;
+        this.updateSunDir();
+
+        if (byteLength - offs < 12)
+            return offs;
+        offs = readColor(view, offs, this.sky.color);
+        offs = readColor(view, offs, this.sky.horizonColor);
+        offs = readColor(view, offs, this.sky.zenithColor);
+        offs = readColor(view, offs, this.sky.groundColor);
+
+        if (byteLength - offs < 1)
+            return offs;
+        this.nightDegree = view.getUint8(offs++) / 255;
+
+        const layerBytes = bitMapGetSerializedByteLength(NUM_LAYER_BITS);
+        if (byteLength - offs < layerBytes)
+            return offs;
+        const bits = new BitMap(NUM_LAYER_BITS);
+        offs = bitMapDeserialize(view, offs, bits);
+        const spr = this.spriteRenderer;
+        if (spr !== null) {
+            spr.setKindEnabled("npc", bits.getBit(LayerBit.NPCs));
+            spr.setKindEnabled("mob", bits.getBit(LayerBit.Mobs));
+            spr.setKindEnabled("effect", bits.getBit(LayerBit.Effects));
+        }
+        this.showProps = bits.getBit(LayerBit.Props);
+        this.showWater = bits.getBit(LayerBit.Water);
+        this.showGrannyModels = bits.getBit(LayerBit.Granny);
+        this.showParticles = bits.getBit(LayerBit.Particles);
+        this.showNameLabels = bits.getBit(LayerBit.NameLabels);
+        this.weatherEnabled = bits.getBit(LayerBit.Weather);
+        return offs;
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -1755,8 +2022,9 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.prepareToRender(viewerInput);
 
         // Per-map sky colour — see sky.ts for the policy.
+        const sky = this.sky;
         const clearDescriptor = makeAttachmentClearDescriptor(
-            colorNewFromRGBA(this.sky.color[0], this.sky.color[1], this.sky.color[2], 1.0));
+            colorNewFromRGBA(sky.color[0], sky.color[1], sky.color[2], 1.0));
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearDescriptor);

@@ -12,9 +12,9 @@ import { DecodedImage, decodeBMP, decodeTGA } from "./bmp.js";
 import { parseGND, textureNameToUrl } from "./gnd.js";
 import { GatMap, parseGAT } from "./gat.js";
 import { AnimatedModelMesh, buildAnimatedModelMesh, buildModelMesh, buildPlacementMatrix, modelIsAnimated, ModelMesh } from "./model.js";
-import { AnimatedModelPlacement, FogSceneData, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
+import { AnimatedModelPlacement, FogSceneData, FOG_DEFAULT_COLOR_UNFOGGED, FOG_DEFAULT_TINT_UNFOGGED, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
 import { parseRSM } from "./rsm.js";
-import { computeLightDir, parseRSW } from "./rsw.js";
+import { parseRSW } from "./rsw.js";
 import { decodeImageBitmapRGBA } from "./water.js";
 import { loadEntities, loadEffectSources } from "./entity.js";
 import { loadWarpPortals } from "./warp-portal.js";
@@ -210,19 +210,17 @@ class RagnarokMapSceneDesc implements SceneDesc {
             frames,
         } : null;
 
-        // Sun X is negated because the world is mirrored about X (see coord.ts).
-        const sunDir = computeLightDir(rsw.longitude, rsw.latitude);
-        sunDir[0] = -sunDir[0];
         const lightData: LightSceneData = {
-            lightDir: sunDir,
-            diffuse: [rsw.diffuse.x, rsw.diffuse.y, rsw.diffuse.z],
-            ambient: [rsw.ambient.x, rsw.ambient.y, rsw.ambient.z],
+            diffuse: vec3.fromValues(rsw.diffuse.x, rsw.diffuse.y, rsw.diffuse.z),
+            ambient: vec3.fromValues(rsw.ambient.x, rsw.ambient.y, rsw.ambient.z),
+            longitudeDeg: rsw.longitude,
+            pitchDeg: rsw.latitude,
         };
 
         // Fog table doubles as the sky colour (always applied when present).
         // The fog *tint* over geometry only reads as atmosphere inside
         // dungeons, so it's gated by mapWantsFog. Era-shared: bare base id.
-        let fogTableColor: [number, number, number] | null = null;
+        let fogTableColor: vec3 | null = null;
         let fogTableDensity: number = 0;
         try {
             const fogRaw = await dataFetcher.fetchData(`${pathBase}/maps/${eraSharedKey(this.id)}.fog.json`, { allow404: true });
@@ -232,19 +230,19 @@ class RagnarokMapSceneDesc implements SceneDesc {
             const r = ((argb >>> 16) & 0xff) / 255;
             const g = ((argb >>> 8) & 0xff) / 255;
             const b = (argb & 0xff) / 255;
-            fogTableColor = [r, g, b];
+            fogTableColor = vec3.fromValues(r, g, b);
             fogTableDensity = Math.min(Math.max(fog.density, 0), 0.45);
         } catch {
             // No fog entry: sky falls back to a category default, tint off.
         }
 
-        const fogData: FogSceneData = (fogTableColor !== null && mapWantsFog(this.id))
-            ? { enabled: true, color: fogTableColor, tint: fogTableDensity }
-            : { enabled: false, color: [0, 0, 0], tint: 0 };
+        const fogData: FogSceneData = {
+            enabled: fogTableColor !== null && mapWantsFog(this.id),
+            color: fogTableColor !== null ? vec3.clone(fogTableColor) : vec3.clone(FOG_DEFAULT_COLOR_UNFOGGED),
+            tint: fogTableColor !== null ? fogTableDensity : FOG_DEFAULT_TINT_UNFOGGED,
+        };
 
-        // The sky dome wants a vector FROM the ground TOWARD the sun. `sunDir`
-        // is the propagation direction (already X-mirrored), so negate it.
-        const skyData = buildSkyData(this.id, fogTableColor, [-sunDir[0], -sunDir[1], -sunDir[2]]);
+        const skyData = buildSkyData(this.id, fogTableColor);
 
         // A missing/unparseable GAT just disables mob wandering.
         let gat: GatMap | null = null;

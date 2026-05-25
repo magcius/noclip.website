@@ -3,10 +3,12 @@
 // shared HTMLAudioElement; the id -> filename map is lazy-loaded once.
 
 import { DataFetcher } from "../DataFetcher.js";
+import { maps } from "./maps.js";
 
 export class Bgm {
     private static enabled = false;
     private static currentVolume = 0.5;
+    private static mapNameById: Map<string, string> | null = null;
 
     private audio: HTMLAudioElement | null = null;
     private currentMapId: string | null = null;
@@ -14,6 +16,7 @@ export class Bgm {
     private sceneGeneration = 0;
     private indexPromise: Promise<Map<string, string> | null> | null = null;
     private destroyed = false;
+    private trackOverride: string | null = null;
 
     constructor(private pathBase: string) {
     }
@@ -93,6 +96,45 @@ export class Bgm {
         return Bgm.currentVolume;
     }
 
+    public async listLabelledTracks(): Promise<{ filename: string, label: string }[]> {
+        if (this.lastFetcher === null)
+            return [];
+        const idx = await this.loadIndex(this.lastFetcher);
+        if (idx === null)
+            return [];
+        // A single file can be shared by multiple maps; use the first map's
+        // human-readable name as the label.
+        const byFile = new Map<string, string>();
+        for (const [mapId, file] of idx)
+            if (!byFile.has(file))
+                byFile.set(file, mapId);
+        if (Bgm.mapNameById === null) {
+            Bgm.mapNameById = new Map();
+            for (const m of maps)
+                Bgm.mapNameById.set(m.id, m.name);
+        }
+        const names = Bgm.mapNameById;
+        const labelled = Array.from(byFile, ([filename, mapId]) => {
+            const name = names.get(mapId);
+            return { filename, label: name !== undefined ? `${name} (${filename})` : filename };
+        });
+        labelled.sort((a, b) => a.label.localeCompare(b.label));
+        return labelled;
+    }
+
+    public setTrackOverride(filename: string | null): void {
+        this.trackOverride = filename;
+        if (this.lastFetcher !== null && Bgm.enabled)
+            this.applyCurrent(this.lastFetcher, ++this.sceneGeneration).catch((e) => console.error("BGM: track override failed", e));
+    }
+
+    public async getMapDefaultTrack(): Promise<string | null> {
+        if (this.currentMapId === null || this.lastFetcher === null)
+            return null;
+        const idx = await this.loadIndex(this.lastFetcher);
+        return idx?.get(this.currentMapId) ?? null;
+    }
+
     public stop(): void {
         if (this.audio === null)
             return;
@@ -113,7 +155,9 @@ export class Bgm {
         if (this.currentMapId === null)
             return;
         const mapId = this.currentMapId;
-        const url = await this.urlForMap(dataFetcher, mapId);
+        const url = this.trackOverride !== null
+            ? dataFetcher.getDataURLForPath(`${this.pathBase}/bgm/${this.trackOverride}`)
+            : await this.urlForMap(dataFetcher, mapId);
         if (this.destroyed || generation !== this.sceneGeneration || mapId !== this.currentMapId)
             return;
         if (!Bgm.enabled)
