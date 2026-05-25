@@ -47,22 +47,13 @@ const IRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/iro_tables/mapnameta
 const KRO_NAMETABLE = path.resolve("data/RagnarokOnline_raw/assets/data/misc/mapnametable.txt");
 const OUT = path.resolve("src/RagnarokOnline/maps.ts");
 
-// mapnametable.txt: each line `<map_id>.rsw#<display name>#`, CP949 encoded on
-// kRO and Latin-1 on iRO (English names — Latin-1 is ASCII-safe). Decode either
-// way: UTF-8 first (works on ASCII/Latin-1), else CP949 fallback.
+// mapnametable.txt: `<map_id>.rsw#<display name>#`. kRO is CP949; iRO is ASCII
+// (which decodes through CP949 unchanged). WHATWG's "euc-kr" label is the CP949 index.
 function parseMapNameTable(file: string): Map<string, string> {
     const out = new Map<string, string>();
     if (!existsSync(file))
         return out;
-    let text: string;
-    try {
-        text = readFileSync(file, "utf8");
-        // If it has replacement chars, fall back to CP949.
-        if (text.includes("�"))
-            text = new TextDecoder("euc-kr").decode(readFileSync(file));
-    } catch {
-        text = new TextDecoder("euc-kr").decode(readFileSync(file));
-    }
+    const text = new TextDecoder("euc-kr").decode(readFileSync(file));
     for (const raw of text.split(/\r?\n/)) {
         const s = raw.trim();
         if (s.length === 0 || s.startsWith("//"))
