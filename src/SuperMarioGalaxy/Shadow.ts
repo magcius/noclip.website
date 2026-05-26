@@ -254,7 +254,7 @@ class ShadowController {
         else if (this.calcCollisionMode === CalcCollisionMode.OneTime)
             return (this.calcCollisionTimer === 0);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public updateProjection(sceneObjHolder: SceneObjHolder): void {
@@ -971,7 +971,7 @@ function findPosNrmMtxIndexFromModel(modelData: J3DModelData, jointIndex: number
             return posNrmMtxIndex;
     }
 
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 class ShadowVolumeFlatModel extends ShadowVolumeModel {
@@ -1310,7 +1310,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeLine') {
         createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -1323,7 +1323,7 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     else if (sceneObjHolder.sceneLoader.gameBit === GameBits.SMG2)
         shadowFile = resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
     else
-        throw "whoops";
+        throw new Error("whoops");
 
     actor.shadowControllerList = new ShadowControllerList();
 

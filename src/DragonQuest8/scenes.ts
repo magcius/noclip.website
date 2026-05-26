@@ -327,7 +327,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
             for (const [k, v] of map.textureDataMap) {
                 if (texNameToTextureData.has(k))
-                    throw "already there";
+                    throw new Error("already there");
                 texNameToTextureData.set(k, v);
                 viewerTextures.push({ gfxTexture: v.texture });
             }

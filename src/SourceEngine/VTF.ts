@@ -58,7 +58,7 @@ function imageFormatGetBPP(fmt: ImageFormat): number {
         return 2;
     if (fmt === ImageFormat.I8)
         return 1;
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 function imageFormatCalcLevelSize(fmt: ImageFormat, width: number, height: number, depth: number): number {
@@ -73,7 +73,7 @@ function imageFormatCalcLevelSize(fmt: ImageFormat, width: number, height: numbe
         else if (fmt === ImageFormat.DXT5)
             return count * 16;
         else
-            throw "whoops";
+            throw new Error("whoops");
     } else {
         return (width * height * depth) * imageFormatGetBPP(fmt);
     }
@@ -108,7 +108,7 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
     else if (fmt === ImageFormat.RGBA16161616F)
         return GfxFormat.F16_RGBA;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: ArrayBufferSlice, width: number, height: number, depth: number): ArrayBufferView {
@@ -321,7 +321,7 @@ export class VTF {
                 imageDataIdx = dataIdx;
             }
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         const isCube = !!(this.flags & VTFFlags.ENVMAP);

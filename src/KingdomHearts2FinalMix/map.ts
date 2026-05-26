@@ -278,7 +278,7 @@ function parseTextures(buffer: ArrayBufferSlice, textureFile: BarFile, gsMemoryM
             }
 
             if (tex0 === null || clamp === null)
-                throw "whoops";
+                throw new Error("whoops");
 
             if (!textureBlock) {
                 textureBlock = new TextureBlock;
@@ -352,7 +352,7 @@ function processTextureUpload(buffer: ArrayBufferSlice, offs: number, gsMemoryMa
         }
     }
     if (bitbltbuf === null || trxpos === null || trxreg === null)
-        throw "whoops";
+        throw new Error("whoops");
     const imageOffs = textureFile.offset + view.getUint32(offs + 0x74, true);
     let imageBytesize = (view.getUint32(offs + 0x70, true) & 0xFFFFFFF) * 0x10;
     if (imageOffs + imageBytesize > buffer.byteLength) {

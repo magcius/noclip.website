@@ -189,7 +189,7 @@ function translateWrapMode(wm: CLAMP1_WM): GfxWrapMode {
     case CLAMP1_WM.CLAMP: return GfxWrapMode.Clamp;
     // TODO(jstpierre): Support REGION_* clamp modes.
     case CLAMP1_WM.REGION_REPEAT: return GfxWrapMode.Repeat;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -257,7 +257,7 @@ export class BINModelPartInstance {
                 blendDstFactor: GfxBlendFactor.One,
             });
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         // Katamari should not have any mipmaps.

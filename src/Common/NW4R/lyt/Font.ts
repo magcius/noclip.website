@@ -191,7 +191,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
                     cmap[view.getUint16(tableIdx + 0x00)] = view.getUint16(tableIdx + 0x02);
             }
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         tableIdx += blockSize;

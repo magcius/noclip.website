@@ -1677,7 +1677,7 @@ function excludeCalcShadowToSensorAll(actor: LiveActor, hitSensor: HitSensor): v
 
 export function excludeCalcShadowToMyCollision(actor: LiveActor, collisionName: string | null = null): void {
     if (collisionName !== null)
-        throw "whoops";
+        throw new Error("whoops");
     else
         excludeCalcShadowToSensorAll(actor, actor.collisionParts!.hitSensor);
 }

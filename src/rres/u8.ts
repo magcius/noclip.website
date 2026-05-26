@@ -151,7 +151,7 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
             const nodeBuffer = buffer.subarray(nodeDataBegin, nodeDataSize);
             return { kind: 'file', name: nodeName, buffer: nodeBuffer };
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

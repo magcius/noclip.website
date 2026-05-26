@@ -188,7 +188,7 @@ export class MessageData {
             const userParam = flw1.getUint32(offs + 0x04);
             return { type, eventID, branchInfoIndex, userParam };
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

@@ -1694,7 +1694,7 @@ export function newRecord(recordType: string): NiParse {
         case 'NiVertexColorProperty': return new NiVertexColorProperty();
         case 'NiZBufferProperty': return new NiZBufferProperty();
         case 'RootCollisionNode': return new RootCollisionNode();
-        default: throw "whoops";
+        default: throw new Error("whoops");
     }
 }
 }

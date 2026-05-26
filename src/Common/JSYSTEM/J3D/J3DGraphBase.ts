@@ -565,7 +565,7 @@ export class MaterialInstance {
             break;
 
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

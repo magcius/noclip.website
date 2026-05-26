@@ -350,7 +350,7 @@ class ParallelGravity extends PlanetGravity {
         else if (this.distanceCalcType === ParallelGravityDistanceCalcType.Z)
             return this.baseDistance + (Math.abs(dotZ) / Math.sqrt(extentsSq[2]));
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private isInCylinderRange(coord: ReadonlyVec3): number {
@@ -375,7 +375,7 @@ class ParallelGravity extends PlanetGravity {
         else if (this.rangeType === ParallelGravityRangeType.Cylinder)
             return this.isInCylinderRange(coord);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {

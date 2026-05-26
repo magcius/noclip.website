@@ -1034,7 +1034,7 @@ class Main {
 
         if (promise === null) {
             console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         promise.then((scene: SceneGfx) => {

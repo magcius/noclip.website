@@ -268,7 +268,7 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         for (let i = 0; i < joints.length; i++)
             if (joints[i].name === jointName)
                 return this.shapeInstanceState.jointToWorldMatrixArray[i];
-        throw "could not find joint";
+        throw new Error("could not find joint");
     }
 
     private calcSkybox(camera: Camera): void {

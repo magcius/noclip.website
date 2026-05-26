@@ -509,5 +509,5 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
         }
     }
 
-    throw "whoops";
+    throw new Error("whoops");
 }

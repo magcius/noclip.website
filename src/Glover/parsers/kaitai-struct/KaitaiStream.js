@@ -511,7 +511,7 @@ KaitaiStream.prototype.readBytesTerm = function(terminator, include, consume, eo
   if (i === blen) {
     // we've read all the buffer and haven't found the terminator
     if (eosError) {
-      throw "End of stream reached, but no terminator " + terminator + " found";
+      throw new Error("End of stream reached, but no terminator " + terminator + " found");
     } else {
       return this.mapUint8Array(i);
     }
@@ -583,7 +583,7 @@ KaitaiStream.bytesToStr = function(arr, encoding) {
           return new Buffer(arr).toString(encoding);
           break;
         default:
-          throw "Unsupported"; // NOTE (noclip/naclomi): Removed iconv-lite decoding support since we don't need it here
+          throw new Error("Unsupported"); // NOTE (noclip/naclomi): Removed iconv-lite decoding support since we don't need it here
       }
     }
   }
@@ -630,7 +630,7 @@ KaitaiStream.processRotateLeft = function(data, amount, groupSize) {
 };
 
 KaitaiStream.processZlib = function(buf) {
-  throw "Unsupported"; // NOTE (noclip/naclomi): Removed zlib support since we don't need it here
+  throw new Error("Unsupported"); // NOTE (noclip/naclomi): Removed zlib support since we don't need it here
 };
 
 // ========================================================================
@@ -639,7 +639,7 @@ KaitaiStream.processZlib = function(buf) {
 
 KaitaiStream.mod = function(a, b) {
   if (b <= 0)
-    throw "mod divisor <= 0";
+    throw new Error("mod divisor <= 0");
   var r = a % b;
   if (r < 0)
     r += b;

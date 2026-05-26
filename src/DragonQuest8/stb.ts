@@ -96,7 +96,7 @@ class STBStackInfo {
 
 function stackOverflowCheck(stackInfo: STBStackInfo) {
     if (stackInfo.currentStackPtr >= stackInfo.maxStackPtr)
-        throw "stack overflow";
+        throw new Error("stack overflow");
 }
 
 function pop(stack: number[], stackInfo: STBStackInfo): number[] {
@@ -192,7 +192,7 @@ function externalFunctionCall(sceneInfo: SINFO.SceneInfo, buffer: ArrayBufferSli
         //Same as 0x3D
         func0x3E(sceneInfo, argvPtr, argc, stack);
     else
-        throw "unknown function id " + functionID.toString();
+        throw new Error("unknown function id ") + functionID.toString();
 }
 
 export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBufferSlice, stb: STB, stack: number[], callStack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance): boolean {
@@ -210,7 +210,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 1 x 0x2 instruction";
+                throw new Error("Unexpected data type for 1 x 0x2 instruction");
             push(stack[stackInfo.currentBaseStackPtr + 2 * data0 + 2 * v1], stack[stackInfo.currentBaseStackPtr + 2 * data0 + 2 * v1 + 1], stack, stackInfo);
         }
         else if (data1 === 0x4) {
@@ -218,7 +218,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 1 x 0x4 instruction";
+                throw new Error("Unexpected data type for 1 x 0x4 instruction");
             const vPtr = stack[stackInfo.currentBaseStackPtr + 2 * data0 + 1 + 2 * v1];
             push(stack[vPtr], stack[vPtr + 1], stack, stackInfo);
         }
@@ -231,7 +231,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 1 x 0x10 instruction";
+                throw new Error("Unexpected data type for 1 x 0x10 instruction");
             stack[stackInfo.currentBaseStackPtr + 2 * data0 + 2 * v1] = 1;
             push(1, stack[stackInfo.currentBaseStackPtr + 2 * data0 + 1 + 2 * v1], stack, stackInfo);
         }
@@ -240,7 +240,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 1 x 0x20 instruction";
+                throw new Error("Unexpected data type for 1 x 0x20 instruction");
             stack[stack[stackInfo.currentBaseStackPtr + 2 * data0 + 1] + 2 * v1] = 1;
             push(1, stack[stack[stackInfo.currentBaseStackPtr + 2 * data0 + 1] + 2 * v1 + 1], stack, stackInfo);
         }
@@ -252,7 +252,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             push(1, stack[stackInfo.field0x7 + 2 * data0 + 1], stack, stackInfo);
         }
         else
-            throw "unimplemented script instruction : " + instructionID.toString() + " " + data0.toString() + " " + data1.toString();
+            throw new Error("unimplemented script instruction : " + instructionID.toString() + " " + data0.toString() + " ") + data1.toString();
 
     }
     else if (instructionID === 0x2) {
@@ -269,7 +269,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 2 x 0x2 instruction";
+                throw new Error("Unexpected data type for 2 x 0x2 instruction");
             push(3, currentBaseStackPtr + 2 * data0 + 2 * v1, stack, stackInfo);
         }
         else if (data1 === 0x4) {
@@ -277,7 +277,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 2 x 0x4 instruction";
+                throw new Error("Unexpected data type for 2 x 0x4 instruction");
             push(3, stack[stackInfo.currentBaseStackPtr + 2 * data0 + 1 + 2 * v1], stack, stackInfo);
         }
         else if (data1 === 0x8) {
@@ -290,7 +290,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 2 x 0x10 instruction";
+                throw new Error("Unexpected data type for 2 x 0x10 instruction");
             push(3, stackInfo.currentBaseStackPtr + 2 * data0 + 2 * v1, stack, stackInfo);
         }
         else if (data1 === 0x20) {
@@ -298,7 +298,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             const t1 = a[0];
             const v1 = a[1];
             if (t1 !== 0)
-                throw "Unexpected data type for 2 x 0x20 instruction";
+                throw new Error("Unexpected data type for 2 x 0x20 instruction");
             push(3, stack[stackInfo.currentBaseStackPtr + 2 * data0 + 1] + 2 * v1, stack, stackInfo);
         }
         else if (data1 === 0x40) {
@@ -309,7 +309,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             push(3, stackInfo.field0x7 + 2 * data0, stack, stackInfo);
         }
         else
-            throw "unimplemented script instruction : " + instructionID.toString() + " " + data0.toString() + " " + data1.toString();
+            throw new Error("unimplemented script instruction : " + instructionID.toString() + " " + data0.toString() + " ") + data1.toString();
     }
     else if (instructionID === 0x3) {
         const data0 = view.getUint32(stackInfo.currentInstructionPtr + 0x4, true);
@@ -329,7 +329,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
             push(2, data1 + stackInfo.SB2SecondSectionPtr, stack, stackInfo);
         }
         else
-            throw "unimplemented script instruction : " + instructionID.toString() + " " + data0.toString();
+            throw new Error("unimplemented script instruction : " + instructionID.toString() + " ") + data0.toString();
     }
     else if (instructionID === 0x4) {
         stackInfo.currentStackPtr -= 2;
@@ -387,7 +387,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t2 = b[0];
         const v2 = b[1];
         if (!v1)
-            throw "Division by 0 error";
+            throw new Error("Division by 0 error");
 
         if (!t1 && !t2)
             push(0, Math.floor(v2 / v1), stack, stackInfo);
@@ -403,7 +403,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t2 = b[0];
         const v2 = b[1];
         if (t1 !== 0 || t2 !== 0) {
-            throw "Modulo operation only takes integers";
+            throw new Error("Modulo operation only takes integers");
         }
 
         push(0, v2 % v1, stack, stackInfo);
@@ -450,7 +450,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         else if (data0 === 0x2d)
             push(0, v1 <= v2 ? 1 : 0, stack, stackInfo);
         else
-            throw "unimplemented script instruction : " + instructionID.toString() + " " + data0.toString();
+            throw new Error("unimplemented script instruction : " + instructionID.toString() + " ") + data0.toString();
     }
     else if (instructionID === 0xf) {
         //Return from "local" function
@@ -514,7 +514,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const currentInstructionPtr = stackInfo.currentInstructionPtr;
         const functionInfoPtr = stackInfo.SB2SecondSectionPtr + data1;
         if (stackInfo.callStackPtr >= stackInfo.maxCallStackPtr)
-            throw "Call stack overflow";
+            throw new Error("Call stack overflow");
         callStack[stackInfo.callStackPtr] = currentInstructionPtr;
         callStack[stackInfo.callStackPtr + 2] = stackInfo.functionInfoOffsetPtr;
         callStack[stackInfo.callStackPtr + 1] = stackInfo.currentBaseStackPtr;
@@ -541,7 +541,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         if (!stackInfo.field0x10) {
             const functionID = stack[stackInfo.currentStackPtr + 1];
             if (functionID >= stackInfo.functionCount)
-                throw "function doesn't exist in table";
+                throw new Error("function doesn't exist in table");
             externalFunctionCall(sceneInfo, buffer, stb, functionID, stackInfo.currentStackPtr + 2, data0 - 1, stack, stackInfo, mdsInstance);
         }
     }
@@ -563,7 +563,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t2 = b[0];
         const v2 = b[1];
         if (t1 !== 0 || t2 !== 0) {
-            throw "And operation only takes integers";
+            throw new Error("And operation only takes integers");
         }
 
         push(0, v2 & v1, stack, stackInfo);
@@ -577,7 +577,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t2 = b[0];
         const v2 = b[1];
         if (t1 !== 0 || t2 !== 0) {
-            throw "Or operation only takes integers";
+            throw new Error("Or operation only takes integers");
         }
 
         push(0, v2 | v1, stack, stackInfo);
@@ -588,7 +588,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t1 = a[0];
         const v1 = a[1];
         if (t1 !== 0) {
-            throw "Not operation only takes an integer";
+            throw new Error("Not operation only takes an integer");
         }
 
         push(0, (v1 !== 0) ? 0 : 1, stack, stackInfo);
@@ -612,7 +612,7 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t1 = a[0];
         const v1 = a[1];
         if (t1 !== 0 && t1 !== 1)
-            throw "Wrong datatype for sin";
+            throw new Error("Wrong datatype for sin");
         push(1, Math.sin(v1), stack, stackInfo);
     }
     else if (instructionID === 0x1e) {
@@ -621,11 +621,11 @@ export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBuff
         const t1 = a[0];
         const v1 = a[1];
         if (t1 !== 0 && t1 !== 1)
-            throw "Wrong datatype for cos";
+            throw new Error("Wrong datatype for cos");
         push(1, Math.cos(v1), stack, stackInfo);
     }
     else
-        throw "unimplemented script instruction : " + instructionID.toString();
+        throw new Error("unimplemented script instruction : ") + instructionID.toString();
     stackInfo.currentInstructionPtr += 0xC;
 
     return false;
@@ -668,7 +668,7 @@ export class STB {
             if (res)
                 return;
         }
-        throw "Possible script bug, 10000 iterations exceeded";
+        throw new Error("Possible script bug, 10000 iterations exceeded");
     }
 }
 
@@ -707,7 +707,7 @@ function func0x4(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
         stack[stack[argvPtr + 5] + 1] = stack[argvPtr + 11] - stack[argvPtr + 17];
     }
     else
-        throw "Unexpected func0x4 argument count";
+        throw new Error("Unexpected func0x4 argument count");
 }
 
 function func0x7(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -724,7 +724,7 @@ function func0x7(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
         stack[stack[argvPtr + 7] + 1] = Math.sqrt(a * a + b * b + c * c);
     }
     else
-        throw "Unexpected func0x7 argument count";
+        throw new Error("Unexpected func0x7 argument count");
 }
 
 function func0x9(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -734,7 +734,7 @@ function func0x9(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
         stack[stack[argvPtr + 5] + 1] = Math.atan2(a, b);
     }
     else
-        throw "Unexpected func0x9 argument count";
+        throw new Error("Unexpected func0x9 argument count");
 }
 
 function func0xA(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -759,10 +759,10 @@ function func0xA(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
         if (stack[argvPtr + 6] === 3)
             stack[stack[argvPtr + 7] + 1] = res;
         else
-            throw "Unexpected func0xA argument type";
+            throw new Error("Unexpected func0xA argument type");
     }
     else
-        throw "Unexpected func0xA argument count";
+        throw new Error("Unexpected func0xA argument count");
 }
 
 function func0xB(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -780,10 +780,10 @@ function func0xB(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
             stack[stack[argvPtr + 1] + 1] = angle;
         }
         else
-            throw "Unexpected func0xB argument type";
+            throw new Error("Unexpected func0xB argument type");
     }
     else
-        throw "Unexpected func0xB argument count";
+        throw new Error("Unexpected func0xB argument count");
 }
 
 function func0xC(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -796,7 +796,7 @@ function func0xC(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
             stack[stack[argvPtr + 3] + 1] = Math.floor(v);
     }
     else
-        throw "Unexpected func0xC argument count";
+        throw new Error("Unexpected func0xC argument count");
 }
 
 function func0xD(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -806,7 +806,7 @@ function func0xD(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stac
         stack[stack[argvPtr + 17] + 1] = stack[argvPtr + 5] + stack[argvPtr + 11];
     }
     else
-        throw "Unexpected func0xD argument count";
+        throw new Error("Unexpected func0xD argument count");
 }
 
 function func0x14(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -817,10 +817,10 @@ function func0x14(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, sta
             return;
         }
         else
-            throw "Unexpected func0x14 argument type";
+            throw new Error("Unexpected func0x14 argument type");
     }
     else
-        throw "Unexpected func0x14 argument count";
+        throw new Error("Unexpected func0x14 argument count");
 }
 
 function func0x15(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -831,7 +831,7 @@ function func0x15(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, sta
             return;
         }
         else
-            throw "Unexpected func0x15 argument type";
+            throw new Error("Unexpected func0x15 argument type");
     }
     else if (argc === 3) {
         if (stack[argvPtr + 1] === 1 && stack[argvPtr + 4] === 3) //block not completely accurate for convenience, should be enough for now
@@ -848,7 +848,7 @@ function func0x15(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, sta
         }
     }
     else
-        throw "Unexpected func0x15 argument count";
+        throw new Error("Unexpected func0x15 argument count");
 }
 
 function func0x16(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
@@ -872,10 +872,10 @@ function func0x1F(argvPtr: number, argc: number, stack: number[], stackInfo: STB
             return;
         }
         else
-            throw "Unexpected func0x1F argument type";
+            throw new Error("Unexpected func0x1F argument type");
     }
     else
-        throw "Unexpected func0x1F argument count";
+        throw new Error("Unexpected func0x1F argument count");
 }
 
 function func0x20(argvPtr: number, argc: number, stack: number[], stackInfo: STBStackInfo) {
@@ -886,15 +886,15 @@ function func0x20(argvPtr: number, argc: number, stack: number[], stackInfo: STB
             return;
         }
         else
-            throw "Unexpected func0x20 argument type";
+            throw new Error("Unexpected func0x20 argument type");
     }
     else
-        throw "Unexpected func0x20 argument count";
+        throw new Error("Unexpected func0x20 argument count");
 }
 
 function func0x32(argvPtr: number, argc: number, stack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance) {
     if (stack[argvPtr + 1] !== stackInfo.npcID && stack[argvPtr + 1] !== 0) {
-        throw "trying to get info of another NPC (0x32)! " + stack[argvPtr + 1].toString();
+        throw new Error("trying to get info of another NPC (0x32)! ") + stack[argvPtr + 1].toString();
 
     }
     else if (stack[argvPtr + 1] === 0) {
@@ -906,7 +906,7 @@ function func0x32(argvPtr: number, argc: number, stack: number[], stackInfo: STB
                 stack[outPtr + 1] = 10000;
             }
             else
-                throw "unexpected type for func0x32";
+                throw new Error("unexpected type for func0x32");
         }
         return;
     }
@@ -918,7 +918,7 @@ function func0x32(argvPtr: number, argc: number, stack: number[], stackInfo: STB
             stack[outPtr + 1] = v[i];
         }
         else
-            throw "unexpected type for func0x32";
+            throw new Error("unexpected type for func0x32");
     }
 }
 
@@ -933,7 +933,7 @@ function func0x33(argvPtr: number, argc: number, stack: number[], stackInfo: STB
 
 function func0x34(argvPtr: number, argc: number, stack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance) {
     //if (stack[argvPtr + 1] !== stackInfo.npcID)
-    //    throw "trying to get info of another NPC (0x34)! " + stack[argvPtr + 1].toString();
+    //    throw new Error("trying to get info of another NPC (0x34)! ") + stack[argvPtr + 1].toString();
     const v: vec3 = mdsInstance.eulerRot;
     //computeEulerAngleRotationFromSRTMatrix(v, mdsInstance.modelMatrix);
     if (argc === 4) {
@@ -943,7 +943,7 @@ function func0x34(argvPtr: number, argc: number, stack: number[], stackInfo: STB
                 stack[outPtr + 1] = v[i];
             }
             else
-                throw "unexpected type for func0x34 argc 4";
+                throw new Error("unexpected type for func0x34 argc 4");
         }
     }
     else if (argc === 2) {
@@ -952,10 +952,10 @@ function func0x34(argvPtr: number, argc: number, stack: number[], stackInfo: STB
             stack[outPtr + 1] = v[1];
         }
         else
-            throw "unexpected type for func0x34 argc 2";
+            throw new Error("unexpected type for func0x34 argc 2");
     }
     else
-        throw "Unexpected argument count";
+        throw new Error("Unexpected argument count");
 }
 
 function func0x35(argvPtr: number, argc: number, stack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance) {
@@ -970,7 +970,7 @@ function func0x35(argvPtr: number, argc: number, stack: number[], stackInfo: STB
         out[1] = stack[argvPtr + 3];
     }
     else
-        throw "Unexpected func0x35 argument count";
+        throw new Error("Unexpected func0x35 argument count");
     const s: vec3 = vec3.create();
     const t: vec3 = vec3.create();
     mat4.getScaling(s, mdsInstance.modelMatrix);

@@ -840,7 +840,7 @@ export class OceanWaveFloater extends MapObjActor {
             this.rippleStopThreshold = 150;
             this.rippleStartThreshold = 100;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         this.waveForce = new WaveFloatingForce(frequency, amplitude);
@@ -2314,7 +2314,7 @@ export class BreakableCage extends LiveActor<BreakableCageNrv> {
         else if (this.name === 'BreakableTrash')
             this.type = BreakableCageType.Trash;
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         if (this.type === BreakableCageType.Trash)
             joinToGroupArray(sceneObjHolder, this, infoIter, 'BreakableTrash', 32);
@@ -2834,7 +2834,7 @@ export class MeteorStrike extends LiveActor<MeteorStrikeNrv> {
         else if (objectName === 'MeteorCannon')
             return MeteorStrikeType.MeteorCannon;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -4484,7 +4484,7 @@ export class SpaceMine extends MapObjActor<SpaceMineNrv> {
         else if (this.shadowType === SpaceMineShadowType.OnlyWhenExistRail)
             return isExistRail(this);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -4898,7 +4898,7 @@ function getGlaringLightModelName(parentName: string): string {
     else if (parentName === 'TeresaMansionLightB')
         return 'TeresaMansionGlaringLightB';
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 class LightCylinder extends MapObjActor {

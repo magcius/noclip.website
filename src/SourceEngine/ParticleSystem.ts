@@ -61,7 +61,7 @@ function getAttribValue<T extends DMX.DMXAttributeType>(elem: DMX.DMXElement, na
         if (defaultValue !== null)
             return defaultValue;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
     assert(attrib.type === type);
     return attrib.value as DMXType<T>;
@@ -127,7 +127,7 @@ function getStreamStride(bit: StreamMask): number {
     else if (bit === StreamMask.SequenceNum2)
         return 1;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 abstract class ModuleBase {
@@ -1276,7 +1276,7 @@ class Sheet {
             calcScaleBiasFromCoord(dst1, f1.coords[coord]);
             return (time - t0) / f0.duration;
         }
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -1806,7 +1806,7 @@ export class ParticleSystemInstance {
                 } else if (stream === StreamMask.Radius) {
                     this.particleDataF32[offs] = this.constRadius;
                 } else {
-                    throw "whoops";
+                    throw new Error("whoops");
                 }
                 streamConstBits &= ~stream;
             }

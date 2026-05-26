@@ -192,7 +192,7 @@ export function parse(buffer: ArrayBufferSlice): DMXFile {
                 m03, m13, m23, m33,
             );
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

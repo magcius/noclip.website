@@ -52,7 +52,7 @@ export function computeTextureByteSize(format: TextureFormat, width: number, hei
     case TextureFormat.A4:
         return (width * height) / 2;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

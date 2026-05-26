@@ -2987,7 +2987,7 @@ function envIndex(level: number, weather: number): number {
     } else if (level === 3) {
         return weather < 3 ? base + 1 : base; // skip 3, but states has an extra
     }
-    throw "Unknown level " + level;
+    throw new Error("Unknown level " + level);
 }
 
 // mapping from env_loadtpal (2e1990) combined with envIndex

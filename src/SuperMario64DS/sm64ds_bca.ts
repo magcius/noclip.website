@@ -138,7 +138,7 @@ function getAnimFrame(anim: BCA, frame: number): number {
             frame -= lastFrame;
         return frame;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

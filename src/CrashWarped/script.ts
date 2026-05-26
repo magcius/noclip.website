@@ -410,10 +410,10 @@ class ArgStorer implements ArgHandler<number, void> {
     }
 
     public const(index: number, useAlt: boolean): void {
-        throw "store to const"
+        throw new Error("store to const")
     }
     public bool(value: boolean): void {
-        throw "store to bool"
+        throw new Error("store to bool")
     }
     public variable(src: Source, val: number): void {
         assert(src !== Source.SCRIPT_PTR)
@@ -429,7 +429,7 @@ class ArgStorer implements ArgHandler<number, void> {
     public literal(value: number): number {
         // literals are valid, as the game passes a pointer to scratch memory,
         // but can be ignored for our purposes
-        throw "store to literal"
+        throw new Error("store to literal")
     }
 }
 const argStorer = new ArgStorer();
@@ -518,7 +518,7 @@ class PointerBuilder implements ArgHandler<void, number > {
         return buildPointer(PointerBase.CONSTANTS, index);
     }
     public bool(value: boolean): number {
-        throw "pointer to bool";
+        throw new Error("pointer to bool");
     }
     public variable(src: Source): number {
         assert(src !== Source.STACK)
@@ -531,10 +531,10 @@ class PointerBuilder implements ArgHandler<void, number > {
             return buildPointer(PointerBase.PARAMETER, -offset);
     }
     public indirect(base: Source, src: Source): number {
-        throw "pointer to indirect"
+        throw new Error("pointer to indirect")
     }
     public literal(value: number): number {
-        throw "pointer to literal"
+        throw new Error("pointer to literal")
     }
 }
 const argPointerBuilder = new PointerBuilder();
