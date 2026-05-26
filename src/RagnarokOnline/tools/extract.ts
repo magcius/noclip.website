@@ -1,6 +1,5 @@
 
-// Offline pipeline that produces data/RagnarokOnline/ (the CDN tree the
-// renderer fetches at runtime).
+// Offline pipeline that produces data/RagnarokOnline/
 //
 //   npx tsx src/RagnarokOnline/tools/extract.ts [mapId ...]
 //   npx tsx src/RagnarokOnline/tools/extract.ts --only=extract,gen-maps
@@ -23,7 +22,8 @@
 //     CLASSIC_MAPS' pre-renewal geometry; sdata.grf (v0x200) also contains
 //     the two LEGACY_ONLY_MAPS (poring_c01/c02). data_hp.grf (v0x102) is
 //     harmlessly skipped (parser doesn't handle v0x102; no map we use lives
-//     there). Optional; missing -> classic/legacy scene entries vanish.
+//     there). Optional; missing -> classic/legacy scene entries aren't 
+//     generated.
 //
 //   data/RagnarokOnline_raw/iro_effecttool/
 //     iRO effecttool .lub/.lua dump. Not in the GRF; copy from an iRO client
@@ -93,9 +93,7 @@ function legacyGrfPaths(): string[] {
 }
 
 // Pre-renewal maps with meaningful geometry differences from the modern iRO
-// versions, exposed as separate `<id>@classic` scene entries. List discovered
-// by hash-diffing the kRO 2009 GRFs against the iRO renewal GRF (commit
-// f2b1c12a).
+// versions, exposed as separate `<id>@classic` scene entries.
 const CLASSIC_MAPS = new Set<string>([
     "alberta", "alde_gld", "aru_gld", "bat_c01", "bra_in01", "brasilis",
     "cmd_fild08", "ein_fild01", "gl_cas02", "iz_dun03", "izlude", "manuk",
