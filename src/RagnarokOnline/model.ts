@@ -343,6 +343,11 @@ export interface AnimatedModelMesh {
     bbox: AABB;
 }
 
+export interface AnimatedPoseMesh {
+    nodes: AnimatedNode[];
+    modernRsm2: boolean;
+}
+
 function sampleRotationKeyframes(an: AnimatedNode, frame: number, scratchQ: quat, out: mat4): boolean {
     if (an.rotKeyframes.length === 0) {
         mat4.copy(out, an.staticRot);
@@ -659,7 +664,7 @@ export class AnimatedPose {
     private scratchScale = vec3.create();
     private scratchPos = vec3.create();
 
-    constructor(private mesh: AnimatedModelMesh) {
+    constructor(private mesh: AnimatedPoseMesh) {
     }
 
     public evaluate(frame: number, out: mat4[]): void {
