@@ -711,12 +711,25 @@ function loadMapIds(): Set<string> {
         return new Set();
     const text = readFileSync(mapsTs, "utf8");
     const ids = new Set<string>();
-    for (const m of text.matchAll(/["']([a-z0-9_@\-]+)["']\s*[,:]/gi)) {
+    for (const m of text.matchAll(/\bid:\s*["']([a-z0-9_@\-]+)["']/gi)) {
         const id = m[1].toLowerCase();
-        if (id.length >= 2)
-            ids.add(id);
+        ids.add(id);
     }
     return ids;
+}
+
+function stripClassicSuffix(id: string): string {
+    const suffix = "@classic";
+    return id.endsWith(suffix) ? id.slice(0, -suffix.length) : id;
+}
+
+function eraForManifest(manifestId: string): "classic" | "renewal" {
+    return manifestId.endsWith("@classic") ? "classic" : "renewal";
+}
+
+function resolveWarpDestForSceneIds(rawDest: string, targetEra: "classic" | "renewal", classicGeometryBases: Set<string>): string {
+    const dest = stripClassicSuffix(rawDest.trim().toLowerCase());
+    return targetEra === "classic" && classicGeometryBases.has(dest) ? `${dest}@classic` : dest;
 }
 
 interface EmitterSpec {
@@ -1413,11 +1426,25 @@ function runExtractEntities(): void {
     const byMap = scanAllScripts(filesWithEra, mobIdByName);
     console.log(`scanned ${byMap.size} maps with script entries\n`);
 
+    const sceneIds = loadMapIds();
+    if (sceneIds.size === 0) {
+        console.error(`maps.ts has no scene ids; run gen-maps before extract-entities`);
+        throw new Error("stage aborted");
+    }
+    const classicGeometryBases = new Set(
+        Array.from(sceneIds)
+            .filter((id) => id.endsWith("@classic"))
+            .map((id) => stripClassicSuffix(id)),
+    );
+    console.log(`scene registry: ${sceneIds.size} maps (${classicGeometryBases.size} classic geometry variants)`);
+
     // Track manifests written this run so we can sweep stale .json from a
     // previous run (e.g. when CLEAR_NPC additions filter a map empty).
     const writtenManifests = new Set<string>();
 
     let mapsWritten = 0, totalNpcs = 0, totalMobInstances = 0, totalWarps = 0, eraVariantsWritten = 0;
+    let removedDeadWarps = 0;
+    const removedDeadWarpDests = new Map<string, number>();
     for (const [mapId, scan] of byMap) {
         for (const { name: manifestId, scan: filteredScan } of emitManifests(mapId, scan)) {
             // Mobs: resolve id -> sprite via mob_db. Rare "tame" spawns
@@ -1451,11 +1478,21 @@ function runExtractEntities(): void {
             // Drop the per-entry `era` scratch but keep destEra (set by
             // filterByEra; used by the resolver to pick the matching dest
             // variant when both eras exist).
-            const warps: WarpEntry[] = filteredScan.warps.map((w) => ({
-                cellX: w.cellX, cellY: w.cellY, spanX: w.spanX, spanY: w.spanY,
-                dest: w.dest, destX: w.destX, destY: w.destY,
-                destEra: w.destEra,
-            }));
+            const warps: WarpEntry[] = [];
+            for (const w of filteredScan.warps) {
+                const targetEra = w.destEra ?? eraForManifest(manifestId);
+                const resolvedDest = resolveWarpDestForSceneIds(w.dest, targetEra, classicGeometryBases);
+                if (!sceneIds.has(resolvedDest)) {
+                    removedDeadWarps++;
+                    removedDeadWarpDests.set(resolvedDest, (removedDeadWarpDests.get(resolvedDest) ?? 0) + 1);
+                    continue;
+                }
+                warps.push({
+                    cellX: w.cellX, cellY: w.cellY, spanX: w.spanX, spanY: w.spanY,
+                    dest: w.dest, destX: w.destX, destY: w.destY,
+                    destEra: w.destEra,
+                });
+            }
 
             if (mobs.length === 0 && npcs.length === 0 && warps.length === 0)
                 continue;
@@ -1484,6 +1521,14 @@ function runExtractEntities(): void {
         console.log(`removed ${stale} stale manifest(s) from a previous run.`);
 
     console.log(`${mapsWritten} map manifests written (${totalNpcs} NPCs, ${totalMobInstances} monster instances, ${totalWarps} warps).`);
+    if (removedDeadWarps > 0) {
+        const topDests = Array.from(removedDeadWarpDests.entries())
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, 20)
+            .map(([dest, count]) => `${dest}=${count}`)
+            .join(", ");
+        console.log(`removed ${removedDeadWarps} warp(s) to ${removedDeadWarpDests.size} unavailable destination map(s): ${topDests}`);
+    }
 
     console.log(`\n${stagedSprites.size} unique sprite (.spr/.act) pairs staged into ${OUT_SPRITE_DIR}`);
 }
