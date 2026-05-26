@@ -41,6 +41,10 @@ function nodeOffset(n: RsmNode, out: mat4): void {
     out[15] = 1;
 }
 
+function modelUsesRsm2Transforms(model: RsmModel): boolean {
+    return model.major > 2 || (model.major === 2 && model.minor >= 2);
+}
+
 export interface ModelDrawGroup {
     textureId: number;   // index into ModelMesh.textureNames
     indexOffset: number;
@@ -201,7 +205,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         };
     }
 
-    const parentIdx = resolveParents(model);
+    const parentIdx = modelUsesRsm2Transforms(model) ? new Int32Array(nodeCount).fill(-1) : resolveParents(model);
     const nodeMat = composeNodeMatrices(nodeCount, parentIdx, (idx, out) => nodeLocal(model.nodes[idx], out));
 
     const out = vec3.create();
@@ -378,7 +382,69 @@ export interface AnimatedModelMesh {
     textureNames: string[];
     nodes: AnimatedNode[];
     animLength: number;  // loop length in frames (>= 1)
+    modernRsm2: boolean;
     bbox: AABB;
+}
+
+function sampleRotationKeyframes(an: AnimatedNode, frame: number, scratchQ: quat, out: mat4): boolean {
+    if (an.rotKeyframes.length === 0) {
+        mat4.copy(out, an.staticRot);
+        return false;
+    }
+
+    const kfs = an.rotKeyframes;
+    if (kfs.length === 1) {
+        mat4.fromQuat(out, kfs[0].q);
+        return true;
+    }
+
+    let i = 0;
+    while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
+        i++;
+    const a = kfs[i];
+    const b = kfs[Math.min(i + 1, kfs.length - 1)];
+    const span = b.frame - a.frame;
+    const t = span > 0 ? (frame - a.frame) / span : 0;
+    quat.slerp(scratchQ, a.q, b.q, Math.max(0, Math.min(1, t)));
+    quat.normalize(scratchQ, scratchQ);
+    mat4.fromQuat(out, scratchQ);
+    return true;
+}
+
+function samplePositionKeyframes(an: AnimatedNode, frame: number, out: vec3): boolean {
+    if (an.posKeyframes.length === 0) {
+        vec3.copy(out, an.staticPos);
+        return false;
+    }
+
+    const kfs = an.posKeyframes;
+    if (kfs.length === 1) {
+        vec3.copy(out, kfs[0].p);
+        return true;
+    }
+
+    let i = 0;
+    while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
+        i++;
+    const a = kfs[i], b = kfs[Math.min(i + 1, kfs.length - 1)];
+    const span = b.frame - a.frame;
+    const t = span > 0 ? Math.max(0, Math.min(1, (frame - a.frame) / span)) : 0;
+    out[0] = a.p[0] + (b.p[0] - a.p[0]) * t;
+    out[1] = a.p[1] + (b.p[1] - a.p[1]) * t;
+    out[2] = a.p[2] + (b.p[2] - a.p[2]) * t;
+    return true;
+}
+
+// Scale: original takes the first scale key (or static) and does not
+// interpolate across keyframes.
+function sampleScaleKeyframes(an: AnimatedNode, out: vec3): boolean {
+    if (an.scaleKeyframes.length === 0) {
+        vec3.copy(out, an.staticScale);
+        return false;
+    }
+
+    vec3.copy(out, an.scaleKeyframes[0].s);
+    return true;
 }
 
 // Bbox is taken over the rest pose (frame 0) so the placement matrix anchors
@@ -386,6 +452,7 @@ export interface AnimatedModelMesh {
 export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const nodeCount = model.nodes.length;
     const parentIdx = resolveParents(model);
+    const modernRsm2 = modelUsesRsm2Transforms(model);
 
     const nodes: AnimatedNode[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) {
@@ -407,26 +474,26 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     }
 
     // Rest-pose locals for bbox (uses first keyframe value where present).
-    const restRot = mat4.create();
-    const restScale = vec3.create();
-    const restPos = vec3.create();
-    const restLocal = (idx: number, out: mat4): void => {
-        const an = nodes[idx];
-        if (an.scaleKeyframes.length > 0)
-            vec3.copy(restScale, an.scaleKeyframes[0].s);
-        else
-            vec3.copy(restScale, an.staticScale);
-        if (an.rotKeyframes.length > 0)
-            mat4.fromQuat(restRot, an.rotKeyframes[0].q);
-        else
-            mat4.copy(restRot, an.staticRot);
-        if (an.posKeyframes.length > 0)
-            vec3.copy(restPos, an.posKeyframes[0].p);
-        else
-            vec3.copy(restPos, an.staticPos);
-        nodeLocalFromParts(restScale, restRot, restPos, out);
-    };
-    const restNodeMat = composeNodeMatrices(nodeCount, parentIdx, restLocal);
+    let restNodeMat: mat4[];
+    if (modernRsm2) {
+        restNodeMat = new Array(nodeCount);
+        for (let i = 0; i < nodeCount; i++)
+            restNodeMat[i] = mat4.create();
+        evaluateRsm2NodeMatrices(nodes, 0, restNodeMat, quat.create());
+    } else {
+        const restRot = mat4.create();
+        const restScale = vec3.create();
+        const restPos = vec3.create();
+        const restQ = quat.create();
+        const restLocal = (idx: number, out: mat4): void => {
+            const an = nodes[idx];
+            sampleScaleKeyframes(an, restScale);
+            sampleRotationKeyframes(an, 0, restQ, restRot);
+            samplePositionKeyframes(an, 0, restPos);
+            nodeLocalFromParts(restScale, restRot, restPos, out);
+        };
+        restNodeMat = composeNodeMatrices(nodeCount, parentIdx, restLocal);
+    }
 
     const vx: number[] = [], vy: number[] = [], vz: number[] = [];
     const vu: number[] = [], vv: number[] = [];
@@ -466,13 +533,16 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                 if (vi < n.vertices.length) {
                     px = n.vertices[vi].x; py = n.vertices[vi].y; pz = n.vertices[vi].z;
                 }
-                // Stored position: node-local (raw * offset), no node transform.
                 vec3.set(localOut, px, py, pz);
-                vec3.transformMat4(localOut, localOut, offset);
+                if (!modernRsm2)
+                    vec3.transformMat4(localOut, localOut, offset);
                 vx.push(localOut[0]); vy.push(localOut[1]); vz.push(localOut[2]);
 
                 vec3.set(restOut, px, py, pz);
-                vec3.transformMat4(restOut, restOut, restVT);
+                if (modernRsm2)
+                    vec3.transformMat4(restOut, restOut, restNodeMat[ni]);
+                else
+                    vec3.transformMat4(restOut, restOut, restVT);
                 bbox.unionPoint(restOut);
 
                 let u = 0, v = 0;
@@ -484,8 +554,12 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
 
                 // Node-local normal; shader rotates by the node's animated mat.
                 const cn = nodeNormals[faceIdx * 3 + k];
-                transformNormalMat4(offset, cn, nrm);
-                vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
+                if (modernRsm2) {
+                    vnx.push(cn[0]); vny.push(cn[1]); vnz.push(cn[2]);
+                } else {
+                    transformNormalMat4(offset, cn, nrm);
+                    vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
+                }
 
                 vcol.push(0xFFFFFFFF);
             }
@@ -544,68 +618,98 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         textureNames: model.textures.slice(),
         nodes,
         animLength,
+        modernRsm2,
         bbox,
     };
 }
 
 // Interpolates a node's keyframes at `frame` (wrapped into [0, animLength)).
 // Channels without keyframes fall back to their static value.
-function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat, scratchRot: mat4, out: mat4): void {
-    if (an.rotKeyframes.length > 0) {
-        const kfs = an.rotKeyframes;
-        if (kfs.length === 1) {
-            mat4.fromQuat(scratchRot, kfs[0].q);
-        } else {
-            let i = 0;
-            while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
-                i++;
-            const a = kfs[i];
-            const b = kfs[Math.min(i + 1, kfs.length - 1)];
-            const span = b.frame - a.frame;
-            const t = span > 0 ? (frame - a.frame) / span : 0;
-            quat.slerp(scratchQ, a.q, b.q, Math.max(0, Math.min(1, t)));
-            quat.normalize(scratchQ, scratchQ);
-            mat4.fromQuat(scratchRot, scratchQ);
-        }
-    } else {
-        mat4.copy(scratchRot, an.staticRot);
-    }
-
-    let px = an.staticPos[0], py = an.staticPos[1], pz = an.staticPos[2];
-    if (an.posKeyframes.length > 0) {
-        const kfs = an.posKeyframes;
-        if (kfs.length === 1) {
-            px = kfs[0].p[0]; py = kfs[0].p[1]; pz = kfs[0].p[2];
-        } else {
-            let i = 0;
-            while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
-                i++;
-            const a = kfs[i], b = kfs[Math.min(i + 1, kfs.length - 1)];
-            const span = b.frame - a.frame;
-            const t = span > 0 ? Math.max(0, Math.min(1, (frame - a.frame) / span)) : 0;
-            px = a.p[0] + (b.p[0] - a.p[0]) * t;
-            py = a.p[1] + (b.p[1] - a.p[1]) * t;
-            pz = a.p[2] + (b.p[2] - a.p[2]) * t;
-        }
-    }
-
-    // Scale: original takes the first scale key (or static) and does not
-    // interpolate across keyframes.
-    let sx = an.staticScale[0], sy = an.staticScale[1], sz = an.staticScale[2];
-    if (an.scaleKeyframes.length > 0) {
-        const k = an.scaleKeyframes[0];
-        sx = k.s[0]; sy = k.s[1]; sz = k.s[2];
-    }
+function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat, scratchRot: mat4, scratchScale: vec3, scratchPos: vec3, out: mat4): void {
+    sampleRotationKeyframes(an, frame, scratchQ, scratchRot);
+    samplePositionKeyframes(an, frame, scratchPos);
+    sampleScaleKeyframes(an, scratchScale);
 
     // Row-vector L = S * R * P -> column-major T(p) * R * S.
-    mat4.fromTranslation(out, [px, py, pz]);
+    mat4.fromTranslation(out, scratchPos);
     mat4.multiply(out, out, scratchRot);
-    mat4.scale(out, out, [sx, sy, sz]);
+    mat4.scale(out, out, scratchScale);
+}
+
+function invertOrIdentity(out: mat4, m: mat4): void {
+    if (mat4.invert(out, m) === null)
+        mat4.identity(out);
+}
+
+function evaluateRsm2NodeMatrices(nodes: AnimatedNode[], frame: number, out: mat4[], scratchQ: quat): void {
+    const nodeCount = nodes.length;
+    while (out.length < nodeCount)
+        out.push(mat4.create());
+
+    const meshLinear: mat4[] = new Array(nodeCount);
+    const chain: mat4[] = new Array(nodeCount);
+    const local: mat4[] = new Array(nodeCount);
+    const scratchRot = mat4.create();
+    const scratchScale = vec3.create();
+    const scratchPos = vec3.create();
+    const parentInv = mat4.create();
+    const delta = vec3.create();
+
+    for (let i = 0; i < nodeCount; i++) {
+        meshLinear[i] = mat4.create();
+        chain[i] = mat4.create();
+        local[i] = mat4.create();
+    }
+
+    for (let i = 0; i < nodeCount; i++) {
+        const an = nodes[i];
+        const p = an.parentIdx;
+        const hasRot = sampleRotationKeyframes(an, frame, scratchQ, scratchRot);
+        const hasScale = sampleScaleKeyframes(an, scratchScale);
+
+        if (hasRot) {
+            mat4.copy(meshLinear[i], scratchRot);
+            mat4.scale(meshLinear[i], meshLinear[i], scratchScale);
+        } else {
+            if (p >= 0) {
+                invertOrIdentity(parentInv, nodes[p].offset);
+                mat4.multiply(meshLinear[i], parentInv, an.offset);
+            } else {
+                mat4.copy(meshLinear[i], an.offset);
+            }
+            if (hasScale)
+                mat4.scale(meshLinear[i], meshLinear[i], scratchScale);
+        }
+
+        const hasPos = samplePositionKeyframes(an, frame, scratchPos);
+        if (!hasPos && p >= 0) {
+            vec3.subtract(delta, an.staticPos, nodes[p].staticPos);
+            invertOrIdentity(parentInv, nodes[p].offset);
+            vec3.transformMat4(scratchPos, delta, parentInv);
+        }
+
+        mat4.fromTranslation(local[i], scratchPos);
+        mat4.multiply(local[i], local[i], meshLinear[i]);
+
+        if (p >= 0)
+            mat4.multiply(chain[i], chain[p], meshLinear[p]);
+        else
+            mat4.identity(chain[i]);
+
+        mat4.multiply(out[i], chain[i], local[i]);
+        if (p >= 0) {
+            out[i][12] += out[p][12];
+            out[i][13] += out[p][13];
+            out[i][14] += out[p][14];
+        }
+    }
 }
 
 export class AnimatedPose {
     private scratchQ = quat.create();
     private scratchRot = mat4.create();
+    private scratchScale = vec3.create();
+    private scratchPos = vec3.create();
 
     constructor(private mesh: AnimatedModelMesh) {
     }
@@ -616,12 +720,16 @@ export class AnimatedPose {
         while (out.length < nodeCount)
             out.push(mat4.create());
 
+        if (this.mesh.modernRsm2) {
+            evaluateRsm2NodeMatrices(nodes, frame, out, this.scratchQ);
+            return;
+        }
+
         const local: mat4[] = new Array(nodeCount);
         for (let i = 0; i < nodeCount; i++) {
             local[i] = mat4.create();
-            animatedLocal(nodes[i], frame, this.scratchQ, this.scratchRot, local[i]);
+            animatedLocal(nodes[i], frame, this.scratchQ, this.scratchRot, this.scratchScale, this.scratchPos, local[i]);
         }
-
         const parents = new Int32Array(nodeCount);
         for (let i = 0; i < nodeCount; i++) parents[i] = nodes[i].parentIdx;
         const nodeMat = composeNodeMatrices(nodeCount, parents, (idx, dst) => mat4.copy(dst, local[idx]));
