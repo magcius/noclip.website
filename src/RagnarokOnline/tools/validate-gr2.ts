@@ -1,8 +1,3 @@
-// Validates the baked (decompressed) .gr2 against our in-engine Granny parser.
-// Runs the same parseGranny + extractGrannyModel path the renderer uses and
-// reports mesh/skeleton/vertex/texture stats. Optionally dumps decoded textures
-// as PNG for eyeballing:  npx tsx validate-gr2.ts <dir> [--png <outdir>]
-
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import { PNG } from "pngjs";

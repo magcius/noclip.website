@@ -1,17 +1,9 @@
-
-// Decoders for the BMP and TGA textures RO uses. BMP is 8-bit palettized or
-// 24-bit BI_RGB (no compression); TGA is uncompressed (type 2) or RLE (type 10)
-// 24/32-bit BGR(A). Both decode to top-down RGBA8.
-//
-// RO BMPs key (255,0,255) as transparent. Some shipped textures store the key
-// off-by-one (e.g. (254,0,255), (255,1,254)) so we widen the match slightly.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export interface DecodedImage {
     width: number;
     height: number;
-    rgba: Uint8Array; // width*height*4, top-down
+    rgba: Uint8Array;
 }
 
 function isMagicPink(r: number, g: number, b: number): boolean {
@@ -22,7 +14,7 @@ export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
     const view = buffer.createDataView();
     if (view.byteLength < 54)
         throw new Error(`BMP: too small (${view.byteLength} bytes)`);
-    if (view.getUint8(0) !== 0x42 || view.getUint8(1) !== 0x4d) // 'BM'
+    if (view.getUint8(0) !== 0x42 || view.getUint8(1) !== 0x4d)
         throw new Error(`BMP: bad magic`);
 
     const dataOffset = view.getUint32(10, true);
@@ -58,7 +50,6 @@ export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
         throw new Error(`BMP: unsupported bit depth ${bpp}`);
     }
 
-    // Each scanline padded to 4-byte boundary.
     const rowSize = (((bpp * w + 31) / 32) | 0) * 4;
     if (dataOffset + rowSize * absH > view.byteLength)
         throw new Error(`BMP: pixel data out of range`);
@@ -73,18 +64,17 @@ export function decodeBMP(buffer: ArrayBufferSlice): DecodedImage {
                 let idx = bytes[rowOff + x];
                 if (idx >= clrUsed)
                     idx = 0;
-                const pe = idx * 4; // BGRA palette entry
+                const pe = idx * 4;
                 b = palette![pe + 0];
                 g = palette![pe + 1];
                 r = palette![pe + 2];
             } else {
-                const px = rowOff + x * 3; // BGR
+                const px = rowOff + x * 3;
                 b = bytes[px + 0];
                 g = bytes[px + 1];
                 r = bytes[px + 2];
             }
-            // Zero RGB on keyed texels too so magenta doesn't bleed under
-            // linear filtering at cutout edges.
+
             const pink = isMagicPink(r, g, b);
             const out = (y * w + x) * 4;
             rgba[out + 0] = pink ? 0 : r;
@@ -122,7 +112,7 @@ export function decodeTGA(buffer: ArrayBufferSlice): DecodedImage {
         if (src + bytesPerPixel > view.byteLength)
             throw new Error(`TGA: truncated pixel data`);
         const dst = dstPixel * 4;
-        fileRgba[dst + 0] = view.getUint8(src + 2); // R (TGA stores BGRA/BGR)
+        fileRgba[dst + 0] = view.getUint8(src + 2);
         fileRgba[dst + 1] = view.getUint8(src + 1);
         fileRgba[dst + 2] = view.getUint8(src + 0);
         fileRgba[dst + 3] = bpp === 32 ? view.getUint8(src + 3) : 255;

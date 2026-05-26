@@ -1,9 +1,3 @@
-
-// Soft blob shadows under feet-anchored sprites (NPCs, monsters). Flat textured
-// quad on the XZ plane at each sprite's world anchor, lifted slightly to avoid
-// z-fighting. Standard alpha blend; no depth write so the shadow doesn't
-// occlude the transparent layers drawn over it (sprites, water, effects).
-
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -18,11 +12,9 @@ import { makeSoftDiscImage } from "./weather.js";
 
 const SHADOW_HALF_SIZE = 5.5;
 const SHADOW_MAX_ALPHA = 0.85;
-// Lift along +Y (terrain world_y = -height, render frame is Y-up) so the quad
-// doesn't z-fight with the ground.
+
 const SHADOW_LIFT = 0.4;
 
-// 3 floats pos + 2 floats uv = 20 bytes. Color is constant in the shader.
 const SHADOW_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4;
 const SHADOW_FLOATS_PER_VERTEX = 5;
 const VERTS_PER_QUAD = 4;
@@ -43,7 +35,7 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_ShadowParams; // x: peak alpha
+    vec4 u_ShadowParams;
 };
 
 uniform sampler2D u_ShadowTexture;
@@ -126,9 +118,6 @@ export class ShadowRenderer {
         this.instances.push(inst);
     }
 
-    // Mutates slots in place to avoid the `{ worldPos, size }` literal per
-    // anchor per frame. Keeps the reference to each live anchor vec3 (mobs
-    // walk by mutating their worldPos).
     public setAnchors(anchors: vec3[], size: number): void {
         const n = anchors.length;
         while (this.instances.length < n)
@@ -145,7 +134,6 @@ export class ShadowRenderer {
         return SHADOW_HALF_SIZE;
     }
 
-    // Call BEFORE the sprite pass so shadows render under their sprites.
     public prepare(renderHelper: GfxRenderHelper, clipFromWorld: mat4): void {
         if (this.instances.length === 0)
             return;
@@ -187,9 +175,7 @@ export class ShadowRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
-        // OPAQUE layer so shadows draw BEFORE the sprite billboards (sprite
-        // renderer's depthWrite would clobber a later-drawn shadow). Stable
-        // sort preserves submission order within the layer.
+
         template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
 
         let offs = template.allocateUniformBuffer(ShadowProgram.ub_SceneParams, 16 + 4);
@@ -197,8 +183,6 @@ export class ShadowRenderer {
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
         offs += fillVec4(mapped, offs, SHADOW_MAX_ALPHA, 0, 0, 0);
 
-        // depthWrite off: shadow must not block the transparent layers drawn
-        // over it (sprites, water, effects).
         const megaState = template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: false });
         setAttachmentStateSimple(megaState, {
             blendMode: GfxBlendMode.Add,

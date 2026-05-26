@@ -1,12 +1,3 @@
-
-// Builds a flat, per-texture-grouped mesh from an RSM model's node hierarchy.
-// RO's fixed-function math is row-vector (v' = v * M, transforms compose
-// left-to-right); gl-matrix is column-vector (v' = M * v, compose right-to-left).
-// We rebuild the same transforms in column-major form by reversing the source
-// order — e.g. row-vector L = S * R * P (scale, then rotate, then translate)
-// becomes the column-major sequence T * R * S built via post-multiplying helpers.
-// Per-placement world matrix is applied at draw time, not baked here.
-
 import { mat4, quat, vec3 } from "gl-matrix";
 import { AABB } from "../Geometry.js";
 import { transformVec3Mat4w0 } from "../MathHelpers.js";
@@ -14,22 +5,18 @@ import { assert } from "../util.js";
 import { RsmModel, RsmNode } from "./rsm.js";
 import { RswVec3 } from "./rsw.js";
 
-// L_node (column-major) for "v' = v_row * S * R * P" (apply scale, rotate, translate).
-// In column-vector form that's T(p) * R * S * v, so we build T*R*S via post-multiplies.
 function nodeLocal(n: RsmNode, out: mat4): void {
     mat4.fromTranslation(out, [n.position.x, n.position.y, n.position.z]);
     mat4.rotate(out, out, n.rotAngle, [n.rotAxis.x, n.rotAxis.y, n.rotAxis.z]);
     mat4.scale(out, out, [n.scale.x, n.scale.y, n.scale.z]);
 }
 
-// Build column-major L from explicit S/R/P parts (used by the animated path).
 function nodeLocalFromParts(scale: vec3, rot: mat4, pos: vec3, out: mat4): void {
     mat4.fromTranslation(out, pos);
     mat4.multiply(out, out, rot);
     mat4.scale(out, out, scale);
 }
 
-// RSM offsetMatrix is 3x3 row-major; rewriting as column-major mat4 transposes it.
 function nodeOffset(n: RsmNode, out: mat4): void {
     const m = n.offsetMatrix;
     out[0]  = m[0]; out[1]  = m[1]; out[2]  = m[2]; out[3]  = 0;
@@ -41,8 +28,12 @@ function nodeOffset(n: RsmNode, out: mat4): void {
     out[15] = 1;
 }
 
+function modelUsesRsm2Transforms(model: RsmModel): boolean {
+    return model.major > 2 || (model.major === 2 && model.minor >= 2);
+}
+
 export interface ModelDrawGroup {
-    textureId: number;   // index into ModelMesh.textureNames
+    textureId: number;
     indexOffset: number;
     indexCount: number;
 }
@@ -55,20 +46,12 @@ export interface ModelMesh {
     bbox: AABB;
 }
 
-// position (3 f32) + UV (2 f32) + normal (3 f32) + color (4 u8) = 36 bytes.
 export const MODEL_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 3 * 4 + 4;
 
-// Per-node smooth-shaded normals, mirroring the engine's RSM lighting:
-//   shadeType 0 (none): unused, zeroed.
-//   shadeType 1 (flat): every corner of a face takes the face's normal.
-//   shadeType 2 (gouraud): a vertex's normal sums the face normals of all
-//     faces in the SAME smoothing group touching that vertex, then normalize.
-// Returns one normal per face-corner (3 per face), in node-local space.
 function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     const faceCount = n.faces.length;
     const out: vec3[] = new Array(faceCount * 3);
 
-    // Geometric face normal = cross(v3-v2, v3-v1), normalized (matches engine).
     const faceNormal: vec3[] = new Array(faceCount);
     const v1 = vec3.create(), v2 = vec3.create(), v3 = vec3.create();
     const e1 = vec3.create(), e2 = vec3.create();
@@ -95,7 +78,6 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
         return out;
     }
 
-    // Gouraud: accumulate per smoothing group.
     const vertCount = n.vertices.length;
     const groupVertNormals = new Map<number, vec3[]>();
     for (let i = 0; i < faceCount; i++) {
@@ -142,8 +124,6 @@ function transformNormalMat4(m: mat4, v: vec3, out: vec3): void {
     }
 }
 
-// parentIdx[i] = -1 means root (empty parent, self-parent, or dangling parent).
-// First occurrence wins for duplicate node names.
 function resolveParents(model: RsmModel): Int32Array {
     const nodeCount = model.nodes.length;
     const nameToIdx = new Map<string, number>();
@@ -162,7 +142,6 @@ function resolveParents(model: RsmModel): Int32Array {
     return parentIdx;
 }
 
-// Composes M_node = M_parent * L_node, parent-first.
 function composeNodeMatrices(nodeCount: number, parentIdx: Int32Array, local: (idx: number, out: mat4) => void): mat4[] {
     const nodeMat: mat4[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) nodeMat[i] = mat4.create();
@@ -185,7 +164,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     const vx: number[] = [], vy: number[] = [], vz: number[] = [];
     const vu: number[] = [], vv: number[] = [];
     const vnx: number[] = [], vny: number[] = [], vnz: number[] = [];
-    const vcol: number[] = []; // packed 0xAABBGGRR for the byte view
+    const vcol: number[] = [];
 
     const buckets = new Map<number, number[]>();
     const bbox = new AABB();
@@ -201,7 +180,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
         };
     }
 
-    const parentIdx = resolveParents(model);
+    const parentIdx = modelUsesRsm2Transforms(model) ? new Int32Array(nodeCount).fill(-1) : resolveParents(model);
     const nodeMat = composeNodeMatrices(nodeCount, parentIdx, (idx, out) => nodeLocal(model.nodes[idx], out));
 
     const out = vec3.create();
@@ -219,7 +198,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
 
         let faceIdx = 0;
         for (const f of n.faces) {
-            // Resolve face's per-node texture slot to a model-level index.
+
             let modelTex = 0;
             if (f.textureId < n.textureIds.length)
                 modelTex = n.textureIds[f.textureId];
@@ -266,8 +245,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     if (vx.length === 0)
         bbox.set(0, 0, 0, 0, 0, 0);
 
-    // Interleaved vertex: pos(3) + uv(2) + normal(3) + color(1 u32) = 9 32-bit
-    // words = 36 bytes per vertex.
     const vertexCount = vx.length;
     const vertexData = new ArrayBuffer(vertexCount * MODEL_VERTEX_STRIDE_BYTES);
     const fview = new Float32Array(vertexData);
@@ -304,13 +281,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     };
 }
 
-// Builds per-placement world matrix in the terrain's render frame, mirroring
-// the engine's actor-matrix build:
-//   wtm = T(boxOffset) * S * Ry * Rx * Rz * T(pos)   (row-vector order)
-// then mapped to render frame: render = (ro.x + offX, -ro.y, ro.z + offZ).
-// boxOffset anchors the model by its object-space bbox (X/Z centered, Y
-// pinned to box top). mapOffX/mapOffZ are half the map extent: the RSW frame
-// is map-centered while the terrain is corner-origin (see coord.ts).
 export function buildPlacementMatrix(
     bbox: AABB,
     pos: RswVec3, rot: RswVec3, scale: RswVec3,
@@ -322,8 +292,7 @@ export function buildPlacementMatrix(
     const offZ = -(bbox.min[2] + bbox.max[2]) * 0.5;
 
     const deg = Math.PI / 180;
-    // Row-vector source: T(off) * S * Ry * Rx * Rz * T(pos). Column-major
-    // equivalent (transpose, reverse): T(pos) * Rz * Rx * Ry * S * T(off).
+
     mat4.fromTranslation(out, [pos.x, pos.y, pos.z]);
     mat4.rotateZ(out, out, rot.z * deg);
     mat4.rotateX(out, out, rot.x * deg);
@@ -331,21 +300,13 @@ export function buildPlacementMatrix(
     mat4.scale(out, out, [scale.x, scale.y, scale.z]);
     mat4.translate(out, out, [offX, offY, offZ]);
 
-    // RO-frame -> render-frame: negate Y, shift X/Z by half the map extent.
     out[1] = -out[1]; out[5] = -out[5]; out[9] = -out[9]; out[13] = -out[13];
     out[12] += mapOffX;
     out[14] += mapOffZ;
 
-    // Mirror X about the map centre (W = 2*mapOffX): RO is left-handed, this
-    // renderer right-handed, so the whole world is mirrored (matching the
-    // terrain mesh and sun direction; see coord.ts).
     out[0] = -out[0]; out[4] = -out[4]; out[8] = -out[8];
     out[12] = 2 * mapOffX - out[12];
 }
-
-// Keyframe-animated models: nodes with rotation/position/scale tracks. Such
-// models can't be baked statically — geometry stays in NODE-LOCAL space and is
-// grouped per (node, texture); the renderer composes M_node(t) per frame.
 
 export function modelIsAnimated(model: RsmModel): boolean {
     return model.nodes.some((n) =>
@@ -362,7 +323,7 @@ export interface AnimatedDrawGroup {
 export interface AnimatedNode {
     parentIdx: number;
     offset: mat4;
-    // Static channel values, reused when a channel has no keyframes.
+
     staticRot: mat4;
     staticPos: vec3;
     staticScale: vec3;
@@ -377,15 +338,74 @@ export interface AnimatedModelMesh {
     groups: AnimatedDrawGroup[];
     textureNames: string[];
     nodes: AnimatedNode[];
-    animLength: number;  // loop length in frames (>= 1)
+    animLength: number;
+    modernRsm2: boolean;
     bbox: AABB;
 }
 
-// Bbox is taken over the rest pose (frame 0) so the placement matrix anchors
-// the model exactly as the static path would at start.
+function sampleRotationKeyframes(an: AnimatedNode, frame: number, scratchQ: quat, out: mat4): boolean {
+    if (an.rotKeyframes.length === 0) {
+        mat4.copy(out, an.staticRot);
+        return false;
+    }
+
+    const kfs = an.rotKeyframes;
+    if (kfs.length === 1) {
+        mat4.fromQuat(out, kfs[0].q);
+        return true;
+    }
+
+    let i = 0;
+    while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
+        i++;
+    const a = kfs[i];
+    const b = kfs[Math.min(i + 1, kfs.length - 1)];
+    const span = b.frame - a.frame;
+    const t = span > 0 ? (frame - a.frame) / span : 0;
+    quat.slerp(scratchQ, a.q, b.q, Math.max(0, Math.min(1, t)));
+    quat.normalize(scratchQ, scratchQ);
+    mat4.fromQuat(out, scratchQ);
+    return true;
+}
+
+function samplePositionKeyframes(an: AnimatedNode, frame: number, out: vec3): boolean {
+    if (an.posKeyframes.length === 0) {
+        vec3.copy(out, an.staticPos);
+        return false;
+    }
+
+    const kfs = an.posKeyframes;
+    if (kfs.length === 1) {
+        vec3.copy(out, kfs[0].p);
+        return true;
+    }
+
+    let i = 0;
+    while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
+        i++;
+    const a = kfs[i], b = kfs[Math.min(i + 1, kfs.length - 1)];
+    const span = b.frame - a.frame;
+    const t = span > 0 ? Math.max(0, Math.min(1, (frame - a.frame) / span)) : 0;
+    out[0] = a.p[0] + (b.p[0] - a.p[0]) * t;
+    out[1] = a.p[1] + (b.p[1] - a.p[1]) * t;
+    out[2] = a.p[2] + (b.p[2] - a.p[2]) * t;
+    return true;
+}
+
+function sampleScaleKeyframes(an: AnimatedNode, out: vec3): boolean {
+    if (an.scaleKeyframes.length === 0) {
+        vec3.copy(out, an.staticScale);
+        return false;
+    }
+
+    vec3.copy(out, an.scaleKeyframes[0].s);
+    return true;
+}
+
 export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const nodeCount = model.nodes.length;
     const parentIdx = resolveParents(model);
+    const modernRsm2 = modelUsesRsm2Transforms(model);
 
     const nodes: AnimatedNode[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) {
@@ -406,27 +426,26 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         };
     }
 
-    // Rest-pose locals for bbox (uses first keyframe value where present).
-    const restRot = mat4.create();
-    const restScale = vec3.create();
-    const restPos = vec3.create();
-    const restLocal = (idx: number, out: mat4): void => {
-        const an = nodes[idx];
-        if (an.scaleKeyframes.length > 0)
-            vec3.copy(restScale, an.scaleKeyframes[0].s);
-        else
-            vec3.copy(restScale, an.staticScale);
-        if (an.rotKeyframes.length > 0)
-            mat4.fromQuat(restRot, an.rotKeyframes[0].q);
-        else
-            mat4.copy(restRot, an.staticRot);
-        if (an.posKeyframes.length > 0)
-            vec3.copy(restPos, an.posKeyframes[0].p);
-        else
-            vec3.copy(restPos, an.staticPos);
-        nodeLocalFromParts(restScale, restRot, restPos, out);
-    };
-    const restNodeMat = composeNodeMatrices(nodeCount, parentIdx, restLocal);
+    let restNodeMat: mat4[];
+    if (modernRsm2) {
+        restNodeMat = new Array(nodeCount);
+        for (let i = 0; i < nodeCount; i++)
+            restNodeMat[i] = mat4.create();
+        evaluateRsm2NodeMatrices(nodes, 0, restNodeMat, quat.create());
+    } else {
+        const restRot = mat4.create();
+        const restScale = vec3.create();
+        const restPos = vec3.create();
+        const restQ = quat.create();
+        const restLocal = (idx: number, out: mat4): void => {
+            const an = nodes[idx];
+            sampleScaleKeyframes(an, restScale);
+            sampleRotationKeyframes(an, 0, restQ, restRot);
+            samplePositionKeyframes(an, 0, restPos);
+            nodeLocalFromParts(restScale, restRot, restPos, out);
+        };
+        restNodeMat = composeNodeMatrices(nodeCount, parentIdx, restLocal);
+    }
 
     const vx: number[] = [], vy: number[] = [], vz: number[] = [];
     const vu: number[] = [], vv: number[] = [];
@@ -466,13 +485,16 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                 if (vi < n.vertices.length) {
                     px = n.vertices[vi].x; py = n.vertices[vi].y; pz = n.vertices[vi].z;
                 }
-                // Stored position: node-local (raw * offset), no node transform.
                 vec3.set(localOut, px, py, pz);
-                vec3.transformMat4(localOut, localOut, offset);
+                if (!modernRsm2)
+                    vec3.transformMat4(localOut, localOut, offset);
                 vx.push(localOut[0]); vy.push(localOut[1]); vz.push(localOut[2]);
 
                 vec3.set(restOut, px, py, pz);
-                vec3.transformMat4(restOut, restOut, restVT);
+                if (modernRsm2)
+                    vec3.transformMat4(restOut, restOut, restNodeMat[ni]);
+                else
+                    vec3.transformMat4(restOut, restOut, restVT);
                 bbox.unionPoint(restOut);
 
                 let u = 0, v = 0;
@@ -482,10 +504,13 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                 }
                 vu.push(u); vv.push(v);
 
-                // Node-local normal; shader rotates by the node's animated mat.
                 const cn = nodeNormals[faceIdx * 3 + k];
-                transformNormalMat4(offset, cn, nrm);
-                vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
+                if (modernRsm2) {
+                    vnx.push(cn[0]); vny.push(cn[1]); vnz.push(cn[2]);
+                } else {
+                    transformNormalMat4(offset, cn, nrm);
+                    vnx.push(nrm[0]); vny.push(nrm[1]); vnz.push(nrm[2]);
+                }
 
                 vcol.push(0xFFFFFFFF);
             }
@@ -544,68 +569,95 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         textureNames: model.textures.slice(),
         nodes,
         animLength,
+        modernRsm2,
         bbox,
     };
 }
 
-// Interpolates a node's keyframes at `frame` (wrapped into [0, animLength)).
-// Channels without keyframes fall back to their static value.
-function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat, scratchRot: mat4, out: mat4): void {
-    if (an.rotKeyframes.length > 0) {
-        const kfs = an.rotKeyframes;
-        if (kfs.length === 1) {
-            mat4.fromQuat(scratchRot, kfs[0].q);
-        } else {
-            let i = 0;
-            while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
-                i++;
-            const a = kfs[i];
-            const b = kfs[Math.min(i + 1, kfs.length - 1)];
-            const span = b.frame - a.frame;
-            const t = span > 0 ? (frame - a.frame) / span : 0;
-            quat.slerp(scratchQ, a.q, b.q, Math.max(0, Math.min(1, t)));
-            quat.normalize(scratchQ, scratchQ);
-            mat4.fromQuat(scratchRot, scratchQ);
-        }
-    } else {
-        mat4.copy(scratchRot, an.staticRot);
-    }
+function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat, scratchRot: mat4, scratchScale: vec3, scratchPos: vec3, out: mat4): void {
+    sampleRotationKeyframes(an, frame, scratchQ, scratchRot);
+    samplePositionKeyframes(an, frame, scratchPos);
+    sampleScaleKeyframes(an, scratchScale);
 
-    let px = an.staticPos[0], py = an.staticPos[1], pz = an.staticPos[2];
-    if (an.posKeyframes.length > 0) {
-        const kfs = an.posKeyframes;
-        if (kfs.length === 1) {
-            px = kfs[0].p[0]; py = kfs[0].p[1]; pz = kfs[0].p[2];
-        } else {
-            let i = 0;
-            while (i < kfs.length - 1 && kfs[i + 1].frame <= frame)
-                i++;
-            const a = kfs[i], b = kfs[Math.min(i + 1, kfs.length - 1)];
-            const span = b.frame - a.frame;
-            const t = span > 0 ? Math.max(0, Math.min(1, (frame - a.frame) / span)) : 0;
-            px = a.p[0] + (b.p[0] - a.p[0]) * t;
-            py = a.p[1] + (b.p[1] - a.p[1]) * t;
-            pz = a.p[2] + (b.p[2] - a.p[2]) * t;
-        }
-    }
-
-    // Scale: original takes the first scale key (or static) and does not
-    // interpolate across keyframes.
-    let sx = an.staticScale[0], sy = an.staticScale[1], sz = an.staticScale[2];
-    if (an.scaleKeyframes.length > 0) {
-        const k = an.scaleKeyframes[0];
-        sx = k.s[0]; sy = k.s[1]; sz = k.s[2];
-    }
-
-    // Row-vector L = S * R * P -> column-major T(p) * R * S.
-    mat4.fromTranslation(out, [px, py, pz]);
+    mat4.fromTranslation(out, scratchPos);
     mat4.multiply(out, out, scratchRot);
-    mat4.scale(out, out, [sx, sy, sz]);
+    mat4.scale(out, out, scratchScale);
+}
+
+function invertOrIdentity(out: mat4, m: mat4): void {
+    if (mat4.invert(out, m) === null)
+        mat4.identity(out);
+}
+
+function evaluateRsm2NodeMatrices(nodes: AnimatedNode[], frame: number, out: mat4[], scratchQ: quat): void {
+    const nodeCount = nodes.length;
+    while (out.length < nodeCount)
+        out.push(mat4.create());
+
+    const meshLinear: mat4[] = new Array(nodeCount);
+    const chain: mat4[] = new Array(nodeCount);
+    const local: mat4[] = new Array(nodeCount);
+    const scratchRot = mat4.create();
+    const scratchScale = vec3.create();
+    const scratchPos = vec3.create();
+    const parentInv = mat4.create();
+    const delta = vec3.create();
+
+    for (let i = 0; i < nodeCount; i++) {
+        meshLinear[i] = mat4.create();
+        chain[i] = mat4.create();
+        local[i] = mat4.create();
+    }
+
+    for (let i = 0; i < nodeCount; i++) {
+        const an = nodes[i];
+        const p = an.parentIdx;
+        const hasRot = sampleRotationKeyframes(an, frame, scratchQ, scratchRot);
+        const hasScale = sampleScaleKeyframes(an, scratchScale);
+
+        if (hasRot) {
+            mat4.copy(meshLinear[i], scratchRot);
+            mat4.scale(meshLinear[i], meshLinear[i], scratchScale);
+        } else {
+            if (p >= 0) {
+                invertOrIdentity(parentInv, nodes[p].offset);
+                mat4.multiply(meshLinear[i], parentInv, an.offset);
+            } else {
+                mat4.copy(meshLinear[i], an.offset);
+            }
+            if (hasScale)
+                mat4.scale(meshLinear[i], meshLinear[i], scratchScale);
+        }
+
+        const hasPos = samplePositionKeyframes(an, frame, scratchPos);
+        if (!hasPos && p >= 0) {
+            vec3.subtract(delta, an.staticPos, nodes[p].staticPos);
+            invertOrIdentity(parentInv, nodes[p].offset);
+            vec3.transformMat4(scratchPos, delta, parentInv);
+        }
+
+        mat4.fromTranslation(local[i], scratchPos);
+        mat4.multiply(local[i], local[i], meshLinear[i]);
+
+        if (p >= 0)
+            mat4.multiply(chain[i], chain[p], meshLinear[p]);
+        else
+            mat4.identity(chain[i]);
+
+        mat4.multiply(out[i], chain[i], local[i]);
+        if (p >= 0) {
+            out[i][12] += out[p][12];
+            out[i][13] += out[p][13];
+            out[i][14] += out[p][14];
+        }
+    }
 }
 
 export class AnimatedPose {
     private scratchQ = quat.create();
     private scratchRot = mat4.create();
+    private scratchScale = vec3.create();
+    private scratchPos = vec3.create();
 
     constructor(private mesh: AnimatedModelMesh) {
     }
@@ -616,12 +668,16 @@ export class AnimatedPose {
         while (out.length < nodeCount)
             out.push(mat4.create());
 
+        if (this.mesh.modernRsm2) {
+            evaluateRsm2NodeMatrices(nodes, frame, out, this.scratchQ);
+            return;
+        }
+
         const local: mat4[] = new Array(nodeCount);
         for (let i = 0; i < nodeCount; i++) {
             local[i] = mat4.create();
-            animatedLocal(nodes[i], frame, this.scratchQ, this.scratchRot, local[i]);
+            animatedLocal(nodes[i], frame, this.scratchQ, this.scratchRot, this.scratchScale, this.scratchPos, local[i]);
         }
-
         const parents = new Int32Array(nodeCount);
         for (let i = 0; i < nodeCount; i++) parents[i] = nodes[i].parentIdx;
         const nodeMat = composeNodeMatrices(nodeCount, parents, (idx, dst) => mat4.copy(dst, local[idx]));
@@ -631,14 +687,6 @@ export class AnimatedPose {
     }
 }
 
-// Drives an animated model's frame clock off real elapsed time. The C++ client
-// advances m_curMotion += animSpeed * 100 per game tick; we fold the tick rate
-// into a per-second cursor rate so playback is identical at any render rate.
-//
-// TICK_RATE: empirically ~10 Hz against a live iRO server (alberta's pickaxes
-// loop ~2.5x slower than the C++ 60 Hz formula would predict). Also matches
-// the canonical roBrowser/BrowEdit rate. anim_speed is scaled by 4/3 (engine
-// applies this when building a map actor); 0 stays 0 (frozen at frame 0).
 export class ModelAnimator {
     private static readonly TICK_RATE = 10;
 
@@ -656,7 +704,6 @@ export class ModelAnimator {
         if (this.framesPerSecond === 0)
             return;
 
-        // Clamp dt so a long stall (backgrounded tab) can't leap the cursor.
         const dt = dtSeconds > 1.0 ? 1.0 : dtSeconds;
         this.frame += this.framesPerSecond * dt;
         if (this.frame >= this.animLength)

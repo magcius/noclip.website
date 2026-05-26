@@ -1,8 +1,3 @@
-
-// Walking dust puffs under wandering mobs: one small fading billboard per step.
-// MobEntity owns a stepEpoch counter (bumped on cell-cross, not on respawn);
-// we keep a parallel lastSeenEpoch per mob and spawn when it advances.
-
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -19,9 +14,9 @@ const DUST_LIFETIME = 0.4;
 const DUST_HALF_SIZE_START = 1.0;
 const DUST_HALF_SIZE_END = 2.5;
 const DUST_PEAK_ALPHA = 0.5;
-// World-up lift over the lifetime (terrain world_y = -height, so +Y is up).
+
 const DUST_LIFT_TOTAL = 2.5;
-// Small bias so the first frame doesn't z-fight with the terrain.
+
 const DUST_LIFT_INITIAL = 0.4;
 const DUST_COLOR_R = 180;
 const DUST_COLOR_G = 165;
@@ -34,7 +29,6 @@ interface DustParticle {
     alive: boolean;
 }
 
-// pos.xyz (3) + offset.xy (2) + uv.xy + per-particle alpha (4) = 9 floats.
 const DUST_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 4 * 4;
 const DUST_FLOATS_PER_VERTEX = 9;
 
@@ -54,14 +48,14 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_CamRight;  // xyz: render-frame camera right
-    vec4 u_CamUp;     // xyz: render-frame camera up
-    vec4 u_DustColor; // rgb: tint; per-particle alpha rides in v_TexCoord.z
+    vec4 u_CamRight;
+    vec4 u_CamUp;
+    vec4 u_DustColor;
 };
 
 uniform sampler2D u_Texture;
 
-varying vec3 v_TexCoord;  // .xy uv, .z per-particle alpha
+varying vec3 v_TexCoord;
 `;
 
     public override vert = `
@@ -137,7 +131,6 @@ export class DustRenderer {
         this.growPool(DUST_INITIAL_POOL);
     }
 
-    // Primes lastSeenEpoch to current so we don't fire catch-up puffs.
     public setMobs(mobs: MobEntity[]): void {
         this.mobs = mobs;
         if (this.lastSeenEpoch.length !== mobs.length)
@@ -168,10 +161,9 @@ export class DustRenderer {
         p.alive = true;
     }
 
-    // Call before prepare().
     public update(dt: number): void {
         if (dt <= 0) {
-            // Drain epoch deltas so we don't double-fire next frame.
+
             this.drainStepEvents();
             return;
         }
@@ -196,7 +188,7 @@ export class DustRenderer {
             const epoch = mob.stepEpoch;
             const last = this.lastSeenEpoch[i];
             if (epoch !== last) {
-                // An epoch can advance by >1 in a frame; one puff per frame is fine.
+
                 this.spawnOne(mob.stepWorldX, mob.stepWorldY, mob.stepWorldZ);
                 this.lastSeenEpoch[i] = epoch;
             }

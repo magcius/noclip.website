@@ -1,10 +1,3 @@
-
-// Parser for Ragnarok Online's RSM 3D model format (magic "GRSM"). A node tree
-// (parented by name) where each node owns its vertices/UVs/faces, an offset
-// matrix and a local TRS. Rotation keyframes are always present; position
-// keyframes from v1.6, scale keyframes from v2.2. All values little-endian;
-// names are CP949.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString } from "../util.js";
 import { RswVec3 } from "./rsw.js";
@@ -18,14 +11,14 @@ export interface RsmTexCoord {
 export interface RsmFace {
     vertIdx: [number, number, number];
     texIdx: [number, number, number];
-    textureId: number;   // index into RsmNode.textureIds
+    textureId: number;
     twoSided: number;
     smoothGroup: number;
 }
 
 export interface RsmRotKeyframe {
     frame: number;
-    q: [number, number, number, number]; // x,y,z,w
+    q: [number, number, number, number];
 }
 
 export interface RsmPosKeyframe {
@@ -42,11 +35,11 @@ export interface RsmNode {
     name: string;
     parent: string;
     textureIds: number[];
-    // 3x3 linear part of the offset transform, row-major (9 floats).
+
     offsetMatrix: number[];
     offsetTranslation: RswVec3;
     position: RswVec3;
-    rotAngle: number;     // radians
+    rotAngle: number;
     rotAxis: RswVec3;
     scale: RswVec3;
     vertices: RswVec3[];
@@ -61,12 +54,14 @@ export interface RsmModel {
     major: number;
     minor: number;
     shadeType: number;
-    alpha: number;        // 0..255
+    alpha: number;
     mainNode: string;
     textures: string[];
     nodes: RsmNode[];
-    // Loop length in frames; keyframe frame numbers wrap at this.
+
     animLength: number;
+
+    frameRate: number;
 }
 
 class Reader {
@@ -111,6 +106,13 @@ class Reader {
         this.offs += width;
         return s;
     }
+
+    public sizedName(): string {
+        const width = this.i32();
+        if (width < 0)
+            throw new Error(`RSM: bad string length ${width}`);
+        return this.name(width);
+    }
 }
 
 export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
@@ -129,17 +131,41 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
     const animLength = r.i32();
     const shadeType = r.i32();
     const alpha = ge(1, 4) ? r.u8() : 0xFF;
+    const frameRate = ge(2, 2) ? r.f32() : 0;
 
-    if (!ge(2, 2)) r.skip(16); // reserved block, versions < 2.2
+    if (!ge(2, 2)) r.skip(16);
 
-    const numTextures = r.i32();
-    if (numTextures < 0)
-        throw new Error(`RSM: bad texture count ${numTextures}`);
     const textures: string[] = [];
-    for (let i = 0; i < numTextures; i++)
-        textures.push(r.name(40));
+    const textureToId = new Map<string, number>();
+    const addTexture = (name: string): number => {
+        let id = textureToId.get(name);
+        if (id === undefined) {
+            id = textures.length;
+            textures.push(name);
+            textureToId.set(name, id);
+        }
+        return id;
+    };
 
-    const mainNode = r.name(40);
+    if (!ge(2, 3)) {
+        const numTextures = r.i32();
+        if (numTextures < 0)
+            throw new Error(`RSM: bad texture count ${numTextures}`);
+        for (let i = 0; i < numTextures; i++)
+            textures.push(ge(2, 2) ? r.sizedName() : r.name(40));
+    }
+
+    const mainNodes: string[] = [];
+    if (ge(2, 2)) {
+        const numMainNodes = r.i32();
+        if (numMainNodes < 0)
+            throw new Error(`RSM: bad main node count ${numMainNodes}`);
+        for (let i = 0; i < numMainNodes; i++)
+            mainNodes.push(r.sizedName());
+    } else {
+        mainNodes.push(r.name(40));
+    }
+    const mainNode = mainNodes[0] ?? "";
 
     const numNodes = r.i32();
     if (numNodes < 0)
@@ -147,24 +173,37 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
 
     const nodes: RsmNode[] = [];
     for (let n = 0; n < numNodes; n++) {
-        const name = r.name(40);
-        const parent = r.name(40);
+        const name = ge(2, 2) ? r.sizedName() : r.name(40);
+        const parent = ge(2, 2) ? r.sizedName() : r.name(40);
 
         const numNodeTex = r.i32();
         if (numNodeTex < 0)
             throw new Error(`RSM: bad node texture count ${numNodeTex}`);
         const textureIds: number[] = [];
-        for (let i = 0; i < numNodeTex; i++)
-            textureIds.push(r.i32());
+        for (let i = 0; i < numNodeTex; i++) {
+            if (ge(2, 3))
+                textureIds.push(addTexture(r.sizedName()));
+            else
+                textureIds.push(r.i32());
+        }
 
         const offsetMatrix: number[] = [];
         for (let i = 0; i < 9; i++)
             offsetMatrix.push(r.f32());
-        const offsetTranslation = r.vec3();
-        const position = r.vec3();
-        const rotAngle = r.f32();
-        const rotAxis = r.vec3();
-        const scale = r.vec3();
+        let offsetTranslation: RswVec3, position: RswVec3, rotAngle: number, rotAxis: RswVec3, scale: RswVec3;
+        if (ge(2, 2)) {
+            offsetTranslation = { x: 0, y: 0, z: 0 };
+            position = r.vec3();
+            rotAngle = 0;
+            rotAxis = { x: 0, y: 0, z: 0 };
+            scale = { x: 1, y: 1, z: 1 };
+        } else {
+            offsetTranslation = r.vec3();
+            position = r.vec3();
+            rotAngle = r.f32();
+            rotAxis = r.vec3();
+            scale = r.vec3();
+        }
 
         const numVertices = r.i32();
         if (numVertices < 0)
@@ -189,40 +228,28 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             throw new Error(`RSM: bad face count ${numFaces}`);
         const faces: RsmFace[] = [];
         for (let i = 0; i < numFaces; i++) {
+            const faceEnd = ge(2, 2) ? (() => {
+                const len = r.i32();
+                if (len < 0)
+                    throw new Error(`RSM: bad face length ${len}`);
+                return r.offs + len;
+            })() : -1;
             const vertIdx: [number, number, number] = [r.u16(), r.u16(), r.u16()];
             const texIdx: [number, number, number] = [r.u16(), r.u16(), r.u16()];
             const textureId = r.u16();
-            r.u16();                  // padding
+            r.u16();
             const twoSided = r.i32();
             const smoothGroup = r.i32();
+            if (faceEnd >= 0) {
+                if (r.offs > faceEnd)
+                    throw new Error(`RSM: face overread at ${r.offs} > ${faceEnd}`);
+                r.skip(faceEnd - r.offs);
+            }
             faces.push({ vertIdx, texIdx, textureId, twoSided, smoothGroup });
         }
 
-        // Gate is 1.6 here even though Model.cpp:655 reads posanim from 1.5: in
-        // the v1.5 corpus 138/344 RSMs yield infeasible counts under the 1.5
-        // gate while all 344 parse cleanly at 1.6. Decomp source is from a later
-        // client where the format moved.
         const posKeyframes: RsmPosKeyframe[] = [];
-        if (ge(1, 6)) {
-            const numPosKf = r.i32();
-            if (numPosKf < 0)
-                throw new Error(`RSM: bad position keyframe count ${numPosKf}`);
-            for (let i = 0; i < numPosKf; i++) {
-                const frame = r.i32();
-                posKeyframes.push({ frame, p: r.vec3() });
-            }
-        }
-
         const rotKeyframes: RsmRotKeyframe[] = [];
-        const numRotKf = r.i32();
-        if (numRotKf < 0)
-            throw new Error(`RSM: bad rotation keyframe count ${numRotKf}`);
-        for (let i = 0; i < numRotKf; i++) {
-            const frame = r.i32();
-            const qx = r.f32(), qy = r.f32(), qz = r.f32(), qw = r.f32();
-            rotKeyframes.push({ frame, q: [qx, qy, qz, qw] });
-        }
-
         const scaleKeyframes: RsmScaleKeyframe[] = [];
         if (ge(2, 2)) {
             const numScaleKf = r.i32();
@@ -231,6 +258,64 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             for (let i = 0; i < numScaleKf; i++) {
                 const frame = r.i32();
                 scaleKeyframes.push({ frame, s: r.vec3() });
+                r.f32();
+            }
+
+            const numRotKf = r.i32();
+            if (numRotKf < 0)
+                throw new Error(`RSM: bad rotation keyframe count ${numRotKf}`);
+            for (let i = 0; i < numRotKf; i++) {
+                const frame = r.i32();
+                const qx = r.f32(), qy = r.f32(), qz = r.f32(), qw = r.f32();
+                rotKeyframes.push({ frame, q: [qx, qy, qz, qw] });
+            }
+
+            const numPosKf = r.i32();
+            if (numPosKf < 0)
+                throw new Error(`RSM: bad position keyframe count ${numPosKf}`);
+            for (let i = 0; i < numPosKf; i++) {
+                const frame = r.i32();
+                posKeyframes.push({ frame, p: r.vec3() });
+                r.i32();
+            }
+
+            if (ge(2, 3)) {
+                const numTexAnimGroups = r.i32();
+                if (numTexAnimGroups < 0)
+                    throw new Error(`RSM: bad texture animation group count ${numTexAnimGroups}`);
+                for (let i = 0; i < numTexAnimGroups; i++) {
+                    r.i32();
+                    const numTexAnims = r.i32();
+                    if (numTexAnims < 0)
+                        throw new Error(`RSM: bad texture animation count ${numTexAnims}`);
+                    for (let j = 0; j < numTexAnims; j++) {
+                        r.i32();
+                        const numFrames = r.i32();
+                        if (numFrames < 0)
+                            throw new Error(`RSM: bad texture animation frame count ${numFrames}`);
+                        r.skip(numFrames * 8);
+                    }
+                }
+            }
+        } else {
+
+            if (ge(1, 6)) {
+                const numPosKf = r.i32();
+                if (numPosKf < 0)
+                    throw new Error(`RSM: bad position keyframe count ${numPosKf}`);
+                for (let i = 0; i < numPosKf; i++) {
+                    const frame = r.i32();
+                    posKeyframes.push({ frame, p: r.vec3() });
+                }
+            }
+
+            const numRotKf = r.i32();
+            if (numRotKf < 0)
+                throw new Error(`RSM: bad rotation keyframe count ${numRotKf}`);
+            for (let i = 0; i < numRotKf; i++) {
+                const frame = r.i32();
+                const qx = r.f32(), qy = r.f32(), qz = r.f32(), qw = r.f32();
+                rotKeyframes.push({ frame, q: [qx, qy, qz, qw] });
             }
         }
 
@@ -241,9 +326,6 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
         });
     }
 
-    // Model-level trailer (versions < 1.6): posKf section, then volume-box
-    // section, both count-prefixed. 5/6086 v1.4 RSMs carry garbage here
-    // (morgue_h_02..06); skip only when counts fit.
     if (!ge(1, 6)) {
         if (r.remaining() >= 4) {
             const numPosKf = r.i32();
@@ -263,5 +345,5 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
         }
     }
 
-    return { major, minor, shadeType, alpha, mainNode, textures, nodes, animLength };
+    return { major, minor, shadeType, alpha, mainNode, textures, nodes, animLength, frameRate };
 }

@@ -1,40 +1,21 @@
-
-// Parser for Granny2 (.gr2) files used by RO for WoE 3D props (Emperium,
-// guardians, flag, treasure box) and the shared 3dmob_bone animation files.
-//
-// Container layout: [magic+header 32B][GrannyFileHeader 56B][section table
-// (44B per entry)][per-section data + fixup/marshal tables]. Sections are
-// concatenated into one decompressed blob; an absolute-offset -> absolute-offset
-// fixup map rewrites stored pointers. A self-describing type tree is walked in
-// lockstep with root data to pull out typed members.
-//
-// 32-bit LE only — RO ships no 64-bit or BE variants.
-//
-// Compression: this parser only handles NoCompression sections. RO .gr2 ship
-// with Granny compression type 1 (Oodle0), which has no open decoder, so the
-// offline tool `tools/gr2_decompress.c` (wine + granny2.dll) expands every
-// section to NoCompression at extraction time. Both Oodle0 and Oodle1 sections
-// throw at runtime — they shouldn't appear in baked files.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assertExists, readString } from "../util.js";
 
-// Type-tree node "type" field.
 const enum GrannyType {
     None = 0,
-    Inline = 1,                 // container with children, no data
-    Reference = 2,              // pointer to one child struct
-    ReferenceToArray = 3,       // count + pointer to packed array
-    ArrayOfReferences = 4,      // count + pointer to array of pointers
-    VariantReference = 5,       // (type ptr, data ptr)
-    ReferenceToVariantArray = 7,// (type ptr, count, data ptr)
-    String = 8,                 // pointer to NUL-terminated string
-    Transform = 9,              // GrannyTransform (68 bytes)
+    Inline = 1,
+    Reference = 2,
+    ReferenceToArray = 3,
+    ArrayOfReferences = 4,
+    VariantReference = 5,
+    ReferenceToVariantArray = 7,
+    String = 8,
+    Transform = 9,
     Real32 = 10,
     Int8 = 11, UInt8 = 12, BinormalInt8 = 13, NormalUInt8 = 14,
     Int16 = 15, UInt16 = 16, BinormalInt16 = 17, NormalUInt16 = 18,
     Int32 = 19, UInt32 = 20,
-    Real16 = 21,                // half float
+    Real16 = 21,
     EmptyReference = 22,
 }
 
@@ -46,7 +27,6 @@ const enum GrannyCompression {
     BitKnit2 = 4,
 }
 
-// Per-element on-disk size in 32-bit mode (scalar/struct types only).
 const TYPE_SCALAR_SIZE: { [k: number]: number } = {
     [GrannyType.Real32]: 4, [GrannyType.Int32]: 4, [GrannyType.UInt32]: 4,
     [GrannyType.Int16]: 2, [GrannyType.UInt16]: 2, [GrannyType.BinormalInt16]: 2, [GrannyType.NormalUInt16]: 2,
@@ -55,7 +35,6 @@ const TYPE_SCALAR_SIZE: { [k: number]: number } = {
     [GrannyType.Transform]: 68,
 };
 
-// LE 32-bit Granny2 v6/v7 magic.
 const GRANNY_MAGIC = [0xb8, 0x67, 0xb0, 0xca, 0xf8, 0x6d, 0xb1, 0x0f, 0x84, 0x72, 0x8c, 0x7e, 0x5e, 0x19, 0x00, 0x1e];
 
 interface GrannySection {
@@ -74,10 +53,10 @@ interface GrannySection {
 
 export interface GrannyFile {
     blob: Uint8Array;
-    slice: ArrayBufferSlice; // same memory as `blob`, for readString
+    slice: ArrayBufferSlice;
     view: DataView;
     sectionBase: number[];
-    fixups: Map<number, number>; // abs src -> abs dst (both in `blob`)
+    fixups: Map<number, number>;
     typeAbs: number;
     rootAbs: number;
     version: number;
@@ -94,12 +73,10 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         if (bytes[i] !== GRANNY_MAGIC[i])
             throw new Error(`Granny: bad magic`);
 
-    // headerFormat@0x14: 0 = per-section (de)compression, only form RO uses.
     const headerFormat = view.getUint32(0x14, true);
     if (headerFormat !== 0)
         throw new Error(`Granny: unsupported header format ${headerFormat}`);
 
-    // GrannyFileHeader at 0x20.
     const version = view.getUint32(0x20, true);
     if (version !== 6 && version !== 7)
         throw new Error(`Granny: unsupported version ${version}`);
@@ -107,7 +84,6 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     if (totalSize !== view.byteLength)
         throw new Error(`Granny: size mismatch (header ${totalSize}, file ${view.byteLength})`);
 
-    // sectionArrayOffset is relative to the file header at 0x20.
     const sectionArrayOffset = 0x20 + view.getUint32(0x2c, true);
     const sectionCount = view.getUint32(0x30, true);
 
@@ -116,7 +92,6 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     const rootSection = view.getUint32(0x3c, true);
     const rootOffset = view.getUint32(0x40, true);
 
-    // Section table: 44 bytes per entry.
     const sections: GrannySection[] = [];
     for (let i = 0; i < sectionCount; i++) {
         const o = sectionArrayOffset + i * 44;
@@ -135,7 +110,6 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         });
     }
 
-    // Decompress every section into one contiguous blob.
     let blobSize = 0;
     for (const s of sections)
         blobSize += s.decompressedSize;
@@ -145,7 +119,7 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     for (const s of sections) {
         sectionBase.push(cursor);
         if (s.decompressedSize === 0) {
-            // empty section
+
         } else if (s.compression === GrannyCompression.None) {
             blob.set(bytes.subarray(s.dataOffset, s.dataOffset + s.decompressedSize), cursor);
         } else if (s.compression === GrannyCompression.Oodle1) {
@@ -158,9 +132,6 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
         cursor += s.decompressedSize;
     }
 
-    // Pointer-fixup tables: each entry rewrites (srcSection, srcOffset) to
-    // point at (dstSection, dstOffset). Built as abs -> abs in `blob`; a pointer
-    // field with no fixup is null.
     const fixups = new Map<number, number>();
     for (let i = 0; i < sections.length; i++) {
         const s = sections[i];
@@ -171,7 +142,7 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
             const dstOffset = view.getUint32(o + 8, true);
             fixups.set(sectionBase[i] + srcOffset, sectionBase[dstSection] + dstOffset);
         }
-        // Marshalling fixups only matter for endianness mismatches; skipped.
+
     }
 
     return {
@@ -186,9 +157,6 @@ export function parseGranny(buffer: ArrayBufferSlice): GrannyFile {
     };
 }
 
-// Walks a list of 32-byte type nodes (terminated by type==0) at `typeAbs`,
-// consuming matching data sequentially from `dataAbs`. Returns members by name.
-
 interface GrannyMember {
     type: number;
     name: string | null;
@@ -202,11 +170,8 @@ interface GrannyMember {
     scalarAbs?: number;
 }
 
-// 32-bit: type(4) name(4) children(4) arraySize(4) extra[12] extra4(4).
 const TYPE_NODE_SIZE = 32;
 
-// Data-stream byte size of a member (32-bit). Inline embeds its child struct
-// in place; without this the walker desyncs after any inline member.
 function memberDataSize(gr: GrannyFile, type: number, childTypeAbs: number | null, arraySize: number, depth: number): number {
     const n = Math.max(1, arraySize);
     let unit: number;
@@ -343,15 +308,15 @@ interface GrannyVertexFormatField {
 
 export interface GrannyMesh {
     name: string | null;
-    positions: Float32Array;   // vertexCount * 3
-    normals: Float32Array;     // vertexCount * 3
-    uvs: Float32Array;         // vertexCount * 2
-    boneWeights: Float32Array; // vertexCount * 4
-    boneIndices: Uint8Array;   // vertexCount * 4
+    positions: Float32Array;
+    normals: Float32Array;
+    uvs: Float32Array;
+    boneWeights: Float32Array;
+    boneIndices: Uint8Array;
     indices: Uint32Array;
     vertexCount: number;
     boneBindingNames: string[];
-    textureIndex: number; // -1 if none
+    textureIndex: number;
 }
 
 interface GrannyTextureImage {
@@ -365,8 +330,8 @@ export interface GrannyBone {
     parentIndex: number;
     translation: [number, number, number];
     rotation: [number, number, number, number];
-    scaleShear: Float32Array; // row-major 3x3
-    inverseBindPose: Float32Array; // column-major 4x4
+    scaleShear: Float32Array;
+    inverseBindPose: Float32Array;
 }
 
 export interface GrannySkeleton {
@@ -374,13 +339,11 @@ export interface GrannySkeleton {
     bones: GrannyBone[];
 }
 
-// One keyframed curve. `dimension` per knot: 3 = position, 4 = orientation quat,
-// 9 = scale-shear 3x3. Zero knots means "use the bone's rest value".
 export interface GrannyCurve {
     degree: number;
     dimension: number;
     knots: Float32Array;
-    controls: Float32Array; // knotCount * dimension
+    controls: Float32Array;
 }
 
 export interface GrannyTransformTrack {
@@ -451,7 +414,6 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
     if (topo === undefined || topo.ref === null || topo.ref === undefined || topo.childTypeAbs === null)
         return null;
 
-    // Vertices: ReferenceToVariantArray, variant type = vertex format.
     const vw = walkType(gr, pvd.childTypeAbs, pvd.ref);
     const verts = vw.get("Vertices");
     if (verts === undefined || verts.arrAbs === null || verts.arrAbs === undefined || verts.variantTypeAbs === null || verts.variantTypeAbs === undefined || verts.count === undefined)
@@ -494,7 +456,6 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
         }
     }
 
-    // Indices: u32 or u16.
     const tw = walkType(gr, topo.childTypeAbs, topo.ref);
     let indices = new Uint32Array(0);
     const ind32 = tw.get("Indices");
@@ -509,8 +470,6 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
             indices[i] = view.getUint16(ind16.arrAbs + i * 2, true);
     }
 
-    // Vertex BoneIndices are LOCAL indices into this list; each binding's
-    // BoneName maps to a skeleton bone.
     const boneBindingNames: string[] = [];
     const bb = mw.get("BoneBindings");
     if (bb !== undefined && bb.arrAbs !== null && bb.arrAbs !== undefined && bb.count !== undefined && bb.childTypeAbs !== null) {
@@ -526,8 +485,6 @@ function extractMesh(gr: GrannyFile, meshTypeAbs: number, meshDataAbs: number): 
     return { name, positions, normals, uvs, boneWeights, boneIndices, indices, vertexCount, boneBindingNames, textureIndex: -1 };
 }
 
-// Decodes one embedded texture's level-0 image to RGBA. Honours the per-component
-// shift/bits layout; common case is RGBA8888 (a direct copy).
 function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number): GrannyTextureImage | null {
     const { view } = gr;
     const tw = walkType(gr, texTypeAbs, texDataAbs);
@@ -538,7 +495,6 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
     if (width === undefined || height === undefined || width <= 0 || height <= 0)
         return null;
 
-    // Pixel layout (inline): BytesPerPixel + per-component shift/bit count.
     let bytesPerPixel = 4;
     const shifts = [0, 8, 16, 24];
     const bits = [8, 8, 8, 8];
@@ -553,7 +509,6 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
             for (let i = 0; i < 4; i++) bits[i] = view.getInt32(bi.scalarAbs + i * 4, true);
     }
 
-    // Images[0].MIPLevels[0].Pixels.
     const images = tw.get("Images");
     if (images === undefined || images.arrAbs === null || images.arrAbs === undefined || !images.count || images.childTypeAbs === null)
         return null;
@@ -568,11 +523,6 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
     const strideField = scI(mw.get("Stride"));
     const rowStride = strideField && strideField > 0 ? strideField : width * bytesPerPixel;
 
-    // RO's monster .gr2 ship RAD-encoded inline pixels that the offline section
-    // decompressor does NOT expand (only tools/gr2_texbake.c does, into separate
-    // <name>.<i>.tex files that the loader fetches alongside the .gr2). When the
-    // inline pixel blob is undersized, fall through: the caller will resolve the
-    // texture from the external .tex.
     if (pixels.count < width * height * bytesPerPixel)
         return null;
 
@@ -611,8 +561,6 @@ function extractTexture(gr: GrannyFile, texTypeAbs: number, texDataAbs: number):
     return { width, height, rgba };
 }
 
-// Returns the absolute offset of the diffuse granny_texture struct, recursing
-// through the material's Maps (mirrors GrannyGetMaterialTextureByType).
 function resolveMaterialTexture(gr: GrannyFile, matTypeAbs: number, matDataAbs: number, depth = 0): number | null {
     if (depth > 8)
         return null;
@@ -626,7 +574,7 @@ function resolveMaterialTexture(gr: GrannyFile, matTypeAbs: number, matDataAbs: 
         if (mapStride === 0)
             throw new Error(`Granny: material Maps element stride is 0; type tree is empty or malformed`);
         for (let i = 0; i < maps.count; i++) {
-            // granny_material_map = { Usage: String, Map: granny_material* }.
+
             const mapw = walkType(gr, maps.childTypeAbs, maps.arrAbs + i * mapStride);
             const subMat = mapw.get("Map");
             if (subMat !== undefined && subMat.ref !== null && subMat.ref !== undefined && subMat.childTypeAbs !== null) {
@@ -662,7 +610,6 @@ function resolveMeshTextureIndex(gr: GrannyFile, meshTypeAbs: number, meshDataAb
 export function extractGrannyModel(gr: GrannyFile): GrannyModelData {
     const top = walkType(gr, gr.typeAbs, gr.rootAbs);
 
-    // Textures first: their data offsets key the per-mesh material lookup.
     const textureNames: string[] = [];
     const textures: (GrannyTextureImage | null)[] = [];
     const texAbsToIndex = new Map<number, number>();
@@ -725,9 +672,7 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     const name = sw.get("Name")?.str ?? null;
     const bonesM = sw.get("Bones");
     const bones: GrannyBone[] = [];
-    // Bone struct: Name + ParentIndex + Transform(68B) + InverseWorldTransform[16]
-    // (the inverse bind-pose matrix) + ignored pointers. Stride comes from
-    // computeInlineSize over the bone type.
+
     if (bonesM !== undefined && bonesM.arrAbs !== null && bonesM.arrAbs !== undefined && bonesM.childTypeAbs !== null && bonesM.count !== undefined) {
         const stride = computeInlineSize(gr, bonesM.childTypeAbs);
         for (let i = 0; i < bonesM.count; i++) {
@@ -740,14 +685,14 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
             let rotation: [number, number, number, number] = [0, 0, 0, 1];
             const scaleShear = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
             if (tr !== undefined && tr.scalarAbs !== undefined) {
-                // GrannyTransform: Flags(u32) + Position[3] + Orientation[4] + ScaleShear[3][3].
+
                 const o = tr.scalarAbs;
                 translation = [view.getFloat32(o + 4, true), view.getFloat32(o + 8, true), view.getFloat32(o + 12, true)];
                 rotation = [view.getFloat32(o + 16, true), view.getFloat32(o + 20, true), view.getFloat32(o + 24, true), view.getFloat32(o + 28, true)];
                 for (let k = 0; k < 9; k++)
                     scaleShear[k] = view.getFloat32(o + 32 + k * 4, true);
             }
-            // Inverse bind-pose matrix; column-major, copy verbatim.
+
             const inverseBindPose = new Float32Array(16);
             const iw = bw.get("InverseWorldTransform");
             if (iw !== undefined && iw.scalarAbs !== undefined) {
@@ -762,8 +707,6 @@ function extractSkeleton(gr: GrannyFile, skTypeAbs: number, skDataAbs: number): 
     return { name, bones };
 }
 
-// Only handles inline Knots/Controls — the form every RO baked .gr2 uses.
-// SDK files have a CurveData VariantReference indirection we don't need.
 function extractCurve(gr: GrannyFile, curveTypeAbs: number, curveDataAbs: number, dimension: number): GrannyCurve | null {
     const { view } = gr;
     const cw = walkType(gr, curveTypeAbs, curveDataAbs);

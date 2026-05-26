@@ -1,15 +1,7 @@
-
-// Animated water plane: a flat grid at the map's water level. Cycles through
-// 32 texture frames and bobs each vertex on a sine wave whose phase scrolls
-// across the grid. The original advances once per ~60fps game tick; we
-// reproduce that step on a fixed 1/60s tick driven by real elapsed time.
-
 import { DecodedImage } from "./bmp.js";
 
-// Texture tiles once every 4 cells (RO authoring step).
 const WATER_TEX_UV = 0.25;
 
-// world X/Z + integer cell-corner sum (gx+gy) for wave phase + tiling UV.
 export const WATER_VERTEX_STRIDE_BYTES = 5 * 4;
 
 export interface WaterMesh {
@@ -18,15 +10,13 @@ export interface WaterMesh {
 }
 
 export interface WaterParams {
-    level: number;       // RSW water level (positive; world Y is its negation)
-    animSpeed: number;   // texture-cycle divisor; frame = (cnt/animSpeed) % 32
-    wavePitch: number;   // phase increment per grid step, degrees
-    waveSpeed: number;   // phase advance per 1/60s tick, degrees
-    waveHeight: number;  // sine amplitude, world units
+    level: number;
+    animSpeed: number;
+    wavePitch: number;
+    waveSpeed: number;
+    waveHeight: number;
 }
 
-// One quad per GND cell. Vertical position is filled by the shader from the
-// wave; only X/Z/grid/UV are stored. Winding matches the terrain quad.
 export function buildWaterMesh(gndWidth: number, gndHeight: number, zoom: number): WaterMesh {
     const vw = gndWidth + 1;
     const vh = gndHeight + 1;
@@ -60,9 +50,6 @@ export function buildWaterMesh(gndWidth: number, gndHeight: number, zoom: number
     return { vertexData, indexData: new Uint32Array(indices) };
 }
 
-// Water frames are JPEG, which decodeBMP can't read; createImageBitmap +
-// OffscreenCanvas readback yields the same top-down RGBA8 the rest of the
-// pipeline uses.
 export async function decodeImageBitmapRGBA(bytes: Uint8Array): Promise<DecodedImage> {
     const blob = new Blob([bytes as BlobPart]);
     const bitmap = await createImageBitmap(blob);
@@ -80,14 +67,12 @@ export async function decodeImageBitmapRGBA(bytes: Uint8Array): Promise<DecodedI
     return { width, height, rgba: new Uint8Array(imageData.data.buffer.slice(0)) };
 }
 
-// Drains accumulated dt in fixed 1/60s steps so the speed matches the
-// original at any render rate.
 export class WaterAnimator {
     private static readonly STEP = 1 / 60;
 
     private accum = 0;
-    private cnt = 0;          // texture-frame counter, wraps at 32*animSpeed
-    private offsetDeg = 0;    // wave phase, wrapped to (-180, 180]
+    private cnt = 0;
+    private offsetDeg = 0;
 
     constructor(private animSpeed: number, private waveSpeed: number) {
         if (this.animSpeed <= 0)
@@ -96,7 +81,7 @@ export class WaterAnimator {
 
     public update(dtSeconds: number): void {
         this.accum += dtSeconds;
-        // Clamp after a long stall so we never burst thousands of steps.
+
         if (this.accum > 1.0)
             this.accum = 1.0;
         while (this.accum >= WaterAnimator.STEP) {

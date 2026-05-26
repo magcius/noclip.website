@@ -1,8 +1,3 @@
-
-// Places the WoE Granny props on guild-castle maps. RO's .gr2s are
-// Oodle0-compressed with RAD-encoded textures; sources are expanded offline into
-// decompressed .gr2 + per-texture <name>.<i>.tex.
-
 import { mat4 } from "gl-matrix";
 import { DataFetcher } from "../DataFetcher.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -13,19 +8,15 @@ import { gatCellSurfaceHeight, GAT_CELL_SIZE, GND_CELL_SIZE } from "./coord.js";
 import { extractGrannyModel, GrannyAnimation, parseGranny } from "./granny.js";
 import { GrannyInstance } from "./granny-render.js";
 
-// Guardian action clips live in shared 3dmob_bone files keyed by id suffix.
-// Death omitted (loops as a glitch).
 const GUARDIAN_CLIP_ID: { [model: string]: string } = {
     kguardian90_7: "7", aguardian90_8: "8", sguardian90_9: "9",
 };
 const GUARDIAN_ACTIONS = ["move", "attack", "damage"];
 
-// Treasure box's clip is a one-shot tumble; looped it spins unnaturally.
 const STATIC_MODELS = new Set(["treasurebox_2"]);
 
 const GRANNY_WORLD_SCALE = 1.0;
 
-// Emperium-room cell (server GAT coords) per castle. Other display models go beside it.
 const EMPERIUM_ROOM: { [mapId: string]: [number, number] } = {
     aldeg_cas01: [216, 23], aldeg_cas02: [213, 23], aldeg_cas03: [205, 31], aldeg_cas04: [36, 217], aldeg_cas05: [27, 101],
     gefg_cas01: [197, 181], gefg_cas02: [176, 178], gefg_cas03: [244, 166], gefg_cas04: [174, 177], gefg_cas05: [194, 184],
@@ -44,7 +35,6 @@ const WOE_LAYOUT: { name: string, dx: number, dy: number }[] = [
     { name: "treasurebox_2", dx: 4, dy: 4 },
 ];
 
-// Baked .tex: 'GTEX' + u32 width + u32 height + u32 flags, then RGBA pixels.
 function parseTex(data: ArrayBufferSlice): DecodedImage | null {
     const view = data.createDataView();
     if (view.byteLength < 16 || view.getUint8(0) !== 0x47 || view.getUint8(1) !== 0x54 || view.getUint8(2) !== 0x45 || view.getUint8(3) !== 0x58)
@@ -57,7 +47,6 @@ function parseTex(data: ArrayBufferSlice): DecodedImage | null {
     return { width, height, rgba };
 }
 
-// Granny is Z-up, render frame is Y-up. (cx, cy) recentres the footprint on the cell.
 function placement(worldX: number, worldY: number, worldZ: number, scale: number, cx: number, cy: number): mat4 {
     const m = mat4.create();
     mat4.translate(m, m, [worldX, worldY, worldZ]);
@@ -102,7 +91,7 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
 
         const gatX = anchor[0] + layout.dx;
         const gatY = anchor[1] + layout.dy;
-        // X is mirrored about the map centre (see coord.ts).
+
         const worldX = gnd.width * GND_CELL_SIZE - (gatX + 0.5) * GAT_CELL_SIZE;
         const worldZ = (gatY + 0.5) * GAT_CELL_SIZE;
         const worldY = -gatCellSurfaceHeight(gat, gatX, gatY);
@@ -110,7 +99,7 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
         const animations: GrannyAnimation[] = [];
         if (!STATIC_MODELS.has(name)) {
             if (model.animations[0])
-                animations.push(model.animations[0]); // embedded idle
+                animations.push(model.animations[0]);
             const clipId = GUARDIAN_CLIP_ID[name];
             if (clipId !== undefined) {
                 for (const action of GUARDIAN_ACTIONS) {
@@ -120,7 +109,7 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
                         if (clip.animations[0])
                             animations.push(clip.animations[0]);
                     } catch {
-                        // Missing action clip drops from cycle.
+
                     }
                 }
             }
@@ -128,7 +117,7 @@ export async function loadWoeGrannyModels(dataFetcher: DataFetcher, pathBase: st
 
         const [cx, cy] = footprintCentre(model.meshes);
         const worldMatrix = placement(worldX, worldY, worldZ, GRANNY_WORLD_SCALE, cx, cy);
-        // Mirror geometry/normals in place to match the X-mirrored world.
+
         worldMatrix[0] = -worldMatrix[0]; worldMatrix[4] = -worldMatrix[4]; worldMatrix[8] = -worldMatrix[8];
         instances.push({
             meshes: model.meshes,
