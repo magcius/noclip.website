@@ -255,8 +255,6 @@ func extract32bitRGBA(finalPixel helpers.PixelBytes) (uint8, uint8, uint8, uint8
 	R := finalPixel.Bytes[0]
 	G := finalPixel.Bytes[1]
 	B := finalPixel.Bytes[2]
-	// on the PS2, the color blending divides the values by 128 which means an alpha of 128 results in full opacity
-	// similar to PS1
 	A := uint8(float32(finalPixel.Bytes[3]) / 128.0 * 255.0)
 
 	// A := 255 //finalPixel.Bytes[3]

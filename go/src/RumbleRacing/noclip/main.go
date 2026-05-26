@@ -18,7 +18,7 @@ import (
 
 func main() {
 	js.Global().Set("parseTrackFile", js.FuncOf(parseTrackFile))
-	select {} // keep alive
+	select {}
 }
 
 func parseTrackFile(this js.Value, args []js.Value) any {
@@ -30,7 +30,6 @@ func parseTrackFile(this js.Value, args []js.Value) any {
 
 	js.CopyBytesToGo(data, uint8Arr)
 
-	// now data is a real go []byte
 	fmt.Println("Got bytes:", len(data))
 
 	result := processTrackFile(data, isGlobalFile.Bool())
@@ -137,7 +136,6 @@ func processTrackFile(rawData []byte, isGlobalFile bool) RumbleRacingTrackFile {
 		switch thing := resource.(type) {
 		case *asset.Actor:
 			{
-				// fmt.Println("ACTOR FOUND:", thing.ActorType, thing.X, thing.Y, thing.Z)
 				// we only care about actors that have models for now..
 				if thing.O3DResourceIndex > 0 {
 					out.Actors = append(out.Actors, ActorData{
@@ -146,12 +144,6 @@ func processTrackFile(rawData []byte, isGlobalFile bool) RumbleRacingTrackFile {
 						X:                thing.X,
 						Y:                thing.Y,
 						Z:                thing.Z,
-						ScaleX:           thing.ScaleX,
-						ScaleY:           thing.ScaleY,
-						ScaleZ:           thing.ScaleZ,
-						AngleX:           thing.AngleX,
-						AngleY:           thing.AngleY,
-						AngleZ:           thing.AngleZ,
 						O3DResourceIndex: thing.O3DResourceIndex,
 					})
 				}

@@ -78,12 +78,10 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
-    // Track OBF geometry
     for (const obf of this.trackFile.Obfs) {
       this.trackGeometries.push(new ObfGeometry(cache, obf, this.exclude));
     }
 
-    // O3D model geometry
     for (let i = 0; i < this.trackFile.O3Ds.length; i++) {
       const o3d = this.trackFile.O3Ds[i];
       this.o3dGeometries.set(
@@ -209,7 +207,6 @@ class RumbleRacingScene implements SceneGfx {
       this.submitGeometryDrawCalls(geometry, trackMatrix);
     }
 
-    // ── Instanced O3D actors ──────────────────────────────────────────────
     if (this.showActors) {
       for (const actor of this.trackFile.Actors) {
         const o3dGeom = this.o3dGeometries.get(actor.O3DResourceIndex);
@@ -358,32 +355,27 @@ class RumbleRacingScene implements SceneGfx {
   }
 }
 
-// build a world matrix from an actor's transform data or fallback
 function buildActorMatrix(actor: Actor, globalScale: number): mat4 {
   const m = mat4.create();
 
   if (actor.transform) {
     const t = actor.transform;
 
-    // Column 0: Right vector (Rotation X)
     m[0] = t[0][0];
     m[1] = t[0][1];
     m[2] = t[0][2];
     m[3] = 0.0;
 
-    // Column 1: Up vector (Rotation Y)
     m[4] = t[1][0];
     m[5] = t[1][1];
     m[6] = t[1][2];
     m[7] = 0.0;
 
-    // Column 2: Forward vector (Rotation Z)
     m[8] = t[2][0];
     m[9] = t[2][1];
     m[10] = t[2][2];
     m[11] = 0.0;
 
-    // Column 3: Translation (Position) scaled properly
     m[12] = t[3][0] * globalScale;
     m[13] = t[3][1] * globalScale;
     m[14] = t[3][2] * globalScale;
@@ -432,10 +424,7 @@ class RumbleRacingSceneDesc implements SceneDesc {
     const trackBuffer = trackBlob.arrayBuffer;
     const globalBuffer = globalBlob.arrayBuffer;
 
-    // spin up the worker and offload WASM parsing
     const myWorker = new Worker(new URL("worker.ts", import.meta.url));
-
-    // Get the absolute URL of the WASM file relative to this module
     const wasmUrl = new URL("./rumble-racing.wasm", import.meta.url).href;
 
     const wasmParsingPromise = new Promise<{
@@ -443,7 +432,7 @@ class RumbleRacingSceneDesc implements SceneDesc {
       globalData: RumbleRacingTrackFile;
     }>((resolve, reject) => {
       myWorker.onmessage = (e) => {
-        myWorker.terminate(); // Clean up worker resources once finished
+        myWorker.terminate();
         if (e.data.success) {
           resolve({
             trackData: e.data.trackData,

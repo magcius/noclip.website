@@ -29,7 +29,6 @@ func (c *Ctrl) Data() []byte {
 	return c.data
 }
 
-// 3. Implement TopLevelChunk interface method
 func (c *Ctrl) Index() uint32 {
 	return c.index
 }

@@ -28,7 +28,6 @@ func (c *Generic) Data() []byte {
 	return c.data
 }
 
-// 3. Implement TopLevelChunk interface method
 func (c *Generic) Index() uint32 {
 	return c.index
 }

@@ -31,7 +31,6 @@ func (c *SWVR) Data() []byte {
 	return c.data
 }
 
-// 3. Implement TopLevelChunk interface method
 func (c *SWVR) Index() uint32 {
 	return c.index
 }

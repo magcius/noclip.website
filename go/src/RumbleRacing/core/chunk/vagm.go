@@ -29,7 +29,6 @@ func (c *VAGM) Data() []byte {
 	return c.data
 }
 
-// 3. Implement TopLevelChunk interface method
 func (c *VAGM) Index() uint32 {
 	return c.index
 }

@@ -30,7 +30,6 @@ func (c *Shoc) Data() []byte {
 	return c.data
 }
 
-// 3. Implement TopLevelChunk interface method
 func (c *Shoc) Index() uint32 {
 	return c.index
 }
@@ -72,7 +71,6 @@ func parseSubChunk(data []byte, shocIndex uint32) ShocMetaChunk {
 	}
 }
 
-// Shoc internal structure
 type ShocMetaChunk interface {
 	FourCC() string
 	Data() []byte

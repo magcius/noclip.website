@@ -7,7 +7,6 @@ import (
 	"rumble-reader/chunk/shoc"
 )
 
-// TXF seems to contain
 type TXF struct {
 	rawData []byte
 
@@ -89,7 +88,6 @@ func ParseTXF(buf []byte, hdr shoc.SHDR, resName string) (*TXF, error) {
 	return &txfAsset, nil
 }
 
-// Splits binary stream into chunks: [4-byte tag][4-byte size][size bytes of data]
 func splitTaggedChunks(buf []byte) ([][]byte, error) {
 	var chunks [][]byte
 	offset := 0
@@ -107,11 +105,10 @@ func splitTaggedChunks(buf []byte) ([][]byte, error) {
 		data := buf[offset : offset+int(size)]
 		offset += int(size)
 
-		// Make a new binary chunk: tag + size + data
 		chunk := make([]byte, 0, 8+len(data))
 		chunk = append(chunk, tag...)
 		chunk = append(chunk,
-			buf[offset-int(size)-4:offset-int(size)]..., // size
+			buf[offset-int(size)-4:offset-int(size)]...,
 		)
 		chunk = append(chunk, data...)
 
