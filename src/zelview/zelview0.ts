@@ -32,7 +32,7 @@ export class ZELVIEW0 {
         for (let i = 0; i < this.entries.length; i++)
             if (this.entries[i].vStart === vStart)
                 return this.entries[i];
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public lookupAddress(file: VFSEntry, offs: number): { buffer: ArrayBufferSlice, offs: number } {
@@ -129,7 +129,7 @@ function readHeaders(rom: ZELVIEW0, file: VFSEntry, banks: RomBanks, sharedOutpu
         else if (bankIdx === 0x03)
             return assertExists(banks.room);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     function lookupAddress(addr: number): { buffer: ArrayBufferSlice, offs: number } {

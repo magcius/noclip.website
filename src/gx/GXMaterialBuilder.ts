@@ -438,7 +438,7 @@ export class GXMaterialBuilder {
             texGenType = GX.TexGenType.SRTG;
             texGenSrc = GX.TexGenSrc.COLOR1;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         // TODO(jstpierre): XF_MATRIXINDEX0_ID
@@ -506,7 +506,7 @@ export class GXMaterialBuilder {
                 case GX.TevScale.$HWB_BGR24: return sub ? GX.TevOp.COMP_BGR24_EQ : GX.TevOp.COMP_BGR24_GT;
                 case GX.TevScale.$HWB_RGB8: return sub ? GX.TevOp.COMP_RGB8_EQ : GX.TevOp.COMP_RGB8_GT;
                 default:
-                    throw "whoops 2";
+                    throw new Error("whoops 2");
                 }
             } else {
                 return sub ? GX.TevOp.SUB : GX.TevOp.ADD;

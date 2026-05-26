@@ -55,7 +55,7 @@ function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): numb
     } else if (light.type === WorldLightType.QuakeLight) {
         return Math.max(0.0, light.distAttenuation[1] - vec3.length(delta));
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -95,7 +95,7 @@ function worldLightAngleFalloff(light: WorldLight, surfaceNormal: ReadonlyVec3, 
     } else if (light.type === WorldLightType.SkyAmbient) {
         return 1.0;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

@@ -216,7 +216,7 @@ function processTIM2Texture(img: IMG, buffer: ArrayBufferSlice, name: string, bI
         }
     }
     else
-        throw "Unimplemented format";
+        throw new Error("Unimplemented format");
     img.textures.push({ name, width, height, pixels: finalPixelData });
 }
 
@@ -249,7 +249,7 @@ export function animateTexture(texAnim: TexAnim, animationController: AnimationC
         const srcTexName: string = texAnimData.srcTex;
         const dstTexName: string = texAnimData.dstTex;
         if (!img.texnameToAnimTexture.has(srcTexName) || !img.texnameToAnimTexture.get(dstTexName))
-            throw "srcTex or dstTex not found";
+            throw new Error("srcTex or dstTex not found");
 
         const srcTex: Texture = img.texnameToAnimTexture.get(srcTexName)!;
         const dstTex: Texture = img.texnameToAnimTexture.get(dstTexName)!;

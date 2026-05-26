@@ -396,7 +396,7 @@ function findTimeInSchejule(schedule: dScnKy__Schedule, time: number): dScnKy__S
             return entry;
     }
 
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 export function dKy_plight_priority_set(envLight: dScnKy_env_light_c, lightInfluence: LIGHT_INFLUENCE): void {

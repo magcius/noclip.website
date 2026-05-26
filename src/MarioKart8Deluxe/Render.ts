@@ -91,7 +91,7 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
         // TODO(jstpierre): This requires GL_ARB_texture_mirror_clamp_to_edge
         return GfxWrapMode.Mirror;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -103,7 +103,7 @@ function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
     case FilterMode.Point:
         return GfxMipFilterMode.Nearest;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -114,7 +114,7 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
     case FilterMode.Point:
         return GfxTexFilterMode.Point;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -891,7 +891,7 @@ ${this.generateAlphaTest()}
         case GfxCompareMode.NotEqual:     return `t_PixelOut.a != ${ref}`;
         case GfxCompareMode.GreaterEqual: return `t_PixelOut.a >= ${ref}`;
         case GfxCompareMode.Always:       return `true`;
-        default: throw "whoops";
+        default: throw new Error("whoops");
         }
     }
 
@@ -927,7 +927,7 @@ function getRenderInfoBoolean(renderInfo: FMAT_RenderInfo): boolean {
     else if (value === 'false' || value === '0')
         return false;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateCullMode(fmat: FMAT): GfxCullMode | null {
@@ -941,7 +941,7 @@ function translateCullMode(fmat: FMAT): GfxCullMode | null {
     else if (display_face === 'none')
         return null;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateDepthWrite(fmat: FMAT): boolean {
@@ -957,7 +957,7 @@ function getRenderInfoCompareMode(renderInfo: FMAT_RenderInfo): GfxCompareMode {
     else if (value === 'greater')
         return GfxCompareMode.Greater;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateDepthCompare(fmat: FMAT): GfxCompareMode {
@@ -973,7 +973,7 @@ function getRenderInfoBlendMode(renderInfo: FMAT_RenderInfo): GfxBlendMode {
     if (value === 'add')
         return GfxBlendMode.Add;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateRenderInfoBlendFactor(renderInfo: FMAT_RenderInfo): GfxBlendFactor {
@@ -987,7 +987,7 @@ function translateRenderInfoBlendFactor(renderInfo: FMAT_RenderInfo): GfxBlendFa
     else if (value === 'zero')
         return GfxBlendFactor.Zero;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function findShaderParam(fmat: FMAT, name: string): FMAT_ShaderParam {
@@ -1071,7 +1071,7 @@ function createShaderProgram(fmat: FMAT): DeviceProgram {
     if (shaderAssign.shadingModelName === 'turbo_uber' || shaderAssign.shadingModelName === 'turbo_uber_xlu')
         return new TurboUBER(fmat);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 class FMATInstance {
@@ -1175,7 +1175,7 @@ class FMATInstance {
         } else if (blendMode === 'none') {
             // Nothing.
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         const pass = getRenderInfoSingleString(fmat.renderInfo.get('gsys_pass')!);
@@ -1219,7 +1219,7 @@ class FMATInstance {
         } else if (render_state_mode === 'translucent') {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, programKey);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, findShaderParam(fmat, 'tex_mtx0'));
@@ -1305,7 +1305,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         return GfxFormat.F32_RGB;
     default:
         console.error(getChannelFormat(attributeFormat), getTypeFormat(attributeFormat));
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -1461,7 +1461,7 @@ function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
     case IndexFormat.Uint8:  return GfxFormat.U8_R;
     case IndexFormat.Uint16: return GfxFormat.U16_R;
     case IndexFormat.Uint32: return GfxFormat.U32_R;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -1691,7 +1691,7 @@ export class TurboLightEnv {
             vec3.negate(scratchVec3, hemiLight.Direction);
             offs += fillVec3v(d, offs, scratchVec3);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         return offs - baseOffs;

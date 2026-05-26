@@ -57,7 +57,7 @@ export class ValveKeyValueParser {
                 this.pos = this.S.indexOf('*/', this.pos) + 2;
                 return true;
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
         else if (tok === '#') {
@@ -112,7 +112,7 @@ export class ValveKeyValueParser {
                 val += tok;
         }
         debugger;
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private run(t: RegExp, start: string): string {
@@ -155,7 +155,7 @@ export class ValveKeyValueParser {
             return this.num(tok);
         console.log(tok);
         debugger;
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public pair<T extends VKFPairUnit>(): VKFPair<T> {

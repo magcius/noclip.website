@@ -452,7 +452,7 @@ function classifyNodeValue(w: WriteContext, v: Node): NodeType {
     } else if (v.constructor === Object) {
         return NodeType.Dictionary;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -553,7 +553,7 @@ function writeValue(w: WriteContext, nodeType: NodeType, v: Node, valueOffs: num
         stream.setUint32(valueOffs, stream.offs, w.littleEndian);
         writeComplexValueDict(w, v as NodeDict);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -574,7 +574,7 @@ function gatherStrings(v: Node, keyStrings: Set<string>, valueStrings: Set<strin
         for (let i = 0; i < keys.length; i++)
             gatherStrings(v[keys[i]], keyStrings, valueStrings);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

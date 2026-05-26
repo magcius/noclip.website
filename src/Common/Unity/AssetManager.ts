@@ -226,7 +226,7 @@ export class AssetFile {
             else if (this.fullData !== null)
                 buffer = this.fullData.subarray(Number(obj.byte_start), obj.byte_size);
             else
-                throw "whoops";
+                throw new Error("whoops");
 
             const location = this.createLocation(pathID);
             const classID = obj.class_id;
@@ -319,7 +319,7 @@ export class AssetFile {
         else if (type === UnityAssetResourceType.Shader)
             return this.fetchFromCache(assetSystem, pathID, this.createShaderData) as Promise<ResType<T>>;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public destroy(device: GfxDevice): void {
@@ -618,7 +618,7 @@ function translateWrapMode(v: number): GfxWrapMode {
     else if (v === rust.UnityTextureWrapMode.MirrorOnce)
         return GfxWrapMode.Mirror; // TODO(jstpierre): what to do here?
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateSampler(header: UnityGLTextureSettings): GfxSamplerDescriptor {
@@ -653,7 +653,7 @@ function calcLevelSize(fmt: UnityTextureFormat, w: number, h: number): number {
         else if (fmt === rust.UnityTextureFormat.BC7)
             return count * 16;
         else
-            throw "whoops";
+            throw new Error("whoops");
     } else if (fmt === rust.UnityTextureFormat.Alpha8) {
         return w * h;
     } else if (fmt === rust.UnityTextureFormat.RGB24) {
@@ -665,7 +665,7 @@ function calcLevelSize(fmt: UnityTextureFormat, w: number, h: number): number {
     } else if (fmt === rust.UnityTextureFormat.ARGB32) {
         return w * h * 4;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

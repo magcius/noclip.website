@@ -512,7 +512,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
             const length = getRailPartLength(this.actor, currentRailPart);
             return length / moveTimeToNextPoint;
         } else {
-            throw "whoops"; // not sure what to do in this case
+            throw new Error("whoops"); // not sure what to do in this case
         }
     }
 

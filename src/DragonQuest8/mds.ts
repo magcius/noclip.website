@@ -436,7 +436,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                         }
                     }
                     else
-                        throw "Unsupported position datatype";
+                        throw new Error("Unsupported position datatype");
 
                     //Normal coords
                     if (normIdxBufferOffset) {
@@ -451,7 +451,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                             }
                         }
                         else
-                            throw "Unsupported normal datatype";
+                            throw new Error("Unsupported normal datatype");
                     }
                     else {
                         for (let j = 0; j < 3; j++)
@@ -475,7 +475,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                         }
                     }
                     else
-                        throw "Unsupported uv datatype";
+                        throw new Error("Unsupported uv datatype");
 
                     //Vcol: irrelevant datatype? 0x10 bits while data is obviously bytes, see m01h02-m for ex
                     if (vColIdxBufferOffset) {
@@ -499,7 +499,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                                     jointSeenMap.set(idx, jointSeenMap.size);
                                     jointPalette.push(idx);
                                     if (jointPalette.length > MDS.maxJointCount)
-                                        throw "More matrices needed";
+                                        throw new Error("More matrices needed");
                                 }
                                 if (idx >= 0)
                                     finalAttribs.push(jointSeenMap.get(idx) as number);
@@ -508,7 +508,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                             }
                         }
                         else
-                            throw "Unsupported joint index datatype";
+                            throw new Error("Unsupported joint index datatype");
                         //Joint weight
                         if (jWType === EAttributeDataType.SHORT) {
                             for (let j = 0; j < jointPerVertCount; j++) {
@@ -516,7 +516,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                             }
                         }
                         else
-                            throw "Unsupported joint weight datatype";
+                            throw new Error("Unsupported joint weight datatype");
                     }
                     else if (bIsFromChar) {
                         const idx = mds.rigidTransformJointIds[mdts.length];
@@ -524,7 +524,7 @@ function parseMDTs(mds: MDS, buffer: ArrayBufferSlice, MDTCount: number, bIsFrom
                             jointSeenMap.set(idx, jointSeenMap.size);
                             jointPalette.push(idx);
                             if (jointPalette.length > MDS.maxJointCount)
-                                throw "More matrices needed";
+                                throw new Error("More matrices needed");
                         }
                         if (idx >= 0)
                             finalAttribs.push(jointSeenMap.get(idx) as number);

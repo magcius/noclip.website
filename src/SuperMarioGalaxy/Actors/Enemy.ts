@@ -1153,7 +1153,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
             this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoShoalBreak`, `UnizoShoalBreak`, null, DrawBufferType.Enemy, -2, -2);
             this.breakModel.makeActorDead(sceneObjHolder);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         initDefaultPos(sceneObjHolder, this, infoIter);
@@ -2249,7 +2249,7 @@ export class Kuribo extends LiveActor<KuriboNrv> {
 
     private requestAttackSuccess(sceneObjHolder: SceneObjHolder): void {
         // should never happen in practice
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private requestStagger(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
@@ -2528,7 +2528,7 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
 
     private requestAttackSuccess(sceneObjHolder: SceneObjHolder): void {
         // should never happen in practice
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private requestStagger(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
@@ -2618,7 +2618,7 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
         else if (this.name === 'MagnumKiller')
             this.type = HomingKillerType.MagnumKiller;
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.chaseStartDistance = fallback(getJMapInfoArg0(infoIter), 2000.0);
@@ -2925,7 +2925,7 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
         } else if (this.type === HomingKillerType.MagnumKiller) {
             speed = 12.0;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         vec3.scale(this.velocity, this.axisZ, speed);
@@ -4767,7 +4767,7 @@ export class Snakehead extends LiveActor<SnakeheadNrv> {
         else if (name === 'Back')
             bckName = dataTable.bckBackName;
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         if (bckName === null)
             return;
@@ -4888,7 +4888,7 @@ export class Snakehead extends LiveActor<SnakeheadNrv> {
         else if (objectName === 'SnakeheadSmall' && subtype === 1)
             return SnakeheadType.SmallRace;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -4922,7 +4922,7 @@ class HanachanParts extends LiveActor<HanachanPartsNrv> {
         else if (partsName === 'HanachanBodyS')
             this.type = HanachanPartsType.BodyS;
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         this.initNerve(HanachanPartsNrv.Walk);
         this.initHitSensor();
@@ -7423,7 +7423,7 @@ class SkeletalFishRailControl {
         if (railCoord >= 0.0 || isLoopRail(this.railActor)) {
             calcRailPosAtCoord(dst, this.railActor, railCoord);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -7433,7 +7433,7 @@ class SkeletalFishRailControl {
             calcRailPosAtCoord(scratchVec3a, this.railActor, railCoord);
             calcRailDirectionAtCoord(scratchVec3b, this.railActor, railCoord);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         vec3.normalize(scratchVec3b, scratchVec3b);
@@ -7572,9 +7572,9 @@ export class ExterminationChecker extends LiveActor {
                 else if (childObjName === 'ChildSkeletalFishBaby')
                     return new SkeletalFishBaby(zoneAndLayer, sceneObjHolder, childInfoIter);
                 else if (childObjName === 'ChildMeramera')
-                    throw "whoops";
+                    throw new Error("whoops");
                 else
-                    throw "whoops";
+                    throw new Error("whoops");
             };
 
             const actor = createActor(childInfoIter);
@@ -8304,7 +8304,7 @@ export class Meramera extends LiveActor<MerameraNrv> {
         else if (v === MerameraEffectHead.Escape)
             return 'Escape';
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private emitEffectHead(sceneObjHolder: SceneObjHolder, effect: MerameraEffectHead): void {

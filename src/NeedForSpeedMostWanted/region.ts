@@ -106,7 +106,7 @@ export class NfsRegion {
                 });
                 return false;
             default:
-                throw "Invalid load status";
+                throw new Error("Invalid load status");
         }
     }
 
@@ -325,7 +325,7 @@ export class NfsRegion {
             case GfxFormat.U8_R_NORM:
                 return width * height;
             default:
-                throw "Invalid texture format";
+                throw new Error("Invalid texture format");
         }
     }
 
@@ -342,7 +342,7 @@ export class NfsRegion {
             case 0x29000000:
                 return GfxFormat.U8_R_NORM;
             default:
-                throw "Invalid texture format";
+                throw new Error("Invalid texture format");
         }
     }
 

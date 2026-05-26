@@ -153,7 +153,7 @@ export function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, name: str
         motFileName = chrcfgInfo.motFileName;
     }
     else
-        throw "info.cfg not found"
+        throw new Error("info.cfg not found")
 
     if (chr.resInfo.has(imgFileName)) {
         chr.img = IMG.parse(buffer.slice(chr.resInfo.get(imgFileName)!.offset, chr.resInfo.get(imgFileName)!.offset + chr.resInfo.get(imgFileName)!.size), imgFileName);

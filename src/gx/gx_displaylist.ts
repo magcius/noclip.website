@@ -98,7 +98,7 @@ function getAttrInputForAttr(attrib: GX.Attr): VertexAttributeInput {
     else if (attrib === GX.Attr.CLR1)
         return VertexAttributeInput.CLR1;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export interface SingleVertexInputLayout {
@@ -356,7 +356,7 @@ function getComponentShift(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number
         else if (vatFormat.compType === GX.CompType.U16 || vatFormat.compType === GX.CompType.S16)
             return 14;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
@@ -456,7 +456,7 @@ export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = f
         case VertexAttributeInput.TEX67:
             return GfxFormat.F32_RGBA;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -536,7 +536,7 @@ export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = f
             input = allocateVertexInput(attrInput);
             fieldFormat = input.format;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         const fieldByteOffset = getFormatCompByteSize(input.format) * fieldCompOffset;
@@ -606,7 +606,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             case GX.CompType.S16:
                 return compileShift(`${viewName}.getInt16(${attrOffset})`);
             default:
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 
@@ -642,7 +642,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             else if (typeFlags === FormatTypeFlags.U8)
                 return compileWriteOneComponentU8(offs, value);
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
 
         function compileOneAttribColor(viewName: string, attrOffs: string): string {
@@ -690,7 +690,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
     ${compileWriteOneComponent(dstOffs + 3, `${viewName}.getUint8(${attrOffs} + 3) / 0xFF`)};
 `;
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 
@@ -747,7 +747,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
                 else
                     return compileOneAttribOther(viewName, attrOffsetBase);
             } else if (outputMode === GX_VtxDescOutputMode.Index) {
-                throw "whoops";
+                throw new Error("whoops");
             } else {
                 return ``;
             }
@@ -819,7 +819,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
     // ${getAttrName(vtxAttrib)} - ZERO
     ${compileZero()}`;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -1400,7 +1400,7 @@ export function displayListToString(buffer: ArrayBufferSlice) {
 
         default:
             console.error(`Unknown command ${cmd} at ${i} (buffer: 0x${buffer.byteOffset.toString(16)})`);
-            throw "whoops 1";
+            throw new Error("whoops 1");
         }
     }
 
@@ -1456,7 +1456,7 @@ export function displayListRegistersRun(r: DisplayListRegisters, buffer: ArrayBu
 
         default:
             console.error(`Unknown command ${cmd} at ${i} (buffer: 0x${buffer.byteOffset.toString(16)})`);
-            throw "whoops 1";
+            throw new Error("whoops 1");
         }
     }
 }

@@ -344,7 +344,7 @@ export abstract class ScrollSelect implements Widget {
                 else if (item.name !== undefined)
                     textSpan.textContent = item.name;
                 else
-                    throw "whoops";
+                    throw new Error("whoops");
                 selector.appendChild(textSpan);
 
                 const index = i;
@@ -404,7 +404,7 @@ export abstract class ScrollSelect implements Widget {
                 else if (item.name !== undefined)
                     textSpan.appendChild(document.createTextNode(item.name));
                 else
-                    throw "whoops";
+                    throw new Error("whoops");
                 outer.appendChild(textSpan);
                 hasHeader = true;
             }

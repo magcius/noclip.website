@@ -231,7 +231,7 @@ export class CollisionParts {
             // Equalize the scale.
             scale = getAvgScale(scratchVec3a);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         vec3.set(scratchVec3a, scale / scratchVec3a[0], scale / scratchVec3a[1], scale / scratchVec3a[2]);
@@ -340,7 +340,7 @@ export class CollisionParts {
         } else if (classification === KCHitSphereClassification.Vertex3) {
             this.collisionServer.getPos(dst, prism, 2);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -387,7 +387,7 @@ export class CollisionParts {
         if (!movingReaction || this.notMovedCounter === 0) {
             return this.checkStrikeBallCore(sceneObjHolder, hitInfo, dstIdx, scratchVec3a, Vec3Zero, scaledRadius, invAvgScale, avgScale, triFilter, null);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -1200,7 +1200,7 @@ export class Binder {
 
             if (this.useMovingReaction) {
                 // add on "hitVel" field.
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 

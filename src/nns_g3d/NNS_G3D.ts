@@ -220,7 +220,7 @@ function expand5to8(n: number): number {
 function translateCullMode(renderWhichFaces: number): GfxCullMode {
     switch (renderWhichFaces) {
     case 0x00: // Render Nothing
-        throw "whoops";
+        throw new Error("whoops");
     case 0x01: // Render Back
         return GfxCullMode.Front;
     case 0x02: // Render Front
@@ -264,7 +264,7 @@ export function calcTexMtx(dst: mat2d, texMtxMode: TexMtxMode, texScaleS: number
     case TexMtxMode.MAX:
         return calcTexMtx_Max(dst, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -610,7 +610,7 @@ export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopM
             frame -= lastFrame;
         return frame;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

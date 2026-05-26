@@ -1116,7 +1116,7 @@ export class CameraAnimationManager {
         else if (interpType === InterpolationType.Hold)
             return p0;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private calcAnimationPose(dst: InterpolationStep, animation: Readonly<CameraAnimation>, time: number): void {
@@ -2702,7 +2702,7 @@ export class StudioPanel extends FloatingPanel {
 
         const addKeyframeIcon = (time: number, kfType: KeyframeIconType, tracks: KeyframeTrackType[], kfs: Keyframe[], y: number) => {
             if (tracks.length !== kfs.length)
-                throw "Mismatched track/kf array length";
+                throw new Error("Mismatched track/kf array length");
 
             const kfMap = new Map<KeyframeTrackType, Keyframe>();
             for (let i = 0; i < tracks.length; i++) {
@@ -2769,7 +2769,7 @@ export class StudioPanel extends FloatingPanel {
                 [KeyframeTrackType.bankTrack], [this.animation.bankTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6));
             }
         } else {
-            throw "Bad timelineMode";
+            throw new Error("Bad timelineMode");
         }
     }
 
@@ -2789,7 +2789,7 @@ export class StudioPanel extends FloatingPanel {
         else if (trackType === KeyframeTrackType.bankTrack)
             return animation.bankTrack;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private onChangeValueInput(input: HTMLInputElement): void {
@@ -2867,7 +2867,7 @@ export class StudioPanel extends FloatingPanel {
         else if (trackType === KeyframeTrackType.bankTrack)
             return this.bankValueInput;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private drawBankRotationWheel(angleRads: number, prevAngleRads?: number) {
@@ -3252,7 +3252,7 @@ export class StudioPanel extends FloatingPanel {
 
         const addKeyframeIcon = (tracks: KeyframeTrackType[], kfs: Keyframe[], y: number) => {
             if (tracks.length !== kfs.length)
-                throw "Mismatched track/kf array length";
+                throw new Error("Mismatched track/kf array length");
 
             const kfMap = new Map<KeyframeTrackType, Keyframe>();
             for (let i = 0; i < tracks.length; i++) {
@@ -3303,7 +3303,7 @@ export class StudioPanel extends FloatingPanel {
             if (tracks & KeyframeTrackType.bankTrack)
                 addKeyframeIcon([KeyframeTrackType.bankTrack], [keyframeSet.bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6));
         } else {
-            throw "Bad timelineMode";
+            throw new Error("Bad timelineMode");
         }
 
         this.updatePreviewSteps();
@@ -3355,7 +3355,7 @@ export class StudioPanel extends FloatingPanel {
             addLoopKeyframe([KeyframeTrackType.lookAtZTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 5))
             addLoopKeyframe([KeyframeTrackType.bankTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6))
         } else {
-            throw "Bad timelineMode";
+            throw new Error("Bad timelineMode");
         }
 
         this.ensureTimelineLength(time);

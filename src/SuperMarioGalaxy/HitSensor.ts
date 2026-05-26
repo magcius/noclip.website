@@ -234,7 +234,7 @@ export class HitSensorInfo {
 
         if (this.useCallback) {
             // this.sensor.actor.updateHitSensor();
-            throw "whoops";
+            throw new Error("whoops");
         } else if (this.baseMtx !== null) {
             transformVec3Mat4w1(dst, this.baseMtx, this.offset);
         } else {
