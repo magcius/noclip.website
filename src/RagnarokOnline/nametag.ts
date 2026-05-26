@@ -1,9 +1,3 @@
-
-// Floating name labels for Ragnarok Online entities. Each label string is
-// rasterized to an offscreen 2D canvas (text + dark outline) once, uploaded as
-// an RGBA texture, and drawn as a camera-facing billboard quad. Textures are
-// cached by string + style so entities sharing a name upload once.
-
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -14,12 +8,12 @@ import { GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManage
 import { DeviceProgram } from "../Program.js";
 
 export interface LabelStyle {
-    font: string;             // CSS font string used on the 2D canvas
-    outlinePx: number;        // stroke width in canvas pixels; 0 disables
+    font: string;
+    outlinePx: number;
     fillStyle: string;
     strokeStyle: string;
-    wrapPx: number;           // single line wider than this is split in two
-    worldScale: number;       // world units per canvas pixel
+    wrapPx: number;
+    worldScale: number;
     marginAboveSprite: number;
 }
 
@@ -46,8 +40,6 @@ export const MOB_LABEL_STYLE: LabelStyle = {
 const LINE_HEIGHT_FACTOR = 1.1;
 const LABEL_PADDING = 4;
 
-// worldPos is held by reference so mob labels follow them; heightAbove is the
-// sprite's visible height (label's bottom sits margin above worldPos.y + this).
 export interface LabelInstance {
     text: string;
     worldPos: vec3;
@@ -60,7 +52,6 @@ interface LabelTexture {
     height: number;
 }
 
-// 3 floats world pos + 2 floats uv = 20 bytes.
 const LABEL_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4;
 const LABEL_FLOATS_PER_VERTEX = 5;
 
@@ -102,7 +93,6 @@ void main() {
 `;
 }
 
-// Picks a balanced 2-line word split if a single line exceeds wrapPx.
 function wrapLines(ctx: CanvasRenderingContext2D, text: string, wrapPx: number): string[] {
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     if (words.length <= 1)
@@ -111,7 +101,6 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, wrapPx: number):
     if (singleWidth <= wrapPx)
         return [text];
 
-    // Pick the split that minimises the max line width.
     let bestIdx = 1;
     let bestMax = Infinity;
     for (let i = 1; i < words.length; i++) {
@@ -142,7 +131,7 @@ function rasterizeLabel(text: string, style: LabelStyle): { canvas: HTMLCanvasEl
         const w = ctx.measureText(line).width;
         if (w > maxLineW) maxLineW = w;
     }
-    // Fall back to font-size if measureText doesn't fill the bounding box.
+
     const fontPx = parseFloat(style.font.match(/(\d+(?:\.\d+)?)px/)?.[1] ?? "16");
     const lineHeight = fontPx * LINE_HEIGHT_FACTOR;
     const textBlockH = Math.ceil(lineHeight * lines.length);
@@ -156,7 +145,6 @@ function rasterizeLabel(text: string, style: LabelStyle): { canvas: HTMLCanvasEl
     canvas.width = width;
     canvas.height = height;
 
-    // Canvas resize reset the context state; restore the font.
     ctx.font = style.font;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -254,11 +242,9 @@ export class NameLabelRenderer {
         const worldScale = this.style.worldScale;
         const margin = this.style.marginAboveSprite;
 
-        // Camera right/up axes (world-to-camera columns 0 and 1).
         vec3.set(this.scratchRight, cameraWorldMatrix[0], cameraWorldMatrix[1], cameraWorldMatrix[2]);
         vec3.set(this.scratchUp, cameraWorldMatrix[4], cameraWorldMatrix[5], cameraWorldMatrix[6]);
 
-        // Group by texture so each texture's quads draw contiguously / bind once.
         const byTexture = new Map<LabelTexture, LabelInstance[]>();
         for (const l of this.labels) {
             const tex = this.textureCache.get(l.text);
@@ -298,14 +284,11 @@ export class NameLabelRenderer {
             const halfW = tex.width * 0.5 * worldScale;
             const fullH = tex.height * worldScale;
             for (const l of list) {
-                // Label bottom sits at worldPos.y + heightAbove + margin. Use
-                // world-up (not camera-up) so the label stays a fixed height
-                // above the sprite regardless of camera pitch.
+
                 const baseX = l.worldPos[0];
                 const baseY = l.worldPos[1] + l.heightAbove + margin;
                 const baseZ = l.worldPos[2];
 
-                // Corners: TL, TR, BL, BR around the anchored bottom-center.
                 const tlx = baseX - rx[0] * halfW + uy[0] * fullH;
                 const tly = baseY - rx[1] * halfW + uy[1] * fullH;
                 const tlz = baseZ - rx[2] * halfW + uy[2] * fullH;
@@ -345,15 +328,13 @@ export class NameLabelRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, vertexBufferDescriptors, null);
-        // +1 layer bit so labels sort over other transparent overlays.
+
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
 
         let offs = template.allocateUniformBuffer(LabelProgram.ub_SceneParams, 16);
         const mapped = template.mapUniformBufferF32(LabelProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
 
-        // Depth test against the scene but don't write. 3D geometry occludes
-        // text per-pixel and labels never occlude each other.
         const megaState = template.setMegaStateFlags({
             cullMode: GfxCullMode.None,
             depthWrite: false,

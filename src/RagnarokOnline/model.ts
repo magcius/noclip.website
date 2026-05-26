@@ -1,12 +1,3 @@
-
-// Builds a flat, per-texture-grouped mesh from an RSM model's node hierarchy.
-// RO's fixed-function math is row-vector (v' = v * M, transforms compose
-// left-to-right); gl-matrix is column-vector (v' = M * v, compose right-to-left).
-// We rebuild the same transforms in column-major form by reversing the source
-// order, e.g. row-vector L = S * R * P (scale, then rotate, then translate)
-// becomes the column-major sequence T * R * S built via post-multiplying helpers.
-// Per-placement world matrix is applied at draw time, not baked here.
-
 import { mat4, quat, vec3 } from "gl-matrix";
 import { AABB } from "../Geometry.js";
 import { transformVec3Mat4w0 } from "../MathHelpers.js";
@@ -14,22 +5,18 @@ import { assert } from "../util.js";
 import { RsmModel, RsmNode } from "./rsm.js";
 import { RswVec3 } from "./rsw.js";
 
-// L_node (column-major) for "v' = v_row * S * R * P" (apply scale, rotate, translate).
-// In column-vector form that's T(p) * R * S * v, so we build T*R*S via post-multiplies.
 function nodeLocal(n: RsmNode, out: mat4): void {
     mat4.fromTranslation(out, [n.position.x, n.position.y, n.position.z]);
     mat4.rotate(out, out, n.rotAngle, [n.rotAxis.x, n.rotAxis.y, n.rotAxis.z]);
     mat4.scale(out, out, [n.scale.x, n.scale.y, n.scale.z]);
 }
 
-// Build column-major L from explicit S/R/P parts (used by the animated path).
 function nodeLocalFromParts(scale: vec3, rot: mat4, pos: vec3, out: mat4): void {
     mat4.fromTranslation(out, pos);
     mat4.multiply(out, out, rot);
     mat4.scale(out, out, scale);
 }
 
-// RSM offsetMatrix is 3x3 row-major; rewriting as column-major mat4 transposes it.
 function nodeOffset(n: RsmNode, out: mat4): void {
     const m = n.offsetMatrix;
     out[0]  = m[0]; out[1]  = m[1]; out[2]  = m[2]; out[3]  = 0;
@@ -46,7 +33,7 @@ function modelUsesRsm2Transforms(model: RsmModel): boolean {
 }
 
 export interface ModelDrawGroup {
-    textureId: number;   // index into ModelMesh.textureNames
+    textureId: number;
     indexOffset: number;
     indexCount: number;
 }
@@ -59,20 +46,12 @@ export interface ModelMesh {
     bbox: AABB;
 }
 
-// position (3 f32) + UV (2 f32) + normal (3 f32) + color (4 u8) = 36 bytes.
 export const MODEL_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 3 * 4 + 4;
 
-// Per-node smooth-shaded normals, mirroring the engine's RSM lighting:
-//   shadeType 0 (none): unused, zeroed.
-//   shadeType 1 (flat): every corner of a face takes the face's normal.
-//   shadeType 2 (gouraud): a vertex's normal sums the face normals of all
-//     faces in the SAME smoothing group touching that vertex, then normalize.
-// Returns one normal per face-corner (3 per face), in node-local space.
 function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
     const faceCount = n.faces.length;
     const out: vec3[] = new Array(faceCount * 3);
 
-    // Geometric face normal = cross(v3-v2, v3-v1), normalized (matches engine).
     const faceNormal: vec3[] = new Array(faceCount);
     const v1 = vec3.create(), v2 = vec3.create(), v3 = vec3.create();
     const e1 = vec3.create(), e2 = vec3.create();
@@ -99,7 +78,6 @@ function computeNodeNormals(n: RsmNode, shadeType: number): vec3[] {
         return out;
     }
 
-    // Gouraud: accumulate per smoothing group.
     const vertCount = n.vertices.length;
     const groupVertNormals = new Map<number, vec3[]>();
     for (let i = 0; i < faceCount; i++) {
@@ -146,8 +124,6 @@ function transformNormalMat4(m: mat4, v: vec3, out: vec3): void {
     }
 }
 
-// parentIdx[i] = -1 means root (empty parent, self-parent, or dangling parent).
-// First occurrence wins for duplicate node names.
 function resolveParents(model: RsmModel): Int32Array {
     const nodeCount = model.nodes.length;
     const nameToIdx = new Map<string, number>();
@@ -166,7 +142,6 @@ function resolveParents(model: RsmModel): Int32Array {
     return parentIdx;
 }
 
-// Composes M_node = M_parent * L_node, parent-first.
 function composeNodeMatrices(nodeCount: number, parentIdx: Int32Array, local: (idx: number, out: mat4) => void): mat4[] {
     const nodeMat: mat4[] = new Array(nodeCount);
     for (let i = 0; i < nodeCount; i++) nodeMat[i] = mat4.create();
@@ -189,7 +164,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     const vx: number[] = [], vy: number[] = [], vz: number[] = [];
     const vu: number[] = [], vv: number[] = [];
     const vnx: number[] = [], vny: number[] = [], vnz: number[] = [];
-    const vcol: number[] = []; // packed 0xAABBGGRR for the byte view
+    const vcol: number[] = [];
 
     const buckets = new Map<number, number[]>();
     const bbox = new AABB();
@@ -223,7 +198,7 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
 
         let faceIdx = 0;
         for (const f of n.faces) {
-            // Resolve face's per-node texture slot to a model-level index.
+
             let modelTex = 0;
             if (f.textureId < n.textureIds.length)
                 modelTex = n.textureIds[f.textureId];
@@ -270,8 +245,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     if (vx.length === 0)
         bbox.set(0, 0, 0, 0, 0, 0);
 
-    // Interleaved vertex: pos(3) + uv(2) + normal(3) + color(1 u32) = 9 32-bit
-    // words = 36 bytes per vertex.
     const vertexCount = vx.length;
     const vertexData = new ArrayBuffer(vertexCount * MODEL_VERTEX_STRIDE_BYTES);
     const fview = new Float32Array(vertexData);
@@ -308,13 +281,6 @@ export function buildModelMesh(model: RsmModel): ModelMesh {
     };
 }
 
-// Builds per-placement world matrix in the terrain's render frame, mirroring
-// the engine's actor-matrix build:
-//   wtm = T(boxOffset) * S * Ry * Rx * Rz * T(pos)   (row-vector order)
-// then mapped to render frame: render = (ro.x + offX, -ro.y, ro.z + offZ).
-// boxOffset anchors the model by its object-space bbox (X/Z centered, Y
-// pinned to box top). mapOffX/mapOffZ are half the map extent: the RSW frame
-// is map-centered while the terrain is corner-origin (see coord.ts).
 export function buildPlacementMatrix(
     bbox: AABB,
     pos: RswVec3, rot: RswVec3, scale: RswVec3,
@@ -326,8 +292,7 @@ export function buildPlacementMatrix(
     const offZ = -(bbox.min[2] + bbox.max[2]) * 0.5;
 
     const deg = Math.PI / 180;
-    // Row-vector source: T(off) * S * Ry * Rx * Rz * T(pos). Column-major
-    // equivalent (transpose, reverse): T(pos) * Rz * Rx * Ry * S * T(off).
+
     mat4.fromTranslation(out, [pos.x, pos.y, pos.z]);
     mat4.rotateZ(out, out, rot.z * deg);
     mat4.rotateX(out, out, rot.x * deg);
@@ -335,21 +300,13 @@ export function buildPlacementMatrix(
     mat4.scale(out, out, [scale.x, scale.y, scale.z]);
     mat4.translate(out, out, [offX, offY, offZ]);
 
-    // RO-frame -> render-frame: negate Y, shift X/Z by half the map extent.
     out[1] = -out[1]; out[5] = -out[5]; out[9] = -out[9]; out[13] = -out[13];
     out[12] += mapOffX;
     out[14] += mapOffZ;
 
-    // Mirror X about the map centre (W = 2*mapOffX): RO is left-handed, this
-    // renderer right-handed, so the whole world is mirrored (matching the
-    // terrain mesh and sun direction; see coord.ts).
     out[0] = -out[0]; out[4] = -out[4]; out[8] = -out[8];
     out[12] = 2 * mapOffX - out[12];
 }
-
-// Keyframe-animated models: nodes with rotation/position/scale tracks. Such
-// models can't be baked statically; geometry stays in NODE-LOCAL space and is
-// grouped per (node, texture); the renderer composes M_node(t) per frame.
 
 export function modelIsAnimated(model: RsmModel): boolean {
     return model.nodes.some((n) =>
@@ -366,7 +323,7 @@ export interface AnimatedDrawGroup {
 export interface AnimatedNode {
     parentIdx: number;
     offset: mat4;
-    // Static channel values, reused when a channel has no keyframes.
+
     staticRot: mat4;
     staticPos: vec3;
     staticScale: vec3;
@@ -381,7 +338,7 @@ export interface AnimatedModelMesh {
     groups: AnimatedDrawGroup[];
     textureNames: string[];
     nodes: AnimatedNode[];
-    animLength: number;  // loop length in frames (>= 1)
+    animLength: number;
     modernRsm2: boolean;
     bbox: AABB;
 }
@@ -435,8 +392,6 @@ function samplePositionKeyframes(an: AnimatedNode, frame: number, out: vec3): bo
     return true;
 }
 
-// Scale: original takes the first scale key (or static) and does not
-// interpolate across keyframes.
 function sampleScaleKeyframes(an: AnimatedNode, out: vec3): boolean {
     if (an.scaleKeyframes.length === 0) {
         vec3.copy(out, an.staticScale);
@@ -447,8 +402,6 @@ function sampleScaleKeyframes(an: AnimatedNode, out: vec3): boolean {
     return true;
 }
 
-// Bbox is taken over the rest pose (frame 0) so the placement matrix anchors
-// the model exactly as the static path would at start.
 export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     const nodeCount = model.nodes.length;
     const parentIdx = resolveParents(model);
@@ -473,7 +426,6 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
         };
     }
 
-    // Rest-pose locals for bbox (uses first keyframe value where present).
     let restNodeMat: mat4[];
     if (modernRsm2) {
         restNodeMat = new Array(nodeCount);
@@ -552,7 +504,6 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
                 }
                 vu.push(u); vv.push(v);
 
-                // Node-local normal; shader rotates by the node's animated mat.
                 const cn = nodeNormals[faceIdx * 3 + k];
                 if (modernRsm2) {
                     vnx.push(cn[0]); vny.push(cn[1]); vnz.push(cn[2]);
@@ -623,14 +574,11 @@ export function buildAnimatedModelMesh(model: RsmModel): AnimatedModelMesh {
     };
 }
 
-// Interpolates a node's keyframes at `frame` (wrapped into [0, animLength)).
-// Channels without keyframes fall back to their static value.
 function animatedLocal(an: AnimatedNode, frame: number, scratchQ: quat, scratchRot: mat4, scratchScale: vec3, scratchPos: vec3, out: mat4): void {
     sampleRotationKeyframes(an, frame, scratchQ, scratchRot);
     samplePositionKeyframes(an, frame, scratchPos);
     sampleScaleKeyframes(an, scratchScale);
 
-    // Row-vector L = S * R * P -> column-major T(p) * R * S.
     mat4.fromTranslation(out, scratchPos);
     mat4.multiply(out, out, scratchRot);
     mat4.scale(out, out, scratchScale);
@@ -739,14 +687,6 @@ export class AnimatedPose {
     }
 }
 
-// Drives an animated model's frame clock off real elapsed time. The C++ client
-// advances m_curMotion += animSpeed * 100 per game tick; we fold the tick rate
-// into a per-second cursor rate so playback is identical at any render rate.
-//
-// TICK_RATE: empirically ~10 Hz against a live iRO server (alberta's pickaxes
-// loop ~2.5x slower than the C++ 60 Hz formula would predict). Also matches
-// the canonical roBrowser/BrowEdit rate. anim_speed is scaled by 4/3 (engine
-// applies this when building a map actor); 0 stays 0 (frozen at frame 0).
 export class ModelAnimator {
     private static readonly TICK_RATE = 10;
 
@@ -764,7 +704,6 @@ export class ModelAnimator {
         if (this.framesPerSecond === 0)
             return;
 
-        // Clamp dt so a long stall (backgrounded tab) can't leap the cursor.
         const dt = dtSeconds > 1.0 ? 1.0 : dtSeconds;
         this.frame += this.framesPerSecond * dt;
         if (this.frame >= this.animLength)

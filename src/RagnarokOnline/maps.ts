@@ -1,21 +1,10 @@
-
-// Generated map manifest for the Ragnarok Online scene registry. Do not edit
-// by hand: regenerate by running
-//   npx tsx src/RagnarokOnline/tools/extract.ts --only=gen-maps
-//
-// 1006 entries (984 bare + 22
-// pre-renewal classic variants with rebuilt geometry). 926 with an iRO
-// English name, 58 unnamed.
-
 import type { MapCategory } from "./mapcategory.js";
 
 export interface RagnarokMapEntry {
     id: string;
     name: string;
     category: MapCategory;
-    // Set on dedicated pre-renewal scene entries; their assets and entity
-    // manifest are loaded from the @classic-suffixed files regardless of the
-    // global era toggle.
+
     era?: "classic";
 }
 

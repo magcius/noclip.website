@@ -1,15 +1,6 @@
 import { GndMap } from "./gnd.js";
 import { GatMap } from "./gat.js";
 
-// RO's world is left-handed D3D9 (Y-down heights); noclip is right-handed
-// Y-up. We negate Y and mirror X about the map centre. Picking the centre
-// over a plain `-x` keeps the [0,0] corner at world origin instead of at
-// -worldWidth. The terrain mesh (render.ts) and model placement matrix
-// (model.ts) apply the same flip.
-//
-// GND cells are 10 world units wide; each contains a 2x2 grid of 5-unit
-// GAT cells.
-
 export const GND_CELL_SIZE = 10;
 export const GAT_CELL_SIZE = 5;
 
@@ -18,9 +9,6 @@ export function gatCellToWorld(gatX: number, gatY: number, height: number, gndWi
     return [worldWidth - (gatX + 0.5) * GAT_CELL_SIZE, -height, (gatY + 0.5) * GAT_CELL_SIZE];
 }
 
-// Bilinearly samples the GND cell's four corner heights at the GAT sub-cell
-// position. A plain average would flatten stairs and slopes under any GAT cell
-// that shares a GND parent. Corner order: [0]=(x,y) [1]=(x+1,y) [2]=(x,y+1) [3]=(x+1,y+1).
 export function gatCellGroundHeight(gnd: GndMap, gatX: number, gatY: number): number {
     const gx = gatX >> 1, gy = gatY >> 1;
     if (gx < 0 || gy < 0 || gx >= gnd.width || gy >= gnd.height)
@@ -35,10 +23,6 @@ export function gatCellGroundedWorldPos(gnd: GndMap, gatX: number, gatY: number)
     return gatCellToWorld(gatX, gatY, gatCellGroundHeight(gnd, gatX, gatY), gnd.width);
 }
 
-// Walkable-surface height: averages the GAT cell's own corners, which follow
-// what the player walks on (props like staircases lift their GAT corners above
-// the GND below). Use this for cell-anchored decorations (warp portals etc.)
-// that should sit on top of the geometry rather than the raw terrain.
 export function gatCellSurfaceHeight(gat: GatMap, gatX: number, gatY: number): number {
     if (gatX < 0 || gatY < 0 || gatX >= gat.width || gatY >= gat.height)
         return 0;

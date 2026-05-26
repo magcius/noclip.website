@@ -1,8 +1,3 @@
-
-// Renderer for a Granny (.gr2) 3D model. Alpha-cutout + fixed directional
-// shading, optional GPU linear-blend skinning when a skeleton + animation is
-// present, layered with RSW per-source point lights.
-
 import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -16,7 +11,6 @@ import { GrannyAnimation, GrannyMesh, GrannySkeleton } from "./granny.js";
 import { GRANNY_MAX_BONES, GrannyAnimator } from "./granny-anim.js";
 import { MAX_POINT_LIGHTS, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 
-// pos(3 f32) + uv(2 f32) + normal(3 f32) + boneWeights(4 u8n) + boneIndices(4 u8) = 40B.
 const GRANNY_VERTEX_STRIDE = 3 * 4 + 2 * 4 + 3 * 4 + 4 + 4;
 
 class GrannyProgram extends DeviceProgram {
@@ -34,18 +28,18 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_LightDir;     // xyz: sun dir
+    vec4 u_LightDir;
     vec4 u_DiffuseColor;
     vec4 u_AmbientColor;
-    vec4 u_PointLightParams; // x=count, y=gain, z=falloff, w=enable
-    vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}]; // xyz=pos, w=range
-    vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];    // rgb=colour
+    vec4 u_PointLightParams;
+    vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];
+    vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];
 };
 
 layout(std140) uniform ub_ModelParams {
     Mat4x4 u_WorldFromModel;
-    vec4 u_Skinned; // x>0.5 = skinned, else rigid (palette ignored)
-    Mat4x4 u_BoneMatrices[${GRANNY_MAX_BONES}]; // skinMatrix[i] = boneWorld[i] * inverseBind[i]
+    vec4 u_Skinned;
+    Mat4x4 u_BoneMatrices[${GRANNY_MAX_BONES}];
 };
 
 uniform sampler2D u_BaseTexture;
@@ -70,7 +64,7 @@ void main() {
     if (u_Skinned.x > 0.5) {
         float t_WeightSum = a_BoneWeights.x + a_BoneWeights.y + a_BoneWeights.z + a_BoneWeights.w;
         if (t_WeightSum > 0.0001) {
-            // Denormalize the 0..1 indices back to bone indices (+0.5 to round).
+
             ivec4 t_Idx = ivec4(a_BoneIndices * 255.0 + 0.5);
             mat4 t_Skin =
                 UnpackMatrix(u_BoneMatrices[t_Idx.x]) * a_BoneWeights.x +
@@ -91,10 +85,6 @@ void main() {
 }
 `;
 
-    // Granny actors use a fixed bright directional light (not the RSW ambient/
-    // diffuse), so a glowing prop like the gold Emperium stays vivid at night.
-    // RO's per-vertex shade is mix(0.5, 1.0, clamp(dot(N, sunDir), 0, 1)): a
-    // wrapped half-Lambert with the floor as shadow brightness.
     public override frag = `
 const float GRANNY_LIGHT_FLOOR = 0.5;
 
@@ -114,7 +104,6 @@ void main() {
     }
     vec3 t_Color = t_Base.rgb * t_Shade;
 
-    // RSW point lights (torches/lamps) layered on top.
     if (u_PointLightParams.w > 0.5) {
         int t_Count = int(u_PointLightParams.x);
         float t_Gain = u_PointLightParams.y;
@@ -146,8 +135,6 @@ interface GpuGrannyMesh {
     texture: GfxTexture | null;
 }
 
-// One placed Granny model. Index-aligned `textures` (null = drawn untextured).
-// Null `skeleton` / empty `animations` -> drawn rigid.
 export interface GrannyInstance {
     meshes: GrannyMesh[];
     worldMatrix: mat4;
@@ -175,7 +162,6 @@ export class GrannyModelRenderer {
             this.skinned = this.animator.hasAnimation();
         }
 
-        // Remap per-mesh local bone indices (into BoneBindings) to global skeleton indices.
         const boneIndexByName = new Map<string, number>();
         if (skeleton !== null)
             skeleton.bones.forEach((b, i) => { if (b.name !== null) boneIndexByName.set(b.name, i); });
@@ -186,8 +172,7 @@ export class GrannyModelRenderer {
                 { location: GrannyProgram.a_TexCoord, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 4, bufferIndex: 0 },
                 { location: GrannyProgram.a_Normal, format: GfxFormat.F32_RGB, bufferByteOffset: 5 * 4, bufferIndex: 0 },
                 { location: GrannyProgram.a_BoneWeights, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 8 * 4, bufferIndex: 0 },
-                // U8_RGBA_NORM (not raw U8): a raw int attribute mismatches the vec4
-                // shader input (GL_INVALID_OPERATION). Shader denormalizes (* 255).
+
                 { location: GrannyProgram.a_BoneIndices, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 8 * 4 + 4, bufferIndex: 0 },
             ],
             vertexBufferDescriptors: [
@@ -224,7 +209,6 @@ export class GrannyModelRenderer {
         }
     }
 
-    // `remap` rewrites local BoneBindings indices to global skeleton bone indices.
     private packVertices(mesh: GrannyMesh, remap: number[]): ArrayBuffer {
         const n = mesh.vertexCount;
         const ab = new ArrayBuffer(n * GRANNY_VERTEX_STRIDE);
@@ -314,7 +298,7 @@ export class GrannyModelRenderer {
             mo += fillMatrix4x4(mm, mo, this.worldMatrix);
             const doSkin = this.skinned && this.animator !== null;
             mo += fillVec4(mm, mo, doSkin ? 1 : 0, 0, 0, 0);
-            // Fill each skin matrix through fillMatrix4x4 so UnpackMatrix round-trips it.
+
             if (doSkin) {
                 const palette = this.animator!.skinMatrices;
                 for (let b = 0; b < GRANNY_MAX_BONES; b++)

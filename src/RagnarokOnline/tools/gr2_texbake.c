@@ -1,19 +1,3 @@
-// Offline Granny texture exporter.
-//
-// RO's .gr2 store their textures with a proprietary RAD compressed encoding
-// (Encoding=3) that only granny2.dll can decode. The decomp does exactly this:
-// GrannyReadEntireFileFromMemory -> GrannyGetFileInfo -> for each texture,
-// GrannyCopyTextureImage(..., GrannyRGBA8888PixelFormat, ...) to expand it to
-// RGBA8888. We run that once, offline, and ship the resulting RGBA so the
-// in-engine path needs nothing proprietary.
-//
-// 32-bit Win32; build with mingw, run under wine on x86 (granny2.dll beside it):
-//   i686-w64-mingw32-gcc -O2 -o gr2_texbake.exe gr2_texbake.c
-//   wine gr2_texbake.exe in.gr2 out_prefix
-// Emits one out_prefix.<i>.tex per texture: a 16-byte header
-//   ['G','T','E','X', u32 width, u32 height, u32 flags(bit0=hasAlpha)]
-// followed by width*height*4 RGBA bytes.
-
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,8 +10,6 @@ typedef void(__stdcall *CopyTexFn)(void *tex, int imageIndex, int mipIndex, void
 typedef int(__stdcall *HasAlphaFn)(void *tex);
 typedef void(__stdcall *FreeFileFn)(void *file);
 
-// granny_file_info / granny_texture field offsets (32-bit, granny v6, verified
-// against the engine struct layout).
 #define FI_TEXTURE_COUNT 16
 #define FI_TEXTURES 20
 #define TEX_WIDTH 8
@@ -46,8 +28,7 @@ int main(int argc, char **argv) {
     CopyTexFn CopyTex = (CopyTexFn)GetProcAddress(h, "_GrannyCopyTextureImage@32");
     HasAlphaFn HasAlpha = (HasAlphaFn)GetProcAddress(h, "_GrannyTextureHasAlpha@4");
     FreeFileFn FreeFile = (FreeFileFn)GetProcAddress(h, "_GrannyFreeFile@4");
-    // Exported global: granny_pixel_layout* GrannyRGBA8888PixelFormat. The proc
-    // address is the variable's address, so deref once for the layout pointer.
+
     void **ppLayout = (void **)GetProcAddress(h, "GrannyRGBA8888PixelFormat");
     if (!ReadFromMem || !GetFileInfo || !CopyTex || !ppLayout) {
         fprintf(stderr, "ERROR: missing granny export(s)\n"); return 4;

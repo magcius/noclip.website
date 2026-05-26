@@ -1,8 +1,3 @@
-
-// Runtime era selector. Most scene ids are bare and swap classic/renewal
-// entities in-place; maps with rebuilt pre-renewal geometry have a dedicated
-// `<base>@classic` scene id.
-
 import { maps } from "./maps.js";
 
 export type Era = "classic" | "renewal";

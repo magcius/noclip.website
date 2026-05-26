@@ -1,9 +1,3 @@
-
-// Billboard sprite actor + GPU renderer for Ragnarok Online SPR/ACT characters.
-// Each clip in the current .act motion is drawn as a vertical world-space quad
-// that rotates around world-up to face the camera. Animation is framerate-
-// independent: dt is accumulated against the .act per-frame delay table.
-
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -17,16 +11,10 @@ import { DecodedImage } from "./bmp.js";
 import { ActModel, recalcClipXY } from "./act.js";
 import { SprModel } from "./spr.js";
 
-// Original advances motion as floor(elapsedMs / 24 / delay): one frame lasts
-// delay * 24 ms. So seconds-per-frame = delay * (24/1000).
 const DELAY_TO_SECONDS = 24.0 / 1000.0;
 
-// Cap on a single accumulated step so a huge dt (stall, backgrounded tab)
-// cannot spin the advance loop for an unbounded number of frames.
 const MAX_ACCUM = 1.0;
 
-// How far the billboard's up-axis leans from vertical (world-up) toward the
-// camera's up-axis. 0 = always vertical; 1 = always face camera.
 const BILLBOARD_TILT = 0.5;
 
 const SPRITE_WORLD_SCALE = 0.2;
@@ -46,11 +34,6 @@ function spriteFrameVisibleTopRow(spr: SprModel, clipType: number, sprIndex: num
     return sprIndex >= 0 && sprIndex < rows.length ? rows[sprIndex] : -1;
 }
 
-// "Foot line" in clip-y: min over idle directions of the frame's lowest visible
-// pixel. Per-frame anchoring would bob the figure as the camera orbits (different
-// directions extend below the feet by varying amounts: hem, spear butt, cape).
-// Idle action only, to avoid contamination from dying/sitting. Computed once
-// per (act, spr) pair at sprite-load time and passed into the SpriteActor.
 export function computeActorFootPxY(act: ActModel, spr: SprModel): number {
     let minPerFrameMax = Infinity;
     const idleDirs = Math.min(8, act.actions.length);
@@ -63,10 +46,7 @@ export function computeActorFootPxY(act: ActModel, spr: SprModel): number {
             const img = spriteFrameImage(spr, c.clipType, c.sprIndex);
             if (img === null)
                 continue;
-            // Pre-0x0205 .act clips store the image's top-left as the anchor;
-            // newer versions store the centre. Recenter the old layout against
-            // the .spr image dims so foot-line measurement matches the draw-time
-            // recentre in buildQuads.
+
             let cy = c.y;
             if (act.version < 0x0205) {
                 const tmp = { ...c };
@@ -86,7 +66,6 @@ export function computeActorFootPxY(act: ActModel, spr: SprModel): number {
     return minPerFrameMax === Infinity ? NaN : minPerFrameMax;
 }
 
-// 3 floats world pos + 2 floats uv + 1 u32 color = 24 bytes.
 const SPRITE_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 4;
 const SPRITE_FLOATS_PER_VERTEX = 6;
 const VERTS_PER_QUAD = 4;
@@ -96,8 +75,8 @@ interface SpriteQuad {
     sheet: number;
     clipType: number;
     sprIndex: number;
-    verts: Float32Array;     // 4 * (x,y,z,u,v,color); color word reinterpreted u32
-    colors: Uint32Array;     // 4 packed RGBA, one per vertex
+    verts: Float32Array;
+    colors: Uint32Array;
 }
 
 export class SpriteActor {
@@ -105,14 +84,12 @@ export class SpriteActor {
     private act: ActModel;
     private footPxY: number;
 
-    private state = 0;     // action base = state*8 (0 = idle/stand)
-    private worldDir = 0;  // entity facing in the world, 0..7
-    private dir = 0;       // displayed direction (worldDir relative to camera)
+    private state = 0;
+    private worldDir = 0;
+    private dir = 0;
     private motion = 0;
     private accum = 0;
 
-    // If true, motion is driven externally (e.g. distance-based walk) and
-    // advance() is a no-op so the two drivers don't fight.
     private externalMotion = false;
 
     constructor(spr: SprModel, act: ActModel, footPxY: number) {
@@ -134,9 +111,6 @@ export class SpriteActor {
         }
     }
 
-    // Current action's per-frame delay, clamped to >= 1 (the engine's floor).
-    // A mob's distance-driven walk cadence scales by this so slow-action sprites
-    // animate at their authored pace.
     public currentDelay(): number {
         const a = this.actionIndex();
         const d = a < this.act.delay.length ? this.act.delay[a] : 4.0;
@@ -150,13 +124,10 @@ export class SpriteActor {
         return this.act.actions[a].motions.length;
     }
 
-    // actionIndex() clamps a missing state down to the last action (so e.g.
-    // a sprite asked to die may show walk frames). Pre-check via this.
     public hasState(state: number): boolean {
         return this.act.actions.length > state * 8;
     }
 
-    // AABB of the current motion frame in world units; ignores clip rotation.
     public currentFrameWorldSize(): { width: number, height: number } | null {
         if (this.act.actions.length === 0)
             return null;
@@ -199,9 +170,6 @@ export class SpriteActor {
         };
     }
 
-    // World-Y from the anchor up to the topmost VISIBLE pixel. Tighter than
-    // currentFrameWorldSize().height (which includes hem/cape below the foot
-    // row). Use this to land a label at the head exactly.
     public currentFrameTopAboveAnchor(anchor: SpriteAnchor = "feet"): number | null {
         if (this.act.actions.length === 0)
             return null;
@@ -233,13 +201,10 @@ export class SpriteActor {
             return null;
 
         const anchorPxY = anchor === "center" ? 0 : (Number.isNaN(this.footPxY) ? 0 : this.footPxY);
-        // RO's +y is down the image; top pixel has the smaller pxY.
+
         return (anchorPxY - minVisPxY) * SPRITE_WORLD_SCALE;
     }
 
-    // Distance-based walk: drives the motion frame directly, suppresses
-    // time-based advance() until the next setState. Mirrors the engine's
-    // ProcessMotionWithDist.
     public setMotion(motion: number): void {
         const count = this.currentMotionCount();
         if (count <= 0)
@@ -253,7 +218,6 @@ export class SpriteActor {
         this.dir = this.worldDir;
     }
 
-    // RO draws facing relative to the view, so orbiting cycles the 8 frames.
     public updateFacing(camDir: number): void {
         this.dir = ((this.worldDir - camDir) % 8 + 8) % 8;
     }
@@ -279,7 +243,7 @@ export class SpriteActor {
         let d = action < this.act.delay.length ? this.act.delay[action] : 4.0;
         d *= DELAY_TO_SECONDS;
         if (d <= 0)
-            return; // no cadence -> hold the current frame
+            return;
 
         this.accum += dtSeconds;
         if (this.accum > MAX_ACCUM)
@@ -290,9 +254,6 @@ export class SpriteActor {
         }
     }
 
-    // `anchor`: "feet" plants the frame's foot row on worldPos; "center"
-    // places the .act attach point on worldPos, correct for effect sprites
-    // (torch flames etc.) authored around their emit point.
     public buildQuads(camRight: vec3, camUp: vec3, worldPos: vec3, anchor: SpriteAnchor = "feet"): SpriteQuad[] {
         const out: SpriteQuad[] = [];
         if (this.act.actions.length === 0)
@@ -310,7 +271,7 @@ export class SpriteActor {
             clipType: number;
             sprIndex: number;
             color: number;
-            cx: number[]; // 4 corners: TL, TR, BL, BR
+            cx: number[];
             cy: number[];
         }
         const clips: ClipCorners[] = [];
@@ -320,8 +281,6 @@ export class SpriteActor {
             if (img === null)
                 continue;
 
-            // Pre-0x0205: recenter against the referenced .spr frame's dims
-            // (the parser couldn't, the clip didn't carry its own w/h).
             let clipX = src.x, clipY = src.y;
             if (this.act.version < 0x0205) {
                 const tmp = { ...src };
@@ -349,10 +308,10 @@ export class SpriteActor {
             } else {
                 const xl = src.mirror ? x2 : x1;
                 const xr = src.mirror ? x1 : x2;
-                cx[0] = xl; cy[0] = y1; // TL
-                cx[1] = xr; cy[1] = y1; // TR
-                cx[2] = xl; cy[2] = y2; // BL
-                cx[3] = xr; cy[3] = y2; // BR
+                cx[0] = xl; cy[0] = y1;
+                cx[1] = xr; cy[1] = y1;
+                cx[2] = xl; cy[2] = y2;
+                cx[3] = xr; cy[3] = y2;
             }
 
             clips.push({ clipType: src.clipType, sprIndex: src.sprIndex, color, cx, cy });
@@ -361,9 +320,6 @@ export class SpriteActor {
         if (clips.length === 0)
             return out;
 
-        // offV = anchorPxY - pxY (positive rises above the anchor). For "feet",
-        // anchorPxY is the actor's foot-line (cached at construction); for
-        // "center" it's the .act attach point (0).
         const anchorPxY = anchor === "center" ? 0 : (Number.isNaN(this.footPxY) ? 0 : this.footPxY);
 
         const emit = (verts: Float32Array, colors: Uint32Array, vi: number, pxX: number, pxY: number, u: number, v: number, color: number): void => {
@@ -378,11 +334,6 @@ export class SpriteActor {
             colors[vi] = color;
         };
 
-        // 4 verts per quad in perimeter CCW order (TL, TR, BR, BL); the
-        // renderer's quad index buffer expands each into two triangles
-        // (0,1,2 + 0,2,3), which under this ordering share the TL-BR diagonal.
-        // c.cx[k]/c.cy[k] for k=0..3 remain TL, TR, BL, BR; only the emit
-        // slot for BL and BR is swapped here.
         for (const c of clips) {
             const verts = new Float32Array(VERTS_PER_QUAD * SPRITE_FLOATS_PER_VERTEX);
             const colors = new Uint32Array(VERTS_PER_QUAD);
@@ -390,8 +341,7 @@ export class SpriteActor {
             emit(verts, colors, 1, c.cx[1], c.cy[1], 1.0, 0.0, c.color);
             emit(verts, colors, 2, c.cx[3], c.cy[3], 1.0, 1.0, c.color);
             emit(verts, colors, 3, c.cx[2], c.cy[2], 0.0, 1.0, c.color);
-            // sheet is filled by the renderer (the actor only knows its own
-            // sprite, not its index in the renderer's sheet registry).
+
             out.push({ sheet: 0, clipType: c.clipType, sprIndex: c.sprIndex, verts, colors });
         }
 
@@ -436,7 +386,7 @@ void main() {
     vec4 t_Texel = texture(SAMPLER_2D(u_FrameTexture), v_TexCoord);
     vec4 t_Color = t_Texel * v_Color;
     if (t_Color.a < 0.5)
-        discard; // RO alpha cutout
+        discard;
     gl_FragColor = t_Color;
 }
 `;
@@ -468,9 +418,6 @@ export interface SpriteInstance {
     kind: SpriteKind;
 }
 
-// Per-sheet GPU textures. Both clip-type-0 (indexed) and clip-type-!=0 (rgba)
-// frames live in one flat array; the indexed frames are at [0..rgbaBase) and
-// the rgba frames at [rgbaBase..).
 interface SpriteSheet {
     tex: (GfxTexture | null)[];
     rgbaBase: number;
@@ -505,7 +452,6 @@ export class SpriteRenderer {
             indexBufferFormat: GfxFormat.U16_R,
         });
 
-        // Nearest, clamp-to-edge: faithful RO pixel-art look.
         this.sampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
@@ -515,7 +461,6 @@ export class SpriteRenderer {
         });
     }
 
-    // Uploads a unique .spr's frames as a new sheet and returns its index.
     public addSheet(spr: SprModel): number {
         const tex: (GfxTexture | null)[] = [];
         for (const img of spr.indexed)
@@ -561,15 +506,12 @@ export class SpriteRenderer {
             return;
         const renderInstManager = renderHelper.renderInstManager;
 
-        // Camera right (world-to-camera column 0) flattened onto the
-        // horizontal plane so billboards turn around world-up.
         vec3.set(this.scratchRight, cameraWorldMatrix[0], 0, cameraWorldMatrix[2]);
         if (vec3.len(this.scratchRight) < 1e-5)
             vec3.set(this.scratchRight, 1, 0, 0);
         else
             vec3.normalize(this.scratchRight, this.scratchRight);
 
-        // World-up leaned toward the camera's up by BILLBOARD_TILT.
         const t = BILLBOARD_TILT;
         vec3.set(this.scratchUp, t * cameraWorldMatrix[4], (1 - t) + t * cameraWorldMatrix[5], t * cameraWorldMatrix[6]);
         if (vec3.len(this.scratchUp) < 1e-5)
@@ -577,15 +519,10 @@ export class SpriteRenderer {
         else
             vec3.normalize(this.scratchUp, this.scratchUp);
 
-        // Camera yaw -> one of 8 directions matching actor facing convention
-        // (atan2(dirX, -dirZ)). Each actor's drawn frame is worldDir - this.
         const fwdX = -cameraWorldMatrix[8], fwdZ = -cameraWorldMatrix[10];
         const yawDeg = Math.atan2(fwdX, -fwdZ) * 180 / Math.PI;
         const camDir = ((Math.round(yawDeg / 45) % 8) + 8) % 8;
 
-        // Back-to-front: depth-write prevents far sprites painting over near
-        // ones, but the near sprite's cutout edges still blend against the
-        // framebuffer. Drawing far first kills the halo at the silhouette.
         const camX = cameraWorldMatrix[12], camY = cameraWorldMatrix[13], camZ = cameraWorldMatrix[14];
         this.instances.sort((a, b) => {
             const ax = a.worldPos[0] - camX, ay = a.worldPos[1] - camY, az = a.worldPos[2] - camZ;
@@ -593,13 +530,8 @@ export class SpriteRenderer {
             return (bx * bx + by * by + bz * bz) - (ax * ax + ay * ay + az * az);
         });
 
-        // Order is PRESERVED: an actor's clips stack back-to-front in array
-        // order; reordering would re-layer body parts. Texture is resolved
-        // inline; quads whose frame texture isn't on disk are dropped here.
-        // Only consecutive same-texture quads are coalesced into one draw.
         const drawQuads: { tex: GfxTexture, verts: Float32Array, colors: Uint32Array }[] = [];
-        // Tick actors/animators unconditionally so hidden entities don't jump-cut
-        // on re-enable; the kind filter only suppresses drawing.
+
         for (const inst of this.instances) {
             inst.actor.updateFacing(camDir);
             inst.actor.advance(dtSeconds);
@@ -655,9 +587,6 @@ export class SpriteRenderer {
         const mapped = template.mapUniformBufferF32(SpriteProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, clipFromWorld);
 
-        // Two-sided; depth test + write so sprites occlude each other (cutout
-        // discard keeps transparent regions out of depth). LessEqual lets an
-        // actor's co-planar clips stack in submission order.
         const megaState = template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: true });
         setAttachmentStateSimple(megaState, {
             blendMode: GfxBlendMode.Add,

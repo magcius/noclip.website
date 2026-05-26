@@ -1,22 +1,16 @@
-
-// Parser for Ragnarok Online's ACT animation format (magic "AC"). Drives a
-// matching .spr: each logical state occupies 8 consecutive actions (one per
-// facing). Reads are version-gated; older versions fill missing fields with
-// the documented defaults. All multi-byte values are little-endian.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 
 export interface ActClip {
     x: number;
     y: number;
-    sprIndex: number;     // -1 = unused slot
+    sprIndex: number;
     mirror: boolean;
-    r: number; g: number; b: number; a: number; // tint, 0..255
+    r: number; g: number; b: number; a: number;
     zoomX: number;
     zoomY: number;
-    angle: number;        // degrees
-    clipType: number;     // 0 = palette-indexed frame set, else rgba
+    angle: number;
+    clipType: number;
 }
 
 export interface ActMotion {
@@ -30,7 +24,7 @@ export interface ActAction {
 export interface ActModel {
     version: number;
     actions: ActAction[];
-    delay: number[];      // per-action playback delay, default 4.0
+    delay: number[];
 }
 
 class Reader {
@@ -55,8 +49,6 @@ class Reader {
 
 const MAX_VERSION = 0x0206;
 
-// Recenters a clip whose stored origin is the sprite's top-left to one centered
-// on the sprite, matching the original loader's ReCalcClipXY.
 export function recalcClipXY(clip: ActClip, w: number, h: number): void {
     clip.x = ((clip.x - (((w / 2) | 0) + (w % 2)) * clip.zoomX) / clip.zoomX) | 0;
     clip.y = ((clip.y - (((h / 2) | 0) + (h % 2)) * clip.zoomY) / clip.zoomY) | 0;
@@ -70,7 +62,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
     r.skip(2);
     const ver = r.u16();
     const actionCount = r.u16();
-    r.skip(10); // reserved
+    r.skip(10);
     if (ver > MAX_VERSION)
         throw new Error(`ACT: unsupported version 0x${ver.toString(16)}`);
 
@@ -82,7 +74,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
         const motions: ActMotion[] = [];
 
         for (let j = 0; j < motionCount; j++) {
-            // range1 / range2 (attack/body bounding rects): unused.
+
             r.skip(16);
             r.skip(16);
             const clipCount = r.i32();
@@ -119,9 +111,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
                     clip.clipType = r.i32();
 
                     if (ver >= 0x0205) {
-                        // Clip carries its own width/height and is recentered
-                        // against THEM; older versions defer recentering to the
-                        // renderer using the referenced .spr frame's dims.
+
                         const w = r.i32();
                         const h = r.i32();
                         if (clip.sprIndex !== -1)
@@ -133,10 +123,10 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
             }
 
             if (ver >= 0x0200)
-                r.i32(); // event id
+                r.i32();
 
             if (ver >= 0x0203) {
-                // attach points: 16 bytes each, unused.
+
                 const attachCount = r.i32();
                 if (attachCount < 0)
                     throw new Error(`ACT: bad attach count ${attachCount}`);
@@ -151,7 +141,7 @@ export function parseACT(buffer: ArrayBufferSlice): ActModel {
     }
 
     if (ver >= 0x0201) {
-        // Event-name table: 40-byte fixed strings, skipped.
+
         const eventCount = r.i32();
         if (eventCount < 0)
             throw new Error(`ACT: bad event count ${eventCount}`);

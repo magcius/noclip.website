@@ -1,20 +1,8 @@
-
-// Parser for Ragnarok Online's STR layered effect format (signature "STRM",
-// version 0x0094).
-//
-// A .str is a stack of layers played over a fixed frame span. Each layer owns
-// a list of texture frames (animated flipbook) plus a list of keyframes;
-// each keyframe carries a full transform/color/alpha/blend snapshot. POS
-// keyframes snap to their values; BASIC keyframes are per-frame deltas
-// accumulated into the running transform (see RagEffect ProcessEZ2STR).
-// All multi-byte values are little-endian.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-// 'STRM' as a little-endian DWORD.
 const STR_SIGNATURE = 0x4D525453;
 const STR_VERSION = 0x0094;
-// Fixed texture-name field width; NUL-padded.
+
 const TEXNAME_BYTES = 128;
 
 export const enum StrKeyframeType {
@@ -22,8 +10,6 @@ export const enum StrKeyframeType {
     Pos = 1,
 }
 
-// Texture-frame advance mode (XformData.anitype). The integer values are the
-// ones stored in the file and MUST match the engine's enum.
 export const enum StrAniType {
     Stop = 0,
     Intp = 1,
@@ -33,41 +19,40 @@ export const enum StrAniType {
     BiLoop = 5,
 }
 
-// KAC_XFORMDATA. Field names follow the original struct.
 export interface StrXformData {
-    x: number;            // screen-space offset from effect origin (px, pre-(/-320,-240) bias)
+    x: number;
     y: number;
-    u: number; v: number; // base UV
-    us: number; vs: number; // UV span
-    u2: number; v2: number; // secondary UV (multitexture; unused here)
+    u: number; v: number;
+    us: number; vs: number;
+    u2: number; v2: number;
     us2: number; vs2: number;
-    ax: number[];         // 4 quad-corner X positions (px), relative to keyed pos
+    ax: number[];
     ay: number[];
-    aniframe: number;     // current texture-frame index (float; floored at draw)
-    anitype: number;      // StrAniType
-    anidelta: number;     // per-frame texture-frame step
-    rz: number;           // rotation about view axis (engine units; /2.844444 -> degrees)
-    crR: number; crG: number; crB: number; crA: number; // tint/alpha, 0..255
-    srcalpha: number;     // D3DBLEND source factor
-    destalpha: number;    // D3DBLEND destination factor
-    mtpreset: number;     // multitexture preset (unused here)
+    aniframe: number;
+    anitype: number;
+    anidelta: number;
+    rz: number;
+    crR: number; crG: number; crB: number; crA: number;
+    srcalpha: number;
+    destalpha: number;
+    mtpreset: number;
 }
 
 export interface StrKeyframe {
     frame: number;
-    type: number;         // StrKeyframeType
+    type: number;
     xform: StrXformData;
 }
 
 export interface StrLayer {
-    texNames: string[];   // per-frame texture names (relative to texture/effect/)
+    texNames: string[];
     keyframes: StrKeyframe[];
 }
 
 export interface StrEffect {
     fps: number;
-    frameCount: number;   // file's cFrame field (authoring metadata, see keyframeSpan)
-    keyframeSpan: number; // highest keyframe frame across all layers; the true length
+    frameCount: number;
+    keyframeSpan: number;
     layers: StrLayer[];
 }
 
@@ -142,7 +127,6 @@ export function parseSTR(buffer: ArrayBufferSlice): StrEffect {
     if (ver !== STR_VERSION)
         throw new Error(`STR: unsupported version 0x${ver.toString(16)}`);
 
-    // Header: frameCount, fps, layerCount, then 16-byte reserved block.
     const frameCount = r.i32();
     const fps = r.i32();
     const layerCount = r.i32();
@@ -171,8 +155,6 @@ export function parseSTR(buffer: ArrayBufferSlice): StrEffect {
         layers.push({ texNames, keyframes });
     }
 
-    // cFrame is authoring metadata only; keyframes routinely extend past it.
-    // True playback length is the highest keyframe frame across all layers.
     let keyframeSpan = 0;
     for (const layer of layers)
         for (const k of layer.keyframes)

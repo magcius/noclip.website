@@ -1,18 +1,6 @@
-
-// Parser for Ragnarok Online's SPR sprite-image format (magic "SP"). Two frame
-// kinds: palette-indexed (8-bit per pixel, RLE in newer versions, resolved
-// against a 256-color palette in the file's last 1024 bytes) and (>= 0x0200)
-// true-color RGBA frames stored bottom-up. Palette index 0 is the transparency
-// key. All multi-byte values are little-endian.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DecodedImage } from "./bmp.js";
 
-// A decoded .spr. A clip with clip_type 0 references `indexed[spr_index]`; any
-// other clip type references `rgba[spr_index]`. The *TopRow/*BottomRow arrays
-// are parallel to indexed/rgba and hold the y of the first/last row containing
-// any non-transparent pixel, -1 for fully transparent frames. Precomputed once
-// at parse time; the sprite renderer reads them every frame.
 export interface SprModel {
     indexed: DecodedImage[];
     rgba: DecodedImage[];
@@ -84,8 +72,6 @@ class Reader {
 
 const MAX_VERSION = 0x0201;
 
-// A 0x00 byte is a marker followed by a length byte (a run of that many
-// transparent pixels); any other byte is one literal index.
 function zeroDecompress(r: Reader, end: number, width: number, height: number): Uint8Array {
     const total = width * height;
     const out = new Uint8Array(total);
@@ -114,15 +100,13 @@ function zeroDecompress(r: Reader, end: number, width: number, height: number): 
     return out;
 }
 
-// Palette is 256 entries of R,G,B,flags (4 bytes each).
 function compositeIndexed(indices: Uint8Array, palette: Uint8Array, width: number, height: number): DecodedImage {
     const rgba = new Uint8Array(width * height * 4);
     for (let i = 0; i < indices.length; i++) {
         const idx = indices[i];
         const pe = idx * 4;
         const o = i * 4;
-        // Zero RGB on keyed texels (not just alpha) so the transparent color
-        // doesn't bleed into opaque neighbours under linear filtering.
+
         if (idx === 0) {
             rgba[o + 0] = 0;
             rgba[o + 1] = 0;
@@ -143,7 +127,7 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
 
     const id = r.u16();
     const ver = r.u16();
-    // Magic 'SP' stored as bytes 'S','P' => little-endian word 'P'<<8 | 'S'.
+
     if (id !== (("P".charCodeAt(0) << 8) | "S".charCodeAt(0)))
         throw new Error(`SPR: bad magic 0x${id.toString(16)}`);
     if (ver > MAX_VERSION)
@@ -151,7 +135,6 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
 
     const indexedCount = r.u16();
 
-    // Embedded palette (versions >= 0x0101) is the file's last 1024 bytes.
     const palette = new Uint8Array(256 * 4);
     if (ver >= 0x0101) {
         if (r.byteLength < 1024)
@@ -172,13 +155,13 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
 
         let indices: Uint8Array;
         if (ver >= 0x0201) {
-            // RLE: WORD payload size, then bytes decoding to exactly w*h indices.
+
             const compressedSize = r.u16();
             const chunkEnd = r.offs + compressedSize;
             if (chunkEnd > r.byteLength)
                 throw new Error("SPR: RLE chunk runs past end of file");
             indices = zeroDecompress(r, chunkEnd, w, h);
-            r.offs = chunkEnd; // skip any unread padding in the chunk
+            r.offs = chunkEnd;
         } else {
             indices = r.bytes(w * h).slice();
         }
@@ -192,17 +175,16 @@ export function parseSPR(buffer: ArrayBufferSlice): SprModel {
             const w = r.u16();
             const h = r.u16();
             const out = new Uint8Array(w * h * 4);
-            // Stored bottom-up as packed DWORDs whose little-endian byte order
-            // is a,b,g,r; flip rows to produce top-down RGBA8.
+
             for (let y = h - 1; y >= 0; y--) {
                 const row = w * y;
                 for (let x = 0; x < w; x++) {
                     const px = r.u32();
                     const o = (row + x) * 4;
-                    out[o + 0] = (px >>> 24) & 0xff; // r
-                    out[o + 1] = (px >>> 16) & 0xff; // g
-                    out[o + 2] = (px >>> 8) & 0xff;  // b
-                    out[o + 3] = px & 0xff;          // a
+                    out[o + 0] = (px >>> 24) & 0xff;
+                    out[o + 1] = (px >>> 16) & 0xff;
+                    out[o + 2] = (px >>> 8) & 0xff;
+                    out[o + 3] = px & 0xff;
                 }
             }
             rgba.push({ width: w, height: h, rgba: out });

@@ -1,14 +1,6 @@
-
-// Parser for Ragnarok Online's GND ground format (magic "GRGN"). A GND is a
-// grid of terrain cells with corner heights and up to three surfaces per cell
-// (top quad + front/right walls). All values are little-endian.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString } from "../util.js";
 
-// Normalises a GND texture path (backslash-separated CP949) to a URL relative
-// to the textures root. Lowercased to match the case-sensitive CDN; the
-// extractor lowercases destination paths in the same way.
 export function textureNameToUrl(name: string): string {
     return name.toLowerCase().split("\\").map(encodeURIComponent).join("/");
 }
@@ -18,11 +10,11 @@ export interface GndSurface {
     v: [number, number, number, number];
     textureId: number;
     lightmapId: number;
-    color: number; // packed ARGB
+    color: number;
 }
 
 export interface GndCell {
-    // Corner order: [0]=(x,y) [1]=(x+1,y) [2]=(x,y+1) [3]=(x+1,y+1).
+
     height: [number, number, number, number];
     topSurface: number;
     frontSurface: number;
@@ -30,8 +22,8 @@ export interface GndCell {
 }
 
 export interface GndLightmap {
-    intensity: Uint8Array; // 8x8 grayscale (64 bytes)
-    color: Uint8Array;     // 8x8 RGB (192 bytes)
+    intensity: Uint8Array;
+    color: Uint8Array;
 }
 
 export interface GndWaterParams {
@@ -49,9 +41,9 @@ export interface GndMap {
     textureNames: string[];
     lightmaps: GndLightmap[];
     surfaces: GndSurface[];
-    // Row-major: cell(x, y) = cells[y * width + x].
+
     cells: GndCell[];
-    // GND 1.8+ stores the water setup that RSW 2.6 dropped from the world file.
+
     water: GndWaterParams | null;
 }
 
@@ -143,7 +135,7 @@ export function parseGND(buffer: ArrayBufferSlice): GndMap {
     const lightmapCount = r.i32();
     const lightmapWidth = r.i32();
     const lightmapHeight = r.i32();
-    r.i32(); // pixel format, unused
+    r.i32();
     if (lightmapCount < 0 || lightmapWidth !== 8 || lightmapHeight !== 8)
         throw new Error(`GND: unexpected lightmap layout (${lightmapCount} of ${lightmapWidth}x${lightmapHeight})`);
     const lightmaps: GndLightmap[] = [];
@@ -180,9 +172,6 @@ export function parseGND(buffer: ArrayBufferSlice): GndMap {
     if (minor >= 8 && r.remaining() >= 24) {
         water = readWaterParams(r);
 
-        // 1.8 appends a U/V plane grid + one float level per plane; 1.9 appends
-        // a full water config per plane. We render a single map-wide plane, so
-        // prefer the first plane's config when present.
         if (r.remaining() >= 8) {
             const numWaterPlanesU = r.i32();
             const numWaterPlanesV = r.i32();

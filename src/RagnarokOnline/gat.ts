@@ -1,8 +1,3 @@
-
-// Parser for Ragnarok Online's GAT attribute grid (magic "GRAT"). One cell per
-// 5-unit square (GAT is 2x the GND resolution), each with four corner heights
-// and a flag word classifying walkability. All values little-endian.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export interface GatCell {
@@ -13,12 +8,10 @@ export interface GatCell {
 export interface GatMap {
     width: number;
     height: number;
-    // Row-major: cell(x, y) = cells[y * width + x].
+
     cells: GatCell[];
 }
 
-// Types 1 (no-walk block) and 5 (no-walk snipeable cliff) are the only blocked
-// types; 0, 2, 3, 4 and 6 are walkable.
 export function isWalkableFlag(flag: number): boolean {
     return flag !== 1 && flag !== 5;
 }
@@ -29,7 +22,6 @@ export function gatCellIndex(g: GatMap, cx: number, cy: number): number {
     return cy * g.width + cx;
 }
 
-// Out-of-range cells are blocked (engine's GetCell returns null there).
 export function isWalkable(g: GatMap, cx: number, cy: number): boolean {
     const idx = gatCellIndex(g, cx, cy);
     if (idx < 0)

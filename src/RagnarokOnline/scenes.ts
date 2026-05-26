@@ -1,8 +1,3 @@
-
-// Scene registry for Ragnarok Online maps. A single SceneDesc covers any map
-// by base name; the loader fetches the .rsw (ground + model placements),
-// decodes textures, builds unique RSM meshes, and composes the scene.
-
 import { mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DataFetcher } from "../DataFetcher.js";
@@ -32,13 +27,11 @@ import { buildSkyData } from "./sky.js";
 import { loadParticles } from "./particles.js";
 import { Bgm } from "./bgm.js";
 
-// Water animation frames live in textures/워터/water<type><NN>.jpg, NN=00..31.
 const WATER_DIR = "워터";
 const WATER_FRAME_COUNT = 32;
 
 const pathBase = `RagnarokOnline`;
 
-// Floor on a warp's world hit radius so a 1x1-cell warp is still easy to click.
 const WARP_MIN_HIT_RADIUS = 8;
 
 function modelNameToUrl(name: string): string {
@@ -49,11 +42,6 @@ function decodeTexture(name: string, data: ArrayBufferSlice): DecodedImage {
     return name.toLowerCase().endsWith(".tga") ? decodeTGA(data) : decodeBMP(data);
 }
 
-// Cross-scene cache held in DataShare. Adjacent maps reuse the same terrain
-// BMPs, model RSMs and water frames; without this every map switch re-fetched
-// and re-decoded them. Stored as in-flight Promises so concurrent requests
-// collapse to a single fetch. Holds no GPU state (GfxTextures live on the
-// per-scene renderer), so destroy() is a no-op; DataShare prunes by age.
 interface SharedModelEntry {
     mesh: ModelMesh | null;
     animatedMesh: AnimatedModelMesh | null;
@@ -140,7 +128,7 @@ class RagnarokSharedCache implements Destroyable {
     }
 
     public destroy(_device: GfxDevice): void {
-        // CPU-only data; GC reclaims it once the cache is dropped.
+
     }
 }
 
@@ -150,8 +138,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        // Dedicated `<base>@classic` scenes ship pre-renewal geometry; props
-        // and textures still resolve from the shared model/texture pool.
+
         const baseId = baseMapId(this.id);
         const shared = await context.dataShare.ensureObject(
             `${pathBase}/SharedCache`,
@@ -166,21 +153,14 @@ class RagnarokMapSceneDesc implements SceneDesc {
         }
         const rsw = parseRSW(rswData);
 
-        // Pre-renewal RSWs embed the bare `<base>.gnd` filename; for @classic
-        // scenes we must override to fetch the era-suffixed GND instead.
         const baseGnd = baseId !== this.id ? this.id : (rsw.gndFile !== "" ? rsw.gndFile.replace(/\.gnd$/i, "") : this.id);
         const gndData = await dataFetcher.fetchData(`${pathBase}/maps/${baseGnd}.gnd`);
         const gnd = parseGND(gndData);
 
-        // Missing texture: silently skip the draw group. Decode failure: log
-        // (real bug we want to see) rather than swallow alongside 404s. The
-        // shared cache dedupes within and across maps.
         const textureImages: (DecodedImage | null)[] = await Promise.all(
             gnd.textureNames.map((n) => shared.fetchTexture(dataFetcher, n)),
         );
 
-        // Models with keyframe tracks take the animated path. The cache stores
-        // the parsed mesh + resolved textures, so a revisit skips fetch + parse.
         const uniqueModels = new Set<string>();
         for (const p of rsw.models)
             if (p.modelName !== "")
@@ -198,7 +178,6 @@ class RagnarokMapSceneDesc implements SceneDesc {
                 meshes.set(modelName, { mesh: entry.mesh, textures: entry.textures });
         }));
 
-        // Half the map extent: RSW is map-centred, terrain is corner-origin.
         const mapOffX = gnd.width * GND_CELL_SIZE * 0.5;
         const mapOffZ = gnd.height * GND_CELL_SIZE * 0.5;
 
@@ -222,11 +201,6 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
         const modelData: ModelSceneData = { meshes, instances, animatedMeshes, animatedInstances };
 
-        // GND vs RSW water-type precedence: 1.8+ GNDs carry their own water
-        // params which usually agree with the RSW. When they disagree (a GND
-        // references a tile set the staged corpus doesn't have), trusting GND
-        // unconditionally kills the map's water. Try GND first; if no frames
-        // load, fall back to the RSW's type.
         const rswWater = {
             level: rsw.waterLevel,
             type: rsw.waterType,
@@ -264,9 +238,6 @@ class RagnarokMapSceneDesc implements SceneDesc {
             pitchDeg: rsw.latitude,
         };
 
-        // Fog table doubles as the sky colour (always applied when present).
-        // The fog tint over geometry only reads as atmosphere inside dungeons,
-        // so it's gated by mapWantsFog.
         let fogTableColor: vec3 | null = null;
         let fogTableDensity: number = 0;
         try {
@@ -280,7 +251,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
             fogTableColor = vec3.fromValues(r, g, b);
             fogTableDensity = clamp(fog.density, 0, 0.45);
         } catch {
-            // No fog entry: sky falls back to a category default, tint off.
+
         }
 
         const fogData: FogSceneData = {
@@ -291,7 +262,6 @@ class RagnarokMapSceneDesc implements SceneDesc {
 
         const skyData = buildSkyData(this.id, fogTableColor);
 
-        // A missing/unparseable GAT just disables mob wandering.
         let gat: GatMap | null = null;
         try {
             const gatData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.gat`);
@@ -300,8 +270,6 @@ class RagnarokMapSceneDesc implements SceneDesc {
             gat = null;
         }
 
-        // Effect sources are era-invariant (loaded once, merged into the entity
-        // sprite layer on every era swap).
         const effectSources = await loadEffectSources(dataFetcher, pathBase, rsw.effects, mapOffX, mapOffZ);
 
         const gatHeight = (gatX: number, gatY: number): number =>
@@ -360,7 +328,6 @@ class RagnarokMapSceneDesc implements SceneDesc {
     }
 }
 
-// String entries in sceneDescs render as headers in the scene list.
 const CATEGORY_ORDER: { cat: MapCategory, label: string }[] = [
     { cat: "city", label: "Cities & Towns" },
     { cat: "field", label: "Fields" },

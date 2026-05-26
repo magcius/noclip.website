@@ -1,8 +1,3 @@
-
-// Renderer for Ragnarok Online terrain plus the map's props, water, sprites,
-// particles and overlays. Terrain quads are grouped by base texture and
-// modulated by a baked lightmap atlas.
-
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
 import { clamp, MathConstants, Vec3UnitY } from "../MathHelpers.js";
@@ -51,20 +46,14 @@ export interface EntityLayerBundle {
     warpClickData: WarpClickSceneData;
 }
 
-// CSS px of drift allowed between mousedown/up before a click counts as a drag.
 const WARP_CLICK_MOVE_THRESHOLD_PX = 6;
 const WARP_CLICK_PIXEL_SLOP = 24;
 
-// Fallbacks used on the first tick after spawn, before the actor has a drawable
-// frame to measure.
 const MOB_HITBOX_BUFFER = 1.2;
 const MOB_CLICK_PIXEL_SLOP = 10;
 const MOB_FALLBACK_HALF_HEIGHT = 3.0;
 const MOB_FALLBACK_RADIUS = 4.0;
 
-// Distance-fog defaults framed against the map's bounding-sphere radius: start
-// fading just past the camera, hit full fog past the far edge. The slider caps
-// give a usable range on small indoor maps without flooring at the map size.
 const FOG_NEAR_RADIUS_FRACTION = 0.05;
 const FOG_FAR_RADIUS_FRACTION = 1.5;
 const FOG_NEAR_FLOOR_UNITS = 50;
@@ -72,15 +61,11 @@ const FOG_FAR_MIN_DEPTH_UNITS = 100;
 const FOG_DIST_SLIDER_MAX_MULT = 4;
 const FOG_DIST_SLIDER_MAX_FLOOR = 2000;
 
-// Ambient/diffuse sliders cap at 4x so a stock-dim map can be cranked bright
-// without unbounded values blowing out the night-transition floor in resolveLighting.
 const LIGHT_MULTIPLIER_MAX = 4;
 
 export const FOG_DEFAULT_COLOR_UNFOGGED = vec3.fromValues(0.6, 0.6, 0.65);
 export const FOG_DEFAULT_TINT_UNFOGGED = 0.25;
 
-// Stable bit indices for the layer-toggle bitmap in serializeSaveState. Only
-// append; renumbering breaks existing share URLs.
 const enum LayerBit {
     NPCs = 0,
     Mobs = 1,
@@ -100,7 +85,6 @@ const scratchOffset = vec3.create();
 const scratchScreen: [number, number] = [0, 0];
 const scratchScreen2: [number, number] = [0, 0];
 
-// u_FogParams: x = tint amount, y = mode (0 even, 1 distance), z = near, w = far.
 const FOG_GLSL = `
 vec3 ApplyFog(vec3 t_Color, vec3 t_WorldPos, vec3 t_EyePos, vec4 t_FogColor, vec4 t_FogParams) {
     if (t_FogColor.a < 0.5) return t_Color;
@@ -128,13 +112,13 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_EnvDiff;    // rgb: day/night env-diffuse multiplier
-    vec4 u_FogColor;   // rgb: fog/background color, a: 1 = fog on, 0 = off
+    vec4 u_EnvDiff;
+    vec4 u_FogColor;
     vec4 u_FogParams;
-    vec4 u_EyePos;     // xyz: camera world position (render frame)
-    vec4 u_PointLightParams;                          // x: count, y: gain, z: falloff, w: enable
-    vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];   // xyz: pos, w: range
-    vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];      // rgb: linear colour
+    vec4 u_EyePos;
+    vec4 u_PointLightParams;
+    vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];
+    vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];
 };
 
 uniform sampler2D u_BaseTexture;
@@ -169,7 +153,7 @@ void main() {
     if (t_Base.a < 0.5)
         discard;
     vec4 t_Light = texture(SAMPLER_2D(u_Lightmap), v_LightCoord);
-    // Lightmap intensity rides in alpha; the rgb tint is additive.
+
     float t_Intensity = t_Light.a;
     vec3 t_Lit = t_Base.rgb * v_Color.rgb * t_Intensity + t_Light.rgb;
 
@@ -177,7 +161,6 @@ void main() {
 
     t_Lit = ApplyFog(t_Lit, v_WorldPos, u_EyePos.xyz, u_FogColor, u_FogParams);
 
-    // Radial falloff added on top so dim baked areas glow under a torch.
     if (u_PointLightParams.w > 0.5) {
         int t_Count = int(u_PointLightParams.x);
         float t_Gain = u_PointLightParams.y;
@@ -213,13 +196,13 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_LightDir;       // xyz: world-space sun direction (render frame)
-    vec4 u_DiffuseColor;   // rgb: directional diffuse (night-scaled)
-    vec4 u_AmbientColor;   // rgb: ambient (night-scaled)
-    vec4 u_FogColor;       // rgb: fog/background color, a: 1 = fog on, 0 = off
+    vec4 u_LightDir;
+    vec4 u_DiffuseColor;
+    vec4 u_AmbientColor;
+    vec4 u_FogColor;
     vec4 u_FogParams;
-    vec4 u_EyePos;         // xyz: camera world position (render frame)
-    // Point lights. Same layout as TerrainProgram's block.
+    vec4 u_EyePos;
+
     vec4 u_PointLightParams;
     vec4 u_PointLightPosRange[${MAX_POINT_LIGHTS}];
     vec4 u_PointLightColor[${MAX_POINT_LIGHTS}];
@@ -250,7 +233,7 @@ void main() {
     gl_Position = UnpackMatrix(u_ClipFromWorld) * t_WorldPos;
     v_TexCoord = a_TexCoord;
     v_Color = a_Color;
-    // Rotate the normal by the model->world linear part; renormalised per-pixel.
+
     mat4 t_M = UnpackMatrix(u_WorldFromModel);
     v_Normal = mat3(t_M[0].xyz, t_M[1].xyz, t_M[2].xyz) * a_Normal;
     v_WorldPos = t_WorldPos.xyz;
@@ -263,7 +246,6 @@ void main() {
     if (t_Base.a < 0.5)
         discard;
 
-    // shadeType 0 (no normal) takes a full-bright fallback so it isn't darkened.
     vec3 t_Shade;
     float t_NLen = length(v_Normal);
     bool t_HasNormal = t_NLen >= 0.0001;
@@ -279,7 +261,6 @@ void main() {
 
     t_Color = ApplyFog(t_Color, v_WorldPos, u_EyePos.xyz, u_FogColor, u_FogParams);
 
-    // Unshaded models take the radial term flat so they still glow under a torch.
     if (u_PointLightParams.w > 0.5) {
         int t_Count = int(u_PointLightParams.x);
         float t_Gain = u_PointLightParams.y;
@@ -316,10 +297,10 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_WaterParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_WaveParams; // x: waterLevel, y: waveOffsetDeg, z: wavePitch, w: waveHeight
-    vec4 u_FogColor;   // rgb: fog/background color, a: 1 = fog on, 0 = off
+    vec4 u_WaveParams;
+    vec4 u_FogColor;
     vec4 u_FogParams;
-    vec4 u_EyePos;     // xyz: camera world position (render frame)
+    vec4 u_EyePos;
 };
 
 uniform sampler2D u_FrameTexture;
@@ -341,7 +322,6 @@ void main() {
     float t_WavePitch = u_WaveParams.z;
     float t_WaveHeight = u_WaveParams.w;
 
-    // RO's wave phase is integer degrees (truncated sine table lookup).
     float t_PhaseDeg = trunc(t_WaveOffset + a_Grid * t_WavePitch);
     float t_Wave = sin(t_PhaseDeg * ${MathConstants.DEG_TO_RAD}) * t_WaveHeight;
     float t_WorldY = -(t_WaterLevel + t_Wave);
@@ -363,10 +343,8 @@ void main() {
 `;
 }
 
-// pos (3 f32) + baseUV (2 f32) + lightmapUV (2 f32: atlas u, v) + color (4 u8) = 32 bytes.
 const VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4 + 2 * 4 + 4;
 
-// Side of the square tile grid for an `n`-tile lightmap atlas (at least 1).
 function lightmapAtlasGridSide(n: number): number {
     return Math.max(1, Math.ceil(Math.sqrt(Math.max(n, 1))));
 }
@@ -381,17 +359,13 @@ interface TerrainMesh {
     vertexData: ArrayBuffer;
     indexData: Uint32Array;
     groups: TerrainDrawGroup[];
-    // Atlas-packed lightmap: a square grid of 8x8 RGBA tiles. We pack into a
-    // 2D atlas instead of a 2D array texture because large maps (e.g. WoE
-    // castles, prontera) blow past WebGL2's MAX_ARRAY_TEXTURE_LAYERS (256
-    // guaranteed; many caps at 2048). Atlas size is gridSide*8 per side.
+
     lightmapAtlas: Uint8Array;
     lightmapAtlasGridSide: number;
     min: vec3;
     max: vec3;
 }
 
-// Each GND lightmap is an 8x8 RGBA tile (RGB=tint, A=intensity); one slice per tile.
 function buildLightmapTiles(gnd: GndMap): Uint8Array[] {
     const tiles: Uint8Array[] = [];
     for (const lm of gnd.lightmaps) {
@@ -412,9 +386,6 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
     const lightmapTiles = buildLightmapTiles(gnd);
     const n = lightmapTiles.length;
 
-    // Pack the 8x8 tiles into a square 2D atlas, row-major. The GND reserves
-    // a 1-texel border per tile so bilinear sampling at the inner [1/8, 7/8]
-    // range never leaks across tile boundaries inside the atlas.
     const gridSide = lightmapAtlasGridSide(n);
     const atlasSize = gridSide * 8;
     const lightmapAtlas = new Uint8Array(atlasSize * atlasSize * 4);
@@ -429,8 +400,6 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         }
     }
 
-    // Sample at texel 1 and 7 (tile-local) to skip the 1-texel border the GND
-    // reserves; remap into atlas coords by adding the tile's grid position.
     const lightmapUV = (lightmapId: number, k: number, out: [number, number]): void => {
         let idx = lightmapId;
         if (n === 0 || idx >= n)
@@ -443,7 +412,6 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
         out[1] = (row + localV) / gridSide;
     };
 
-    // X mirrored about the map centre (see coord.ts).
     const worldWidth = gnd.width * GND_CELL_SIZE;
 
     const cornerWorld = (x: number, y: number, k: number, h: ArrayLike<number>, out: vec3): void => {
@@ -489,8 +457,6 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
 
     let vertexCursor = 0;
 
-    // Per-corner color sampled from the cell owning that corner so shared
-    // corners agree across tiles (orig 3dGround.cpp; alpha is always opaque).
     const surfaceColor = (s: GndSurface): number => {
         const argb = s.color >>> 0;
         const r = (argb >>> 16) & 0xff;
@@ -616,7 +582,6 @@ export interface ModelPlacement {
     worldMatrix: mat4;
 }
 
-// placementMatrix is in the terrain render frame, sans the per-node transform.
 export interface AnimatedModelPlacement {
     modelKey: string;
     placementMatrix: mat4;
@@ -650,7 +615,6 @@ export interface ModelSceneData {
     animatedInstances: AnimatedModelPlacement[];
 }
 
-// Angles are authoritative; light/sun vectors are derived in updateSunDir().
 export interface LightSceneData {
     diffuse: vec3;
     ambient: vec3;
@@ -661,7 +625,7 @@ export interface LightSceneData {
 export interface FogSceneData {
     enabled: boolean;
     color: vec3;
-    tint: number;   // even blend amount toward the fog color (0..1)
+    tint: number;
 }
 
 export interface WaterSceneData {
@@ -672,9 +636,6 @@ export interface WaterSceneData {
     frames: (DecodedImage | null)[];
 }
 
-// For intra-map warps (e.g. prt_in's room-to-room portals) arrivalWorldPos is
-// pre-resolved so the click teleports the camera in place; absent for cross-map
-// targets (we can't resolve a destination cell against another map's terrain).
 export interface WarpTarget {
     worldPos: vec3;
     radius: number;
@@ -702,7 +663,6 @@ function createRGBATexture(device: GfxDevice, width: number, height: number, rgb
     return texture;
 }
 
-// Returns null when the mesh has no indices.
 function uploadModelGeometry(
     device: GfxDevice,
     mesh: { vertexData: ArrayBuffer, indexData: Uint32Array },
@@ -721,7 +681,7 @@ function uploadModelGeometry(
 }
 
 export class RagnarokTerrainRenderer implements SceneGfx {
-    // Fire after every panel mutation so URL bookmarks capture the tweak.
+
     public onstatechanged: (() => void) | undefined;
 
     private renderHelper: GfxRenderHelper;
@@ -745,7 +705,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private radius = 1000;
     private cameraInitialized = false;
 
-    // Neutral defaults so a map without these still renders.
     private light: LightSceneData = {
         diffuse: vec3.fromValues(1, 1, 1),
         ambient: vec3.fromValues(0.3, 0.3, 0.3),
@@ -766,7 +725,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private sunLightDir = vec3.create();
     private sunSkyDir = vec3.create();
 
-    // 0 = full day, 1 = full night.
     private nightDegree = 0;
 
     private fogEnabled = true;
@@ -794,7 +752,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private modelData = new Map<string, ModelData>();
     private modelInstances: LiveModelInstance[] = [];
 
-    // Each animated instance draws per-node with placement * M_node(t).
     private animatedModelData = new Map<string, AnimatedModelData>();
     private animatedInstances: LiveAnimatedModelInstance[] = [];
     private animNodeMatrices: mat4[] = [];
@@ -827,8 +784,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     private particleRenderer: ParticleRenderer | null = null;
 
-    // Anchors are references into the live sprite/mob worldPos vec3s, so as a
-    // mob walks each frame its shadow follows for free.
     private shadowRenderer: ShadowRenderer | null = null;
     private dustRenderer: DustRenderer | null = null;
     private npcShadowAnchors: vec3[] = [];
@@ -838,7 +793,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     private pointLights: PointLight[] = [];
     private pointLightsEnabled = true;
-    // Trimmed to the picked count by pickActiveLights; recycled across frames.
+
     private activeLights: PointLight[] = [];
 
     private bgm: Bgm;
@@ -981,7 +936,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private onMouseMove = (e: MouseEvent): void => {
         if (!this.pressActive)
             return;
-        // movementX/Y keeps accumulating under pointer lock (where clientX/Y freeze).
+
         this.pressMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
     };
     private onMouseUp = (e: MouseEvent): void => {
@@ -1027,7 +982,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         const sheetIndices = entityData.sprites.map((ls) => this.spriteRenderer!.addSheet(ls.spr));
 
-        // Mobs hold an actor built on a SprModel, not a sheet index.
         const sheetForSpr = new Map<SprModel, number>();
         for (let i = 0; i < entityData.sprites.length; i++)
             sheetForSpr.set(entityData.sprites[i].spr, sheetIndices[i]);
@@ -1052,11 +1006,11 @@ export class RagnarokTerrainRenderer implements SceneGfx {
                 anchor,
                 kind,
             });
-            // Effect sources (anchor === "center") get no shadow; RO doesn't shadow them.
+
             if (anchor === "feet" && kind === "npc")
                 this.npcShadowAnchors.push(worldPos);
             if (p.name.length > 0) {
-                // Lift the label to the topmost visible pixel of the idle frame.
+
                 const headHeight = actor.currentFrameTopAboveAnchor(anchor);
                 const heightAbove = headHeight !== null ? headHeight : 10;
                 this.npcLabelRenderer.addLabel({ text: p.name, worldPos, heightAbove });
@@ -1065,8 +1019,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (!this.npcLabelRenderer.hasLabels)
             this.npcLabelRenderer = null;
 
-        // The mob's worldPos vec3 is shared by reference, so per-frame wander
-        // moves the sprite, shadow, and label together.
         for (const mob of entityData.mobs) {
             const sheet = sheetForSpr.get(mob.actor.sprModel);
             if (sheet === undefined)
@@ -1098,7 +1050,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         const token = ++this.reloadToken;
         const { entityData, warpPortalData, warpClickData } = await this.rebuildEntityLayer();
         if (token !== this.reloadToken)
-            return; // a newer reload superseded us
+            return;
         const device = this.sceneContext.device;
         const cache = this.renderHelper.renderCache;
 
@@ -1223,7 +1175,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             });
         }
 
-        // Each placement has its own clock but shares the model's geometry + pose.
         for (const placement of sceneData.animatedInstances) {
             const data = this.animatedModelData.get(placement.modelKey);
             if (data === undefined)
@@ -1277,8 +1228,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         panel.setTitle(UI.LAYER_ICON, "Layers");
 
-        // Dedicated `<base>@classic` scenes ship pre-renewal geometry; the
-        // global toggle is moot there because the scene id already pins the era.
         if (!this.mapId.endsWith("@classic")) {
             const classicToggle = new UI.Checkbox("Pre-Renewal Era", currentEra() === "classic");
             classicToggle.onchanged = () => {
@@ -1288,8 +1237,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             panel.contents.appendChild(classicToggle.elem);
         }
 
-        // Indirect through this.spriteRenderer so the toggles still target the
-        // current renderer after reloadEntities replaces it.
         if (spr !== null && hasNPC)
             this.addCheckbox(panel, "Show NPCs", spr.isKindEnabled("npc"), (v) => this.spriteRenderer?.setKindEnabled("npc", v));
         if (spr !== null && hasMob)
@@ -1340,7 +1287,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.addSlider(panel, "Night", 0, 1, 0.01, this.nightDegree, (v) => { this.nightDegree = v; });
 
         const bgmToggle = new UI.Checkbox("BGM (per-map music)", this.bgm.isEnabled());
-        // The toggle counts as the user gesture browsers require to start playback.
+
         bgmToggle.onchanged = () => this.bgm.setEnabled(bgmToggle.checked, null);
         panel.contents.appendChild(bgmToggle.elem);
 
@@ -1359,9 +1306,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         c.setKeyMoveSpeed(64);
     }
 
-    // CWeather night transition: diffuse R&G pull toward a 0.5 floor (blue
-    // untouched). env-diffuse is the standard 1 - (1-diffuse)*(1-ambient);
-    // the user multipliers are clamped before that or a >1x mul flips the sign.
     private resolveLighting(): { diffuse: vec3, ambient: vec3, envDiff: vec3 } {
         const d = this.light.diffuse, a = this.light.ambient;
         const n = this.nightDegree;
@@ -1427,7 +1371,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareToRender(viewerInput: ViewerRenderInput): void {
-        // Mobs must advance before shadows + sprites read their positions.
+
         const mobDtSeconds = viewerInput.deltaTime / 1000;
         for (const mob of this.mobs)
             mob.update(mobDtSeconds);
@@ -1442,7 +1386,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         const lit = this.resolveLighting();
 
-        // Done once here so all later passes (terrain, models, granny) share the set.
         this.refreshActiveLights();
 
         this.prepareTerrain(viewerInput, lit);
@@ -1450,8 +1393,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.prepareModels(viewerInput);
 
         if (this.grannyModels.length > 0 && this.showGrannyModels) {
-            // Wrap so granny's inner pushTemplate inherits the OPAQUE sortKey
-            // (it doesn't set one itself; default 0 = BACKGROUND).
+
             const opaque = this.renderHelper.pushTemplateRenderInst();
             opaque.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
             for (const g of this.grannyModels)
@@ -1461,13 +1403,10 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.prepareWater(viewerInput);
 
-        // Submitted before sprites so a sprite layers over its own shadow.
         this.prepareShadows(viewerInput);
 
         this.prepareSprites(viewerInput);
 
-        // TRANSLUCENT so they sort after the depth-writing sprite pass (otherwise
-        // a sprite's depth clobbers a particle drawn earlier; original sort bug).
         this.prepareParticles(viewerInput);
 
         this.prepareDust(viewerInput);
@@ -1476,7 +1415,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.prepareWeather(viewerInput);
 
-        // Mob hits consume the click so a mob on a portal dies rather than travels.
         this.processMobClick(viewerInput);
         this.processWarpClick(viewerInput);
 
@@ -1554,7 +1492,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         template.setGfxProgram(this.waterProgram);
         template.setVertexInput(this.waterInputLayout, this.waterVertexBufferDescriptors, this.waterIndexBufferDescriptor);
-        // OPAQUE layer; stable sort preserves submission order (water before sprites).
+
         template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
         const megaState = template.setMegaStateFlags({ cullMode: GfxCullMode.None, depthWrite: false });
         setAttachmentStateSimple(megaState, {
@@ -1588,7 +1526,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (this.spriteRenderer === null)
             return;
         const renderInstManager = this.renderHelper.renderInstManager;
-        // Wrap so sprite.ts's inner pushTemplate inherits the OPAQUE sortKey.
+
         const opaque = this.renderHelper.pushTemplateRenderInst();
         opaque.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
         this.spriteRenderer.prepare(
@@ -1615,8 +1553,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         }
     }
 
-    // Mirrors processWarpClick; a hit consumes the click so it doesn't also
-    // trigger warp travel.
     private processMobClick(viewerInput: ViewerRenderInput): void {
         const click = this.pendingClick;
         if (click === null || this.mobs.length === 0)
@@ -1653,8 +1589,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         for (const mob of this.mobs) {
             if (mob.lifecycle !== "alive")
                 continue;
-            // Sphere fit to the current motion frame, with a buffer so a click
-            // just outside the silhouette still registers.
+
             const size = mob.actor.currentFrameWorldSize();
             const halfH = size !== null ? size.height * 0.5 : MOB_FALLBACK_HALF_HEIGHT;
             const radius = (size !== null ? Math.max(size.width, size.height) * 0.5 : MOB_FALLBACK_RADIUS) * MOB_HITBOX_BUFFER;
@@ -1664,8 +1599,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             vec3.set(scratchOffset, cx, cy, cz);
             if (!projectToScreen(scratchOffset, scratchScreen))
                 continue;
-            // Project a second point offset along camera-right by `radius`,
-            // so the pixel hit radius scales with camera distance.
+
             vec3.set(scratchOffset,
                 cx + camWorld[0] * radius,
                 cy + camWorld[1] * radius,
@@ -1695,7 +1629,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             return;
 
         const clipFromWorld = viewerInput.camera.clipFromWorldMatrix;
-        // Click is in CSS px; backbuffer is device px.
+
         const dpr = window.devicePixelRatio || 1;
         const clickX = click.x * dpr;
         const clickY = click.y * dpr;
@@ -1712,7 +1646,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
                 return false;
             const ndcX = scratchClip[0] / cw;
             const ndcY = scratchClip[1] / cw;
-            // NDC (-1..1, Y up) -> device px (Y down).
+
             out[0] = (ndcX * 0.5 + 0.5) * w;
             out[1] = (1.0 - (ndcY * 0.5 + 0.5)) * h;
             return true;
@@ -1728,8 +1662,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             const dy = scratchScreen[1] - clickY;
             const dist = Math.hypot(dx, dy);
 
-            // Project a second point offset by `radius` along camera-right to
-            // scale the hit radius with distance.
             const camWorld = viewerInput.camera.worldMatrix;
             vec3.set(scratchOffset,
                 t.worldPos[0] + camWorld[0] * t.radius,
@@ -1747,7 +1679,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         if (best === null)
             return;
-        // Intra-map warp (e.g. prt_in): teleport the camera in place.
+
         if (best.arrivalWorldPos !== undefined) {
             this.frameArrivalAt(viewerInput, best.arrivalWorldPos);
             return;
@@ -1757,9 +1689,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         triggerTravel(this.sceneContext.sceneLoader, best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
     }
 
-    // Fixed framing of the arrival cell. Scaling with map radius produced a
-    // whole-map overview on big indoor maps (e.g. prt_in). ~5 GAT cells of
-    // offset keeps the cell on-screen with the surrounding context visible.
     private frameArrivalAt(viewerInput: ViewerRenderInput, target: vec3): void {
         const ARRIVAL_CAMERA_OFFSET = 50;
         const eye = vec3.fromValues(target[0], target[1] + ARRIVAL_CAMERA_OFFSET, target[2] + ARRIVAL_CAMERA_OFFSET);
@@ -1842,8 +1771,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     }
 
     private prepareModels(viewerInput: ViewerRenderInput): void {
-        // Tick animators before the visibility gate, otherwise toggling props
-        // off freezes the animation cycle until re-enabled.
+
         const dtSeconds = viewerInput.deltaTime / 1000;
         for (const inst of this.animatedInstances)
             inst.animator.update(dtSeconds);
@@ -1917,7 +1845,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
                 if (group.nodeIndex < 0 || group.nodeIndex >= inst.data.nodeCount)
                     continue;
 
-                // world = placement * M_node(t)
                 mat4.mul(this.scratchWorld, inst.placementMatrix, this.animNodeMatrices[group.nodeIndex]);
 
                 const renderInst = renderInstManager.newRenderInst();
@@ -1938,7 +1865,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         renderInstManager.popTemplate();
     }
 
-    // Centre-overview eye placement used on a fresh open (no URL state).
     public getDefaultWorldMatrix(dst: mat4): void {
         const eye = vec3.fromValues(this.center[0], this.center[1] + this.radius * 1.2, this.center[2] + this.radius * 1.2);
         mat4.targetTo(dst, eye, this.center, Vec3UnitY);
@@ -2040,10 +1966,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         if (!this.cameraInitialized) {
-            // Arrival framing overrides whatever the framework's save-state load
-            // (or getDefaultWorldMatrix) put on the camera. Clear the fields so
-            // subsequent serializeSaveState (after the user pans) bookmarks the
-            // camera alone, not a re-snap to the arrival cell.
+
             if (this.arrivalCellX !== null && this.arrivalCellY !== null) {
                 const wp = gatCellToWorld(this.arrivalCellX, this.arrivalCellY, gatCellGroundHeight(this.gnd, this.arrivalCellX, this.arrivalCellY), this.gnd.width);
                 this.frameArrivalAt(viewerInput, vec3.fromValues(wp[0], wp[1], wp[2]));
@@ -2054,7 +1977,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
 
         this.prepareToRender(viewerInput);
 
-        // Per-map sky colour (see sky.ts for the policy).
         const sky = this.sky;
         const clearDescriptor = makeAttachmentClearDescriptor(
             colorNewFromRGBA(sky.color[0], sky.color[1], sky.color[2], 1.0));

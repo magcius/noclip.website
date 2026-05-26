@@ -1,20 +1,9 @@
-
-// Skeletal animator for Granny (.gr2) models. Samples per-bone keyframe curves,
-// composes bone-world matrices through the hierarchy, and produces the skinning
-// palette skinMatrix[i] = boneWorld[i] * inverseBind[i].
-
 import { mat4, quat, vec3 } from "gl-matrix";
 import { GrannyAnimation, GrannyBone, GrannyCurve, GrannySkeleton, GrannyTransformTrack } from "./granny.js";
 
-// WoE models top out at 43 bones; 64 leaves headroom.
 export const GRANNY_MAX_BONES = 64;
 
-// Hitch cap. A long pause shouldn't fast-forward the clip.
 const MAX_DT = 0.25;
-
-// RO clips are dense enough that piecewise-linear is visually indistinguishable
-// from a true B-spline reconstruction. `slerp` for the orientation curve, lerp
-// for the rest.
 
 const segment = { a: 0, b: 0, f: 0 };
 
@@ -94,7 +83,6 @@ const tmpScaleShear = mat4.create();
 const tmpLocal = mat4.create();
 const ssBuf = new Float32Array(9);
 
-// Composes bone-local as translation * rotation * scaleShear (Granny's order).
 function composeLocal(bone: GrannyBone, track: GrannyTransformTrack | undefined, t: number, out: mat4): void {
     if (track !== undefined && track.position !== null) {
         sampleVec3(track.position, t, tmpPos);
@@ -115,7 +103,7 @@ function composeLocal(bone: GrannyBone, track: GrannyTransformTrack | undefined,
         ss = bone.scaleShear;
     }
     mat4.identity(tmpScaleShear);
-    // Granny stores the 3x3 row-major; transpose into the column-major mat4.
+
     tmpScaleShear[0] = ss[0]; tmpScaleShear[4] = ss[1]; tmpScaleShear[8] = ss[2];
     tmpScaleShear[1] = ss[3]; tmpScaleShear[5] = ss[4]; tmpScaleShear[9] = ss[5];
     tmpScaleShear[2] = ss[6]; tmpScaleShear[6] = ss[7]; tmpScaleShear[10] = ss[8];
@@ -127,11 +115,9 @@ function composeLocal(bone: GrannyBone, track: GrannyTransformTrack | undefined,
 export class GrannyAnimator {
     private clock = 0;
     private boneWorld: mat4[] = [];
-    // Derived from our own composed rest pose rather than the file's stored
-    // InverseWorldTransform: a few models (e.g. treasure box) bake an extra
-    // root-frame rotation into the stored matrix that isn't in the local chain.
+
     private inverseBind: mat4[] = [];
-    public readonly skinMatrices: Float32Array; // GRANNY_MAX_BONES * 16, column-major
+    public readonly skinMatrices: Float32Array;
     public readonly boneCount: number;
     private animations: GrannyAnimation[] = [];
     private trackForAnim: (GrannyTransformTrack | undefined)[][] = [];
@@ -170,7 +156,7 @@ export class GrannyAnimator {
                 mat4.copy(w, tmpLocal);
             restWorld.push(w);
             if (!mat4.invert(this.inverseBind[i], w)) {
-                // Singular rest world: fall back to the file's stored matrix.
+
                 const iw = bones[i].inverseBindPose;
                 for (let j = 0; j < 16; j++)
                     this.inverseBind[i][j] = iw[j];
@@ -193,7 +179,7 @@ export class GrannyAnimator {
         if (dt > MAX_DT)
             dt = MAX_DT;
         this.clock += dt;
-        // Drain whole clips so a long dt advances past short ones correctly.
+
         let dur = this.animations[this.index].duration;
         while (this.clock >= dur) {
             this.clock -= dur;

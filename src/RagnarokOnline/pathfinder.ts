@@ -1,11 +1,3 @@
-
-// A* cell pathfinder over the GAT walkability grid. Port of the 2008 client's
-// CPathFinder::FindPath: same neighbour expansion order, the engine's costs
-// (10 orthogonal, 14 diagonal, Manhattan*10 heuristic), the same node state
-// machine (UNEXPLORED -> OPEN -> CLOSED with re-opening on a cheaper path),
-// and the same MAX_PATHNODE budget. Direction codes 0..7 are the engine's,
-// and the wander controller maps them to actor facings.
-
 import { GatMap, isWalkable } from "./gat.js";
 
 const COST_ORTHO = 10;
@@ -16,8 +8,6 @@ const UNEXPLORED = 0;
 const OPEN = 1;
 const CLOSED = 2;
 
-// One step of a found path: the GAT cell and the engine direction code (0..7)
-// of the step that arrives at it.
 export interface PathStep {
     x: number;
     y: number;
@@ -27,14 +17,13 @@ export interface PathStep {
 interface PathNode {
     x: number;
     y: number;
-    cost: number;   // g: accumulated cost from start
-    total: number;  // f: cost + heuristic
+    cost: number;
+    total: number;
     dir: number;
     type: number;
     parent: PathNode | null;
 }
 
-// Direction codes: 0=+Y, 1=-X+Y, 2=-X, 3=-X-Y, 4=-Y, 5=+X-Y, 6=+X, 7=+X+Y.
 const NEIGHBORS: { dx: number, dy: number, cost: number, dir: number }[] = [
     { dx: +1, dy: -1, cost: COST_DIAG, dir: 5 },
     { dx: +1, dy: 0, cost: COST_ORTHO, dir: 6 },
@@ -46,8 +35,6 @@ const NEIGHBORS: { dx: number, dy: number, cost: number, dir: number }[] = [
     { dx: 0, dy: -1, cost: COST_ORTHO, dir: 4 },
 ];
 
-// Returns the cell path from (sx, sy) to (dx, dy) inclusive, or null if start
-// equals goal, the goal is unwalkable, or no path exists within the node budget.
 export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: number): PathStep[] | null {
     if (sx === dx && sy === dy)
         return null;
@@ -73,8 +60,6 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
         return node;
     };
 
-    // Min-heap by node.total. Stale entries (a popped node already CLOSED) are
-    // skipped at pop time.
     const heap: PathNode[] = [];
     const heapPush = (node: PathNode): void => {
         heap.push(node);
@@ -118,7 +103,7 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
         const newCost = parent.cost + traverseCost;
         const node = getNode(x, y);
         if (node === null)
-            return false; // node pool exhausted
+            return false;
         if (node.type !== UNEXPLORED) {
             if (node.cost <= newCost)
                 return true;
@@ -127,7 +112,7 @@ export function findPath(gat: GatMap, sx: number, sy: number, dx: number, dy: nu
             node.total = newCost + heuristic(x, y);
             node.dir = dir;
             if (node.type === OPEN)
-                heapPush(node); // re-insert; stale dup tolerated at pop
+                heapPush(node);
             else if (node.type === CLOSED) {
                 node.type = OPEN;
                 heapPush(node);

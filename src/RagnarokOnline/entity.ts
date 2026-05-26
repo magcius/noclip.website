@@ -1,9 +1,3 @@
-
-// Entity layer: places NPCs and monsters from the per-map manifest as animated,
-// grounded billboards. NPCs are static; monsters wander via the ported FindPath
-// on the GAT walkability grid (target selection and idle cadence are our own
-// synthesis; the real client only displayed server-streamed positions).
-
 import { vec3 } from "gl-matrix";
 import { DataFetcher } from "../DataFetcher.js";
 import { GndMap } from "./gnd.js";
@@ -16,7 +10,6 @@ import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coo
 import { RswEffectSource } from "./rsw.js";
 import type { Era } from "./era.js";
 
-// A zero area (cellX=cellY=spanX=spanY=0) is a whole-map random spawn.
 interface MobSpawn {
     id: number;
     sprite: string;
@@ -27,8 +20,7 @@ interface MobSpawn {
     spanX: number;
     spanY: number;
     speed: number;
-    // mob_db Mode.CanMove. Mobs with this off (Pupa, plants, eggs, mushrooms)
-    // never wander.
+
     canMove?: boolean;
 }
 
@@ -46,11 +38,10 @@ export interface WarpEntry {
     spanX: number;
     spanY: number;
     dest: string;
-    // Arrival cell on the destination map. Older manifests omit these.
+
     destX?: number;
     destY?: number;
-    // Era-specific Hercules scripts tag cross-map warps so the runtime can
-    // route to a matching rebuilt-geometry scene when one exists.
+
     destEra?: Era;
 }
 
@@ -68,12 +59,11 @@ export interface LoadedSprite {
 
 export interface EntityPlacement {
     spriteIndex: number;
-    state: number;       // action base = state*8 (0 = idle/stand)
-    direction: number;   // 0..7 facing
+    state: number;
+    direction: number;
     worldPos: [number, number, number];
     name: string;
-    // "feet" (default, NPCs stand on the ground) or "center" (effect sprites
-    // are authored around their emit point).
+
     anchor?: "feet" | "center";
     kind?: SpriteKind;
 }
@@ -85,36 +75,27 @@ export interface EntitySceneData {
     warps: WarpEntry[];
 }
 
-// Standard mob action layout: 0 stand, 1 walk, 2 attack, 3 hurt, 4 die.
 const STATE_IDLE = 0;
 const STATE_WALK = 1;
 const STATE_HIT = 3;
 const STATE_DEAD = 4;
 
-// Click-to-kill (our addition): time the corpse holds before respawning.
 const RESPAWN_SECONDS = 30;
 
-// Matches DELAY_TO_SECONDS in sprite.ts.
 const ACT_DELAY_TO_SECONDS = 24.0 / 1000.0;
 
 const ROAM_RADIUS = 8;
-// Matches Hercules' next_walktime (MIN_RANDOMWALKTIME 4000 ms + rnd()%1000).
+
 const IDLE_BASE_SECONDS = 4.0;
 const IDLE_RANDOM_SECONDS = 1.0;
 const MAX_TARGET_TRIES = 8;
-// After this many consecutive failed pickAndStartPath cycles, exponentially
-// back off the idle timer (capped) so a mob in a fully blocked pocket stops
-// re-allocating findPath state every cycle.
+
 const IDLE_BACKOFF_THRESHOLD = 5;
 const IDLE_BACKOFF_MAX_SECONDS = 60;
 const MAX_DT = 0.25;
 
-// Walk-animation cadence: the walk frame is floor(distance * WALK_MOTION_SCALE
-// / actionDelay) % frameCount. Tying the frame to distance (not the clock)
-// makes legs cycle in step with actual movement.
 const WALK_MOTION_SCALE = 1.48;
 
-// Direction enum: N=0, W=2, S=4, E=6 counter-clockwise, +X east, +Z north.
 function moveDirToFacing(dx: number, dz: number): number {
     if (dx === 0 && dz === 0)
         return 0;
@@ -122,8 +103,6 @@ function moveDirToFacing(dx: number, dz: number): number {
     return (oct % 8 + 8) % 8;
 }
 
-// Grounded on the walkable surface: prefer GAT cell corner heights (they
-// follow props like stairs/plazas dropped on the cell), fall back to GND.
 function cellWorldPos(gnd: GndMap, gat: GatMap | null, gatX: number, gatY: number): [number, number, number] {
     const h = gat !== null ? gatCellSurfaceHeight(gat, gatX, gatY) : gatCellGroundHeight(gnd, gatX, gatY);
     return gatCellToWorld(gatX, gatY, h, gnd.width);
@@ -131,14 +110,6 @@ function cellWorldPos(gnd: GndMap, gat: GatMap | null, gatX: number, gatY: numbe
 
 type MobLifecycle = "alive" | "hit" | "dying" | "dead";
 
-// States:
-//   idle  -> pause, pick a random walkable cell within ROAM_RADIUS, FindPath
-//            to it; on success start walking, else idle again next cycle.
-//   walk  -> advance along the path cell-by-cell at `speed`, face the move
-//            direction; at the end go idle.
-//   dying -> click-to-kill: freeze the wander, play the die action frame-by-
-//            frame, then become dead.
-//   dead  -> hold the corpse for RESPAWN_SECONDS, then respawn at spawn cell.
 export class MobEntity {
     public actor: SpriteActor;
     public worldPos: vec3;
@@ -147,8 +118,6 @@ export class MobEntity {
 
     public lifecycle: MobLifecycle = "alive";
 
-    // Dust-puff event: epoch advances on every new-cell crossing during a walk
-    // (the dust renderer polls). Respawn does NOT bump the epoch (teleport).
     public stepEpoch: number = 0;
     public stepWorldX: number = 0;
     public stepWorldY: number = 0;
@@ -157,7 +126,7 @@ export class MobEntity {
     private gnd: GndMap;
     private gat: GatMap;
     private secondsPerCell: number;
-    private secondsPerDiag: number; // diagonal step is sqrt(2) longer
+    private secondsPerDiag: number;
 
     private cellX: number;
     private cellY: number;
@@ -175,8 +144,6 @@ export class MobEntity {
     private accum = 0;
     private walkDist = 0;
 
-    // Stepped manually so the die action plays once and holds the last frame
-    // instead of looping like the actor's time-based advance.
     private deathMotion = 0;
     private deathAccum = 0;
     private respawnTimer = 0;
@@ -207,8 +174,6 @@ export class MobEntity {
         this.idleTimer = IDLE_BASE_SECONDS + Math.random() * IDLE_RANDOM_SECONDS;
     }
 
-    // No-op for a sprite without a die action: actionIndex() would otherwise
-    // clamp to the last available action and render walk as the "death".
     public kill(): void {
         if (this.lifecycle !== "alive")
             return;
@@ -216,7 +181,7 @@ export class MobEntity {
             return;
         this.walking = false;
         this.path = [];
-        // Mobs without a HIT action skip straight to dying so they aren't stranded.
+
         if (this.actor.hasState(STATE_HIT)) {
             this.lifecycle = "hit";
             this.hitMotion = 0;
@@ -229,8 +194,7 @@ export class MobEntity {
         this.deathMotion = 0;
         this.deathAccum = 0;
         this.actor.setState(STATE_DEAD);
-        // Pin to frame 0; setMotion also disables the actor's time-based advance
-        // so updateDying can step the die frames manually instead of looping.
+
         this.actor.setMotion(0);
     }
 
@@ -290,7 +254,6 @@ export class MobEntity {
         }
     }
 
-    // Single-frame / missing die action collapses straight to "dead".
     private updateDying(dt: number): void {
         const motionCount = this.actor.currentMotionCount();
         if (motionCount <= 1) {
@@ -339,8 +302,7 @@ export class MobEntity {
         if (this.idleTimer > 0)
             return;
         if (!this.pickAndStartPath()) {
-            // After enough consecutive failures, back off the retry interval
-            // exponentially so we stop burning A* on a hopeless search.
+
             this.idleFailStreak++;
             const base = IDLE_BASE_SECONDS + Math.random() * IDLE_RANDOM_SECONDS;
             const overshoot = this.idleFailStreak - IDLE_BACKOFF_THRESHOLD;
@@ -365,7 +327,7 @@ export class MobEntity {
             if (path === null || path.length < 2)
                 continue;
             this.path = path;
-            this.segIndex = 1; // path[0] is the current cell; first move is to path[1]
+            this.segIndex = 1;
             this.walkDist = 0;
             this.walking = true;
             this.idleFailStreak = 0;
@@ -391,7 +353,7 @@ export class MobEntity {
         const prevX = this.worldPos[0], prevZ = this.worldPos[2];
 
         let remaining = dt;
-        // Drain dt across segments so a large dt can cross more than one cell.
+
         while (remaining > 0) {
             const left = this.segDuration - this.segElapsed;
             if (remaining < left) {
@@ -403,7 +365,7 @@ export class MobEntity {
                 const to = this.path[this.segIndex];
                 this.cellX = to.x;
                 this.cellY = to.y;
-                // Publish step event for the dust renderer.
+
                 const stepPos = cellWorldPos(this.gnd, this.gat, to.x, to.y);
                 this.stepWorldX = stepPos[0];
                 this.stepWorldY = stepPos[1];
@@ -450,7 +412,6 @@ export class MobEntity {
     }
 }
 
-// Per-segment percent-encoding so CP949 directory names match the staged paths.
 function spriteUrls(spritePath: string): { spr: string, act: string } {
     const enc = spritePath.split("/").map(encodeURIComponent).join("/");
     return { spr: `${enc}.spr`, act: `${enc}.act` };
@@ -478,7 +439,7 @@ function nearestWalkable(gat: GatMap, gatX: number, gatY: number, maxRadius: num
         for (let dy = -r; dy <= r; dy++) {
             for (let dx = -r; dx <= r; dx++) {
                 if (Math.abs(dx) !== r && Math.abs(dy) !== r)
-                    continue; // ring only
+                    continue;
                 const cx = gatX + dx, cy = gatY + dy;
                 if (isWalkable(gat, cx, cy))
                     return [cx, cy];
@@ -488,8 +449,6 @@ function nearestWalkable(gat: GatMap, gatX: number, gatY: number, maxRadius: num
     return null;
 }
 
-// Pure rejection sampling (rather than snap-to-nearest-walkable, which biases
-// many mobs onto the same few border cells of an obstacle).
 const WALKABLE_SAMPLE_TRIES = 32;
 
 function randomWalkableInRect(gat: GatMap, x0: number, y0: number, x1: number, y1: number): [number, number] | null {
@@ -543,7 +502,6 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
 
     const loaded = await Promise.all(uniquePaths.map((p) => loadSprite(dataFetcher, pathBase, p)));
 
-    // Compact to a dense array so a dropped sprite leaves no gap.
     const sprites: LoadedSprite[] = [];
     const denseIndex = new Map<string, number>();
     for (let i = 0; i < uniquePaths.length; i++) {
@@ -570,7 +528,6 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
         });
     }
 
-    // Mob wander requires GAT walkability.
     if (gat !== null) {
         const gatW = gat.width, gatH = gat.height;
         for (const m of mobSpawns) {
@@ -580,8 +537,6 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
             const ls = sprites[idx];
             const wholeMap = m.cellX === 0 && m.cellY === 0 && m.spanX === 0 && m.spanY === 0;
 
-            // Hercules' span is a half-extent: rect is centred on (cellX,
-            // cellY) and 2*span+1 cells wide.
             let x0: number, y0: number, x1: number, y1: number;
             if (wholeMap) {
                 x0 = 0; y0 = 0; x1 = gatW - 1; y1 = gatH - 1;
@@ -595,8 +550,7 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
             for (let i = 0; i < m.count; i++) {
                 let cell = randomWalkableInRect(gat, x0, y0, x1, y1);
                 if (cell === null) {
-                    // Rejection sampling failed: bounded spiral from the rect
-                    // centre clamped back into the rect.
+
                     const cx = (x0 + x1) >> 1, cy = (y0 + y1) >> 1;
                     cell = nearestWalkable(gat, cx, cy, 16);
                     if (cell !== null) {
@@ -617,17 +571,11 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
     return { sprites, placements, mobs, warps };
 }
 
-// World-placed ambient effect sources (RSW OT_EFFECTSRC). Only the sprite-based
-// EF_* ids whose .spr is in the staged corpus are mapped here (no guessing).
-// Omitted on purpose: EF_SMOKE (44), EF_BANJJAKII (165), and the texture-
-// particle effects (EF_TORCH_RED/GREEN, EF_GLOW*, EF_FORESTLIGHT*).
 const EFFECT_SPRITE_TABLE: Record<number, string> = {
     47: "이팩트/torch_01",
     45: "이팩트/particle1",
 };
 
-// `mapOffX/mapOffZ` are half the map extent (RSW frame is map-centred, terrain
-// is corner-origin). Matches buildPlacementMatrix.
 export async function loadEffectSources(
     dataFetcher: DataFetcher,
     pathBase: string,
@@ -666,8 +614,7 @@ export async function loadEffectSources(
         const idx = index.get(sprite);
         if (idx === undefined)
             continue;
-        // RO frame -> render frame: negate Y, shift X/Z by half the map extent,
-        // mirror X (RO is left-handed; see coord.ts).
+
         result.placements.push({
             spriteIndex: idx,
             state: STATE_IDLE,

@@ -1,10 +1,3 @@
-
-// Per-map particle emitters from each map's compiled effecttool LUB. Offline,
-// `tools/extract.ts` (Stage 2) runs the patched Lua 5.1 binary to dump emitter
-// tables to `<mapId>.emitters.json` next to the .rsw. At runtime we fetch the
-// JSON, decode textures, transform to the render frame, and own a particle pool
-// per emitter.
-
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, colorNewFromRGBA } from "../Color.js";
@@ -34,7 +27,7 @@ interface RawEmitterSpec {
     destmode: [number];
     maxcount: [number];
     zenable: [number];
-    texture: string;  // CP949 path like "effect\\smoke1.bmp"
+    texture: string;
 }
 
 interface RawEmitterDoc {
@@ -79,8 +72,6 @@ export interface ParticleSceneData {
     images: Map<string, DecodedImage>;
 }
 
-// Translate D3DBLEND ids from the emitter spec. 9 (DESTCOLOR) is RO's
-// multiply-into-framebuffer; 7 (DESTALPHA) is treated additively.
 function gfxBlend(d3dBlend: number): GfxBlendFactor {
     switch (d3dBlend) {
     case 1: return GfxBlendFactor.Zero;
@@ -121,9 +112,6 @@ async function loadParticleTexture(
     }
 }
 
-// Render-frame conversion mirrors loadEffectSources in entity.ts:
-//   position: [mapOffX - x, -y, z + mapOffZ]
-//   velocity/gravity: axis flips only ([-x, -y, z])
 export async function loadParticles(
     dataFetcher: DataFetcher, pathBase: string, mapId: string,
     mapOffX: number, mapOffZ: number,
@@ -193,7 +181,6 @@ export async function loadParticles(
     return out.length > 0 ? { emitters: out, images } : null;
 }
 
-// pos (3) + offset (2) + uv (2) = 7 floats.
 const PARTICLE_VERTEX_STRIDE_BYTES = 7 * 4;
 const PARTICLE_FLOATS_PER_VERTEX = 7;
 
@@ -210,12 +197,12 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
-    vec4 u_CamRight;  // xyz: render-frame camera right (world axis)
-    vec4 u_CamUp;     // xyz: render-frame camera up    (world axis)
+    vec4 u_CamRight;
+    vec4 u_CamUp;
 };
 
 layout(std140) uniform ub_DrawParams {
-    vec4 u_Color;     // rgba 0..1
+    vec4 u_Color;
 };
 
 uniform sampler2D u_Texture;
@@ -275,7 +262,6 @@ export class ParticleRenderer {
             wrapT: GfxWrapMode.Clamp,
         });
 
-        // One GPU texture per unique decoded image; emitters share by name.
         const gpuByName = new Map<string, GfxTexture>();
         for (const [name, img] of data.images.entries()) {
             const tex = device.createTexture({
@@ -302,7 +288,7 @@ export class ParticleRenderer {
         if (e.freeList.length > 0) {
             idx = e.freeList.pop()!;
         } else {
-            // maxcount hit; original engine also drops.
+
             return;
         }
         const p = e.particles[idx];
@@ -312,7 +298,7 @@ export class ParticleRenderer {
         p.velX = this.rand(e.dir1X, e.dir2X) * e.speed;
         p.velY = this.rand(e.dir1Y, e.dir2Y) * e.speed;
         p.velZ = this.rand(e.dir1Z, e.dir2Z) * e.speed;
-        // RO's dir bounds act as a base velocity when speed=0.
+
         if (e.speed === 0) {
             p.velX = this.rand(e.dir1X, e.dir2X);
             p.velY = this.rand(e.dir1Y, e.dir2Y);
@@ -326,13 +312,12 @@ export class ParticleRenderer {
 
     public update(dt: number): void {
         if (dt <= 0) return;
-        // Clamp dt to avoid flood-spawning after a long pause (tab in background).
+
         const dtc = Math.min(dt, 0.1);
         for (const e of this.emitters) {
             const rate = this.rand(e.rateMin, e.rateMax);
             e.spawnAccumulator += rate * dtc;
-            // Lazy free-list init: an empty freeList with all-dead particles
-            // means the pool was never used.
+
             if (e.freeList.length === 0) {
                 let allDead = true;
                 for (const p of e.particles) if (p.alive) { allDead = false; break; }
@@ -391,8 +376,7 @@ export class ParticleRenderer {
                 const cx = [-hx, hx, -hx, hx, -hx, hx];
                 const cy = [-hy, -hy, hy, -hy, hy, hy];
                 const uu = [0, 1, 0, 1, 0, 1];
-                // V flipped: BMP decoder is top-down but RO authoring places
-                // uv (0,0) at the texture's bottom-left.
+
                 const vv = [1, 1, 0, 1, 0, 0];
                 const tri = [0, 1, 2, 3, 5, 4];
                 for (let n = 0; n < 6; n++) {
@@ -421,8 +405,7 @@ export class ParticleRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(this.inputLayout, [vertexBufferDescriptor], null);
-        // TRANSLUCENT so we sort after the depth-writing sprite pass (otherwise
-        // a sprite's depth clobbers a particle drawn earlier).
+
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
         let sceneOffs = template.allocateUniformBuffer(ParticleProgram.ub_SceneParams, 16 + 2 * 4);
@@ -431,8 +414,6 @@ export class ParticleRenderer {
         sceneOffs += fillVec4(sceneMapped, sceneOffs, camRight[0], camRight[1], camRight[2], 0);
         sceneOffs += fillVec4(sceneMapped, sceneOffs, camUp[0], camUp[1], camUp[2], 0);
 
-        // Megastate goes on the renderInst (not the template) so each emitter
-        // gets its own blend mode (see warp-portal.ts:drawBatch).
         for (const r of ranges) {
             const e = r.emitter;
             if (e.texture === null) continue;

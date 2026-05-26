@@ -1,10 +1,3 @@
-
-// Parser for Ragnarok Online's RSM 3D model format (magic "GRSM"). A node tree
-// (parented by name) where each node owns its vertices/UVs/faces, an offset
-// matrix and a local TRS. Rotation keyframes are always present; position
-// keyframes from v1.6, scale keyframes from v2.2. All values little-endian;
-// names are CP949.
-
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString } from "../util.js";
 import { RswVec3 } from "./rsw.js";
@@ -18,14 +11,14 @@ export interface RsmTexCoord {
 export interface RsmFace {
     vertIdx: [number, number, number];
     texIdx: [number, number, number];
-    textureId: number;   // index into RsmNode.textureIds
+    textureId: number;
     twoSided: number;
     smoothGroup: number;
 }
 
 export interface RsmRotKeyframe {
     frame: number;
-    q: [number, number, number, number]; // x,y,z,w
+    q: [number, number, number, number];
 }
 
 export interface RsmPosKeyframe {
@@ -42,11 +35,11 @@ export interface RsmNode {
     name: string;
     parent: string;
     textureIds: number[];
-    // 3x3 linear part of the offset transform, row-major (9 floats).
+
     offsetMatrix: number[];
     offsetTranslation: RswVec3;
     position: RswVec3;
-    rotAngle: number;     // radians
+    rotAngle: number;
     rotAxis: RswVec3;
     scale: RswVec3;
     vertices: RswVec3[];
@@ -61,13 +54,13 @@ export interface RsmModel {
     major: number;
     minor: number;
     shadeType: number;
-    alpha: number;        // 0..255
+    alpha: number;
     mainNode: string;
     textures: string[];
     nodes: RsmNode[];
-    // Loop length in frames; keyframe frame numbers wrap at this.
+
     animLength: number;
-    // RSM2 v2.2+ stores animation timing in frames-per-second; older files do not.
+
     frameRate: number;
 }
 
@@ -140,7 +133,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
     const alpha = ge(1, 4) ? r.u8() : 0xFF;
     const frameRate = ge(2, 2) ? r.f32() : 0;
 
-    if (!ge(2, 2)) r.skip(16); // reserved block, versions < 2.2
+    if (!ge(2, 2)) r.skip(16);
 
     const textures: string[] = [];
     const textureToId = new Map<string, number>();
@@ -244,7 +237,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             const vertIdx: [number, number, number] = [r.u16(), r.u16(), r.u16()];
             const texIdx: [number, number, number] = [r.u16(), r.u16(), r.u16()];
             const textureId = r.u16();
-            r.u16();                  // padding
+            r.u16();
             const twoSided = r.i32();
             const smoothGroup = r.i32();
             if (faceEnd >= 0) {
@@ -265,7 +258,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             for (let i = 0; i < numScaleKf; i++) {
                 const frame = r.i32();
                 scaleKeyframes.push({ frame, s: r.vec3() });
-                r.f32(); // unused interpolation/timing field
+                r.f32();
             }
 
             const numRotKf = r.i32();
@@ -283,7 +276,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
             for (let i = 0; i < numPosKf; i++) {
                 const frame = r.i32();
                 posKeyframes.push({ frame, p: r.vec3() });
-                r.i32(); // unused interpolation/timing field
+                r.i32();
             }
 
             if (ge(2, 3)) {
@@ -291,12 +284,12 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
                 if (numTexAnimGroups < 0)
                     throw new Error(`RSM: bad texture animation group count ${numTexAnimGroups}`);
                 for (let i = 0; i < numTexAnimGroups; i++) {
-                    r.i32(); // texture id
+                    r.i32();
                     const numTexAnims = r.i32();
                     if (numTexAnims < 0)
                         throw new Error(`RSM: bad texture animation count ${numTexAnims}`);
                     for (let j = 0; j < numTexAnims; j++) {
-                        r.i32(); // animation type
+                        r.i32();
                         const numFrames = r.i32();
                         if (numFrames < 0)
                             throw new Error(`RSM: bad texture animation frame count ${numFrames}`);
@@ -305,10 +298,7 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
                 }
             }
         } else {
-            // Gate is 1.6 here even though Model.cpp:655 reads posanim from 1.5:
-            // in the v1.5 corpus 138/344 RSMs yield infeasible counts under the
-            // 1.5 gate while all 344 parse cleanly at 1.6. Decomp source is from
-            // a later client where the format moved.
+
             if (ge(1, 6)) {
                 const numPosKf = r.i32();
                 if (numPosKf < 0)
@@ -336,9 +326,6 @@ export function parseRSM(buffer: ArrayBufferSlice): RsmModel {
         });
     }
 
-    // Model-level trailer (versions < 1.6): posKf section, then volume-box
-    // section, both count-prefixed. 5/6086 v1.4 RSMs carry garbage here
-    // (morgue_h_02..06); skip only when counts fit.
     if (!ge(1, 6)) {
         if (r.remaining() >= 4) {
             const numPosKf = r.i32();

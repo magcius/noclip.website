@@ -1,7 +1,3 @@
-
-// Per-map background music owned by the scene's renderer. Tracks loop on a
-// shared HTMLAudioElement; the id -> filename map is lazy-loaded once.
-
 import { DataFetcher } from "../DataFetcher.js";
 
 export class Bgm {
@@ -126,7 +122,7 @@ export class Bgm {
             return;
         }
         if (a.src === url) {
-            a.play().catch(() => { /* browser autoplay needs a user gesture */ });
+            a.play().catch(() => {                                             });
             return;
         }
         a.src = url;
@@ -134,7 +130,7 @@ export class Bgm {
         try {
             await a.play();
         } catch {
-            // browser autoplay needs a user gesture
+
         }
         if (this.destroyed)
             this.stop();

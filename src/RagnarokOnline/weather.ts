@@ -1,8 +1,3 @@
-
-// Camera-relative weather particle field (snow). A fixed pool of flakes orbits
-// the camera's horizontal position, drifts down, and recycles past the floor.
-// Motion is driven by accumulated dt and clamped against stalls.
-
 import { mat4, vec3 } from "gl-matrix";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -40,12 +35,11 @@ export const SNOW_PARAMS: WeatherParams = {
 
 const MAX_DT = 0.25;
 
-// 3 floats world pos + 2 floats uv = 20 bytes. Color constant (white).
 const FLAKE_VERTEX_STRIDE_BYTES = 3 * 4 + 2 * 4;
 const FLAKE_FLOATS_PER_VERTEX = 5;
 
 interface Flake {
-    // Offset from camera; oy is absolute world height.
+
     ox: number;
     oy: number;
     oz: number;
@@ -57,7 +51,6 @@ interface Flake {
     swayAmpZ: number;
 }
 
-// Mulberry32: deterministic so layout is reproducible across reloads.
 function makeRng(seed: number): () => number {
     let a = seed >>> 0;
     return () => {
@@ -68,8 +61,6 @@ function makeRng(seed: number): () => number {
     };
 }
 
-// Small soft-round RGBA texture (constant RGB, radial alpha falloff). Shared
-// with shadow.ts (black).
 export function makeSoftDiscImage(r: number, g: number, b: number): { width: number, height: number, rgba: Uint8Array } {
     const N = 16;
     const rgba = new Uint8Array(N * N * 4);
@@ -81,7 +72,7 @@ export function makeSoftDiscImage(r: number, g: number, b: number): { width: num
             const d = Math.sqrt(dx * dx + dy * dy) / rMax;
             let a = 1.0 - d;
             a = Math.max(0, a);
-            a = a * a * (3 - 2 * a); // smoothstep
+            a = a * a * (3 - 2 * a);
             const o = (y * N + x) * 4;
             rgba[o + 0] = r;
             rgba[o + 1] = g;
@@ -190,8 +181,6 @@ export class WeatherRenderer {
         this.cpuF32 = new Float32Array(this.cpuData);
     }
 
-    // initial=true randomises height across the volume so the field is already
-    // snowing on the first frame; recycle calls pass false to spawn at the top.
     private newFlake(initial: boolean): Flake {
         const p = this.params;
         const r = this.rng;
@@ -215,8 +204,6 @@ export class WeatherRenderer {
         const p = this.params;
         const camX = cameraWorldMatrix[12], camY = cameraWorldMatrix[13], camZ = cameraWorldMatrix[14];
 
-        // Billboard basis: horizontal camera-right, world-up leaned toward
-        // camera-up by 0.5 (same convention as the sprite/effect passes).
         vec3.set(this.scratchRight, cameraWorldMatrix[0], 0, cameraWorldMatrix[2]);
         if (vec3.len(this.scratchRight) < 1e-5)
             vec3.set(this.scratchRight, 1, 0, 0);
@@ -235,8 +222,6 @@ export class WeatherRenderer {
         const dt = this.accum;
         this.accum = 0;
 
-        // All three axes are camera-relative so the field follows the camera
-        // when flying up or down.
         for (const f of this.flakes) {
             f.oy -= f.fallSpeed * dt;
             f.swayPhase += f.swayRate * dt;

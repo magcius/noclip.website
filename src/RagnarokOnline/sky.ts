@@ -1,10 +1,3 @@
-
-// Per-map procedural sky dome. RO has no real skybox (CSkyBox is vestigial; its
-// textures aren't even in the GRF); the original client paints a flat clear.
-// Outdoor maps here draw a gradient dome seeded from the map's fog colour, with
-// a sun disc + halo at the RSW lat/long direction. Dungeons/indoors keep the
-// flat clear.
-
 import { mat4, vec3 } from "gl-matrix";
 import { GfxProgram } from "../gfx/platform/GfxPlatform.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -45,8 +38,6 @@ export function defaultSkyForMap(id: string): vec3 {
     return vec3.clone(DEFAULT_OUTDOOR_SKY);
 }
 
-// RO fog-table colours are an atmospheric tint over geometry, not a sky colour,
-// so the zenith is mostly clear blue with only a hint of the map's tint.
 function deriveZenith(horizon: vec3): vec3 {
     return vec3.lerp(vec3.create(), SKY_BLUE, horizon, 0.15);
 }
@@ -77,9 +68,6 @@ export function buildSkyData(
     };
 }
 
-// Fullscreen-triangle dome. Each fragment unprojects its NDC at z=1 to a
-// world-space view ray and shades a vertical gradient + sun disc/halo + haze
-// band. Depth-write off; depth-test always passes (fullscreenMegaState).
 class SkyDomeProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
@@ -87,14 +75,14 @@ class SkyDomeProgram extends DeviceProgram {
 ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
-    // Camera-relative: maps NDC at z=1 directly to a world-space ray dir.
+
     Mat4x4 u_WorldFromClip;
-    vec4 u_HorizonColor;  // rgb
-    vec4 u_ZenithColor;   // rgb
-    vec4 u_GroundColor;   // rgb
-    vec4 u_SunDir;        // xyz: unit, FROM ground TOWARD sun (render frame)
-    vec4 u_SunColor;      // rgb
-    vec4 u_SunParams;     // x: cos(sunSize), y: halo exponent
+    vec4 u_HorizonColor;
+    vec4 u_ZenithColor;
+    vec4 u_GroundColor;
+    vec4 u_SunDir;
+    vec4 u_SunColor;
+    vec4 u_SunParams;
 };
 
 varying vec3 v_RayDir;
@@ -102,8 +90,7 @@ varying vec3 v_RayDir;
 
     public override vert = `
 void main() {
-    // Three-vertex screen-covering triangle. gl_VertexID = 0 -> (-1,-1),
-    // 1 -> (3,-1), 2 -> (-1,3).
+
     vec2 t_NDC = vec2((gl_VertexID == 1) ? 3.0 : -1.0,
                       (gl_VertexID == 2) ? 3.0 : -1.0);
     gl_Position = vec4(t_NDC, 1.0, 1.0);
@@ -118,7 +105,6 @@ void main() {
     vec3 t_Dir = normalize(v_RayDir);
     float t_Up = clamp(t_Dir.y, -1.0, 1.0);
 
-    // Exponents < 1 compress the gradient toward the horizon.
     vec3 t_Sky;
     if (t_Up >= 0.0) {
         float t_T = pow(t_Up, 0.45);
@@ -132,14 +118,12 @@ void main() {
     float t_CosA = dot(t_Dir, t_SunDirN);
     float t_CosDisc = u_SunParams.x;
     float t_Disc = smoothstep(t_CosDisc - 0.0008, t_CosDisc + 0.0002, t_CosA);
-    // Mask halo to the sky half so it doesn't leak below the horizon at sunset.
+
     float t_HaloMask = clamp(t_Up + 0.1, 0.0, 1.0);
     float t_Halo = pow(max(t_CosA, 0.0), u_SunParams.y) * t_HaloMask * 0.6;
 
     vec3 t_Color = t_Sky + u_SunColor.rgb * (t_Disc + t_Halo);
 
-    // Haze band re-asserts the fog colour at the horizon line so terrain
-    // fades into the dome instead of meeting it at a hard seam.
     float t_HazeBand = exp(-pow(t_Up * 6.0, 2.0)) * 0.35;
     t_Color = mix(t_Color, u_HorizonColor.rgb, t_HazeBand);
 
@@ -161,9 +145,6 @@ export class SkyDomeRenderer {
         if (!sky.enableDome)
             return;
 
-        // Pre-translate by eye so the inverse maps NDC to (world - eye), i.e.
-        // a ray direction, directly. Works for both perspective and ortho:
-        // clipFromWorld * T(eye) cancels the view's T(-eye), leaving P * R.
         mat4.translate(this.scratchClip, clipFromWorld, eyePos);
         mat4.invert(this.scratchInv, this.scratchClip);
 
@@ -172,8 +153,7 @@ export class SkyDomeRenderer {
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 0 }]);
         template.setGfxProgram(this.program);
         template.setVertexInput(null, null, null);
-        // BACKGROUND layer + fullscreenMegaState so the dome paints before
-        // terrain regardless of submission order.
+
         template.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
         template.setMegaStateFlags(fullscreenMegaState);
 

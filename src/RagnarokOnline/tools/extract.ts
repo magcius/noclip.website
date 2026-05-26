@@ -1,4 +1,3 @@
-
 // Offline pipeline that produces data/RagnarokOnline/
 //
 //   npx tsx src/RagnarokOnline/tools/extract.ts [mapId ...]
@@ -22,7 +21,7 @@
 //     CLASSIC_MAPS' pre-renewal geometry; sdata.grf (v0x200) also contains
 //     the two LEGACY_ONLY_MAPS (poring_c01/c02). data_hp.grf (v0x102) is
 //     harmlessly skipped (parser doesn't handle v0x102; no map we use lives
-//     there). Optional; missing -> classic/legacy scene entries aren't 
+//     there). Optional; missing -> classic/legacy scene entries aren't
 //     generated.
 //
 //   data/RagnarokOnline_raw/iro_effecttool/
@@ -82,8 +81,6 @@ function toSlice(buf: Buffer): ArrayBufferSlice {
 
 const GRF_PATH = path.resolve("data/RagnarokOnline_raw/grf/data.grf");
 
-// Pre-renewal kRO 2008/2009 GRFs (v0x200). Treated as an overlay set when a
-// map id isn't in the modern GRF or is `<id>@classic`.
 const LEGACY_GRF_DIR = path.resolve("data/RagnarokOnline_raw/grf/legacy");
 function legacyGrfPaths(): string[] {
     if (!existsSync(LEGACY_GRF_DIR)) return [];
@@ -92,8 +89,6 @@ function legacyGrfPaths(): string[] {
         .map((f) => path.join(LEGACY_GRF_DIR, f));
 }
 
-// Pre-renewal maps with meaningful geometry differences from the modern iRO
-// versions, exposed as separate `<id>@classic` scene entries.
 const CLASSIC_MAPS = new Set<string>([
     "alberta", "alde_gld", "aru_gld", "bat_c01", "bra_in01", "brasilis",
     "cmd_fild08", "ein_fild01", "gl_cas02", "iz_dun03", "izlude", "manuk",
@@ -101,43 +96,7 @@ const CLASSIC_MAPS = new Set<string>([
     "rachel", "spl_fild01", "splendide", "ve_fild02",
 ]);
 
-// Pre-renewal-only maps absent from the modern iRO GRF; sourced from the
-// legacy GRFs under their bare id.
 const LEGACY_ONLY_MAPS = new Set<string>(["poring_c01", "poring_c02"]);
-
-// ============================================================================
-// Grf reader
-// ============================================================================
-
-// Gravity's GRF archive format. Handles v0x200 (kRO/iRO long-standing layout,
-// including the legacy kRO 2008/2009 snapshots) and v0x300 ("Event Horizon",
-// iRO since ~Oct 2024, for 4 GiB+ archives).
-//
-// Header (46 bytes), v0x200:
-//   0x00..0x0E  signature (15 bytes, ignored)
-//   0x0F..0x1D  padding/key
-//   0x1E..0x21  fileTableOffset (u32 LE)
-//   0x22..0x25  seed           (i32 LE)
-//   0x26..0x29  fileCountRaw   (i32 LE; real count = raw - seed - 7)
-//   0x2A..0x2D  version        (u32 LE; 0x200, 0x103, etc.)
-//
-// Header, v0x300 (only when bytes 35..37 are all zero AND version == 0x300):
-//   0x1E..0x25  fileTableOffset (u64 LE)
-//   0x26..0x29  fileCountPre    (u32 LE; real count = this value directly)
-//
-// File table at HEADER_SIZE + fileTableOffset:
-//   v0x300 prefixes a 4-byte zero word, then both versions have
-//   u32 packedSize + u32 realSize + packedSize bytes of zlib-deflated entries.
-//
-// Each entry:
-//   CP949 filename, null-terminated; u32 compressedSize; u32 lengthAligned;
-//   u32 realSize; u8 type; then a u32 offset in v0x200 or u64 in v0x300
-//   (post-name stride 17 vs 21).
-//
-// File data at HEADER_SIZE + entry.offset:
-//   lengthAligned bytes; zlib-deflate when realSize !== compressedSize.
-//   DES-encrypted entries (type bits 0x02 / 0x04) used in pre-v0x200 archives
-//   aren't implemented; we'd throw on read if we ever hit one.
 
 const HEADER_SIZE = 46;
 const FILELIST_TYPE_FILE = 0x01;
@@ -165,10 +124,6 @@ class Grf {
 
         this.version = header.readUInt32LE(0x2A);
 
-        // v0x300 uses u64 offsets only when bytes 35..37 are zero; this guard
-        // distinguishes Event Horizon from older v0x300 builds that still used
-        // the v0x200 u32+seed layout. v0x103/v0x101/v0x102 fall through and
-        // typically fail in inflateSync below.
         const isV3 = this.version === 0x300 && header[35] === 0 && header[36] === 0 && header[37] === 0;
         const entryStride = isV3 ? 21 : 17;
         let fileTableOffset: number;
@@ -183,7 +138,7 @@ class Grf {
             realFileCount = rawCount - seed - 7;
         }
 
-        const tablePrefixLen = isV3 ? 4 : 0; // v0x300 prefixes a zero word
+        const tablePrefixLen = isV3 ? 4 : 0;
 
         const tableHeader = Buffer.alloc(tablePrefixLen + 8);
         readSync(this.fd, tableHeader, 0, tableHeader.length, HEADER_SIZE + fileTableOffset);
@@ -250,8 +205,6 @@ function openGrf(): Grf {
     return grf;
 }
 
-// Debug-only: dump every GRF entry under data/RagnarokOnline_raw/assets/ using
-// its CP949-decoded path. For poking at the corpus; pipeline doesn't use it.
 function runExtractGrf(): void {
     const grf = openGrf();
     const assetsRoot = path.resolve("data/RagnarokOnline_raw/assets");
@@ -277,15 +230,6 @@ function runExtractGrf(): void {
     console.log(`Extracted ${copied} files to ${assetsRoot}, ${errors} errors`);
 }
 
-// ============================================================================
-// Stage 1: extract (stages GRF -> CDN tree)
-// ============================================================================
-
-// CP949 path note: GND.textureNames and RSW model placements arrive in CP949
-// (e.g. `필드바닥\\grass01.bmp`). The GRF stores its file table CP949-decoded
-// and lowercased. On disk we keep the UTF-8 form and lowercase basenames so
-// the case-sensitive CDN serves them under a stable path.
-
 const OUT_MAPS_DIR = path.resolve("data/RagnarokOnline/maps");
 const OUT_TEXTURE_DIR = path.resolve("data/RagnarokOnline/textures");
 const OUT_MODEL_DIR = path.resolve("data/RagnarokOnline/model");
@@ -295,30 +239,19 @@ const OUT_MODEL3D_DIR = path.resolve("data/RagnarokOnline/model3d");
 
 const MAP_EXTENSIONS = [".rsw", ".gnd", ".gat"];
 
-// Granny (.gr2) WoE models (Emperium, guardians, guild flag, treasure box).
-// Pre-expanded offline under data/RagnarokOnline_raw/baked/ (see header for
-// the build steps); this stage just copies the baked artifacts.
 const BAKED_GR2_DIR = path.resolve("data/RagnarokOnline_raw/baked/gr2/3dmob");
 const BAKED_BONE_DIR = path.resolve("data/RagnarokOnline_raw/baked/gr2/3dmob_bone");
 const BAKED_TEX_DIR = path.resolve("data/RagnarokOnline_raw/baked/gr2tex");
 const WOE_GRANNY_MODELS = ["empelium90_0", "sguardian90_9", "aguardian90_8", "kguardian90_7", "guildflag90_1", "treasurebox_2"];
-// Shared mesh-less action clips the guardians cycle through, keyed by
-// guardian id (7=knight, 8=archer, 9=soldier). Retargeted onto the matching
-// skeleton by bone name at load.
+
 const GUARDIAN_BONE_CLIPS = ["7_move", "7_attack", "7_damage", "8_move", "8_attack", "8_damage", "9_move", "9_attack", "9_damage"];
 
-// SPR/ACT pairs staged outside the per-map entity manifest. "이팩트" is the
-// decomp's "misc\" alias: torch_01 = EF_TORCH flame, particle1 = EF_FIREFLY
-// mote and warp-portal orbit sprite.
 const SPRITES_TO_EXTRACT = ["몬스터/poring", "이팩트/torch_01", "이팩트/particle1"];
 
 const EFFECTS_TO_EXTRACT = ["gloria.str"];
 
-// Standalone effect textures not referenced by any staged .str: warp-portal
-// disc and ring. Fetched flat at effects/textures/<name>.
 const EFFECT_TEXTURES_TO_EXTRACT = ["alpha_down.tga", "ring_blue.tga"];
 
-// Water animation frames live under "워터" as water<type><NN>.jpg (NN=00..31).
 const WATER_DIR = "워터";
 const WATER_FRAME_COUNT = 32;
 
@@ -337,8 +270,7 @@ function extractGrannyModels(): void {
         }
         copyFileSync(gr2Src, path.join(OUT_MODEL3D_DIR, `${name}.gr2`));
         models++;
-        // Match strictly on `<name>.<digits>.tex` so a sibling whose name is
-        // a prefix (e.g. "empelium90" vs "empelium90_0") can't steal files.
+
         const texRe = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.\\d+\\.tex$`);
         for (const f of existsSync(BAKED_TEX_DIR) ? readdirSync(BAKED_TEX_DIR) : []) {
             if (texRe.test(f)) {
@@ -360,9 +292,6 @@ function extractGrannyModels(): void {
     console.log(`  granny models: ${models} gr2 + ${texs} textures + ${clips} action clips -> ${OUT_MODEL3D_DIR}`);
 }
 
-// Modern iRO GRF first; legacy GRFs follow for `@classic` and LEGACY_ONLY
-// maps so .gnd/.rsm references to pre-renewal-only assets fall back to
-// legacy bytes when the name is gone in modern.
 function readFromGrfs(grfs: Grf[], filename: string): Buffer | null {
     for (const g of grfs) {
         const buf = g.read(filename);
@@ -437,8 +366,7 @@ function extractModels(grfs: Grf[], rswBuf: Buffer, copied: Set<string>, missing
 
 function extractWater(grfs: Grf[], rswBuf: Buffer, gndBuf: Buffer | null): void {
     const rsw = parseRSW(toSlice(rswBuf));
-    // RSW 2.6 moved the water block into the GND; rsw.waterType is 0 on
-    // those maps, so prefer GND's parsed water.type when present.
+
     let waterType = rsw.waterType;
     if (gndBuf !== null) {
         try {
@@ -462,8 +390,6 @@ function extractWater(grfs: Grf[], rswBuf: Buffer, gndBuf: Buffer | null): void 
     console.log(`  water: type ${waterType}, ${copied}/${WATER_FRAME_COUNT} frames copied (${missing} missing)`);
 }
 
-// On-disk format: one '#'-terminated token per line; records are groups of
-// five (key, start, end, color, density), matching the engine's parser.
 interface FogEntry { start: number; end: number; color: string; density: number; }
 function parseFogTable(grf: Grf): Map<string, FogEntry> {
     const out = new Map<string, FogEntry>();
@@ -496,7 +422,6 @@ function extractFog(mapName: string, table: Map<string, FogEntry>): void {
     console.log(`  fog: start=${entry.start} end=${entry.end} color=${entry.color} density=${entry.density}`);
 }
 
-// `name` is a forward-slash relative path without extension (e.g. "몬스터/poring").
 function extractSprite(grf: Grf, name: string): void {
     const grfRel = name.replace(/\//g, "\\");
     let copied = 0;
@@ -527,8 +452,6 @@ function extractEffectTexture(grf: Grf, name: string): void {
     console.log(`  effect texture ${name}: copied`);
 }
 
-// Copies a .str and the textures its layers reference. Layer texture names
-// default to .bmp when extensionless.
 function extractEffect(grf: Grf, strName: string): void {
     const strBuf = grf.read(`data\\texture\\effect\\${strName}`);
     if (strBuf === null) {
@@ -586,16 +509,13 @@ function enumerateMapIds(grf: Grf, mapIdFilter: string[]): string[] {
     return Array.from(ids).sort((a, b) => a.localeCompare(b));
 }
 
-// CLASSIC and LEGACY_ONLY ids resolve against the legacy GRFs (lazy + cached);
-// everything else against the modern GRF.
 const legacyGrfCache = new Map<string, Grf | null>();
 function openLegacyGrfs(): Grf[] {
     const out: Grf[] = [];
     for (const p of legacyGrfPaths()) {
         let g = legacyGrfCache.get(p);
         if (g === undefined) {
-            // Skip archives this parser can't handle (e.g. v0x102 sound
-            // overlays); cache the null so we don't retry.
+
             try { g = new Grf(p); }
             catch (e) { console.warn(`  skip legacy GRF ${path.basename(p)}: ${(e as Error).message}`); g = null; }
             legacyGrfCache.set(p, g);
@@ -676,35 +596,13 @@ function runExtract(mapIdFilter: string[]): void {
     console.log(`\nDone. ${copied.size} textures copied, ${missing.size} textures missing.`);
 }
 
-
-// ============================================================================
-// Stage: extract-emitters (iRO effecttool .lub -> per-map JSON)
-// ============================================================================
-
-// Each map's effecttool entry is a compiled Lua 5.1 script that, when
-// executed, populates two globals:
-//   _<mapId>_effect_version  -- table-format version (1 or 2)
-//   _<mapId>_emitterInfo     -- the emitter array
-//
-// The LUBs were compiled for 32-bit Lua (Win32 RO client), so stock 64-bit
-// lua refuses to load them. We ship a patch for the Lua 5.1 binary that reads
-// 32-bit size_t regardless of the host pointer width. dump-emitters.lua
-// runs each LUB under that binary and emits one JSON object on stdout.
-
 const LUA_BIN = path.resolve("data/RagnarokOnline_raw/bin/lua-5.1-iro");
 const DUMP_LUA = path.resolve("src/RagnarokOnline/tools/dump-emitters.lua");
 
-// Inside data.grf the path is `data\luafiles514\lua files\effecttool\<name>.lub`;
-// we sweep the whole tree to catch stragglers under `data\lua files\` too.
 const LUB_ROOT = path.resolve("data/RagnarokOnline_raw/iro_effecttool");
 
-// Effect particles share the terrain texture tree under textures/effect/
-// (where the existing TGAs already live), so the runtime resolves them
-// without per-map dirs.
 const EFFECT_TEX_OUT = path.resolve("data/RagnarokOnline/textures/effect");
 
-// Maps the runtime knows about. Anything else (libraries: prt_lib,
-// effecttoolutil, ...) is not a map and we don't stage a JSON for it.
 function loadMapIds(): Set<string> {
     const mapsTs = path.resolve("src/RagnarokOnline/maps.ts");
     if (!existsSync(mapsTs))
@@ -755,8 +653,6 @@ interface RawEmitterDump {
     emitters: Partial<EmitterSpec>[] | null;
 }
 
-// Mirrors how the engine treats absent table entries; better to default
-// than reject a partially-authored emitter.
 function withDefaults(e: Partial<EmitterSpec>): EmitterSpec {
     const v3 = (x: any, d: [number, number, number] = [0, 0, 0]): [number, number, number] =>
         (Array.isArray(x) && x.length >= 3) ? [Number(x[0]) || 0, Number(x[1]) || 0, Number(x[2]) || 0] : d;
@@ -777,8 +673,8 @@ function withDefaults(e: Partial<EmitterSpec>): EmitterSpec {
         size: v2(e.size, [1, 1]),
         life: v2(e.life, [1, 1]),
         speed: v1(e.speed, [0]),
-        srcmode: v1(e.srcmode, [5]),       // D3DBLEND_SRCALPHA
-        destmode: v1(e.destmode, [6]),     // D3DBLEND_INVSRCALPHA
+        srcmode: v1(e.srcmode, [5]),
+        destmode: v1(e.destmode, [6]),
         maxcount: v1(e.maxcount, [1]),
         zenable: v1(e.zenable, [1]),
         texture: typeof e.texture === "string" ? e.texture : "",
@@ -843,8 +739,6 @@ function runExtractEmitters(): void {
     const lubs = findLubFiles(LUB_ROOT);
     console.log(`found ${lubs.length} effecttool LUB/LUA files`);
 
-    // Prefer .lub over .lua: .lub is the form Gravity ships; sibling .lua is
-    // stale source. Explicit pick avoids platform-dependent readdir order.
     const byId = new Map<string, string>();
     const conflicts: string[] = [];
     for (const file of lubs) {
@@ -881,8 +775,7 @@ function runExtractEmitters(): void {
             badParse++;
             continue;
         }
-        // dump-emitters.lua emits arrays for contiguous int-keyed tables and
-        // objects otherwise; a few LUBs mix keys and come through as objects.
+
         const arr: Partial<EmitterSpec>[] = Array.isArray(raw.emitters)
             ? raw.emitters
             : Object.values(raw.emitters);
@@ -911,8 +804,6 @@ function runExtractEmitters(): void {
 
     console.log(`wrote ${wrote}, skipped(empty)=${skipped}, skipped(notMap)=${badId}, parseFail=${badParse}`);
 
-    // Runtime texture lookup drops the `effect\` prefix and resolves the
-    // basename under textures/effect/.
     const grf = openGrf();
     let texCopied = 0, texMissing = 0;
     for (const name of referencedTextures) {
@@ -928,25 +819,13 @@ function runExtractEmitters(): void {
     console.log(`textures: copied ${texCopied}, missing ${texMissing} of ${referencedTextures.size}`);
 }
 
-
-// ============================================================================
-// Stage: extract-entities (Hercules scripts -> per-map JSON + sprites)
-// ============================================================================
-
-// Parses Hercules server scripts into per-map entity manifests (mobs, NPCs,
-// warps) at data/RagnarokOnline/entities/<map>.json plus the SPR/ACT sprite
-// assets the entities reference (deduped into data/RagnarokOnline/sprite/).
-
 const HERCULES = path.resolve("../Hercules");
-// Pre-renewal first, then renewal: renewal overrides shared ids and adds
-// ~750 mobs unique to renewal-era maps.
+
 const MOB_DBS = [
     path.join(HERCULES, "db/pre-re/mob_db.conf"),
     path.join(HERCULES, "db/re/mob_db.conf"),
 ];
 
-// GRF sprite tree: monsters under `data\sprite\몬스터\` (CP949 "monster"),
-// NPC job sprites under `data\sprite\npc\`.
 const MONSTER_DIR = "몬스터";
 const NPC_SPRITE_DIR = "npc";
 
@@ -957,10 +836,10 @@ interface MobEntry {
     sprite: string;
     name: string;
     count: number;
-    cellX: number; cellY: number; // spawn-rect center (GAT cells); 0,0 = whole map
-    spanX: number; spanY: number; // spawn-rect radius; 0,0 = whole map
-    speed: number;    // mob_db MoveSpeed (ms per cell)
-    canMove: boolean; // mob_db Mode.CanMove: false = Pupa/plant/etc., never wanders
+    cellX: number; cellY: number;
+    spanX: number; spanY: number;
+    speed: number;
+    canMove: boolean;
 }
 
 interface NpcEntry {
@@ -974,8 +853,7 @@ interface WarpEntry {
     spanX: number; spanY: number;
     dest: string;
     destX: number; destY: number;
-    // Era hint for the destination resolver; omitted on shared-script warps
-    // so the runtime falls back to the source scene's era (see era.ts).
+
     destEra?: "classic" | "renewal";
 }
 
@@ -985,14 +863,9 @@ interface Manifest {
     warps: WarpEntry[];
 }
 
-// Engine's stock MoveSpeed when a record omits it.
 const DEFAULT_MOVE_SPEED = 150;
 interface MobDbEntry { sprite: string; speed: number; canMove: boolean; }
 
-// Records are `Id: <n>` led, with `SpriteName`, `MoveSpeed`, and a nested
-// `Mode: { ... }` block. CanMove is only honored inside the current record's
-// Mode block (other flag names overlap). A record commits when the next Id
-// appears.
 function parseMobDb(): Map<number, MobDbEntry> {
     const out = new Map<number, MobDbEntry>();
     for (const dbPath of MOB_DBS) {
@@ -1032,13 +905,12 @@ function mobSpriteRel(spriteName: string): string {
     return `${MONSTER_DIR}/${spriteName.toLowerCase()}`;
 }
 
-// Sprite constants used as placeable triggers, with no drawable file.
 const INVISIBLE_NPC_SPRITES = new Set(["HIDDEN_NPC", "FAKE_NPC", "INVISIBLE_NPC", "HIDDEN_WARP_NPC", "WARPNPC", "CLEAR_NPC"]);
 
 function npcSpriteRel(spriteToken: string): string | null {
     if (INVISIBLE_NPC_SPRITES.has(spriteToken.toUpperCase()))
         return null;
-    // Numeric SPRITE tokens are player-job IDs; not resolved to a file here.
+
     if (/^-?\d+$/.test(spriteToken))
         return null;
     return `${NPC_SPRITE_DIR}/${spriteToken.toLowerCase()}`;
@@ -1047,19 +919,6 @@ function npcSpriteRel(spriteToken: string): string | null {
 function spriteExistsInGrf(grf: Grf, rel: string): boolean {
     return grf.has(`data\\sprite\\${rel.replace(/\//g, "\\")}.spr`);
 }
-
-// ---- Hercules script load list ---------------------------------------------
-
-// Hercules loads only the files named in its config, not every .txt under
-// npc/. A raw directory walk pulls in seasonal events and especially
-// npc/custom/ (Healer, Warper, Stylist, Job Master, MVP/bank/lottery rooms,
-// ...) which over-populate towns with content the retail server never loads.
-//
-// We reproduce the server's load order: walk scripts_main.conf
-// (libconfig; `npc_global_list` tuples + `@include` recursion; `//` disables
-// a line). Both eras' main confs share an era-neutral subset and add their
-// own subtree (npc/pre-re/* or npc/re/*); a Set dedups the shared files.
-// npc_removed_list (scripts_removed.conf) drops files even if listed.
 
 function quotedTokens(line: string): string[] {
     const noComment = line.replace(/\/\/.*$/, "");
@@ -1071,10 +930,6 @@ function quotedTokens(line: string): string[] {
     return out;
 }
 
-// Strips `/* ... */` block comments while preserving newlines (line-by-line
-// parsers downstream depend on alignment). `/*` inside a string literal is
-// not a comment opener; otherwise an NPC `mes "/* hint */"` would toggle
-// global comment state.
 function stripBlockComments(src: string): string {
     let out = "";
     let i = 0, inStr = false, inCom = false;
@@ -1101,8 +956,6 @@ function stripBlockComments(src: string): string {
     return out;
 }
 
-// Paths in the conf are relative to the Hercules root. `@include` recurses;
-// quoted ".txt" tokens are script files.
 function parseScriptConf(confRel: string, scripts: Set<string>, removed: Set<string>, seen: Set<string>): void {
     if (seen.has(confRel))
         return;
@@ -1115,8 +968,7 @@ function parseScriptConf(confRel: string, scripts: Set<string>, removed: Set<str
     }
 
     let inRemoved = false;
-    // Strip block comments first so a commented-out @include or quoted path
-    // doesn't get picked up by the line scan.
+
     const text = stripBlockComments(readFileSync(confPath, "utf8"));
     for (const raw of text.split(/\r?\n/)) {
         const noComment = raw.replace(/\/\/.*$/, "");
@@ -1161,8 +1013,6 @@ function collectScriptFiles(rootConf: string): string[] {
     return out;
 }
 
-// Hercules NPC names carry two hidden suffixes: `#tag` (hidden display part)
-// and `::uniqueID` (internal name for duplicate()/event hooks). Both stripped.
 function visibleName(name: string): string {
     let s = name;
     const colons = s.indexOf("::");
@@ -1172,10 +1022,6 @@ function visibleName(name: string): string {
     return s.trim();
 }
 
-// Skipping `//`-commented lines matters: their coords[0] reads as
-// "//<mapId>" and would write to "<mapId>.json" under POSIX path
-// normalisation, silently overwriting the real manifest with the disabled
-// content
 interface Line { coords: string[]; fields: string[]; }
 function splitLine(raw: string): Line | null {
     const lead = raw.trimStart();
@@ -1188,9 +1034,6 @@ function splitLine(raw: string): Line | null {
     return { coords, fields };
 }
 
-// Origin of the source script file. "shared" = @included by both eras'
-// main.conf (most of npc/cities/*.txt). Drives the per-(map, era) fan-out
-// in emitManifests.
 type EntryEra = "pre-re" | "re" | "shared";
 
 interface ScanResult {
@@ -1199,21 +1042,10 @@ interface ScanResult {
     warps: (WarpEntry & { era: EntryEra })[];
 }
 
-// Scripted `monster(...)` calls in NPC script bodies (OnInit/OnTimer/OnTouch
-// handlers) are not tab-anchored definition lines, so the line scanner misses
-// them.
-//
-// monster() signature (script.c):
-//   monster "<map>",<x>,<y>,"<name>",<id|CONST>,<count>{,"<event>"};
-//
-// Mob identifier is either a numeric id or a SpriteName constant (resolved
-// via reverse mob_db lookup). Any call with non-literal map/x/y/count is
-// SKIPPED: drawing a mob at (0,0) just clutters origin.
 function scanScriptedSpawns(text: string, mobIdByName: Map<string, number>):
     { mapId: string; x: number; y: number; name: string; mobId: number; count: number }[] {
     const out: { mapId: string; x: number; y: number; name: string; mobId: number; count: number }[] = [];
-    // Quoted-string-first arg disambiguates from killmonster/areamonster/etc.
-    // Name may be a raw "..." or gettext-style _("...") wrapper.
+
     const re = /\bmonster\s*[\(\s]\s*"([^"]+)"\s*,\s*([^,]+),\s*([^,]+),\s*(?:_\s*\(\s*)?"([^"]*)"\s*\)?\s*,\s*([A-Z_][A-Z0-9_]*|-?\d+)\s*,\s*([^,;)\s]+)/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
@@ -1247,9 +1079,7 @@ function scanAllScripts(files: { file: string, era: EntryEra }[], mobIdByName: M
     };
 
     for (const { file, era } of files) {
-        // Block-comment-strip first: NPCs wrapped in /* ... */ (e.g. the
-        // disabled Curator of Library in npc/cities/prontera.txt) would
-        // otherwise parse as live entries because splitLine only skips `//`.
+
         const text = stripBlockComments(readFileSync(file, "utf8"));
         for (const { mapId, x, y, name, mobId, count } of scanScriptedSpawns(text, mobIdByName)) {
             const res = bucket(mapId);
@@ -1268,7 +1098,7 @@ function scanAllScripts(files: { file: string, era: EntryEra }[], mobIdByName: M
             const type = fields[1].trim();
 
             if (type === "monster" || type === "boss_monster") {
-                // coords: map,x,y,xs,ys ; fields[2]=name ; fields[3]=id,amt,d1,d2{,event}
+
                 const x = +coords[1], y = +coords[2], xs = +coords[3], ys = +coords[4];
                 const args = (fields[3] ?? "").split(",");
                 const mobId = parseInt(args[0], 10);
@@ -1279,9 +1109,7 @@ function scanAllScripts(files: { file: string, era: EntryEra }[], mobIdByName: M
             }
 
             if (type === "warp") {
-                // coords: map,x,y,dir ; fields[3]=xs,ys,dest,dx,dy
-                // dx,dy = arrival cell, kept so the viewer can place the
-                // camera at the landing point.
+
                 const x = +coords[1], y = +coords[2];
                 const args = (fields[3] ?? "").split(",");
                 const xs = parseInt(args[0], 10), ys = parseInt(args[1], 10);
@@ -1297,7 +1125,6 @@ function scanAllScripts(files: { file: string, era: EntryEra }[], mobIdByName: M
                 continue;
             }
 
-            // NPC-like definitions, including duplicate(Parent).
             const isDuplicate = type.startsWith("duplicate(");
             if (NPC_TYPES.has(type) || isDuplicate) {
                 const x = +coords[1], y = +coords[2], dir = +coords[3];
@@ -1312,11 +1139,6 @@ function scanAllScripts(files: { file: string, era: EntryEra }[], mobIdByName: M
     return byMap;
 }
 
-// ---- Era-aware map fan-out -------------------------------------------------
-
-// Tags non-shared warps with `destEra` so cross-map warps carry the right
-// era hint into the runtime resolver. A "shared" warp leaves destEra
-// undefined; the runtime falls back to the source scene's era (era.ts).
 function filterByEra(scan: ScanResult, allowed: EntryEra[], destEra: "classic" | "renewal"): ScanResult {
     const ok = (e: { era: EntryEra }): boolean => allowed.includes(e.era);
     return {
@@ -1333,19 +1155,11 @@ function hasContent(scan: ScanResult): boolean {
     return scan.mobs.length > 0 || scan.npcs.length > 0 || scan.warps.length > 0;
 }
 
-// Era-divergent = at least one entry from an era-specific script.
-// All-shared maps collapse to a single manifest (both eras would be
-// byte-identical; no point emitting three copies).
 function isEraDivergent(scan: ScanResult): boolean {
     const eraSpecific = (e: { era: EntryEra }): boolean => e.era !== "shared";
     return scan.mobs.some(eraSpecific) || scan.npcs.some(eraSpecific) || scan.warps.some(eraSpecific);
 }
 
-// Era-divergent maps emit three files: <id>@classic.json (pre-re + shared),
-// <id>@renewal.json (re + shared), and a bare <id>.json aliasing renewal so
-// existing URLs + inter-map warp scripts naming bare ids still resolve.
-// Non-divergent maps emit one bare <id>.json. Renewal-removed legacy maps
-// fall back to classic for the bare alias.
 function emitManifests(mapId: string, scan: ScanResult): { name: string, scan: ScanResult }[] {
     if (isEraDivergent(scan)) {
         const out: { name: string, scan: ScanResult }[] = [];
@@ -1355,9 +1169,9 @@ function emitManifests(mapId: string, scan: ScanResult): { name: string, scan: S
             out.push({ name: `${mapId}@classic`, scan: classic });
         if (hasContent(renewal)) {
             out.push({ name: `${mapId}@renewal`, scan: renewal });
-            out.push({ name: mapId, scan: renewal });   // bare alias = renewal
+            out.push({ name: mapId, scan: renewal });
         } else if (hasContent(classic)) {
-            // Pre-re-only map (renewal removed it): bare alias falls back.
+
             out.push({ name: mapId, scan: classic });
         }
         return out;
@@ -1366,7 +1180,6 @@ function emitManifests(mapId: string, scan: ScanResult): { name: string, scan: S
     return hasContent(bare) ? [{ name: mapId, scan: bare }] : [];
 }
 
-// `rel` is forward-slash, no extension.
 function stageSprite(grf: Grf, rel: string, copied: Set<string>): void {
     if (copied.has(rel)) return;
     const segs = rel.split("/");
@@ -1395,15 +1208,10 @@ function runExtractEntities(): void {
             console.log(`  ${label} (${id}): CanMove=${e.canMove} speed=${e.speed}`);
     }
 
-    // Reverse SpriteName -> Id for scripted monster() calls. Renewal wins
-    // on shared names (parseMobDb processes it second; same iteration order
-    // here keeps the two sources in sync).
     const mobIdByName = new Map<string, number>();
     for (const [id, e] of mobDb)
         mobIdByName.set(e.sprite.toUpperCase(), id);
 
-    // Tag each unique file by origin: in BOTH lists = "shared", in pre-re
-    // only = "pre-re", in re only = "re".
     const preReFiles = collectScriptFiles(PRE_RE_ROOT_CONF);
     const reFiles = collectScriptFiles(RE_ROOT_CONF);
     const preSet = new Set(preReFiles);
@@ -1438,8 +1246,6 @@ function runExtractEntities(): void {
     );
     console.log(`scene registry: ${sceneIds.size} maps (${classicGeometryBases.size} classic geometry variants)`);
 
-    // Track manifests written this run so we can sweep stale .json from a
-    // previous run (e.g. when CLEAR_NPC additions filter a map empty).
     const writtenManifests = new Set<string>();
 
     let mapsWritten = 0, totalNpcs = 0, totalMobInstances = 0, totalWarps = 0, eraVariantsWritten = 0;
@@ -1447,7 +1253,7 @@ function runExtractEntities(): void {
     const removedDeadWarpDests = new Map<string, number>();
     for (const [mapId, scan] of byMap) {
         for (const { name: manifestId, scan: filteredScan } of emitManifests(mapId, scan)) {
-            // Mobs: resolve id -> sprite via mob_db. Rare "tame" spawns
+
             const mobs: MobEntry[] = [];
             let totalMonsters = 0;
             for (const m of filteredScan.mobs) {
@@ -1460,7 +1266,6 @@ function runExtractEntities(): void {
                 totalMonsters += m.count;
             }
 
-            // NPCs: skip event/demo/debug NPCs and dedup stacked NPCs.
             const npcs: NpcEntry[] = [];
             const cellTaken = new Set<string>();
             for (const n of filteredScan.npcs) {
@@ -1475,9 +1280,6 @@ function runExtractEntities(): void {
                 npcs.push({ sprite: rel, cellX: n.cellX, cellY: n.cellY, dir: n.dir, name: n.name });
             }
 
-            // Drop the per-entry `era` scratch but keep destEra (set by
-            // filterByEra; used by the resolver to pick the matching dest
-            // variant when both eras exist).
             const warps: WarpEntry[] = [];
             for (const w of filteredScan.warps) {
                 const targetEra = w.destEra ?? eraForManifest(manifestId);
@@ -1533,16 +1335,6 @@ function runExtractEntities(): void {
     console.log(`\n${stagedSprites.size} unique sprite (.spr/.act) pairs staged into ${OUT_SPRITE_DIR}`);
 }
 
-
-// ============================================================================
-// Stage: gen-maps (writes src/RagnarokOnline/maps.ts)
-// ============================================================================
-
-// Generates src/RagnarokOnline/maps.ts from `data\<id>.rsw` entries in the
-// iRO GRF, plus `data\mapnametable.txt` for English display names, plus the
-// compiled-in CLASSIC_MAPS / LEGACY_ONLY_MAPS lists.
-
-// Hardcoded bare-named towns (and town-equivalent hubs) that no prefix rule catches.
 const TOWNS = new Set([
     "prontera", "geffen", "payon", "morocc", "alberta", "izlude", "aldebaran", "comodo",
     "umbala", "niflheim", "amatsu", "gonryun", "ayothaya", "louyang", "jawaii", "einbroch",
@@ -1551,14 +1343,12 @@ const TOWNS = new Set([
     "dicastes01", "mid_camp", "prt_fild08", "new_1-1", "new_zone01", "prt_monk",
 ]);
 
-// Named dungeons whose ids don't contain `_dun` (those go through the
-// generic `/_dun/` check in classifyMap below).
 const NAMED_DUNGEON_RE = /^(gl_|abyss|abbey|juperos|jupe_|gefenia|cave\b|izlu2dun|anthell|in_sphinx|in_orcs|in_rogue|orcsdun|c_tower|tha_t|thana|treasure|kh_|ra_san|thor_v|moc_pryd|prt_sew|prt_maze|spl_in|ecl_tdun|1@|2@)/;
 
 function classifyMap(id: string): MapCategory {
     id = id.replace(/@classic$/, "");
     if (/_cas\d|g_cas/.test(id) || id.startsWith("nguild_") || /_gld\b|gld_/.test(id)) return "castle";
-    if (/^\d+@/.test(id)) return "dungeon"; // instance dungeons categorize as dungeons for fog
+    if (/^\d+@/.test(id)) return "dungeon";
     if (/^que_|^job_|^force_|^pvp_|^gvg|^arena|^ordeal|^poring_w|^guild_vs|^bat_|^job3|^turbo_|^sec_|^prt_are|auction/.test(id)) return "instance";
     if (/_fild\d|_field/.test(id)) return "field";
     if (/_dun/.test(id) || NAMED_DUNGEON_RE.test(id)) return "dungeon";
@@ -1593,11 +1383,6 @@ function runGenMaps(): void {
     const iro = parseMapNameTable(iroBuf);
     console.log(`iRO names: ${iro.size}`);
 
-    // Bare ids: one per renderable `data\<id>.rsw/.gnd` pair in the iRO GRF
-    // plus any LEGACY_ONLY map whose pair lives in one of the legacy GRFs.
-    // Instance maps like (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and 
-    // stay in the bare list. CLASSIC_MAPS contribute a `<id>@classic` each, 
-    // gated likewise.
     const bareIds = new Set<string>();
     for (const key of grf.files.keys()) {
         const m = /^data\\([^\\]+)\.rsw$/i.exec(key);
@@ -1648,23 +1433,13 @@ function runGenMaps(): void {
         .join("\n");
 
     const contents = `
-// Generated map manifest for the Ragnarok Online scene registry. Do not edit
-// by hand: regenerate by running
-//   npx tsx src/RagnarokOnline/tools/extract.ts --only=gen-maps
-//
-// ${entries.length} entries (${sortedBare.length} bare + ${classicBaseIds.length}
-// pre-renewal classic variants with rebuilt geometry). ${namedEn} with an iRO
-// English name, ${unnamed} unnamed.
-
 import type { MapCategory } from "./mapcategory.js";
 
 export interface RagnarokMapEntry {
     id: string;
     name: string;
     category: MapCategory;
-    // Set on dedicated pre-renewal scene entries; their assets and entity
-    // manifest are loaded from the @classic-suffixed files regardless of the
-    // global era toggle.
+
     era?: "classic";
 }
 
@@ -1676,11 +1451,6 @@ ${body}
     console.log(`wrote ${entries.length} entries to ${OUT}`);
     console.log(`  ${namedEn} English, ${unnamed} unnamed`);
 }
-
-
-// ============================================================================
-// Orchestrator
-// ============================================================================
 
 interface Stage {
     name: string;
@@ -1706,7 +1476,6 @@ function main(): void {
         return;
     }
 
-    // --only with no `=` value (or an empty one) is a CLI error, not a no-op.
     let only: Set<string> | null = null;
     if (onlyFlags.length > 0) {
         only = new Set();
