@@ -3,9 +3,9 @@
 // by hand: regenerate by running
 //   npx tsx src/RagnarokOnline/tools/extract.ts --only=gen-maps
 //
-// 1014 entries (992 bare + 22
-// pre-renewal classic variants with rebuilt geometry). 931 with an iRO
-// English name, 61 unnamed.
+// 1006 entries (984 bare + 22
+// pre-renewal classic variants with rebuilt geometry). 926 with an iRO
+// English name, 58 unnamed.
 
 import type { MapCategory } from "./mapcategory.js";
 
@@ -250,9 +250,6 @@ export const maps: RagnarokMapEntry[] = [
     { id: "bl_soul", name: "bl_soul - Biosphere Environment - Soul", category: "other" },
     { id: "bl_temple", name: "bl_temple - Biosphere Environment - Temple", category: "other" },
     { id: "bl_venom", name: "bl_venom - Biosphere Environment - Venom", category: "other" },
-    { id: "bphunt_high", name: "bphunt_high", category: "other" },
-    { id: "bphunt_low", name: "bphunt_low", category: "other" },
-    { id: "bphunt_mid", name: "bphunt_mid", category: "other" },
     { id: "bra_dun01", name: "bra_dun01 - Beyond the Waterfall", category: "dungeon" },
     { id: "bra_dun02", name: "bra_dun02 - Beyond the Waterfall", category: "dungeon" },
     { id: "bra_fild01", name: "bra_fild01 - Brasilis Field", category: "field" },
@@ -327,7 +324,6 @@ export const maps: RagnarokMapEntry[] = [
     { id: "einbroch", name: "einbroch - Einbroch, the city of steel", category: "city" },
     { id: "emal_dun01h", name: "emal_dun01h", category: "dungeon" },
     { id: "etur_dun01", name: "etur_dun01", category: "dungeon" },
-    { id: "evt_hello", name: "evt_hello - Dead Angel's landing", category: "other" },
     { id: "evt_mobroom", name: "evt_mobroom", category: "other" },
     { id: "for_dun01", name: "for_dun01 - Garden of Time - Forgotten Time Zone 1", category: "dungeon" },
     { id: "for_dun02", name: "for_dun02 - Garden of Time - Forgotten Time Zone 2", category: "dungeon" },
@@ -435,8 +431,6 @@ export const maps: RagnarokMapEntry[] = [
     { id: "hero_out4", name: "hero_out4 - Herosria Lavinarium", category: "other" },
     { id: "hero_tra", name: "hero_tra - Herosria Training Ground", category: "other" },
     { id: "herosria", name: "herosria - Sanctuary Herosria Room", category: "other" },
-    { id: "httyd_01", name: "httyd_01 - Tranquil Abyss Lake", category: "other" },
-    { id: "httyd_02", name: "httyd_02 - Abyss Lake Underground Cave", category: "other" },
     { id: "hu_fild01", name: "hu_fild01 - Thanatos Tower", category: "field" },
     { id: "hu_fild02", name: "hu_fild02 - Hugel Field", category: "field" },
     { id: "hu_fild03", name: "hu_fild03 - Hugel Field", category: "field" },
@@ -467,7 +461,6 @@ export const maps: RagnarokMapEntry[] = [
     { id: "int_land02", name: "int_land02 - Remote Island", category: "other" },
     { id: "int_land03", name: "int_land03 - Remote Island", category: "other" },
     { id: "int_land04", name: "int_land04 - Remote Island", category: "other" },
-    { id: "iroweekrace", name: "iroweekrace - Mt.Mjolnir", category: "other" },
     { id: "iz_ac01", name: "iz_ac01 - Academy1st floor", category: "other" },
     { id: "iz_ac01_a", name: "iz_ac01_a - Academy1st floor", category: "other" },
     { id: "iz_ac01_b", name: "iz_ac01_b - Academy1st floor", category: "other" },
@@ -728,7 +721,6 @@ export const maps: RagnarokMapEntry[] = [
     { id: "oz_dun01", name: "oz_dun01 - Oz Labyrinth 1F", category: "dungeon" },
     { id: "oz_dun02", name: "oz_dun02 - Oz Labyrinth 2F", category: "dungeon" },
     { id: "p_track01", name: "p_track01 - Monster Race Arena", category: "other" },
-    { id: "p_track02", name: "p_track02 - Monster Race Arena", category: "other" },
     { id: "paramk", name: "paramk - Para Market", category: "other" },
     { id: "pay_arche", name: "pay_arche - Archer Village", category: "city" },
     { id: "pay_d03_i", name: "pay_d03_i - Nightmare_of_the_Moonlight_Flower", category: "city" },

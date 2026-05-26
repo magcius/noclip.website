@@ -7,9 +7,9 @@
 //
 // Stages (run in order; each gated by its inputs existing):
 //   1. extract          : stages GRF + baked + legacy assets -> data/RagnarokOnline/
-//   2. extract-emitters : per-map particle JSON from iRO effecttool .lub dump
-//   3. extract-entities : per-map NPC/mob/warp JSON from Hercules scripts
-//   4. gen-maps         : rewrites src/RagnarokOnline/maps.ts (committed)
+//   2. gen-maps         : rewrites src/RagnarokOnline/maps.ts (committed)
+//   3. extract-emitters : per-map particle JSON from iRO effecttool .lub dump
+//   4. extract-entities : per-map NPC/mob/warp JSON from Hercules scripts
 //
 // Required inputs (drop in place before running):
 //
@@ -571,12 +571,18 @@ function enumerateMapIds(grf: Grf, mapIdFilter: string[]): string[] {
     const ids = new Set<string>();
     for (const key of grf.files.keys()) {
         const m = /^data\\([^\\]+)\.rsw$/i.exec(key);
-        if (m !== null) ids.add(m[1].toLowerCase());
+        if (m !== null) {
+            const id = m[1].toLowerCase();
+            if (modernMapIsRenderable(grf, id))
+                ids.add(id);
+        }
     }
     for (const id of LEGACY_ONLY_MAPS)
-        ids.add(id);
+        if (legacyMapIsRenderable(id))
+            ids.add(id);
     for (const id of CLASSIC_MAPS)
-        ids.add(`${id}@classic`);
+        if (modernMapIsRenderable(grf, id) && legacyMapIsRenderable(id))
+            ids.add(`${id}@classic`);
     return Array.from(ids).sort((a, b) => a.localeCompare(b));
 }
 
@@ -600,6 +606,12 @@ function openLegacyGrfs(): Grf[] {
 }
 function legacyGrfHas(filename: string): boolean {
     return openLegacyGrfs().some((g) => g.has(filename));
+}
+function modernMapIsRenderable(grf: Grf, mapId: string): boolean {
+    return grf.has(`data\\${mapId}.rsw`) && grf.has(`data\\${mapId}.gnd`);
+}
+function legacyMapIsRenderable(mapId: string): boolean {
+    return legacyGrfHas(`data\\${mapId}.rsw`) && legacyGrfHas(`data\\${mapId}.gnd`);
 }
 function readMapFile(grf: Grf, mapId: string, ext: string): Buffer | null {
     const classicMatch = /^(.+)@classic$/i.exec(mapId);
@@ -666,7 +678,7 @@ function runExtract(mapIdFilter: string[]): void {
 
 
 // ============================================================================
-// Stage 2: extract-emitters (iRO effecttool .lub -> per-map JSON)
+// Stage: extract-emitters (iRO effecttool .lub -> per-map JSON)
 // ============================================================================
 
 // Each map's effecttool entry is a compiled Lua 5.1 script that, when
@@ -675,7 +687,7 @@ function runExtract(mapIdFilter: string[]): void {
 //   _<mapId>_emitterInfo     -- the emitter array
 //
 // The LUBs were compiled for 32-bit Lua (Win32 RO client), so stock 64-bit
-// lua refuses to load them. We ship a patched Lua 5.1 binary that reads
+// lua refuses to load them. We ship a patch for the Lua 5.1 binary that reads
 // 32-bit size_t regardless of the host pointer width. dump-emitters.lua
 // runs each LUB under that binary and emits one JSON object on stdout.
 
@@ -905,7 +917,7 @@ function runExtractEmitters(): void {
 
 
 // ============================================================================
-// Stage 3: extract-entities (Hercules scripts -> per-map JSON + sprites)
+// Stage: extract-entities (Hercules scripts -> per-map JSON + sprites)
 // ============================================================================
 
 // Parses Hercules server scripts into per-map entity manifests (mobs, NPCs,
@@ -1028,7 +1040,7 @@ function spriteExistsInGrf(grf: Grf, rel: string): boolean {
 // Hercules loads only the files named in its config, not every .txt under
 // npc/. A raw directory walk pulls in seasonal events and especially
 // npc/custom/ (Healer, Warper, Stylist, Job Master, MVP/bank/lottery rooms,
-// ...) which over-populate towns with content the live server never loads.
+// ...) which over-populate towns with content the retail server never loads.
 //
 // We reproduce the server's load order: walk scripts_main.conf
 // (libconfig; `npc_global_list` tuples + `@include` recursion; `//` disables
@@ -1150,8 +1162,7 @@ function visibleName(name: string): string {
 // Skipping `//`-commented lines matters: their coords[0] reads as
 // "//<mapId>" and would write to "<mapId>.json" under POSIX path
 // normalisation, silently overwriting the real manifest with the disabled
-// content (this had wiped prt_in's NPCs/mobs from a commented warp block in
-// npc/warps/cities/prontera.txt).
+// content
 interface Line { coords: string[]; fields: string[]; }
 function splitLine(raw: string): Line | null {
     const lead = raw.trimStart();
@@ -1177,17 +1188,14 @@ interface ScanResult {
 
 // Scripted `monster(...)` calls in NPC script bodies (OnInit/OnTimer/OnTouch
 // handlers) are not tab-anchored definition lines, so the line scanner misses
-// them. Examples: niflheim.txt (Ashe Bruce's Rideword spawns),
-// quests_airship.txt (staged Gremlin/Beholder encounters in airplane_01).
+// them.
 //
 // monster() signature (script.c):
 //   monster "<map>",<x>,<y>,"<name>",<id|CONST>,<count>{,"<event>"};
 //
 // Mob identifier is either a numeric id or a SpriteName constant (resolved
 // via reverse mob_db lookup). Any call with non-literal map/x/y/count is
-// SKIPPED: drawing a mob at (0,0) just clutters origin. `warp()` calls are
-// NOT scanned (they teleport the caller; visible warp tiles come through as
-// WARPNPC script defs caught by the line scanner).
+// SKIPPED: drawing a mob at (0,0) just clutters origin.
 function scanScriptedSpawns(text: string, mobIdByName: Map<string, number>):
     { mapId: string; x: number; y: number; name: string; mobId: number; count: number }[] {
     const out: { mapId: string; x: number; y: number; name: string; mobId: number; count: number }[] = [];
@@ -1320,10 +1328,10 @@ function isEraDivergent(scan: ScanResult): boolean {
     return scan.mobs.some(eraSpecific) || scan.npcs.some(eraSpecific) || scan.warps.some(eraSpecific);
 }
 
-// Era-divergent maps emit THREE files: <id>@classic.json (pre-re + shared),
+// Era-divergent maps emit three files: <id>@classic.json (pre-re + shared),
 // <id>@renewal.json (re + shared), and a bare <id>.json aliasing renewal so
 // existing URLs + inter-map warp scripts naming bare ids still resolve.
-// Non-divergent maps emit ONE bare <id>.json. Renewal-removed legacy maps
+// Non-divergent maps emit one bare <id>.json. Renewal-removed legacy maps
 // fall back to classic for the bare alias.
 function emitManifests(mapId: string, scan: ScanResult): { name: string, scan: ScanResult }[] {
     if (isEraDivergent(scan)) {
@@ -1413,8 +1421,6 @@ function runExtractEntities(): void {
     for (const [mapId, scan] of byMap) {
         for (const { name: manifestId, scan: filteredScan } of emitManifests(mapId, scan)) {
             // Mobs: resolve id -> sprite via mob_db. Rare "tame" spawns
-            // (Wild Rose, ...) in cities are kept as legitimate content
-            // rather than filtered on a map-name heuristic.
             const mobs: MobEntry[] = [];
             let totalMonsters = 0;
             for (const m of filteredScan.mobs) {
@@ -1484,14 +1490,14 @@ function runExtractEntities(): void {
 
 
 // ============================================================================
-// Stage 4: gen-maps (writes src/RagnarokOnline/maps.ts)
+// Stage: gen-maps (writes src/RagnarokOnline/maps.ts)
 // ============================================================================
 
 // Generates src/RagnarokOnline/maps.ts from `data\<id>.rsw` entries in the
 // iRO GRF, plus `data\mapnametable.txt` for English display names, plus the
 // compiled-in CLASSIC_MAPS / LEGACY_ONLY_MAPS lists.
 
-// Bare-named towns (and town-equivalent hubs) that no prefix rule catches.
+// Hardcoded bare-named towns (and town-equivalent hubs) that no prefix rule catches.
 const TOWNS = new Set([
     "prontera", "geffen", "payon", "morocc", "alberta", "izlude", "aldebaran", "comodo",
     "umbala", "niflheim", "amatsu", "gonryun", "ayothaya", "louyang", "jawaii", "einbroch",
@@ -1518,8 +1524,6 @@ function classifyMap(id: string): MapCategory {
 
 const OUT = path.resolve("src/RagnarokOnline/maps.ts");
 
-// mapnametable.txt: `<map_id>.rsw#<display name>#`. WHATWG's "euc-kr" label
-// is the CP949 index.
 function parseMapNameTable(buf: Buffer): Map<string, string> {
     const out = new Map<string, string>();
     const text = new TextDecoder("euc-kr").decode(buf);
@@ -1544,21 +1548,26 @@ function runGenMaps(): void {
     const iro = parseMapNameTable(iroBuf);
     console.log(`iRO names: ${iro.size}`);
 
-    // Bare ids: one per `data\<id>.rsw` in the iRO GRF plus any LEGACY_ONLY
-    // map whose .rsw lives in one of the legacy GRFs. Instance maps
-    // (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and stay in the bare
-    // list. CLASSIC_MAPS contribute a `<id>@classic` each, gated likewise.
+    // Bare ids: one per renderable `data\<id>.rsw/.gnd` pair in the iRO GRF
+    // plus any LEGACY_ONLY map whose pair lives in one of the legacy GRFs.
+    // Instance maps like (`1@4cdn`, `2@nyd`) use `@` as a LEADING char and 
+    // stay in the bare list. CLASSIC_MAPS contribute a `<id>@classic` each, 
+    // gated likewise.
     const bareIds = new Set<string>();
     for (const key of grf.files.keys()) {
         const m = /^data\\([^\\]+)\.rsw$/i.exec(key);
-        if (m !== null) bareIds.add(m[1].toLowerCase());
+        if (m !== null) {
+            const id = m[1].toLowerCase();
+            if (modernMapIsRenderable(grf, id))
+                bareIds.add(id);
+        }
     }
     grf.close();
     for (const id of LEGACY_ONLY_MAPS)
-        if (legacyGrfHas(`data\\${id}.rsw`)) bareIds.add(id);
+        if (legacyMapIsRenderable(id)) bareIds.add(id);
 
     const classicBaseIds = Array.from(CLASSIC_MAPS)
-        .filter((id) => bareIds.has(id) && legacyGrfHas(`data\\${id}.rsw`))
+        .filter((id) => bareIds.has(id) && legacyMapIsRenderable(id))
         .sort((a, b) => a.localeCompare(b));
 
     const sortedBare = Array.from(bareIds).sort((a, b) => a.localeCompare(b));
@@ -1668,9 +1677,9 @@ function main(): void {
 
     const stages: Stage[] = [
         { name: "extract",          requires: GRF_PATH,                                       run: () => runExtract(mapIdFilter) },
+        { name: "gen-maps",         requires: GRF_PATH,                                       run: () => runGenMaps() },
         { name: "extract-emitters", requires: path.resolve("data/RagnarokOnline_raw/iro_effecttool"), run: () => runExtractEmitters() },
         { name: "extract-entities", requires: HERCULES,                                       run: () => runExtractEntities() },
-        { name: "gen-maps",         requires: GRF_PATH,                                       run: () => runGenMaps() },
     ];
 
     if (only !== null) {

@@ -26,7 +26,7 @@ import { loadWoeGrannyModels } from "./granny-scene.js";
 import { loadPointLights } from "./lights.js";
 import { maps } from "./maps.js";
 import { mapCategory, MapCategory, mapWantsFog, mapWeather } from "./mapcategory.js";
-import { currentEra } from "./era.js";
+import { baseMapId, eraForScene, resolveWarpDestForEra, resolveWarpTargetEra } from "./era.js";
 import { SNOW_PARAMS, WeatherParams } from "./weather.js";
 import { buildSkyData } from "./sky.js";
 import { loadParticles } from "./particles.js";
@@ -152,7 +152,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const dataFetcher = context.dataFetcher;
         // Dedicated `<base>@classic` scenes ship pre-renewal geometry; props
         // and textures still resolve from the shared model/texture pool.
-        const baseId = this.id.replace(/@classic$/, "");
+        const baseId = baseMapId(this.id);
         const shared = await context.dataShare.ensureObject(
             `${pathBase}/SharedCache`,
             async () => new RagnarokSharedCache(),
@@ -310,15 +310,18 @@ class RagnarokMapSceneDesc implements SceneDesc {
             const wp = gatCellToWorld(w.cellX, w.cellY, gatHeight(w.cellX, w.cellY), gnd.width);
             const spanCells = Math.max(w.spanX, w.spanY);
             const radius = Math.max(spanCells * GAT_CELL_SIZE, WARP_MIN_HIT_RADIUS);
+            const destEra = resolveWarpTargetEra(w.destEra, this.id);
+            const dest = resolveWarpDestForEra(w.dest, destEra);
             let arrivalWorldPos: vec3 | undefined;
-            if (w.dest === baseId && w.destX !== undefined && w.destY !== undefined) {
+            if (dest === this.id && w.destX !== undefined && w.destY !== undefined) {
                 const ap = gatCellToWorld(w.destX, w.destY, gatHeight(w.destX, w.destY), gnd.width);
                 arrivalWorldPos = vec3.fromValues(ap[0], ap[1], ap[2]);
             }
             return {
                 worldPos: vec3.fromValues(wp[0], wp[1], wp[2]),
                 radius,
-                dest: w.dest,
+                dest,
+                destEra,
                 arrivalCellX: w.destX,
                 arrivalCellY: w.destY,
                 arrivalWorldPos,
@@ -326,7 +329,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         });
 
         const buildLayer = async (): Promise<EntityLayerBundle> => {
-            const ed = await loadEntities(dataFetcher, pathBase, this.id, currentEra(), gnd, gat);
+            const ed = await loadEntities(dataFetcher, pathBase, this.id, eraForScene(this.id), gnd, gat);
             if (effectSources.sprites.length > 0) {
                 const spriteBase = ed.sprites.length;
                 for (const ls of effectSources.sprites)

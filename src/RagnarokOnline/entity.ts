@@ -14,7 +14,7 @@ import { parseACT, ActModel } from "./act.js";
 import { SpriteActor, computeActorFootPxY, SpriteKind } from "./sprite.js";
 import { gatCellToWorld, gatCellGroundHeight, gatCellSurfaceHeight } from "./coord.js";
 import { RswEffectSource } from "./rsw.js";
-import { Era } from "./era.js";
+import type { Era } from "./era.js";
 
 // A zero area (cellX=cellY=spanX=spanY=0) is a whole-map random spawn.
 interface MobSpawn {
@@ -49,6 +49,9 @@ export interface WarpEntry {
     // Arrival cell on the destination map. Older manifests omit these.
     destX?: number;
     destY?: number;
+    // Era-specific Hercules scripts tag cross-map warps so the runtime can
+    // route to a matching rebuilt-geometry scene when one exists.
+    destEra?: Era;
 }
 
 interface EntityManifest {
@@ -515,7 +518,9 @@ export async function loadEntities(dataFetcher: DataFetcher, pathBase: string, m
         }
     };
 
-    const manifest = (await tryFetch(`${mapId}@${era}`)) ?? (await tryFetch(mapId));
+    const manifest = mapId.endsWith("@classic")
+        ? await tryFetch(mapId)
+        : ((await tryFetch(`${mapId}@${era}`)) ?? (await tryFetch(mapId)));
     if (manifest === null)
         return empty;
 

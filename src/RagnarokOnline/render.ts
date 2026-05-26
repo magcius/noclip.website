@@ -39,6 +39,7 @@ import { SkyDomeRenderer, SkySceneData } from "./sky.js";
 import { DustRenderer } from "./dust.js";
 import { triggerTravel } from "./travel.js";
 import { currentEra, setEra } from "./era.js";
+import type { Era } from "./era.js";
 import { Bgm } from "./bgm.js";
 import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
@@ -490,18 +491,22 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
 
     // Per-corner color sampled from the cell owning that corner so shared
     // corners agree across tiles (orig 3dGround.cpp; alpha is always opaque).
-    const cellTopColor = (cx: number, cy: number): number => {
-        if (cx < 0 || cy < 0 || cx >= gnd.width || cy >= gnd.height)
-            return 0;
-        const cell = gnd.cells[cy * gnd.width + cx];
-        const s = surfaceOk(cell.topSurface);
-        if (s === null)
-            return 0;
+    const surfaceColor = (s: GndSurface): number => {
         const argb = s.color >>> 0;
         const r = (argb >>> 16) & 0xff;
         const g = (argb >>> 8) & 0xff;
         const b = argb & 0xff;
         return (r | (g << 8) | (b << 16) | (0xff << 24)) >>> 0;
+    };
+
+    const cellTopColor = (cx: number, cy: number, fallback: number): number => {
+        if (cx < 0 || cy < 0 || cx >= gnd.width || cy >= gnd.height)
+            return fallback;
+        const cell = gnd.cells[cy * gnd.width + cx];
+        const s = surfaceOk(cell.topSurface);
+        if (s === null)
+            return fallback;
+        return surfaceColor(s);
     };
 
     const emitQuad = (s: GndSurface, p: vec3[], cornerColors: number[]): void => {
@@ -542,11 +547,12 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
                 cornerWorld(x, y, 1, c.height, p1);
                 cornerWorld(x, y, 2, c.height, p2);
                 cornerWorld(x, y, 3, c.height, p3);
+                const cOwn = surfaceColor(top);
                 emitQuad(top, [p0, p1, p2, p3], [
-                    cellTopColor(x, y),
-                    cellTopColor(x + 1, y),
-                    cellTopColor(x, y + 1),
-                    cellTopColor(x + 1, y + 1),
+                    cellTopColor(x, y, cOwn),
+                    cellTopColor(x + 1, y, cOwn),
+                    cellTopColor(x, y + 1, cOwn),
+                    cellTopColor(x + 1, y + 1, cOwn),
                 ]);
             }
 
@@ -557,8 +563,9 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
                 cornerWorld(x, y, 3, c.height, p1);
                 cornerWorld(x, y + 1, 0, nc.height, p2);
                 cornerWorld(x, y + 1, 1, nc.height, p3);
-                const cL = cellTopColor(x, y + 1);
-                const cR = cellTopColor(x + 1, y + 1);
+                const cOwn = surfaceColor(front);
+                const cL = cellTopColor(x, y + 1, cOwn);
+                const cR = cellTopColor(x + 1, y + 1, cOwn);
                 emitQuad(front, [p0, p1, p2, p3], [cL, cR, cL, cR]);
             }
 
@@ -569,8 +576,9 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
                 cornerWorld(x, y, 3, c.height, p1);
                 cornerWorld(x + 1, y, 0, rc.height, p2);
                 cornerWorld(x + 1, y, 2, rc.height, p3);
-                const cT = cellTopColor(x + 1, y);
-                const cB = cellTopColor(x + 1, y + 1);
+                const cOwn = surfaceColor(right);
+                const cT = cellTopColor(x + 1, y, cOwn);
+                const cB = cellTopColor(x + 1, y + 1, cOwn);
                 emitQuad(right, [p0, p1, p2, p3], [cT, cB, cT, cB]);
             }
         }
@@ -671,6 +679,7 @@ export interface WarpTarget {
     worldPos: vec3;
     radius: number;
     dest: string;
+    destEra: Era;
     arrivalCellX?: number;
     arrivalCellY?: number;
     arrivalWorldPos?: vec3;
@@ -955,13 +964,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (warpClickData !== null)
             this.warpTargets = warpClickData.targets;
 
-        if (this.warpTargets.length > 0 || this.mobs.length > 0) {
-            const inputManager = sceneContext.inputManager, toplevel = inputManager.toplevel;
-            toplevel.addEventListener("mousedown", this.onMouseDown);
-            toplevel.addEventListener("mousemove", this.onMouseMove);
-            toplevel.addEventListener("mouseup", this.onMouseUp);
-            this.mouseListenerTarget = toplevel;
-        }
+        this.syncMouseListeners();
 
         if (pointLights !== null)
             this.pointLights = pointLights;
@@ -990,10 +993,28 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     };
 
     private detachMouseListeners(): void {
-        const inputManager = this.sceneContext.inputManager, toplevel = inputManager.toplevel;
-        toplevel.removeEventListener("mousedown", this.onMouseDown);
-        toplevel.removeEventListener("mousemove", this.onMouseMove);
-        toplevel.removeEventListener("mouseup", this.onMouseUp);
+        const target = this.mouseListenerTarget;
+        if (target === null)
+            return;
+        target.removeEventListener("mousedown", this.onMouseDown);
+        target.removeEventListener("mousemove", this.onMouseMove);
+        target.removeEventListener("mouseup", this.onMouseUp);
+        this.mouseListenerTarget = null;
+        this.pressActive = false;
+        this.pendingClick = null;
+    }
+
+    private syncMouseListeners(): void {
+        const shouldListen = this.warpTargets.length > 0 || this.mobs.length > 0;
+        if (shouldListen && this.mouseListenerTarget === null) {
+            const target = this.sceneContext.inputManager.toplevel;
+            target.addEventListener("mousedown", this.onMouseDown);
+            target.addEventListener("mousemove", this.onMouseMove);
+            target.addEventListener("mouseup", this.onMouseUp);
+            this.mouseListenerTarget = target;
+        } else if (!shouldListen) {
+            this.detachMouseListeners();
+        }
     }
 
     private setupEntities(device: GfxDevice, cache: GfxRenderHelper["renderCache"], entityData: EntitySceneData): void {
@@ -1095,6 +1116,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         if (warpPortalData !== null)
             this.warpPortalRenderer = new WarpPortalRenderer(device, cache, warpPortalData);
         this.warpTargets = warpClickData.targets;
+        this.syncMouseListeners();
     }
 
     private setupWater(device: GfxDevice, cache: GfxRenderHelper["renderCache"], waterData: WaterSceneData): void {
@@ -1730,6 +1752,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             this.frameArrivalAt(viewerInput, best.arrivalWorldPos);
             return;
         }
+        if (best.destEra !== currentEra())
+            setEra(best.destEra);
         triggerTravel(this.sceneContext.sceneLoader, best.dest, best.arrivalCellX, best.arrivalCellY, viewerInput.camera.worldMatrix);
     }
 
