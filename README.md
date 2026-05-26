@@ -8,6 +8,13 @@ The reverse engineering of model formats was done by many people. See the applic
 
 Contributions are very welcome! New games, new features, and bug fixes are all very appreciated. Even small contributions like proper map names, grouping maps and new default savestates are extremely helpful.
 
+## AI Contributions Policy
+
+* If AI was used in any capacity for your contribution (coding, reverse engineering, authoring commit messages or PR descriptions), this must be disclosed in your pull request.
+* Please only submit contributions that you have tested, reviewed, and feel you understand.
+* All comments or documentation *must* be fully human-authored. Any AI-written or even AI-assisted comments are not allowed.
+* Project maintainers reserve the right to reject contributions at any time, for any reason, including if they suspect this policy has not been correctly followed.
+
 ## Development Guide
 
 To develop for noclip.website, you'll need these requisites:
