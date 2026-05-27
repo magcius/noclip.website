@@ -1050,10 +1050,51 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("Starschulz");
             }
+        } else if (actor.actorId === ActorId.En_Light) {
+            const flameParams = [
+                { primColor: { r: 255, g: 200, b:   0, a: 255 }, envColor: { r: 255, g:   0, b:   0 }, scale: 75 },
+                { primColor: { r: 255, g: 200, b:   0, a: 255 }, envColor: { r: 255, g:   0, b:   0 }, scale: 75 },
+                { primColor: { r:   0, g: 170, b: 255, a: 255 }, envColor: { r:   0, g:   0, b: 255 }, scale: 75 },
+                { primColor: { r: 170, g: 255, b:   0, a: 255 }, envColor: { r:   0, g: 150, b:   0 }, scale: 75 },
+                { primColor: { r: 255, g: 200, b:   0, a: 255 }, envColor: { r: 255, g:   0, b:   0 }, scale: 40 },
+                { primColor: { r: 255, g: 200, b:   0, a: 255 }, envColor: { r: 255, g:   0, b:   0 }, scale: 75 },
+                { primColor: { r: 170, g: 255, b:   0, a: 255 }, envColor: { r:   0, g: 150, b:   0 }, scale: 75 },
+                { primColor: { r:   0, g: 170, b: 255, a: 255 }, envColor: { r:   0, g:   0, b: 255 }, scale: 75 },
+                { primColor: { r: 255, g:   0, b: 170, a: 255 }, envColor: { r: 200, g:   0, b:   0 }, scale: 75 },
+                { primColor: { r: 255, g: 255, b: 170, a: 255 }, envColor: { r: 255, g:  50, b:   0 }, scale: 75 },
+                { primColor: { r: 255, g: 255, b: 170, a: 255 }, envColor: { r: 255, g: 255, b:   0 }, scale: 75 },
+                { primColor: { r: 255, g: 255, b: 170, a: 255 }, envColor: { r: 100, g: 255, b:   0 }, scale: 75 },
+                { primColor: { r: 255, g: 170, b: 255, a: 255 }, envColor: { r: 255, g:   0, b: 100 }, scale: 75 },
+                { primColor: { r: 255, g: 170, b: 255, a: 255 }, envColor: { r: 100, g:   0, b: 255 }, scale: 75 },
+                { primColor: { r: 170, g: 255, b: 255, a: 255 }, envColor: { r:   0, g:   0, b: 255 }, scale: 75 },
+                { primColor: { r: 170, g: 255, b: 255, a: 255 }, envColor: { r:   0, g: 150, b: 255 }, scale: 75 },
+            ];
+            const param = actor.variable & 0xF;
+            const flameParam = flameParams[param];
+            const zar = await fetchArchive('zelda_dangeon_keep.zar');
+            const b = buildModel(zar, 'model/efc_candle_modelT.cmb', flameParams[param].scale * 0.001);
+            b.bindCMAB(parseCMAB(zar, "misc/efc_candle_modelT.cmab")); // doesn't appear to actually do anything
+
+            b.materialInstances[0].material.diffuseColor = colorNewFromRGBA(
+                flameParam.primColor.r / 255,
+                flameParam.primColor.g / 255,
+                flameParam.primColor.b / 255,
+                flameParam.primColor.a / 255,
+            );
+            // @TODO: EnvColor?
         } else if (actor.actorId === ActorId.En_Door) {
             const zar = await fetchArchive(`zelda_keep.zar`);
-            // TODO(jstpierre): Figure out how doors are decided. I'm guessing the current scene?
-            buildModel(zar, `door/model/obj_door_omote_model.cmb`);
+
+            if (scene == Scene.BottomOfTheWell || scene == Scene.ShadowTemple)
+                buildModel(zar, 'door/model/m_Hnormaldoor_omote_model.cmb');    
+            else if (scene == Scene.ForestTemple)
+                buildModel(zar, 'door/model/door_model.cmb');
+            else if (scene == Scene.FireTemple)
+                buildModel(zar, 'door/model/m_Fnormaldoor_omote_model.cmb');
+            else if (scene == Scene.WaterTemple)
+                buildModel(zar, 'door/model/m_Wnormaldoor_omote_model.cmb');
+            else
+                buildModel(zar, 'door/model/obj_door_omote_model.cmb');
         } else if (actor.actorId === ActorId.Obj_Syokudai) {
             const zar = await fetchArchive(`zelda_syokudai.zar`);
             const whichModel = (actor.variable >>> 12) & 0x03;
@@ -1155,19 +1196,19 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_zf.zar`);
             const whichEnemy = actor.variable & 0xFF;
             if (whichEnemy === 0x00) {
-                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos Miniboss
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.015);  // Lizalfos Miniboss
                 b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
             } else if (whichEnemy === 0x01) {
-                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos Miniboss 2
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.015);  // Lizalfos Miniboss 2
                 b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
             } else if (whichEnemy === 0x80) {
-                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.015);  // Lizalfos
                 b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
             } else if (whichEnemy === 0xFE) {
-                const b = buildModel(zar, `model/dynafos.cmb`, 0.02);    // Dinolfos
+                const b = buildModel(zar, `model/dynafos.cmb`, 0.015);    // Dinolfos
                 b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
             } else if (whichEnemy === 0xFF) {
-                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos drops from ceiling
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.015);  // Lizalfos drops from ceiling
                 b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
             } else {
                 throw new Error("Starschulz");
@@ -1298,6 +1339,10 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(await fetchArchive(`zelda_zg.zar`), `model/zeldoor_model.cmb`, 1);
         } else if (actor.actorId === ActorId.Bg_Breakwall) {
             buildModel(await fetchArchive(`zelda_bwall.zar`), `model/a_bomt_model.cmb`, 0.1);
+        } else if (actor.actorId === ActorId.En_Jj) {
+            const zar = await fetchArchive('zelda_jj.zar');
+            const b = buildModel(zar, 'model/jabjab.cmb', 0.87);
+            b.bindCSAB(parseCSAB(zar, 'anim/jj_wait.csab'));
         } else if (actor.actorId === ActorId.Obj_Timeblock) {
             buildModel(await fetchArchive(`zelda_timeblock.zar`), `model/brick_toki_model.cmb`, 1);
         } else if (actor.actorId === ActorId.Bg_Spot18_Basket) {
@@ -1776,7 +1821,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         } else if (actor.actorId === ActorId.En_Ik) {
             const zar = await fetchArchive(`zelda_ik.zar`);
-            const b = buildModel(zar, `model/ironknack.cmb`, 0.02);
+            const b = buildModel(zar, `model/ironknack.cmb`, 0.012);
             b.bindCSAB(parseCSAB(zar, `anim/ironknack_wait.csab`));
 
         } else if (actor.actorId === ActorId.En_GeldB) {
@@ -2346,7 +2391,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const spikes = buildModel(zar, 'model/spike_toge.cmb');
         } else if (actor.actorId === ActorId.Bg_Ice_Shelter) {
             const zar = await fetchArchive('zelda_ice_objects.zar');
-            const whichIce = (actor.variable >> 8) & ((1 << 3) - 1);
+            const whichIce = (actor.variable >> 8) & 0x7;
 
             if (whichIce == 0x00) {
                 buildModel(zar, 'model/ice_ice_modelT.cmb', 0.1);
