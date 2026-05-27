@@ -9,7 +9,7 @@ function fetchDataSync(path: string): ArrayBufferSlice {
 }
 
 function main(): void {
-    const buffer = fetchDataSync(`../../../data/dks/m10_01_00_00_arc.crg1`);
+    const buffer = fetchDataSync(`./data/dks/m10_01_00_00_arc.crg1`);
     const byml = BYML.parse(buffer, BYML.FileType.CRG1);
     console.log(byml);
 }

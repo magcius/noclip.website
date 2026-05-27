@@ -12,8 +12,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn = `../../../data/BanjoTooie_Raw`;
-const pathBaseOut = `../../../data/BanjoTooie`;
+const pathBaseIn = `./data/BanjoTooie_Raw`;
+const pathBaseOut = `./data/BanjoTooie`;
 
 interface FSFile {
     fileTableOffs: number;

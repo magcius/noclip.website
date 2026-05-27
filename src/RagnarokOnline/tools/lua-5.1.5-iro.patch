@@ -1,0 +1,19 @@
+--- src/lundump.c.orig
++++ src/lundump.c
+@@ -76,7 +76,7 @@
+ static TString* LoadString(LoadState* S)
+ {
+  size_t size;
+- LoadVar(S,size);
++ { unsigned char b[4]; LoadBlock(S,b,4); size = (size_t)b[0] | ((size_t)b[1]<<8) | ((size_t)b[2]<<16) | ((size_t)b[3]<<24); }
+  if (size==0)
+   return NULL;
+  else
+@@ -185,7 +185,7 @@
+  char h[LUAC_HEADERSIZE];
+  char s[LUAC_HEADERSIZE];
+  luaU_header(h);
+  LoadBlock(S,s,LUAC_HEADERSIZE);
+- IF (memcmp(h,s,LUAC_HEADERSIZE)!=0, "bad header");
++ if (memcmp(h,s,8) != 0) IF (1, "bad header");
+ }

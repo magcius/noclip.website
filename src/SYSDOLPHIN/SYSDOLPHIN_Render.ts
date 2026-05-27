@@ -428,7 +428,7 @@ export class HSD_TObj_Instance {
                         HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_A, HSD_TEInput.TE_X));
                     exp[i] = tmp;
                 } else {
-                    throw "whoops";
+                    throw new Error("whoops");
                 }
             }
 
@@ -475,7 +475,7 @@ export class HSD_TObj_Instance {
                         HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_A, HSD_TEInput.TE_X));
                     exp[i] = tmp;
                 } else {
-                    throw "whoops";
+                    throw new Error("whoops");
                 }
             }
 
@@ -529,7 +529,7 @@ export class HSD_TObj_Instance {
             HSD_TExpColorOp(e0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
             HSD_TExpColorIn(e0, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, last.c);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
         last.c = e0;
 
@@ -558,7 +558,7 @@ export class HSD_TObj_Instance {
                 HSD_TExpAlphaOp(e0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.a);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
             last.a = e0;
         }
@@ -1201,7 +1201,7 @@ class HSD_DObj_Instance {
                     mat4.mul(dst, viewerInput.camera.viewMatrix, dst);
                 }
             } else if (pobj.kind === 'ShapeAnim') {
-                throw "whoops";
+                throw new Error("whoops");
             }
 
             const renderInst = renderInstManager.newRenderInst();
@@ -1216,7 +1216,7 @@ class HSD_DObj_Instance {
             else if (cullMode === HSD_PObjFlags.CULLBACK)
                 megaStateFlags.cullMode = GfxCullMode.Back;
             else
-                throw "whoops";
+                throw new Error("whoops");
 
             pobjData.setOnRenderInst(renderInst);
             this.mobj.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);

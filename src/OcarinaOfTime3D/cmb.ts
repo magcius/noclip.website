@@ -334,7 +334,7 @@ function translateBumpTexture(bumpTexture: number): number {
     case BumpTexture.TEXTURE2: return 2;
     case BumpTexture.TEXTURE3: return 3;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -348,7 +348,7 @@ function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
     case 0x02:
         return GfxCullMode.Front;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -363,7 +363,7 @@ function translateCompareMode(compareMode: number): GfxCompareMode {
     case 0x0205: return GfxCompareMode.NotEqual;
     case 0x0206: return GfxCompareMode.GreaterEqual;
     case 0x0207: return GfxCompareMode.Always;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -373,7 +373,7 @@ function translateBlendMode(blendMode: number): GfxBlendMode {
     case 0x8006: return GfxBlendMode.Add;
     case 0x800A: return GfxBlendMode.Subtract;
     case 0x800B: return GfxBlendMode.ReverseSubtract;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -392,7 +392,7 @@ function translateBlendFactor(blendFactor: number): GfxBlendFactor {
     case 0x0307: return GfxBlendFactor.OneMinusDst;
     case 0x8001: case 0x8003: return GfxBlendFactor.ConstantColor;
     case 0x8002: case 0x8004: return GfxBlendFactor.OneMinusConstantColor;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -1160,7 +1160,7 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     else if (version === 0x06)
         cmb.version = Version.Ocarina;
     else
-        throw "whoops";
+        throw new Error("whoops");
 
     let chunkIdx = 0x24;
 

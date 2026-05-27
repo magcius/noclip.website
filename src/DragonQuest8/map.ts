@@ -73,7 +73,7 @@ class SKY {
 function getTimeFlags(start: number, end: number): number {
     if (start === 0) {
         if (end !== 0 && end !== 24) //for 24, seen in purgatory island
-            throw "time flags with null start/end mismatch";
+            throw new Error("time flags with null start/end mismatch");
         return 0xF;//set all flags to true
     }
     if (end < start)
@@ -90,7 +90,7 @@ export function parseSkyCfg(cache: GfxRenderCache, buffer: ArrayBufferSlice): SK
     const skies: SKY[] = [];
     const rNameToInfo = BUNDLE.parseBundle(buffer);
     if (!rNameToInfo.has("info.cfg"))
-        throw "Sky bundle has no cfg file";
+        throw new Error("Sky bundle has no cfg file");
     const lines = decodeString(buffer, 0, buffer.byteLength, "sjis").split('\n');
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -151,7 +151,7 @@ export function parseSkyCfg(cache: GfxRenderCache, buffer: ArrayBufferSlice): SK
             const jointName = line.split("\"")[1];
             const angVel = parseFloat(line.split(",")[2].split(";")[0]);
             if (skies[time].mds === null)
-                throw "sky mds was not registered but anim info was found";
+                throw new Error("sky mds was not registered but anim info was found");
             else {
                 for (let k = 0; k < skies[time].mds!.joints.length; k++) {
                     if (skies[time].mds!.joints[k].name === jointName)
@@ -350,7 +350,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
 
     const ipkInfo = BUNDLE.parseBundle(ipkBuffer);
     if (!ipkInfo.has(map.mapInfo.imgFileName))
-        throw "img file not found";
+        throw new Error("img file not found");
     map.img = IMG.parse(ipkBuffer.slice(ipkInfo.get(map.mapInfo.imgFileName)!.offset, ipkInfo.get(map.mapInfo.imgFileName)!.offset + ipkInfo.get(map.mapInfo.imgFileName)!.size), map.mapInfo.imgFileName);
     for (let i = 0; i < map.img.textures.length; i++) {
         const texture = map.img.textures[i];
@@ -373,7 +373,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
 
     const mpkInfo = BUNDLE.parseBundle(mpkBuffer);
     if (!mpkInfo.has(map.mapInfo.pcpFileName))
-        throw "pcp file not found";
+        throw new Error("pcp file not found");
     const pcpInfo = BUNDLE.parseBundle(mpkBuffer.slice(mpkInfo.get(map.mapInfo.pcpFileName)!.offset), mpkInfo.get(map.mapInfo.pcpFileName)!.offset);
     const processedMDS = new Map<string, string>();
     const processedCHRS = new Map<string, CHR.CHR>();

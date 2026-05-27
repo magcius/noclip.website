@@ -513,7 +513,7 @@ export class NjsActionInstance {
             else if (this.frame > duration - 1)
                 this.frame = 0;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         for (let i = 0; i < this.motions.length; ++i)

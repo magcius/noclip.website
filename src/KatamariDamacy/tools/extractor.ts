@@ -216,8 +216,8 @@ function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBuffer
     }
 }
 
-const pathBaseIn  = `../../../data/KatamariDamacy_raw`;
-const pathBaseOut = `../../../data/KatamariDamacy`;
+const pathBaseIn  = `./data/KatamariDamacy_raw`;
+const pathBaseOut = `./data/KatamariDamacy`;
 
 function main() {
     const isoFilename = `${pathBaseIn}/KatamariDamacy.iso`;

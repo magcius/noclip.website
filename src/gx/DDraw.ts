@@ -24,7 +24,7 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
     else if (cmd === GX.Command.DRAW_TRIANGLE_FAN)
         return GfxTopology.TriFans;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 abstract class TDDrawBase {

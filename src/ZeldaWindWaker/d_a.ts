@@ -1780,7 +1780,7 @@ class d_a_mgameboard extends fopAc_ac_c {
             else if (size === 4)
                 this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x06)));
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
 
         this.cursorX = 0;
@@ -3280,7 +3280,7 @@ function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: numb
         vec3.normalize(scratchVec3a, scratchVec3a);
 
         // todo
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     return pointIdxCurr;

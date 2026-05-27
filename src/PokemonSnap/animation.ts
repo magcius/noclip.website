@@ -439,7 +439,7 @@ export function findNewTextures(dataMap: DataMap, track: AnimationTrack | null, 
     const textureCache = model.sharedOutput.textureCache;
     const dc = model.rspOutput?.drawCalls.find((d) => d.materialIndex === index);
     if (dc === undefined)
-        throw "no corresponding draw call for material";
+        throw new Error("no corresponding draw call for material");
     if (track === null) {
         if (matData.optional)
             return; // we've already gotten the default values

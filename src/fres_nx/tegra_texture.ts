@@ -107,7 +107,7 @@ export function getFormatBytesPerBlock(channelFormat: ChannelFormat): number {
     case ChannelFormat.Bc5:
         return 16;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -154,7 +154,7 @@ export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>):
         return { ... textureEntry, flag: 'SRGB', type: 'RGBA', pixels };
     default:
         console.error(channelFormat.toString(16));
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -237,7 +237,7 @@ function getChannelFormatString(channelFormat: ChannelFormat): string {
     case ChannelFormat.R16_G16_B16_A16:
         return 'R16_G16_B16_A16';
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -252,7 +252,7 @@ function getTypeFormatString(typeFormat: TypeFormat): string {
     case TypeFormat.UnormSrgb:
         return 'SRGB';
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -276,6 +276,6 @@ export function translateImageFormat(imageFormat: ImageFormat): GfxFormat {
     case TypeFormat.Float:
         return GfxFormat.F16_RGBA;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }

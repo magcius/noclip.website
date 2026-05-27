@@ -59,7 +59,6 @@ import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_Metroi
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum.js';
 import * as Scenes_PokemonHGSS from './nns_g3d/Scenes_PokemonHGSS.js';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool.js';
-import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007.js';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes.js';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater.js';
 import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource.js';
@@ -112,6 +111,7 @@ import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_RatchetAndClank1 from './RatchetAndClank/scenes.js';
+import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
 import * as Scenes_RumbleRacing from "./RumbleRacing/Scenes.js";
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
@@ -204,6 +204,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_Fez.sceneGroup,
+    Scenes_RagnarokOnline.sceneGroup,
     Scenes_CounterStrikeSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
     Scenes_HalfLife2DM.sceneGroup,
@@ -237,7 +238,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
-    Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
@@ -1036,7 +1036,7 @@ class Main {
 
         if (promise === null) {
             console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         promise.then((scene: SceneGfx) => {

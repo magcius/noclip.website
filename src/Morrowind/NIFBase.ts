@@ -236,7 +236,7 @@ function translateAlphaFunction(mode: NIFParse.AlphaFunction): GfxBlendFactor {
     case NIFParse.AlphaFunction.DEST_ALPHA: return GfxBlendFactor.DstAlpha;
     case NIFParse.AlphaFunction.INV_DEST_ALPHA: return GfxBlendFactor.OneMinusDstAlpha;
     case NIFParse.AlphaFunction.SRC_ALPHA_SATURATE: return GfxBlendFactor.Src; // ???
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -250,7 +250,7 @@ function translateTestFunction(mode: NIFParse.TestFunction): GfxCompareMode {
     case NIFParse.TestFunction.TEST_NOT_EQUAL: return GfxCompareMode.NotEqual;
     case NIFParse.TestFunction.TEST_GREATER_EQUAL: return GfxCompareMode.GreaterEqual;
     case NIFParse.TestFunction.TEST_NEVER: return GfxCompareMode.Never;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 

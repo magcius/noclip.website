@@ -39,7 +39,7 @@ export function getSizBitsPerPixel(siz: ImageSize): number {
     case ImageSize.G_IM_SIZ_8b:  return 8;
     case ImageSize.G_IM_SIZ_16b: return 16;
     case ImageSize.G_IM_SIZ_32b: return 32;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 
@@ -49,7 +49,7 @@ export function getTLUTSize(siz: ImageSize) {
     case ImageSize.G_IM_SIZ_8b:  return 0x100;
     case ImageSize.G_IM_SIZ_16b: return 0x1000;
     case ImageSize.G_IM_SIZ_32b: return 0x10000;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 

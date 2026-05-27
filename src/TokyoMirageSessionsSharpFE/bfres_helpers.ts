@@ -53,7 +53,7 @@ function convert_wrap_mode(wrap_mode: nngfx_enum.TextureAddressMode)
 
         default:
             console.error(`wrap mode ${wrap_mode} not found`);
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -87,7 +87,7 @@ function convert_depth_compare_mode(depth_compare_mode: nngfx_enum.CompareMode):
 
         default:
             console.error(`depth compare mode ${depth_compare_mode} not found`);
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -103,7 +103,7 @@ function convert_tex_filter_mode(texture_filter_mode: nngfx_enum.FilterMode): Gf
 
         default:
             console.error(`texture filter mode ${texture_filter_mode} not found`);
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -119,7 +119,7 @@ function convert_mip_filter_mode(mip_filter_mode: nngfx_enum.FilterMode): GfxPla
 
         default:
             console.error(`mip filter mode ${mip_filter_mode} not found`);
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -204,7 +204,7 @@ export function convert_attribute_format(format: nngfx_enum.AttributeFormat): Gf
 
         default:
             console.error(`attribute format ${format} not found`);
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -302,7 +302,7 @@ export function convert_index_format(format: nngfx_enum.IndexFormat): GfxPlatfor
 
         default:
             console.error(`index format ${format} not found`);
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 

@@ -410,7 +410,7 @@ export class SceneNameObjListExecutor {
             else if (drawCameraType === DrawCameraType.DrawCameraType_2D)
                 nameObj.calcViewAndEntry(sceneObjHolder, null, Mat4Identity);
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
     }
 

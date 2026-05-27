@@ -142,7 +142,7 @@ uniform samplerCube u_Cubemap;
         case GfxCompareMode.Greater: return `t_CmbOut.a >  ${ref}`;
         case GfxCompareMode.GreaterEqual:  return `t_CmbOut.a >= ${ref}`;
         case GfxCompareMode.Always:  return `true`;
-        default: throw "whoops";
+        default: throw new Error("whoops");
         }
     }
 
@@ -1026,7 +1026,7 @@ class SepdData {
             } else if (dataType === CMB.DataType.UInt) {
                 return Float32Array.from(buffer.createTypedArray(Uint32Array), (v) => v * scale);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         };
 

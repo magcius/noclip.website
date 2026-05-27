@@ -1096,7 +1096,7 @@ export class BSPFile {
                 size = view.getUint32(idx + 0x08, true);
                 uncompressedSize = view.getUint32(idx + 0x0C, true);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
 
             if (uncompressedSize !== 0) {

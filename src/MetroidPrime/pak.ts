@@ -189,5 +189,5 @@ export function parse(buffer: ArrayBufferSlice, gameCompressionMethod: Compressi
         return parse_MP3(stream, gameCompressionMethod);
     }
 
-    throw "whoops";
+    throw new Error("whoops");
 }

@@ -11,8 +11,8 @@ import { hexzero, readString } from "../../util";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { makeZipFile, parseZipFile, ZipCompressionMethod } from "../../ZipFile";
 
-const pathBaseIn  = `../../../data/TheWitness_raw`;
-const pathBaseOut = `../../../data/TheWitness`;
+const pathBaseIn  = `./data/TheWitness_raw`;
+const pathBaseOut = `./data/TheWitness`;
 
 export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
     const buffer: ArrayBufferSlice = b_ instanceof ArrayBufferSlice ? b_ : new ArrayBufferSlice(b_);

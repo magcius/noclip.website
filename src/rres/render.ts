@@ -626,7 +626,7 @@ export class MDL0ModelInstance {
 
     public getNodeToWorldMatrixReference(nodeMtxIdx : number): mat4 {
         if (nodeMtxIdx >= this.instanceStateData.jointToWorldMatrixArray.length || nodeMtxIdx < 0) {
-            throw "Invalid Node";
+            throw new Error("Invalid Node");
         }
         return this.instanceStateData.jointToWorldMatrixArray[nodeMtxIdx];
     }

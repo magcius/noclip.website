@@ -11,8 +11,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/Fez_raw`;
-const pathBaseOut = `../../../data/Fez`;
+const pathBaseIn  = `./data/Fez_raw`;
+const pathBaseOut = `./data/Fez`;
 
 export class ContentReader {
     public Position = 0;

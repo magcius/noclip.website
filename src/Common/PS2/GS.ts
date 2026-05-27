@@ -545,7 +545,7 @@ export function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFor
     else if (dpsm === GSPixelStorageFormat.PSMT4HL)
         gsMemoryMapUploadImagePSMT4HL(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function gsMemoryMapReadImagePSMT4_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, csa: number, alphaReg: number) {

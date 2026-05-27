@@ -117,7 +117,7 @@ function translateQueryPoolType(type: GfxQueryPoolType): GLenum {
     case GfxQueryPoolType.OcclusionConservative:
         return WebGL2RenderingContext.ANY_SAMPLES_PASSED_CONSERVATIVE;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -141,7 +141,7 @@ function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, no
         case FormatTypeFlags.F32:
             return WebGL2RenderingContext.FLOAT;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -192,7 +192,7 @@ function translateIndexFormat(format: GfxFormat): GLenum {
     case GfxFormat.U32_R:
         return WebGL2RenderingContext.UNSIGNED_INT;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -215,7 +215,7 @@ function translateBufferUsageToTarget(usage: GfxBufferUsage): GLenum {
     else if (usage & (GfxBufferUsage.Storage | GfxBufferUsage.CopySrc))
         return WebGL2RenderingContext.COPY_WRITE_BUFFER;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateWrapMode(wrapMode: GfxWrapMode): GLenum {
@@ -227,7 +227,7 @@ function translateWrapMode(wrapMode: GfxWrapMode): GLenum {
     case GfxWrapMode.Mirror:
         return WebGL2RenderingContext.MIRRORED_REPEAT;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -272,7 +272,7 @@ function translateTextureDimension(dimension: GfxTextureDimension): GLenum {
     else if (dimension === GfxTextureDimension.n3D)
         return WebGL2RenderingContext.TEXTURE_3D;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateCompareMode(compareMode: GfxCompareMode): GLenum {
@@ -771,7 +771,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case GfxFormat.D24:
             return WebGL2RenderingContext.DEPTH_COMPONENT24;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -832,7 +832,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case FormatTypeFlags.D32FS8:
             return WebGL2RenderingContext.FLOAT_32_UNSIGNED_INT_24_8_REV;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -974,7 +974,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
             assert(descriptor.depthOrArrayLayers === 6);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
         const texture: GfxTextureP_GL = { _T: _T.Texture, ResourceUniqueId: this.getNextUniqueId(),
             gl_texture, gl_target,
@@ -1071,7 +1071,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createComputeProgram(program: GfxComputeProgramDescriptor): GfxProgram {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public createProgram(descriptor: GfxRenderProgramDescriptor): GfxProgramP_GL {
@@ -1172,7 +1172,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createComputePipeline(descriptor: GfxComputePipelineDescriptor): GfxComputePipeline {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public createReadback(byteSize: number): GfxReadback {
@@ -1324,7 +1324,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createComputePass(): GfxComputePass {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public submitPass(o: GfxPass): void {
@@ -1621,7 +1621,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (program.compileState === GfxProgramCompileStateP_GL.NeedsCompile) {
             // This should not happen.
-            throw "whoops";
+            throw new Error("whoops");
         } if (program.compileState === GfxProgramCompileStateP_GL.Compiling) {
             let complete: boolean;
 
@@ -2013,7 +2013,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         else if (gl_target === gl.TEXTURE_CUBE_MAP)
             return this._fallbackTextureCube;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {

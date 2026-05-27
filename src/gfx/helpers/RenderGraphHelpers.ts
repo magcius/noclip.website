@@ -33,7 +33,7 @@ function selectFormatSimple(slot: GfxrAttachmentSlot): GfxFormat {
     else if (slot === GfxrAttachmentSlot.DepthStencil)
         return GfxFormat.D24;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function selectSampleCount(renderInput: RenderInput): number {

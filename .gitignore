@@ -59,3 +59,7 @@ dist/
 rumble-racing.wasm
 
 .wireit
+
+__pycache__/
+*.pyc
+.venv/

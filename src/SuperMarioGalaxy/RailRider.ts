@@ -305,7 +305,7 @@ export class BezierRail {
         }
 
         // Should be unreachable.
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public getCurrentCtrlPointIndex(coord: number, direction: RailDirection): number {
@@ -329,7 +329,7 @@ export class BezierRail {
         }
 
         // Should never happen.
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private getCoordForRailPartIdx(railPartIdx: number, coord: number): number {
