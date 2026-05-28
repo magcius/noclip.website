@@ -1,14 +1,15 @@
 import { mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DataFetcher } from "../DataFetcher.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform.js";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
 import { DecodedImage, decodeBMP, decodeTGA } from "./bmp.js";
 import { parseGND, textureNameToUrl } from "./gnd.js";
 import { GatMap, parseGAT } from "./gat.js";
-import { AnimatedModelMesh, buildAnimatedModelMesh, buildModelMesh, buildPlacementMatrix, modelIsAnimated, ModelMesh } from "./model.js";
-import { AnimatedModelPlacement, EntityLayerBundle, FogSceneData, FOG_DEFAULT_COLOR_UNFOGGED, FOG_DEFAULT_TINT_UNFOGGED, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer as RaganarokRenderer, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
+import { AnimatedPose, buildAnimatedModelMesh, buildModelMesh, buildPlacementMatrix, modelIsAnimated } from "./model.js";
+import { AnimatedModelPlacement, EntityLayerBundle, FogSceneData, FOG_DEFAULT_COLOR_UNFOGGED, FOG_DEFAULT_TINT_UNFOGGED, LightSceneData, ModelPlacement, ModelSceneData, RagnarokTerrainRenderer as RaganarokRenderer, SharedModelEntry, WarpClickSceneData, WarpTarget, WaterSceneData } from "./render.js";
 import { parseRSM } from "./rsm.js";
 import { parseRSW } from "./rsw.js";
 import { decodeImageBitmapRGBA } from "./water.js";
@@ -42,23 +43,46 @@ function decodeTexture(name: string, data: ArrayBufferSlice): DecodedImage {
     return name.toLowerCase().endsWith(".tga") ? decodeTGA(data) : decodeBMP(data);
 }
 
-interface SharedModelEntry {
-    mesh: ModelMesh | null;
-    animatedMesh: AnimatedModelMesh | null;
-    textures: (DecodedImage | null)[];
-}
-
 class RagnarokSharedCache implements Destroyable {
-    private textures = new Map<string, Promise<DecodedImage | null>>();
-    private waterFrames = new Map<number, Promise<(DecodedImage | null)[]>>();
+    private textures = new Map<string, Promise<GfxTexture | null>>();
+    private waterFrames = new Map<number, Promise<(GfxTexture | null)[]>>();
     private models = new Map<string, Promise<SharedModelEntry | null>>();
+    private ownedTextures: GfxTexture[] = [];
+    private ownedBuffers: GfxBuffer[] = [];
+    private destroyed = false;
 
-    public fetchTexture(dataFetcher: DataFetcher, name: string): Promise<DecodedImage | null> {
+    constructor(private device: GfxDevice) {}
+
+    private uploadTexture(img: DecodedImage): GfxTexture | null {
+        if (this.destroyed)
+            return null;
+        const texture = this.device.createTexture({
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            width: img.width, height: img.height,
+            depthOrArrayLayers: 1,
+            numLevels: 1,
+            dimension: GfxTextureDimension.n2D,
+            usage: GfxTextureUsage.Sampled,
+        });
+        this.device.uploadTextureData(texture, 0, [img.rgba]);
+        this.ownedTextures.push(texture);
+        return texture;
+    }
+
+    private uploadBuffer(usage: GfxBufferUsage, data: ArrayBufferLike): GfxBuffer | null {
+        if (this.destroyed)
+            return null;
+        const buffer = createBufferFromData(this.device, usage, GfxBufferFrequencyHint.Static, data);
+        this.ownedBuffers.push(buffer);
+        return buffer;
+    }
+
+    public fetchTexture(dataFetcher: DataFetcher, name: string): Promise<GfxTexture | null> {
         const url = `${pathBase}/textures/${textureNameToUrl(name)}`;
         let p = this.textures.get(url);
         if (p !== undefined)
             return p;
-        p = (async (): Promise<DecodedImage | null> => {
+        p = (async (): Promise<GfxTexture | null> => {
             let data: ArrayBufferSlice;
             try {
                 data = await dataFetcher.fetchData(url);
@@ -66,7 +90,7 @@ class RagnarokSharedCache implements Destroyable {
                 return null;
             }
             try {
-                return decodeTexture(name, data);
+                return this.uploadTexture(decodeTexture(name, data));
             } catch (e) {
                 console.error(`RagnarokOnline: failed to decode texture ${url}:`, e);
                 return null;
@@ -88,36 +112,55 @@ class RagnarokSharedCache implements Destroyable {
             } catch {
                 return null;
             }
+            let rsm;
             try {
-                const rsm = parseRSM(data);
-                if (modelIsAnimated(rsm)) {
-                    const animatedMesh = buildAnimatedModelMesh(rsm);
-                    const textures = await Promise.all(animatedMesh.textureNames.map((n) => this.fetchTexture(dataFetcher, n)));
-                    return { mesh: null, animatedMesh, textures };
-                } else {
-                    const mesh = buildModelMesh(rsm);
-                    const textures = await Promise.all(mesh.textureNames.map((n) => this.fetchTexture(dataFetcher, n)));
-                    return { mesh, animatedMesh: null, textures };
-                }
+                rsm = parseRSM(data);
             } catch {
                 return null;
             }
+            const animated = modelIsAnimated(rsm);
+            const mesh = animated ? null : buildModelMesh(rsm);
+            const animatedMesh = animated ? buildAnimatedModelMesh(rsm) : null;
+            const source = (animatedMesh ?? mesh)!;
+            if (source.indexData.length === 0)
+                return null;
+            const textures = await Promise.all(source.textureNames.map((n) => this.fetchTexture(dataFetcher, n)));
+            const vertexBuffer = this.uploadBuffer(GfxBufferUsage.Vertex, source.vertexData);
+            const indexBuffer = this.uploadBuffer(GfxBufferUsage.Index, source.indexData.buffer);
+            if (vertexBuffer === null || indexBuffer === null)
+                return null;
+            const sharedMesh = mesh !== null ? { groups: mesh.groups, bbox: mesh.bbox } : null;
+            const sharedAnimatedMesh = animatedMesh !== null ? {
+                groups: animatedMesh.groups,
+                nodes: animatedMesh.nodes,
+                animLength: animatedMesh.animLength,
+                modernRsm2: animatedMesh.modernRsm2,
+                bbox: animatedMesh.bbox,
+            } : null;
+            return {
+                mesh: sharedMesh,
+                animatedMesh: sharedAnimatedMesh,
+                pose: sharedAnimatedMesh !== null ? new AnimatedPose(sharedAnimatedMesh) : null,
+                vertexBufferDescriptors: [{ buffer: vertexBuffer, byteOffset: 0 }],
+                indexBufferDescriptor: { buffer: indexBuffer, byteOffset: 0 },
+                textures,
+            };
         })();
         this.models.set(key, p);
         return p;
     }
 
-    public fetchWaterFrames(dataFetcher: DataFetcher, waterType: number): Promise<(DecodedImage | null)[]> {
+    public fetchWaterFrames(dataFetcher: DataFetcher, waterType: number): Promise<(GfxTexture | null)[]> {
         let p = this.waterFrames.get(waterType);
         if (p !== undefined)
             return p;
         p = Promise.all(
-            Array.from({ length: WATER_FRAME_COUNT }, (_unused, i) => i).map(async (i): Promise<DecodedImage | null> => {
+            Array.from({ length: WATER_FRAME_COUNT }, (_unused, i) => i).map(async (i): Promise<GfxTexture | null> => {
                 const nn = i.toString().padStart(2, "0");
                 const url = `${WATER_DIR}/water${waterType}${nn}.jpg`.split("/").map(encodeURIComponent).join("/");
                 try {
                     const data = await dataFetcher.fetchData(`${pathBase}/textures/${url}`);
-                    return decodeImageBitmapRGBA(data.createTypedArray(Uint8Array));
+                    return this.uploadTexture(await decodeImageBitmapRGBA(data.createTypedArray(Uint8Array)));
                 } catch {
                     return null;
                 }
@@ -127,8 +170,16 @@ class RagnarokSharedCache implements Destroyable {
         return p;
     }
 
-    public destroy(_device: GfxDevice): void {
-
+    public destroy(device: GfxDevice): void {
+        if (this.destroyed)
+            return;
+        this.destroyed = true;
+        for (const t of this.ownedTextures)
+            device.destroyTexture(t);
+        for (const b of this.ownedBuffers)
+            device.destroyBuffer(b);
+        this.ownedTextures.length = 0;
+        this.ownedBuffers.length = 0;
     }
 }
 
@@ -142,7 +193,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const baseId = baseMapId(this.id);
         const shared = await context.dataShare.ensureObject(
             `${pathBase}/SharedCache`,
-            async () => new RagnarokSharedCache(),
+            async () => new RagnarokSharedCache(device),
         );
 
         let rswData: ArrayBufferSlice;
@@ -157,7 +208,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const gndData = await dataFetcher.fetchData(`${pathBase}/maps/${baseGnd}.gnd`);
         const gnd = parseGND(gndData);
 
-        const textureImages: (DecodedImage | null)[] = await Promise.all(
+        const groundTextures: (GfxTexture | null)[] = await Promise.all(
             gnd.textureNames.map((n) => shared.fetchTexture(dataFetcher, n)),
         );
 
@@ -166,16 +217,11 @@ class RagnarokMapSceneDesc implements SceneDesc {
             if (p.modelName !== "")
                 uniqueModels.add(p.modelName);
 
-        const meshes = new Map<string, { mesh: ModelMesh, textures: (DecodedImage | null)[] }>();
-        const animatedMeshes = new Map<string, { mesh: AnimatedModelMesh, textures: (DecodedImage | null)[] }>();
+        const entries = new Map<string, SharedModelEntry>();
         await Promise.all(Array.from(uniqueModels).map(async (modelName) => {
             const entry = await shared.fetchModel(dataFetcher, modelName);
-            if (entry === null)
-                return;
-            if (entry.animatedMesh !== null)
-                animatedMeshes.set(modelName, { mesh: entry.animatedMesh, textures: entry.textures });
-            else if (entry.mesh !== null)
-                meshes.set(modelName, { mesh: entry.mesh, textures: entry.textures });
+            if (entry !== null)
+                entries.set(modelName, entry);
         }));
 
         const mapOffX = gnd.width * GND_CELL_SIZE * 0.5;
@@ -184,22 +230,19 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const instances: ModelPlacement[] = [];
         const animatedInstances: AnimatedModelPlacement[] = [];
         for (const p of rsw.models) {
-            const staticEntry = meshes.get(p.modelName);
-            if (staticEntry !== undefined) {
-                const world = mat4.create();
-                buildPlacementMatrix(staticEntry.mesh.bbox, p.pos, p.rot, p.scale, mapOffX, mapOffZ, world);
-                instances.push({ modelKey: p.modelName, worldMatrix: world });
+            const entry = entries.get(p.modelName);
+            if (entry === undefined)
                 continue;
-            }
-            const animEntry = animatedMeshes.get(p.modelName);
-            if (animEntry !== undefined) {
-                const placement = mat4.create();
-                buildPlacementMatrix(animEntry.mesh.bbox, p.pos, p.rot, p.scale, mapOffX, mapOffZ, placement);
-                animatedInstances.push({ modelKey: p.modelName, placementMatrix: placement, animSpeed: p.animSpeed });
-            }
+            const bbox = (entry.mesh ?? entry.animatedMesh!).bbox;
+            const world = mat4.create();
+            buildPlacementMatrix(bbox, p.pos, p.rot, p.scale, mapOffX, mapOffZ, world);
+            if (entry.mesh !== null)
+                instances.push({ modelKey: p.modelName, worldMatrix: world });
+            else
+                animatedInstances.push({ modelKey: p.modelName, placementMatrix: world, animSpeed: p.animSpeed });
         }
 
-        const modelData: ModelSceneData = { meshes, instances, animatedMeshes, animatedInstances };
+        const modelData: ModelSceneData = { entries, instances, animatedInstances };
 
         const rswWater = {
             level: rsw.waterLevel,
@@ -324,7 +367,7 @@ class RagnarokMapSceneDesc implements SceneDesc {
         const bgm = new Bgm("RagnarokOnline");
         void bgm.setMap(dataFetcher, baseId);
 
-        return new RaganarokRenderer(context, this.id, gnd, textureImages, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, buildLayer);
+        return new RaganarokRenderer(context, this.id, gnd, groundTextures, modelData, waterData, lightData, fogData, entityData, warpPortalData, grannyData, weatherParams, warpClickData, pointLights, skyData, particleData, bgm, buildLayer);
     }
 }
 
