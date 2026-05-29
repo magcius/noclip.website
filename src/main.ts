@@ -112,6 +112,7 @@ import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_RatchetAndClank1 from './RatchetAndClank/scenes.js';
 import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
+import * as Scenes_RumbleRacing from "./RumbleRacing/Scenes.js";
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -195,6 +196,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
+    Scenes_RumbleRacing.sceneGroup,
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
     Scenes_SpongeBobTSSM.sceneGroup,
