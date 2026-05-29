@@ -1,4 +1,5 @@
-import { mat4, quat, vec3 } from "gl-matrix";
+import "./wasm_exec.js";
+import { mat4 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
   makeBackbufferDescSimple,
@@ -20,6 +21,8 @@ import {
   GfxBlendMode,
   GfxBlendFactor,
   GfxChannelWriteMask,
+  makeTextureDescriptor2D,
+  GfxFormat,
 } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -30,7 +33,6 @@ import {
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
-import { makeImageBitmapTexture2D } from "../gfx/helpers/TextureHelpers";
 import { FakeTextureHolder } from "../TextureHolder";
 import {
   RumbleRacingTrackFile,
@@ -40,6 +42,8 @@ import {
 } from "./types";
 import { TrackProgram } from "./TrackProgram";
 import { ObfGeometry, O3DGeometry } from "./Geometry";
+
+const pathBase = `RumbleRacing`;
 
 const GLOBAL_SCALE = 300.0; // this feels the best
 
@@ -115,22 +119,31 @@ class RumbleRacingScene implements SceneGfx {
     }
   }
 
-  private async handleTextures() {
+  private handleTextures() {
+    const device = this.renderHelper.device;
+
     for (const texture of this.trackFile.Textures.sort(
       (a, b) => a.TextureId - b.TextureId,
     )) {
       const binary = atob(texture.PngBytes);
       const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "image/png" });
-      const imageBitmap = await createImageBitmap(blob);
 
-      const device = this.renderHelper.device;
-      const tex = makeImageBitmapTexture2D(device, imageBitmap);
+      const tex = device.createTexture(
+        makeTextureDescriptor2D(
+          GfxFormat.U8_RGBA_NORM,
+          texture.Width,
+          texture.Height,
+          1,
+        ),
+      );
+
+      device.uploadTextureData(tex, 0, [bytes]);
       device.setResourceName(tex, `texture_${texture.TextureId}`);
 
       this.textureMap.set(texture.TextureId, tex);
       this.textureHolder.viewerTextures.push({ gfxTexture: tex });
     }
+
     this.textureHolder.onnewtextures();
   }
 
@@ -404,15 +417,13 @@ class RumbleRacingSceneDesc implements SceneDesc {
     sceneContext: SceneContext,
   ): Promise<SceneGfx> {
     const folder = this.internalName.slice(0, 2);
-    const baseUrl = `./RumbleRacing/`;
 
-    const [trackBlob, globalBlob, actorBlob] = await Promise.all([
+    const [trackBlob, actorBlob] = await Promise.all([
       sceneContext.dataFetcher.fetchData(
-        `${baseUrl}/DATA/LOC${folder}/${this.internalName}.TRK`,
+        `${pathBase}/DATA/LOC${folder}/${this.internalName}.TRK`,
       ),
-      sceneContext.dataFetcher.fetchData(`${baseUrl}/DATA/GLBLDATA.TRK`),
       sceneContext.dataFetcher.fetchData(
-        `${baseUrl}/json/${this.internalName}.json`,
+        `${pathBase}/json/${this.internalName}.json`,
       ),
     ]);
 
@@ -421,49 +432,46 @@ class RumbleRacingSceneDesc implements SceneDesc {
       decoder.decode(actorBlob.arrayBuffer),
     ) as unknown as ActorTransforms;
 
-    const trackBuffer = trackBlob.arrayBuffer;
-    const globalBuffer = globalBlob.arrayBuffer;
-
-    const myWorker = new Worker(new URL("worker.ts", import.meta.url));
+    // @ts-ignore
+    const go = new Go();
     const wasmUrl = new URL("./rumble-racing.wasm", import.meta.url).href;
 
-    const wasmParsingPromise = new Promise<{
-      trackData: RumbleRacingTrackFile;
-      globalData: RumbleRacingTrackFile;
-    }>((resolve, reject) => {
-      myWorker.onmessage = (e) => {
-        myWorker.terminate();
-        if (e.data.success) {
-          resolve({
-            trackData: e.data.trackData,
-            globalData: e.data.globalData,
-          });
-        } else {
-          reject(new Error(`Worker WASM Error: ${e.data.error}`));
-        }
-      };
-      myWorker.onerror = (err) => {
-        myWorker.terminate();
-        reject(err);
-      };
-    });
+    const result = await WebAssembly.instantiateStreaming(
+      fetch(wasmUrl),
+      go.importObject,
+    );
+    go.run(result.instance);
 
-    myWorker.postMessage({ trackBuffer, globalBuffer, wasmUrl }, [
-      trackBuffer,
-      globalBuffer,
-    ]);
+    const trackData: RumbleRacingTrackFile = JSON.parse(
+      // @ts-ignore
+      parseTrackFile(new Uint8Array(trackBlob.arrayBuffer), false),
+    );
 
-    // Make the progress bar look like we're doing something
-    sceneContext.dataFetcher.progressMeter?.setProgress(0.93);
+    const shared =
+      await sceneContext.dataShare.ensureObject<RumbleRacingShared>(
+        `${pathBase}/shared`,
+        async () => {
+          const data = await sceneContext.dataFetcher.fetchData(
+            `${pathBase}/DATA/GLBLDATA.TRK`,
+          );
 
-    // Wait for the worker to finish processing
-    const { trackData, globalData } = await wasmParsingPromise;
+          const globalData: RumbleRacingTrackFile = JSON.parse(
+            // @ts-ignore
+            parseTrackFile(new Uint8Array(data.arrayBuffer), true),
+          );
 
-    sceneContext.dataFetcher.progressMeter?.setProgress(1.0);
+          return {
+            globalTrackFile: globalData,
+            destroy(_device) {},
+          };
+        },
+      );
 
     const existingTexIds = new Set(trackData.Textures.map((x) => x.TextureId));
     trackData.Textures.push(
-      ...globalData.Textures.filter((t) => !existingTexIds.has(t.TextureId)),
+      ...shared.globalTrackFile.Textures.filter(
+        (t) => !existingTexIds.has(t.TextureId),
+      ),
     );
 
     return new RumbleRacingScene(
@@ -522,3 +530,8 @@ export const sceneGroup: SceneGroup = {
   ],
   hidden: !IS_DEVELOPMENT,
 };
+
+interface RumbleRacingShared {
+  globalTrackFile: RumbleRacingTrackFile;
+  destroy(device: GfxDevice): void;
+}

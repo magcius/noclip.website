@@ -46,6 +46,8 @@ export interface Actor {
 export interface TextureData {
   TextureId: number;
   PngBytes: string;
+  Width: number;
+  Height: number;
 }
 
 export interface JsonBuffer {

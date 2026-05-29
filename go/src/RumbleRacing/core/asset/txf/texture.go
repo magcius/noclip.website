@@ -59,11 +59,6 @@ func extractTexturesFromZTHE(txf *TXF, clutHeader CLHEEntry, zthe ZTHETexture, z
 
 	for k, txImage := range zthe.Images {
 
-		// only extract chicken
-		// if ztheIndex != 14 || textureIndex != 1 {
-		// 	continue
-		// }
-
 		var paletteSize uint32
 		// clut size is based on whether it's
 		switch zthe.TexelStorageFormat {
@@ -199,6 +194,8 @@ func extractTexturesFromZTHE(txf *TXF, clutHeader CLHEEntry, zthe ZTHETexture, z
 			Image:    img,
 			IsMipMap: k > 0,
 		})
+
+		break // Only extract highest level mipmaps
 	}
 
 	textures = append(textures, Texture{

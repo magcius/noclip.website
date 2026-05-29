@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"image/png"
 	"rumble-reader-noclip/helpers"
 	"rumble-reader/asset"
 	"rumble-reader/asset/o3d"
@@ -82,6 +81,8 @@ type ActorData struct {
 type TextureData struct {
 	TextureId uint16
 	PngBytes  []byte
+	Width     uint16
+	Height    uint16
 }
 
 func processTrackFile(rawData []byte, isGlobalFile bool) RumbleRacingTrackFile {
@@ -176,11 +177,12 @@ func processTrackFile(rawData []byte, isGlobalFile bool) RumbleRacingTrackFile {
 		case *txf.TXF:
 			{
 				for _, tex := range thing.GetTextures() {
-					var buf bytes.Buffer
-					png.Encode(&buf, tex.Files[0].Image)
+					img := tex.Files[0] // highest detailed mipmap
 					out.Textures = append(out.Textures, TextureData{
 						TextureId: tex.TextureId,
-						PngBytes:  buf.Bytes(),
+						PngBytes:  img.Image.Pix,
+						Width:     img.Width,
+						Height:    img.Height,
 					})
 				}
 			}

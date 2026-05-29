@@ -2,9 +2,7 @@ package o3d
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
-	"strings"
 )
 
 type Obf struct {
@@ -151,22 +149,6 @@ func NodeToJson(node *ObfNode) *ObfNodeJson {
 		child = child.PrevSibling
 	}
 	return j
-}
-
-func (o *Obf) DumpAllVifText() string {
-	var texts []string
-	for _, chunk := range o.RawObfChunks {
-		if chunk.ELDA != nil {
-			text, err := chunk.ELDA.DumpVifText(chunk.ELHE)
-			if text != "" {
-				texts = append(texts, hex.Dump(chunk.ELTL.Raw.Payload))
-			}
-			if err == nil {
-				texts = append(texts, text)
-			}
-		}
-	}
-	return strings.TrimSpace(strings.Join(texts, "\n\n"))
 }
 
 func buildTextureMetadata(elhe *ELHE_Header, eltl *ELTL_TextureList, elda *ELDA_Data) TextureMeta {
