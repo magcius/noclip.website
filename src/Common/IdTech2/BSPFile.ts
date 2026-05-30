@@ -217,7 +217,7 @@ export class BSPFile {
         const vertexData = new Float32Array(numVertexData * 7);
         let dstOffsVertex = 0;
 
-        const indexData = new Uint16Array(numIndexData);
+        const indexData = new Uint32Array(numIndexData);
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
 
