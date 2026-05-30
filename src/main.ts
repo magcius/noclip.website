@@ -63,6 +63,7 @@ import * as Scenes_BanjoTooie from './BanjoTooie/scenes.js';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater.js';
 import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource.js';
 import * as Scenes_CounterStrikeGO from './SourceEngine/Scenes_CounterStrikeGO.js';
+import * as Scenes_DayOfDefeatSource from './SourceEngine/Scenes_DayOfDefeatSource.js';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2.js';
 import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM.js';
 import * as Scenes_HalfLife2LostCoast from './SourceEngine/Scenes_HalfLife2LostCoast.js';
@@ -204,6 +205,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Fez.sceneGroup,
     Scenes_RagnarokOnline.sceneGroup,
     Scenes_CounterStrikeSource.sceneGroup,
+    Scenes_DayOfDefeatSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
     Scenes_HalfLife2DM.sceneGroup,
     Scenes_Halo1.sceneGroup,
