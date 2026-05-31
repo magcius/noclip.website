@@ -994,6 +994,8 @@ class SceneDesc implements Viewer.SceneDesc {
             b.modelMatrix[13] -= 16;
         } else if (actor.actorId === ActorId.En_Gs) {
             buildModel(await fetchArchive(`zelda_gs.zar`), `model/gossip_stone2_model.cmb`, 0.1);
+        } else if (actor.actorId === ActorId.Obj_Kibako) {
+            buildModel(await fetchArchive('zelda_dangeon_keep.zar'), 'model/kibako_model.cmb', 0.1);
         } else if (actor.actorId === ActorId.Obj_Tsubo) {
             buildModel(await fetchArchive(`zelda_tsubo.zar`), `model/tubo2_model.cmb`, 0.15);
         } else if (actor.actorId === ActorId.Obj_Kibako2) {
@@ -1004,6 +1006,17 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, 'anim/dnh_wait.csab'));
             mat4.rotateY(b.modelMatrix, b.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
             buildModel(zar, `model/dekunuts_plant.cmb`);
+        } else if (actor.actorId === ActorId.En_Guest) {
+            const zar = await fetchArchive('zelda_boj.zar');
+            const b = buildModel(zar, 'model/hyliaman1.cmb');
+            b.bindCSAB(parseCSAB(zar, 'anim/boj_matsu.csab'));
+
+            b.setConstantColor(3, colorNewFromRGBA(0xA0 / 255, 0x3C / 255, 0xDC / 255, 1));
+            b.setConstantColor(4, colorNewFromRGBA(1, 1, 1, 1));
+
+            for (let i = 3; i < 12; i++)
+                b.shapeInstances[i].visible = false;
+            b.shapeInstances[9].visible = true;
         } else if (actor.actorId === ActorId.En_Box) {
             const zar = await fetchArchive(`zelda_box.zar`);
 
@@ -1105,7 +1118,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x02) { // Wooden Torch
                 buildModel(zar, `model/syokudai_isi_model.cmb`, 1);
             } else if (whichModel === 0x03) { // Unknown (Seen in Ganon's Castle)
-                // TODO(jstpierre)
+                buildModel(zar, 'model/syokudai_gn_model.cmb', 1);
             } else {
                 throw new Error("Starschulz");
             }
@@ -1213,28 +1226,43 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("Starschulz");
             }
+        } else if (actor.actorId === ActorId.En_Ba) {
+            const zar = await fetchArchive('zelda_bxa.zar');
+            const b = buildModel(zar, 'model/balinadearm.cmb', 0.01);
+            b.bindCSAB(parseCSAB(zar, 'anim/balinadetrap.csab'));
+            b.bindCMAB(parseCMAB(zar, "misc/balinadearm.cmab"));
 
-    //    } else if (actor.actorId === ActorId.En_Bx) fetchArchive(`zelda_bxa.zar`).then((zar) => {
-    //        const whichEnemy = actor.variable & 0xFF // Jabu-Jabu Electrified Tentacle
-    //        if (whichEnemy === 0x00) {
-    //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  // Reddish brown
-    //        } else if (whichEnemy === 0x01) {
-    //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  // Green
-    //        } else if (whichEnemy === 0x02) {
-    //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  // Grayish blue with some red
-    //        } else if (whichEnemy === 0x03) {
-    //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  // Corrupt textures, still visible and works?
-    //        } else if (whichEnemy === 0x04) {
-    //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  // Dark brownish
-    //        } else if (whichEnemy === 0x05) {
-    //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  //+ Blackish gray
-    //        } else {
-    //            throw new Error("Starschulz");
-    //        }
-    //    });
-    //   I believe this is the right match of actor and model, but it doesn't really fit right. wrong size, missing something that
-    //   would cause it to warp / animate right, not quite the right position either?
+            b.modelMatrix[13] += 64;
+            mat4.rotateX(b.modelMatrix, b.modelMatrix, 180 * MathConstants.DEG_TO_RAD);
+       } else if (actor.actorId === ActorId.En_Bx) {
+            const zar = await fetchArchive('zelda_bxa.zar');
+            const whichEnemy = actor.variable & 0x0F;
+            const b = buildModel(zar, `model/balinadetrap.cmb`, 0.025);
+            b.bindCMAB(parseCMAB(zar, 'misc/uv_balinadetrap.cmab'));
+            // b.bindCMAB(parseCMAB(zar, 'misc/tp_balinadetrap.cmab'));
 
+            // This model is primarily animated in code.
+            // For color, original OoT it looks like different textures are loaded based on
+            // type. I'm guessing this is handled via material params in OoT3D. The 
+            // tp_balinadetrap.cmab does change the appearance of the tentacle.
+
+            if (whichEnemy === 0x00) {
+                  // Reddish brown
+            } else if (whichEnemy === 0x01) {
+                  // Green
+            } else if (whichEnemy === 0x02) {
+                  // Grayish blue with some red
+            } else if (whichEnemy === 0x03) {
+                  // Corrupt textures, still visible and works?
+            } else if (whichEnemy === 0x04) {
+                  // Dark brownish
+            } else if (whichEnemy === 0x05) {
+                  //+ Blackish gray
+            } else {
+                throw new Error("Starschulz");
+            }
+
+            b.modelMatrix[13] -= 100;
         } else if (actor.actorId === ActorId.En_Rr) {
             const zar = await fetchArchive(`zelda_rr.zar`);
             const b = buildModel(zar, `model/likelike.cmb`, 0.014);
@@ -1482,31 +1510,40 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (scene === Scene.ShadowTemple) {
                 buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, scale);
             } else if (scene === Scene.GanonsTower) {
-                // TODO(jstpierre): What does Ganon's Tower use?
-                buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, scale);
+                buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, scale); // Unused!
             } else if (scene === Scene.GerudoTrainingGround) {
                 buildModel(zar, `model/brick_15_gerd_La_model.cmb`, scale);
             } else
                 throw new Error("whoops");
         } else if (actor.actorId === ActorId.Obj_Switch) {
             const zar = await fetchArchive(`zelda_dangeon_keep.zar`);
-            // TODO(jstpierre): What determines the diff. between the yellow and silver eye switches?
-            // Probably just child vs. adult scene?
             const whichSwitch = actor.variable & 0x07;
-            if (whichSwitch === 0x00) // Floor Switch
-                buildModel(zar, `model/switch_1_model.cmb`, 0.1);
-            else if (whichSwitch === 0x01) // Rusted Floor Switch
-                buildModel(zar, `model/switch_2_model.cmb`, 0.1);
+            const subType = (actor.variable >> 4) & 0x07;
+            if (whichSwitch === 0x00) { // Floor Switch
+                if (subType == 0x00) // SubType Once
+                    buildModel(zar, `model/switch_1_model.cmb`, 0.1);
+                else if (subType == 0x02 || subType == 0x03) // Subtype Hold/HoldInverted
+                    buildModel(zar, 'model/switch_11_model.cmb', 0.1);
+                else if (subType == 0x01) // SubType Toggle
+                    buildModel(zar, 'model/switch_2_model.cmb');
+            }else if (whichSwitch === 0x01) // Rusted Floor Switch
+                buildModel(zar, `model/switch_10_model.cmb`, 0.1);
             else if (whichSwitch === 0x02) // Yellow Eye Switch
-                if (isChildDungeon(scene))
+                if (subType === 0x00) // SubType Once
                     buildModel(zar, `model/switch_4_model.cmb`, 0.1);
-                else if (isAdultDungeon(scene))
+                else if (subType === 0x01) // SubType Toggle
                     buildModel(zar, `model/switch_5_model.cmb`, 0.1);
                 else
                     throw new Error("whoops");
-            else if (whichSwitch === 0x03) // Crystal Switch
-                // TODO(jstpierre): Green vs. red? Is this only used in Fire and Forest?
-                buildModel(zar, `model/switch_6_model.cmb`, 0.1);
+            else if (whichSwitch === 0x03) { // Crystal Switch
+                if (subType == 0x00 || subType == 0x04) { // SubType Once, Sync
+                    const b = buildModel(zar, `model/switch_6_model.cmb`, 0.1);
+                    b.bindCMAB(parseCMAB(zar, 'misc/switch_6_model.cmab'));
+                } if (subType == 0x01) { // SubType Toggle
+                    const b = buildModel(zar, 'model/switch_7_model.cmb', 0.1);
+                    b.bindCMAB(parseCMAB(zar, 'misc/switch_7_model.cmab'));
+                }
+            }
             else if (whichSwitch === 0x04) // Targetable Crystal Switch
                 buildModel(zar, `model/switch_9_model.cmb`, 0.1);
             else
@@ -1715,7 +1752,9 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/km1_omise.csab`));
 
             } else if (whichShopkeeper === 0x01) { // Kakariko Potion Shopkeeper
-                // TODO(jstpierre)
+                const zar = await fetchArchive('zelda_ds2.zar');
+                const b = buildModel(zar, 'model/drugmaster.cmb');
+                b.bindCSAB(parseCSAB(zar, 'anim/ds2_matsu.csab'));
             } else if (whichShopkeeper === 0x02) { // Bombchu Shopkeeper
                 const zar = await fetchArchive(`zelda_rs.zar`);
                 const b = buildModel(zar, `model/bomchumaster.cmb`);
@@ -1755,7 +1794,7 @@ class SceneDesc implements Viewer.SceneDesc {
         } else if (actor.actorId === ActorId.En_Brob) {
             const zar = await fetchArchive('zelda_brob.zar');
             const b = buildModel(zar, `model/brob.cmb`);
-
+            b.bindCMAB(parseCMAB(zar, 'misc/brob.cmab'));
         } else if (actor.actorId === ActorId.Bg_Spot09_Obj) {
             const zar = await fetchArchive('zelda_spot09_obj.zar');
             const whichObj = actor.variable & 0xFF;
@@ -1859,7 +1898,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_oF1d.zar`);
             const b = buildModel(zar, `model/goronpeople.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/oF1d_dai_goron_kaii.csab`));
-
+        } else if (actor.actorId === ActorId.En_Js) {
+            const zar = await fetchArchive('zelda_js.zar');
+            const b = buildModel(zar, 'model/carpetmaster.cmb', 0.01);
+            b.bindCSAB(parseCSAB(zar, 'anim/js_matsu.csab'));
         } else if (actor.actorId === ActorId.En_Cs) {
             const zar = await fetchArchive(`zelda_cs.zar`);
             const b = buildModel(zar, `model/childstalker.cmb`, 0.01);
@@ -1989,7 +2031,18 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_skj.zar`);
             const b = buildModel(zar, `model/stalkid.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/skeltonJR_wait.csab`));
+        } else if (actor.actorId === ActorId.En_G_Switch) {
+            const type = (actor.variable >> 12) & 0x0f;
+            if (type == 0x01) {
+                const zar = await fetchArchive('zelda_keep.zar');
+                const b = buildModel(zar, 'item00/model/drop_gi_rupy.cmb', 0.03);
 
+                b.modelMatrix[13] += 20;
+                for (let i = 0; i < b.shapeInstances.length; i++)
+                    b.shapeInstances[i].visible = false;
+                b.shapeInstances[5].visible = true;
+            } else
+                console.warn(`En_G_Switch - ${type}`);
         } else if (actor.actorId === ActorId.En_Owl) {
             const zar = await fetchArchive(`zelda_owl.zar`);
             const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
@@ -2359,7 +2412,16 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_wm2.zar`);
             const b = buildModel(zar, `model/floormaster.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/wm_wait.csab`));
+        } else if (actor.actorId === ActorId.En_Tp) {
+            const zar = await fetchArchive('zelda_tp.zar');
+            const head = buildModel(zar, 'model/tailpasaran.cmb', 1.5);
+            mat4.rotateX(head.modelMatrix, head.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
 
+            for (let i = 0; i <= 6; i++) {
+                const tail = buildModel(zar, 'model/tailpasaran_tail.cmb', 0.3);
+                tail.bindCMAB(parseCMAB(zar, 'misc/tailpasaran_tail.cmab'));
+                tail.modelMatrix[13] -= (i * 0.75) * 6; // based on horizontalVariation from decomp
+            }
         } else if (actor.actorId === ActorId.En_St) {
             const zar = await fetchArchive('zelda_st.zar');
             const b = buildModel(zar, `model/staltula.cmb`, 0.02);
