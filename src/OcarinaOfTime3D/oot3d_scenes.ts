@@ -15,7 +15,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController } from '../Camera.js';
 import { Color, TransparentBlack, White, colorNewFromRGBA } from '../Color.js';
 import { DataFetcher } from '../DataFetcher.js';
-import { MathConstants, scaleMatrix } from "../MathHelpers.js";
+import { MathConstants, randomRangeInt, scaleMatrix } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxSamplerFormatKind, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
@@ -983,6 +983,10 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         } else if (actor.actorId === ActorId.Bg_Haka_Ship) {
             buildModel(await fetchArchive(`zelda_haka_objects.zar`), `model/m_Hship_model.cmb`, 0.1);
+        } else if (actor.actorId === ActorId.En_Diving_Game) {
+            const zar = await fetchArchive('zelda_zo.zar');
+            const b = buildModel(zar, 'model/zorapeople.cmb');
+            b.bindCSAB(parseCSAB(zar, 'anim/zola_maku.csab'));
         } else if (actor.actorId === ActorId.En_Kusa) {
             buildModel(await fetchArchive(`zelda_field_keep.zar`), `model/grass05_model.cmb`, 0.4);
         } else if (actor.actorId === ActorId.Obj_Bean) {
@@ -1299,6 +1303,10 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw new Error("starschulz");
             }
+        } else if (actor.actorId === ActorId.Obj_Lightswitch) {
+            const zar = await fetchArchive('zelda_lightswitch.zar');
+            buildModel(zar, 'model/switch_8_model.cmb', 0.1);
+            buildModel(zar, 'model/switch_8_fire1_model.cmb', 0.1);
         } else if (actor.actorId === ActorId.Bg_Relay_Objects) {
             const zar = await fetchArchive(`zelda_relay_objects.zar`);
             const whichModel = ((actor.variable) >>> 8) & 0x0F;
@@ -1372,7 +1380,13 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, 'model/jabjab.cmb', 0.87);
             b.bindCSAB(parseCSAB(zar, 'anim/jj_wait.csab'));
         } else if (actor.actorId === ActorId.Obj_Timeblock) {
-            buildModel(await fetchArchive(`zelda_timeblock.zar`), `model/brick_toki_model.cmb`, 1);
+            const spawnData = (actor.variable >> 8) & ((1 << 1) - 1);
+            buildModel(await fetchArchive(`zelda_timeblock.zar`), `model/brick_toki_model.cmb`, spawnData === 0 ? 1 : 0.6);
+        } else if (actor.actorId === ActorId.Obj_Hamishi) {
+            const zar = await fetchArchive('zelda_field_keep.zar');
+            const b = buildModel(zar, 'model/obj_ginbure_model.cmb', 0.4);
+            b.setConstantColor(4, colorNewFromRGBA(1, 170 / 255, 130 / 255, 1));
+            b.modelMatrix[13] += 30;
         } else if (actor.actorId === ActorId.Bg_Spot18_Basket) {
             buildModel(await fetchArchive(`zelda_spot18_obj.zar`), `model/obj_s18tubo_model.cmb`, 0.1);
         } else if (actor.actorId === ActorId.Bg_Spot18_Shutter) {
@@ -1639,10 +1653,20 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_spot15_obj.zar`);
             buildModel(zar, `model/spot15_box_model.cmb`, 0.1);
         } else if (actor.actorId === ActorId.En_Ishi) {
+            const type = (actor.variable >> 0) & ((1 << 1) - 1);
             const zar = await fetchArchive(`zelda_field_keep.zar`);
-            const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
-            b.modelMatrix[13] += 5;
+            const randDeg = randomRangeInt(0, 359) * MathConstants.DEG_TO_RAD;
+            let b;
 
+            if (type == 0) {
+                b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
+                b.modelMatrix[13] += 8;
+            } else {
+                b = buildModel(zar, 'model/obj_ginbure_model.cmb', 0.4);
+                b.modelMatrix[13] += 30;
+            }
+
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, randDeg);
         } else if (actor.actorId === ActorId.Obj_Hana) {
             const zar = await fetchArchive(`zelda_field_keep.zar`);
             const whichModel = actor.variable & 0x03;
@@ -1675,8 +1699,14 @@ class SceneDesc implements Viewer.SceneDesc {
 
         } else if (actor.actorId === ActorId.Bg_Spot07_Taki) {
             const zar = await fetchArchive(`zelda_spot07_object.zar`);
-            const b = buildModel(zar, `model/obj_s07taki01_modelT.cmb`, 0.1);
-            b.bindCMAB(parseCMAB(zar, `misc/obj_s07taki01_modelT.cmab`));
+
+            if (actor.variable == 0) {
+                const b = buildModel(zar, `model/obj_s07taki01_modelT.cmb`, 0.1);
+                b.bindCMAB(parseCMAB(zar, `misc/obj_s07taki01_modelT.cmab`));
+            } else {
+                const b = buildModel(zar, `model/obj_s07taki02_modelT.cmb`, 0.1);
+                b.bindCMAB(parseCMAB(zar, `misc/obj_s07taki02_modelT.cmab`));
+            }
         } else if (actor.actorId === ActorId.En_A_Obj) {
             const whichObject = actor.variable & 0xFF;
             if (whichObject === 0x0A) {
@@ -1742,7 +1772,8 @@ class SceneDesc implements Viewer.SceneDesc {
         } else if (actor.actorId === ActorId.En_Kz) {
             const zar = await fetchArchive(`zelda_kz.zar`);
             const b = buildModel(zar, `model/kingzora.cmb`);
-            b.bindCSAB(parseCSAB(zar, `anim/kz_kani.csab`)); // mweep
+            b.bindCSAB(parseCSAB(zar, `anim/kz_matsu.csab`));
+            b.modelMatrix[12] -= 100; // approximation for end of mweep path
         } else if (actor.actorId === ActorId.En_Ossan) {
             const whichShopkeeper = actor.variable & 0x0F;
             if (whichShopkeeper === 0x00) {        // Kokiri Shopkeeper
@@ -2590,7 +2621,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive('zelda_av.zar');
             const b = buildModel(zar, `model/anubis.cmb`, 0.015);
             b.bindCSAB(parseCSAB(zar, `anim/av_wait.csab`));
-
+        } else if (actor.actorId === ActorId.En_Ru1) {
+            const zar = await fetchArchive('zelda_ru1.zar');
+            const b = buildModel(zar, 'model/childruto.cmb');
+            b.bindCSAB(parseCSAB(zar, 'anim/ru1_matsu.csab'));
         } else if (actor.actorId === ActorId.En_Dha) {
             const zar = await fetchArchive('zelda_dh.zar');
             const b = buildModel(zar, `model/deadarm.cmb`, 0.01);
@@ -2647,9 +2681,17 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         } else if (actor.actorId === ActorId.En_Dekubaba) {
             const zar = await fetchArchive(`zelda_dekubaba.zar`);
-            // The Deku Baba lies in hiding...
-            const b = buildModel(zar, `model/db_ha_model.cmb`);
+            const size = actor.variable == 0 ? 1 : 2.5;
 
+            buildModel(zar, `model/db_ha_model.cmb`, 0.01 * size);
+            const head = buildModel(zar, 'model/dekubaba.cmb', 0.01 * 0.5 * size);
+            const baseStem = buildModel(zar, 'model/db_miki3_model.cmb', 0.01 * size);
+
+            head.modelMatrix[13] += 14 * size;
+            baseStem.modelMatrix[13] -= 6 * size;
+
+            mat4.rotateX(head.modelMatrix, head.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+            mat4.rotateX(baseStem.modelMatrix, baseStem.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
         } else if (actor.actorId === ActorId.En_Tite) {
             const zar = await fetchArchive(`zelda_tt.zar`);
             const b = buildModel(zar, `model/tectite.cmb`);
@@ -2726,6 +2768,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive('zelda_timeblock.zar');
                 buildModel(zar, 'model/brick_toki_model.cmb', spawnData === 0 ? 1 : 0.6);
             }
+        } else if (actor.actorId === ActorId.En_Fish) {
+            const zar = await fetchArchive('zelda_keep.zar');
+            const b = buildModel(zar, 'fish/model/fishsmall.cmb');
+            b.bindCSAB(parseCSAB(zar, 'fish/anim/fs2_swim.csab'));
         } else if (actor.actorId === ActorId.Elf_Msg || actor.actorId === ActorId.Elf_Msg2 || actor.actorId === ActorId.En_Wonder_Talk || actor.actorId === ActorId.En_Wonder_Talk2) {
             // Navi message, doesn't have a visible actor.
         } else if (actor.actorId === ActorId.En_River_Sound) {
@@ -2736,6 +2782,8 @@ class SceneDesc implements Viewer.SceneDesc {
             // Ocarina Trigger
         } else if (actor.actorId === ActorId.En_Holl) {
             // Room Changing Planes
+        } else if (actor.actorId === ActorId.Obj_Blockstop) {
+            // Locks a pushable block in place
         } else {
             console.warn(`Unknown actor ${j} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
         }
