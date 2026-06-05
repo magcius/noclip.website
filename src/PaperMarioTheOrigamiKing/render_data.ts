@@ -430,6 +430,11 @@ export class OrigamiModelData implements Destroyable {
                     continue;
                 }
             }
+            const bone = model.fskl.bones[shape.boneIndex];
+            if (bone && bone.userData.has("SpecialMask") && bone.userData.get("SpecialMask")![0] === "PaperWaterSurface") {
+                // temp ignore water surfaces
+                continue;
+            }
             const sd = new OrigamiShapeData(cache, shape, new OrigamiVertexData(cache.device, model.fvtx[shape.vertexIndex]), model.fskl);
             if (this.boneVisibilityAnimation) {
                 const visibility = this.baseBoneVisibility.get(shape.boneIndex);

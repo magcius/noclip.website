@@ -15,7 +15,7 @@ import { ViewerRenderInput } from "../viewer.js";
 import { OrigamiTextureHolder } from './texture.js';
 import { AABB } from '../Geometry.js';
 import { getPointCubic } from '../Spline.js';
-import { OrigamiProgram, OrigamiWaterProgram } from './shader.js';
+import { OrigamiProgram } from './shader.js';
 
 // Adapated code from MK8D/Odyessy for lots of the rendering and NX translation, and TMSFE for some of the animations. Switch Toolbox was a big help too
 
@@ -180,9 +180,8 @@ export class OrigamiModelRenderer {
                     matInstance = new OrigamiMaterialInstance(cache, this.textureHolder, material);
                     this.materialInstances.push(matInstance);
                 }
-                const bone = this.modelData.skeleton.bones[shapeData.shape.boneIndex];
                 const staticBoneMatrix = this.computeShiftMatrix(shapeData.shape.boneIndex);
-                this.shapeRenderers.push(new ShapeRenderer(cache, shapeData, matInstance, this.materialInstances.indexOf(matInstance), staticBoneMatrix, bone, this.modelData.skeletonAnimation !== undefined));
+                this.shapeRenderers.push(new ShapeRenderer(cache, shapeData, matInstance, this.materialInstances.indexOf(matInstance), staticBoneMatrix, this.modelData.skeletonAnimation !== undefined));
             }
         }
 
@@ -653,17 +652,13 @@ class ShapeRenderer {
     public instanceBBoxes: (AABB | undefined)[] = [];
     private gfxProgram: GfxProgram;
 
-    constructor(cache: GfxRenderCache, public shapeData: OrigamiShapeData, material: OrigamiMaterialInstance, public materialInstanceIndex: number, public staticBoneMatrix: mat4, bone: FSKL_Bone, isAnimated: boolean = false) {
+    constructor(cache: GfxRenderCache, public shapeData: OrigamiShapeData, material: OrigamiMaterialInstance, public materialInstanceIndex: number, public staticBoneMatrix: mat4, isAnimated: boolean = false) {
         let program;
-        if (bone.userData.has("SpecialMask") && bone.userData.get("SpecialMask")![0] === "PaperWaterSurface") {
-            program = new OrigamiWaterProgram(material.fmat.name, isAnimated ? shapeData.vertexSkinWeightCount : -1, shapeData.vertexData.rawAttributes);
-        } else {
-            program = new OrigamiProgram(
-                material, shapeData.boneMatrixLength,
-                isAnimated ? shapeData.vertexSkinWeightCount : -1,
-                shapeData.vertexData.rawAttributes
-            );
-        }
+        program = new OrigamiProgram(
+            material, shapeData.boneMatrixLength,
+            isAnimated ? shapeData.vertexSkinWeightCount : -1,
+            shapeData.vertexData.rawAttributes
+        );
         this.gfxProgram = cache.createProgram(program);
     }
 
