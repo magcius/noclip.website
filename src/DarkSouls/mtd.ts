@@ -153,7 +153,7 @@ class DataReader {
             assert(val.length === 4);
             return val as DataTypeRet<T>;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 }
@@ -235,7 +235,7 @@ export function parse(buffer: ArrayBufferSlice): MTD {
             value.push(reader.readFloat32());
             value.push(reader.readFloat32());
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         reader.assertChunkOptional(false); // User data?

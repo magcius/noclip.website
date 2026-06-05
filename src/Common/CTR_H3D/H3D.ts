@@ -95,7 +95,7 @@ function toSection(relocationType: RelocationType): FileSectionType {
     case RelocationType.RAW_EXT_VERTEX: return FileSectionType.RAW_EXT;
     case RelocationType.RAW_EXT_INDEX: return FileSectionType.RAW_EXT;
     case RelocationType.RAW_EXT_INDEX_U8: return FileSectionType.RAW_EXT;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 

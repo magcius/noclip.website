@@ -757,7 +757,7 @@ export class DebugDraw {
         });
     }
 
-    public drawWorldTextMtx(str: string, mtx: mat4, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
+    public drawWorldTextMtx(str: string, mtx: ReadonlyMat4, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         options = setFlags(options, DebugDrawFlags.WorldSpace);
         const flags = options.flags!;
         const space = flags & SpaceMask;
@@ -765,14 +765,18 @@ export class DebugDraw {
             const a = this.viewFromWorldMatrix;
             const m10 = a[8] * mtx[2] + a[9] * mtx[6] + a[10] * mtx[10];
             if (m10 < 0.0) {
-                // Reverse the front/right axes, but keep up the same.
-                mtx[0] *= -1;
-                mtx[1] *= -1;
-                mtx[2] *= -1;
+                mat4.copy(DebugDraw.scratchMat4, mtx);
 
-                mtx[8] *= -1;
-                mtx[9] *= -1;
-                mtx[10] *= -1;
+                // Reverse the front/right axes, but keep up the same.
+                DebugDraw.scratchMat4[0] *= -1;
+                DebugDraw.scratchMat4[1] *= -1;
+                DebugDraw.scratchMat4[2] *= -1;
+
+                DebugDraw.scratchMat4[8] *= -1;
+                DebugDraw.scratchMat4[9] *= -1;
+                DebugDraw.scratchMat4[10] *= -1;
+
+                mtx = DebugDraw.scratchMat4;
             }
         }
         this.drawTextMtx(mtx, str, color, options);
@@ -780,7 +784,7 @@ export class DebugDraw {
 
     public drawWorldTextRU(str: string, p: ReadonlyVec3, color: Readonly<Color>, right: ReadonlyVec3 = Vec3UnitX, up: ReadonlyVec3 = Vec3UnitY, options: DebugDrawOptions = defaultOptions): void {
         const mtx = DebugDraw.scratchMat4;
-        vec3.cross(DebugDraw.scratchVec3[0], up, right);
+        vec3.cross(DebugDraw.scratchVec3[0], right, up);
         setMatrixAxis(mtx, right, up, DebugDraw.scratchVec3[0]);
         setMatrixTranslation(mtx, p);
         this.drawWorldTextMtx(str, mtx, color, options);

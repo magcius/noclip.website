@@ -103,7 +103,7 @@ function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): G
     if (paramB === BlendParam_B.G_BL_0)
         return GfxBlendFactor.Zero;
 
-    throw "Unknown Blend Param B: "+paramB;
+    throw new Error("Unknown Blend Param B: ")+paramB;
 }
 
 function translateZMode(zmode: ZMode): GfxCompareMode {
@@ -115,14 +115,14 @@ function translateZMode(zmode: ZMode): GfxCompareMode {
         return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_DEC)
         return GfxCompareMode.GreaterEqual;
-    throw "Unknown Z mode: " + zmode;
+    throw new Error("Unknown Z mode: ") + zmode;
 }
 
 export function translateCullMode(geoMode: number): GfxCullMode {
     const cullBack = !!(geoMode & RSP_Geometry.G_CULL_BACK);
     const cullFront = !!(geoMode & RSP_Geometry.G_CULL_FRONT);
     if (cullBack && cullFront) {
-        throw "whoops";
+        throw new Error("whoops");
     } else if (cullBack) {
         return GfxCullMode.Back;
     } else if (cullFront) {

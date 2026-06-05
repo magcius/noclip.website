@@ -922,7 +922,7 @@ class SceneDesc implements Viewer.SceneDesc {
             else if (whichModel === 0x05) //Guillotine Blade (Fast)
                 buildModel(zar, `model/m_Hgiro_model.cmb`, 0.1);
             else
-                throw "whoops";
+                throw new Error("whoops");
         } else if (actor.actorId === ActorId.Demo_Gj) {
             const zar = await fetchArchive(`zelda_gj.zar`);
             const whichModel = actor.variable & 0xFFFF;
@@ -979,7 +979,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ice_objects.zar`);
                 buildModel(zar, `model/ice_trap_model.cmb`, 0.1);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.Bg_Haka_Ship) {
             buildModel(await fetchArchive(`zelda_haka_objects.zar`), `model/m_Hship_model.cmb`, 0.1);
@@ -1039,7 +1039,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichBox === 0x0C) { // Large
                 setChest(Chest.LARGE_WOODEN);
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         } else if (actor.actorId === ActorId.En_Door) {
             const zar = await fetchArchive(`zelda_keep.zar`);
@@ -1057,7 +1057,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x03) { // Unknown (Seen in Ganon's Castle)
                 // TODO(jstpierre)
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Bowl_Wall) {
             const zar = await fetchArchive(`zelda_bowl.zar`);
@@ -1069,7 +1069,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/bowling_p2_model.cmb`, 1);
                 b.bindCMAB(parseCMAB(zar, `misc/bowling_p2_model.cmab`));
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         }
         else if (actor.actorId === ActorId.En_Tana) {
@@ -1082,7 +1082,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x02) {
                 buildModel(zar, `model/shop_tana03_model.cmb`, 1);  // Granite Shelves ( Goron )
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         }
         else if (actor.actorId === ActorId.Bg_Bdan_Objects) {
@@ -1097,7 +1097,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x03) {
                 buildModel(zar, `model/bdan_fdai_model.cmb`, 0.1);      // Lowering Platform
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Bdan_Switch) {
             const zar = await fetchArchive(`zelda_bdan_objects.zar`);
@@ -1113,7 +1113,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x04) {
                 buildModel(zar, `model/bdan_switch_y_model.cmb`, 0.1);
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         } else if (actor.actorId === ActorId.En_Bombf) {
             const zar = await fetchArchive(`zelda_bombf.zar`);
@@ -1140,7 +1140,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos drops from ceiling
                 b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
             } else {
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
 
     //    } else if (actor.actorId === ActorId.En_Bx) fetchArchive(`zelda_bxa.zar`).then((zar) => {
@@ -1158,7 +1158,7 @@ class SceneDesc implements Viewer.SceneDesc {
     //        } else if (whichEnemy === 0x05) {
     //            buildModel(zar, `model/balinadetrap.cmb`, 0.025);  //+ Blackish gray
     //        } else {
-    //            throw "Starschulz";
+    //            throw new Error("Starschulz");
     //        }
     //    });
     //   I believe this is the right match of actor and model, but it doesn't really fit right. wrong size, missing something that
@@ -1176,7 +1176,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x02) {
                 buildModel(zar, 'model/field_fshot2_model.cmb', 0.1); // Square Wall Target
             } else {
-                throw "starschulz";
+                throw new Error("starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Gate_Shutter) { // kakariko guard gate
             const zar = await fetchArchive(`zelda_spot01_matoyab.zar`);
@@ -1194,7 +1194,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 b.modelMatrix[13] += 5;
             } else {
-                throw "starschulz";
+                throw new Error("starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Relay_Objects) {
             const zar = await fetchArchive(`zelda_relay_objects.zar`);
@@ -1204,7 +1204,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x01) {
                 buildModel(zar, 'model/l_doorpou_model.cmb', 0.1);  // Stone door
             } else {
-                throw "starschulz";
+                throw new Error("starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Spot06_Objects) { // Lake Hylia Objects
             const zar = await fetchArchive(`zelda_spot06_objects.zar`);
@@ -1218,7 +1218,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCMAB(parseCMAB(zar, `misc/c_s06beforewater_modelT.cmab`));
 
             } else {
-                throw "starschulz";
+                throw new Error("starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Spot02_Objects) {
             const zar = await fetchArchive(`zelda_spot02_objects.zar`);
@@ -1234,7 +1234,7 @@ class SceneDesc implements Viewer.SceneDesc {
                // buildModel(zar, 'model/haka_l_ring_modelT.cmb', 0.1); // Light Aura for when grave explodes
             } else if (whichModel === 0x05) {
             } else {
-                throw "starschulz";
+                throw new Error("starschulz");
             }
         } else if (actor.actorId === ActorId.Bg_Spot16_Doughnut) {
             const zar = await fetchArchive(`zelda_efc_doughnut.zar`);
@@ -1330,7 +1330,7 @@ class SceneDesc implements Viewer.SceneDesc {
             else if (whichModel === 0x04) // Shooting Gallery (Finished)
                 buildModel(await fetchArchive(`zelda_spot01_matoya.zar`), `model/c_matoate_house_model.cmb`, 0.1);
             else
-                throw "whoops";
+                throw new Error("whoops");
         } else if (actor.actorId === ActorId.Door_Warp1) {
             const zar = await fetchArchive(`zelda_warp1.zar`);
             const b = buildModel(zar, `model/warp_2_modelT.cmb`, 1);
@@ -1345,7 +1345,7 @@ class SceneDesc implements Viewer.SceneDesc {
             else if (whichModel === 0x02) // Three Rising Platforms
                 buildModel(zar, `model/ydan_maruta_model.cmb`, 0.1);
             else
-                throw "whoops";
+                throw new Error("whoops");
         } else if (actor.actorId === ActorId.Bg_Ydan_Maruta) {
             const zar = await fetchArchive(`zelda_ydan_objects.zar`);
             const whichModel = (actor.variable >>> 8) & 0x0F;
@@ -1398,7 +1398,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (scene === Scene.GerudoTrainingGround) {
                 buildModel(zar, `model/brick_15_gerd_La_model.cmb`, scale);
             } else
-                throw "whoops";
+                throw new Error("whoops");
         } else if (actor.actorId === ActorId.Obj_Switch) {
             const zar = await fetchArchive(`zelda_dangeon_keep.zar`);
             // TODO(jstpierre): What determines the diff. between the yellow and silver eye switches?
@@ -1414,14 +1414,14 @@ class SceneDesc implements Viewer.SceneDesc {
                 else if (isAdultDungeon(scene))
                     buildModel(zar, `model/switch_5_model.cmb`, 0.1);
                 else
-                    throw "whoops";
+                    throw new Error("whoops");
             else if (whichSwitch === 0x03) // Crystal Switch
                 // TODO(jstpierre): Green vs. red? Is this only used in Fire and Forest?
                 buildModel(zar, `model/switch_6_model.cmb`, 0.1);
             else if (whichSwitch === 0x04) // Targetable Crystal Switch
                 buildModel(zar, `model/switch_9_model.cmb`, 0.1);
             else
-                throw "whoops";
+                throw new Error("whoops");
         } else if (actor.actorId === ActorId.Door_Ana) {
             buildModel(await fetchArchive(`zelda_field_keep.zar`), `model/ana01_modelT.cmb`);
         } else if (actor.actorId === ActorId.Bg_Mjin) {
@@ -1455,7 +1455,7 @@ class SceneDesc implements Viewer.SceneDesc {
             else if (whichModel === 0x02) // Web-Hovered Hole
                 buildModel(zar, `model/ydan_spyuka_modelT.cmb`, 0.1);
             else
-                throw "whoops";
+                throw new Error("whoops");
         } else if (actor.actorId === ActorId.Grezzo_DekuTreeWeb) {
             const zar = await fetchArchive(`zelda_ydan_objects.zar`);
             const b = buildModel(zar, `model/deku_kumo_kabe.cmb`, 0.05);
@@ -1498,7 +1498,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 // const b = buildModel(zar, `model/tokinoma_hikari3_modelT.cmb`, 1);
                 // b.bindCMAB(parseCMAB(zar, `misc/tokinoma_hikari3_modelT.cmab`));
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.Bg_Haka) {
             const zar = await fetchArchive(`zelda_haka.zar`);
@@ -1522,7 +1522,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x02) {
                 buildModel(zar, `model/grass05_model.cmb`, 0.4);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.Bg_Spot03_Taki) {
             const zar = await fetchArchive(`zelda_spot03_object.zar`);
@@ -1599,7 +1599,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.shapeInstances[6].visible = false;
                 b.bindCSAB(parseCSAB(zar, `anim/fad_n_wait.csab`));
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.En_Ossan) {
             const whichShopkeeper = actor.variable & 0x0F;
@@ -1645,7 +1645,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             } else {
                 console.log(whichShopkeeper);
-                throw "Starschulz";
+                throw new Error("Starschulz");
             }
         } else if (actor.actorId === ActorId.En_Brob) {
             const zar = await fetchArchive('zelda_brob.zar');
@@ -1666,7 +1666,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/soldier2.cmb`);
 
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.En_Eiyer) {
             const zar = await fetchArchive(`zelda_ei.zar`);
@@ -1692,7 +1692,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/ei_swim.csab`));
 
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.En_Horse_Link_Child) {
             const zar = await fetchArchive(`zelda_hlc.zar`);
@@ -1952,7 +1952,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.setConstantColor(3, colorNewFromRGBA(0.11765, 0.94118, 0.78431));
                 b.setConstantColor(4, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if (actor.actorId === ActorId.En_Dog) {
             const zar = await fetchArchive(`zelda_dog.zar`);

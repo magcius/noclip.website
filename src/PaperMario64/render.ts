@@ -286,7 +286,7 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x200);
     const cullBack = !!(m & 0x400);
     if (cullFront && cullBack)
-        throw "whoops";
+        throw new Error("whoops");
     else if (cullFront)
         return GfxCullMode.Front;
     else if (cullBack)
@@ -452,7 +452,7 @@ class ModelTreeLeafInstance {
             offsetS = this.secondaryTileOffsetS / 0x04;
             offsetT = this.secondaryTileOffsetT / 0x04;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         dst[0] *= scaleS;
@@ -669,7 +669,7 @@ export class PaperMario64ModelTreeRenderer {
         } else if (modelTreeNode.type === 'leaf') {
             return new ModelTreeLeafInstance(device, this.cache, this.textureArchive, this.textureHolder, modelTreeNode);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

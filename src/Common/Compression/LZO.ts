@@ -16,7 +16,7 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
     const srcView = srcBuffer.createDataView();
 
     if (srcView.byteLength < 3)
-        throw "Input Overrun";
+        throw new Error("Input Overrun");
 
     let inp = 0;
     let outp = 0;
@@ -29,12 +29,12 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
 
     function needsIn(count: number): void {
         if (inp + count > srcView.byteLength)
-            throw "Input overrun";
+            throw new Error("Input overrun");
     }
 
     function needsOut(count: number): void {
         if (outp + count > maxDstSize)
-            throw "Output overrun";
+            throw new Error("Output overrun");
     }
 
     function consumeZeroByteLength(): number {
@@ -201,7 +201,7 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
             }
         }
         if (lbcur < 0)
-            throw "Lookbehind overrun";
+            throw new Error("Lookbehind overrun");
         needsIn(nstate);
         needsOut(lblen + nstate);
         /* Copy lookbehind */
@@ -214,7 +214,7 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
     }
 
     if (lblen !== 3) /* Ensure terminating M4 was encountered */
-        throw "LZO terminator not reached";
+        throw new Error("LZO terminator not reached");
 
     return new ArrayBufferSlice(outBuffer.buffer, 0, outp);
 }

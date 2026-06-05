@@ -35,7 +35,7 @@ export function translateCullMode(geoMode: number): GfxCullMode {
     const cullBack = !!(geoMode & RSP_Geometry.G_CULL_BACK);
     const cullFront = !!(geoMode & RSP_Geometry.G_CULL_FRONT);
     if (cullBack && cullFront) {
-        throw "whoops";
+        throw new Error("whoops");
     } else if (cullBack) {
         return GfxCullMode.Back;
     } else if (cullFront) {

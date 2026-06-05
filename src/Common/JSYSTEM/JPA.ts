@@ -1426,7 +1426,7 @@ function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, ra
     } else if (bsp1.texCalcIdxType === CalcIdxType.Random) {
         anmIdx = randomPhase % texIdxAnimData.length;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     return texIdxAnimData[anmIdx];
@@ -1447,7 +1447,7 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
     } else if (bsp1.colorCalcIdxType === CalcIdxType.Random) {
         anmIdx = randomPhase % (bsp1.colorAnimMaxFrm + 1);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     if (bsp1.colorPrmAnimData !== null)
@@ -1603,7 +1603,7 @@ ${super.generateIndTexStages()}`;
         } else if (index === 3) {
             return `texture(SAMPLER_2D(u_Texture14), ${coord}, TextureLODBias(${index}))`;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 }
@@ -1853,7 +1853,7 @@ export class JPABaseEmitter {
             else if (kfa1.keyType === JPAKeyType.Scale)
                 this.scaleOut = v;
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
     }
 
@@ -2012,7 +2012,7 @@ export class JPABaseEmitter {
         else if (bem1.volumeType === VolumeType.Line)
             this.calcVolumeLine(workData);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public createParticle(): JPABaseParticle | null {
@@ -3147,7 +3147,7 @@ export class JPABaseParticle {
             else if (field.type === FieldType.Spin)
                 this.calcFieldSpin(field, workData);
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
     }
 
@@ -3191,7 +3191,7 @@ export class JPABaseParticle {
         else if (type === CalcScaleAnmType.Reverse)
             return 1.0 - this.time;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private calcScaleFade(scaleAnm: number, esp1: JPAExtraShapeBlock, base: number, increase: number, decrease: number): number {
@@ -3758,7 +3758,7 @@ export class JPABaseParticle {
             this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
@@ -4314,7 +4314,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
         } else if (fourcc === 'TEX1') {
             // Textures were parsed beforehand; skip.
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         tableIdx += blockSize;
@@ -4767,7 +4767,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // to JPAC texture indices -- I assume this is "Texture Database".
             tdb1 = buffer.subarray(dataBegin + 0x00).createTypedArray(Uint16Array, 0, tdb1Count, Endianness.BIG_ENDIAN);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         tableIdx += blockSize;
@@ -4927,7 +4927,7 @@ function parseResource_JPAC2(res: JPAResourceRaw, version: JPACVersion): JPAReso
                 isNoDrawParent       = !!((flags >>> 29) & 0x01);
                 isNoDrawChild        = !!((flags >>> 30) & 0x01);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
 
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
@@ -5276,7 +5276,7 @@ function parseResource_JPAC2(res: JPAResourceRaw, version: JPACVersion): JPAReso
             // to JPAC texture indices -- I assume this is "Texture Database".
             tdb1 = buffer.subarray(tableIdx + 0x08).createTypedArray(Uint16Array, 0, tdb1Count, Endianness.BIG_ENDIAN);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         tableIdx += blockSize;
@@ -5305,7 +5305,7 @@ function parseResource(version: JPACVersion, resRaw: JPAResourceRaw): JPAResourc
     else if (version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11)
         return parseResource_JPAC2(resRaw, version);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function parseJEFFjpa1(buffer: ArrayBufferSlice): JPAC {
@@ -5439,6 +5439,6 @@ export function parse(buffer: ArrayBufferSlice): JPAC {
     else if (version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11)
         return parseJPAC2(buffer);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 //#endregion

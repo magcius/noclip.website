@@ -21,8 +21,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/ZeldaTwilightPrincess_raw`;
-const pathBaseOut = `../../../data/ZeldaTwilightPrincess`;
+const pathBaseIn  = `./data/ZeldaTwilightPrincess_raw`;
+const pathBaseOut = `./data/ZeldaTwilightPrincess`;
 
 interface SymbolMapEntry {
     sectionName: string;
@@ -380,4 +380,4 @@ async function main() {
     extractProfiles(binaries);
 }
 
-main();
+await main();

@@ -182,7 +182,7 @@ export class dRes_info_c {
             } else if (resType === ResType.Raw || resType === ResType.Stb) {
                 resEntry.res = file.buffer as ResAssetType<T>;
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 
@@ -194,7 +194,7 @@ export class dRes_info_c {
         for (let i = 0; i < resList.length; i++)
             if (resList[i].file.index === resIndex)
                 return resList[i];
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private getResEntryByID<T extends ResType>(resType: T, resID: number): ResEntry<ResAssetType<T>> {
@@ -202,7 +202,7 @@ export class dRes_info_c {
         for (let i = 0; i < resList.length; i++)
             if (resList[i].file.id === resID)
                 return resList[i];
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private getResEntryByName<T extends ResType>(resType: T, resName: string): ResEntry<ResAssetType<T>> | null {

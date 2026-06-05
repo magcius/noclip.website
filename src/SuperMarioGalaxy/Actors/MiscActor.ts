@@ -88,7 +88,7 @@ function setClippingFar(f: number): number {
         return 2;
     if (f === 600)
         return 1;
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 function isGalaxyDarkCometAppearInCurrentStage(sceneObjHolder: SceneObjHolder): boolean {
@@ -1331,7 +1331,7 @@ export class MiniRoutePart extends LiveActor {
         else if (partsTypeName === 'StarPieceMine')
             modelName = 'MiniStarPieceMine';
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (partsTypeName === 'WorldWarpPoint')
@@ -2416,7 +2416,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
         else if (objName === 'CrystalCageL')
             return CrystalCageSize.L;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -3203,7 +3203,7 @@ export class FishGroup extends LiveActor {
         else if (actorName === 'FishGroupF')
             return 'FishF';
 
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -4238,7 +4238,7 @@ export class WaterPlantDrawInit extends NameObj {
         else if (plantType === 3)
             this.waterPlantD.fillTextureMapping(m);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public override destroy(device: GfxDevice): void {
@@ -4424,7 +4424,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         else if (objName === 'ShellfishKinokoOneUp')
             return ShellfishItemType.KinokoOneUp;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private putItem(): void {
@@ -6104,7 +6104,7 @@ export class Flag extends LiveActor {
             } else if (flagName === 'FlagRaceA' || flagName === 'FlagTamakoro' || flagName === 'Flag') {
                 // Nothing to do.
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
 
             calcActorAxis(null, this.axisY, this.windDirection, this);
@@ -9506,7 +9506,7 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
         else if (objName === 'MorphItemNeoFoo')
             return MorphItemObjNeoType.Foo;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private static getModelName(type: MorphItemObjNeoType): string {
@@ -9523,7 +9523,7 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
         else if (type === MorphItemObjNeoType.Foo)
             return 'PowerUpFoo';
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public override makeActorDead(sceneObjHolder: SceneObjHolder): void {

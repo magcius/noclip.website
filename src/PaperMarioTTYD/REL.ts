@@ -89,7 +89,7 @@ export function linkREL(buffer: ArrayBufferSlice, baseAddress: number): void {
             } else if (op === RelocationOp.R_DOLPHIN_END) {
                 break;
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
 
             relocIdx += 0x08;

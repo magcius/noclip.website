@@ -101,7 +101,7 @@ function decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBuffe
     else if (type === JKRCompressionType.Yay0)
         return Yay0.decompress(src);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function parse(buffer: ArrayBufferSlice, name: string = ''): JKRArchive {

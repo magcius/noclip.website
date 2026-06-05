@@ -229,7 +229,7 @@ void main() {
         else if (textFilt === TextFilt.G_TF_BILERP)
             texFiltStr = 'Bilerp';
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         const colorInputs: string[] = [
             't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',

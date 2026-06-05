@@ -268,7 +268,7 @@ class ZSSModelInstance {
                     child.parentNodeMtxBindIdx = nodes[i].mtxId;
                     return
                 }
-            throw "could not find node";
+            throw new Error("could not find node");
         }
     }
     public findNode(name: string): BRRES.MDL0_NodeEntry | undefined {

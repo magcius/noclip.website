@@ -40,7 +40,7 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
         const signatureSize = view.getUint32(0x18, true);
         idx = 0x1C;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     // Parse directory.

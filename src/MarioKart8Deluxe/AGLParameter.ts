@@ -218,7 +218,7 @@ export function parse(buffer: ArrayBufferSlice): ParameterArchive {
             const value = view.getUint32(dataOffset + 0x00, littleEndian);
             return { nameHash, type, value };
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

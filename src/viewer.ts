@@ -414,5 +414,5 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
 <p>Please try to update your browser to a more recent version.
 `);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }

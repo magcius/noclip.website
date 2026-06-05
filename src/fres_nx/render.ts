@@ -86,7 +86,7 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
         // TODO(jstpierre): This requires GL_ARB_texture_mirror_clamp_to_edge
         return GfxWrapMode.Mirror;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -98,7 +98,7 @@ function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
     case FilterMode.Point:
         return GfxMipFilterMode.Nearest;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -109,7 +109,7 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
     case FilterMode.Point:
         return GfxTexFilterMode.Point;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -202,7 +202,7 @@ uniform sampler2D u_Texture7;
         else if (componentMask === 60)
             return '.a';
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public genSample(shadingModelSamplerBindingName: string): string {
@@ -259,9 +259,9 @@ uniform sampler2D u_Texture7;
             else if (instance === 6)
                 return `vec4(1.0)`;
             else
-                throw "whoops";
+                throw new Error("whoops");
         } else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public blendIsTranslucent(instance: number): boolean {
@@ -384,7 +384,7 @@ function translateRenderInfoBoolean(renderInfo: FMAT_RenderInfo): boolean {
     else if (value === 'false')
         return false;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateCullMode(fmat: FMAT): GfxCullMode {
@@ -396,7 +396,7 @@ function translateCullMode(fmat: FMAT): GfxCullMode {
     else if (display_face === 'both')
         return GfxCullMode.None;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateDepthWrite(fmat: FMAT): boolean {
@@ -409,7 +409,7 @@ function translateDepthCompare(fmat: FMAT): GfxCompareMode {
         if (depth_test_func === 'Lequal')
             return GfxCompareMode.LessEqual;
         else
-            throw "whoops";
+            throw new Error("whoops");
     } else {
         return GfxCompareMode.Always;
     }
@@ -426,7 +426,7 @@ function translateRenderInfoBlendFactor(renderInfo: FMAT_RenderInfo): GfxBlendFa
     else if (value === 'zero')
         return GfxBlendFactor.Zero;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function translateBlendSrcFactor(fmat: FMAT): GfxBlendFactor {
@@ -529,7 +529,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         return GfxFormat.F32_RGB;
     default:
         console.error(getChannelFormat(attributeFormat), getTypeFormat(attributeFormat));
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -705,7 +705,7 @@ function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
     case IndexFormat.Uint8:  return GfxFormat.U8_R;
     case IndexFormat.Uint16: return GfxFormat.U16_R;
     case IndexFormat.Uint32: return GfxFormat.U32_R;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }
 

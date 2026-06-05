@@ -101,7 +101,7 @@ function getTextureFormatGetBytesPerPixel(fmt: TextureFormat): number {
     case TextureFormat.P8:
         return 1;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

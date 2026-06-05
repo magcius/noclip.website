@@ -106,7 +106,7 @@ function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT
     case TexMatrixMode.Max:
         return calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT);
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 //#endregion
@@ -1008,7 +1008,7 @@ function parseMDL0_NodeTreeBytecode(buffer: ArrayBufferSlice): NodeTreeOp[] {
             i += 0x05;
             nodeTreeOps.push({ op, toMtxId, fromMtxId });
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
     return nodeTreeOps;
@@ -1056,7 +1056,7 @@ function parseMDL0_NodeMixBytecode(buffer: ArrayBufferSlice): NodeMixOp[] {
             i += 0x05;
             nodeMixOps.push({ op, mtxId, nodeId });
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
     return nodeMixOps;
@@ -1084,7 +1084,7 @@ function parseMDL0_DrawBytecode(buffer: ArrayBufferSlice): DrawOp[] {
             i += 0x08;
             drawOps.push({ matId, shpId, nodeId });
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
     return drawOps;
@@ -1282,7 +1282,7 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
             frame -= lastFrame;
         return frame;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -1357,7 +1357,7 @@ function sampleFloatAnimationTrack(track: FloatAnimationTrack, frame: number): n
     else if (track.type === AnimationTrackType.HERMITE)
         return sampleFloatAnimationTrackHermite(track, frame);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function lerpColor(k0: number, k1: number, t: number): number {

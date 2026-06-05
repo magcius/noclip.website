@@ -168,7 +168,7 @@ function unpack_portable_item_value(stream: Stream, item: Metadata_Item): any {
     } else if (item.type === Metadata_Type.PARTICLE_PATH) {
         return unpack_metadata_particle_path(stream);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

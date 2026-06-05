@@ -278,7 +278,7 @@ class EfEmitter {
         else if (volumeType === VolumeType.Point)
             this.calcVolumePoint(particle);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private createParticle(): EfParticle | null {

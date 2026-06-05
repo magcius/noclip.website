@@ -67,7 +67,7 @@ async function loadArbitraryFile(context: SceneContext, buffer: ArrayBufferSlice
     if (magic === 'bres')
         return RRES.createBasicRRESRendererFromBRRES(device, [buffer]);
 
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 export async function createSceneFromFiles(context: SceneContext, buffers: NamedArrayBufferSlice[]): Promise<SceneGfx> {
@@ -113,7 +113,7 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
     if (buffer.name.endsWith('.bsp') || buffer.name.endsWith('.gma'))
         return SourceFileDrops.createFileDropsScene(context, buffer); 
 
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 export class DroppedFileSceneDesc implements SceneDesc {
@@ -180,7 +180,7 @@ async function traverseFileSystemEntry(entry: FileSystemEntry, path: string = ''
             });
         });
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

@@ -1293,7 +1293,7 @@ export function isMarkerLittleEndian(marker: number): boolean {
     else if (marker === 0xFEFF)
         return false;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function parse(buffer: ArrayBufferSlice): FRES {

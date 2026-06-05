@@ -121,7 +121,7 @@ export class LZXState {
         else if (windowBits === 21)
             this.positionSlots = 50;
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         this.maintreeHuffTable = new HuffmanTable(256 + (this.positionSlots << 3));
 
@@ -291,7 +291,7 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
 
         windowOffs &= windowMask;
         if (windowOffs + blockRemaining > windowSize)
-            throw "whoops";
+            throw new Error("whoops");
 
         while (blockRemaining > 0) {
             if (state.blockType === BlockType.Verbatim || state.blockType === BlockType.Aligned) {
@@ -342,7 +342,7 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
                         R2 = R1; R1 = R0; R0 = offs;
                     } else {
                         // TypeScript is too dumb to figure out that this never happens...
-                        throw "whoops";
+                        throw new Error("whoops");
                     }
 
                     let src = (windowOffs - offs);
@@ -364,7 +364,7 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
                 }
                 bs.reset();
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
     }

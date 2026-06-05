@@ -163,7 +163,7 @@ export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): 1 | 2 | 
     case FormatTypeFlags.S8:
         return 1;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -197,7 +197,7 @@ export function getFormatByteSize(fmt: GfxFormat): number {
     case FormatTypeFlags.BC5_UNORM:
     case FormatTypeFlags.BC5_SNORM:
     case FormatTypeFlags.BC7:
-        throw "whoops"; // Not valid to call on compressed texture formats...
+        throw new Error("whoops"); // Not valid to call on compressed texture formats...
     default:
         const typeByteSize = getFormatTypeFlagsByteSize(typeFlags);
         const componentCount = getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
@@ -229,7 +229,7 @@ export function getFormatSamplerKind(fmt: GfxFormat): GfxSamplerFormatKind {
     else if (typeFlags === FormatTypeFlags.S8 || typeFlags === FormatTypeFlags.S16 || typeFlags === FormatTypeFlags.S32)
         return GfxSamplerFormatKind.Sint;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function isFormatTextureCompressionBC(fmt: GfxFormat): boolean {

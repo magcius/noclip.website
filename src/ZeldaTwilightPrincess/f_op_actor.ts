@@ -105,7 +105,7 @@ export class fopAc_ac_c extends leafdraw_class {
 
         // Make sure that all culling matrices are filled in, before I forget...
         if (this.cullMtx === null)
-            throw "whoops";
+            throw new Error("whoops");
 
         const frustum = camera.frustum;
 

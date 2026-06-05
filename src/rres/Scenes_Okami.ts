@@ -397,7 +397,7 @@ function patchMaterialSetAlpha(material: BRRES.MDL0_MaterialEntry, alpha: number
         material.gxMaterial.ropInfo.blendDstFactor = GX.BlendFactor.INVSRCALPHA;
     } else {
         // TODO(jstpierre): Rest of them.
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     /*
@@ -506,7 +506,7 @@ function patchMaterialSetTest(material: BRRES.MDL0_MaterialEntry, test: number):
         material.gxMaterial.alphaTest.op = GX.AlphaOp.OR;
         material.gxMaterial.alphaTest.compareA = GX.CompareType.ALWAYS;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
