@@ -13,7 +13,7 @@ import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController } from '../Camera.js';
-import { Color, Red, TransparentBlack, White, colorNewFromRGBA } from '../Color.js';
+import { Color, TransparentBlack, White, colorNewFromRGBA } from '../Color.js';
 import { DataFetcher } from '../DataFetcher.js';
 import { MathConstants, randomRangeInt, scaleMatrix } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
@@ -1207,7 +1207,6 @@ class SceneDesc implements Viewer.SceneDesc {
             b.shapeInstances[8].visible = false; // harp body
             b.shapeInstances[9].visible = false; // harp strings
         } else if (actor.actorId === ActorId.Bg_Spot00_Hanebasi) {
-            console.log(id);
             const zar = await fetchArchive(`zelda_spot00_objects.zar`);
             buildModel(zar, `model/hanebashi01_ita_model.cmb`, 1);
 
@@ -1834,7 +1833,6 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/os_matsu.csab`));
 
             } else {
-                console.log(whichShopkeeper);
                 throw new Error("Starschulz");
             }
         } else if (actor.actorId === ActorId.En_Brob) {
@@ -2535,14 +2533,13 @@ class SceneDesc implements Viewer.SceneDesc {
         } else if (actor.actorId === ActorId.Bg_Bombwall) {
             const zar = await fetchArchive('zelda_field_keep.zar');
             const whichModel = (actor.variable >> 0) & ((1 << 6) - 1);
-            console.log(`Bomb Wall - ${whichModel}`);
 
             if (whichModel == 1 || whichModel == 2)
                 buildModel(zar, 'model/s16_bombwallbefore_model.cmb', 0.1);
             else if (whichModel == 3)
                 buildModel(zar, 'model/s16b_bombwallbefore_model.cmb', 0.1);
             // else if (whichModel == 3)
-                // buildModel(zar, 'model/c_bombwallbefore_model.cmb', 0.1);
+                // buildModel(zar, 'model/c_bombwallbefore_model.cmb', 0.1); // Never see this one come up
 
         } else if (actor.actorId === ActorId.Bg_Gnd_Darkmeiro) {
             const zar = await fetchArchive('zelda_demo_kekkai.zar');
@@ -3052,7 +3049,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const doorType = (actor.variable >> 6) & ((1 << 4) - 1);
             const gfxType = doorType === 0 ? 1 : 2;
 
-            console.log(`Door Shutter - Type: ${doorType} - Gfx Type: ${gfxType}`);
+            // console.log(`Door Shutter - Type: ${doorType} - Gfx Type: ${gfxType}`);
 
             if (doorType < 4 || doorType === 7 || doorType > 8) { // Scene based door
                 let infoIndex = 7;
@@ -3168,7 +3165,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         } else if (actor.actorId === ActorId.En_St) {
             const zar = await fetchArchive('zelda_st.zar');
-            const scale = actor.variable == 1 ? 0.04 : 0.02;
+            const scale = actor.variable == 1 ? 0.056 : 0.04;
             const b = buildModel(zar, `model/staltula.cmb`, scale);
             b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
         } else if (actor.actorId === ActorId.En_Stream) {
