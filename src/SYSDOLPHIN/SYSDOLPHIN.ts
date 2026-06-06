@@ -740,9 +740,9 @@ function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: HSD_LoadContext, buffer: Array
         assert(envelopeDesc.length <= 10);
         pobjs.push({ flags, loadedVertexLayout, loadedVertexData, kind: 'Envelope', envelopeDesc });
     } else if (objType === HSD_PObjFlags.OBJTYPE_SHAPEANIM) {
-        // throw "whoops";
+        // throw new Error("whoops");
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     if (nextSiblingOffs !== 0)
@@ -914,9 +914,9 @@ function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, buff
     if (contentsOffs === 0) {
         jobjs.push({ ... base, kind: 'None' });
     } else if (!!(flags & HSD_JObjFlags.SPLINE)) {
-        // throw "whoops";
+        // throw new Error("whoops");
     } else if (!!(flags & HSD_JObjFlags.PTCL)) {
-        // throw "whoops";
+        // throw new Error("whoops");
     } else {
         const dobj: HSD_DObj[] = [];
         HSD_DObjLoadDesc(dobj, ctx, HSD_LoadContext__ResolvePtr(ctx, contentsOffs));
@@ -1093,7 +1093,7 @@ export function HSD_FObjLoadKeyframes(ctx: HSD_LoadContext, buffer: ArrayBufferS
             res = view.getUint8(dataIdx + 0x00);
             dataIdx += 0x01;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         return res / (1 << shift);

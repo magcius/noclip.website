@@ -8,7 +8,7 @@ import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, invlerp, saturate, vec3SetAll } from "../MathHelpers.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../gx/DDraw.js";
 import { compareDepthValues, reverseDepthForClearValue } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";

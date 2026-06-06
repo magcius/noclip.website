@@ -79,7 +79,7 @@ function get_gfx_format(format: D3DFormat, srgb: boolean): GfxFormat {
     else if (format === D3DFormat.L16)
         return GfxFormat.U16_R_NORM;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function is_block_compressed(format: D3DFormat): boolean {
@@ -108,7 +108,7 @@ function get_mipmap_size(format: D3DFormat, width: number, height: number, depth
         else if (format === D3DFormat.ATI2)
             return count * 16;
         else
-            throw "whoops";
+            throw new Error("whoops");
     } else {
         const num_pixels = width * height * depth;
         if (format === D3DFormat.A8R8G8B8)
@@ -118,7 +118,7 @@ function get_mipmap_size(format: D3DFormat, width: number, height: number, depth
         else if (format === D3DFormat.L16)
             return num_pixels * 2;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 

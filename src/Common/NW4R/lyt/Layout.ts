@@ -10,7 +10,7 @@ import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_P
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
-import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../../../gx/DDraw.js";
 import { ColorKind, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../../../gx/gx_render.js";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture.js";
 import { getPointHermite } from "../../../Spline.js";
@@ -647,7 +647,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
         } else if (fourcc === 'gre1') {
             groupStack.shift();
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         tableIdx += blockSize;
@@ -785,7 +785,7 @@ function parseBRLAN_AnimFourCCToTrackTypeBase(fourcc: string): RLANAnimationTrac
     if (fourcc === 'RLTS') return RLANAnimationTrackType._TextureTransform_First;
     if (fourcc === 'RLTP') return RLANAnimationTrackType._TexturePattern_First;
     if (fourcc === 'RLIM') return RLANAnimationTrackType._IndirectMatrix_First;
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
@@ -1017,7 +1017,7 @@ export class LayoutPane {
             window.parse(rlyt as RLYTWindow, layout);
             return window;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -1121,7 +1121,7 @@ export class LayoutPane {
         else if (basePositionX === 2) // right
             return -this.width;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public getBasePositionY(): number {
@@ -1133,7 +1133,7 @@ export class LayoutPane {
         else if (basePositionY === 2) // bottom
             return this.height;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     protected setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -1364,7 +1364,7 @@ export class LayoutTextbox extends LayoutPane {
         else if (textPositionX === 2) // right
             return 1.0;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private getTextPositionY(): number {
@@ -1376,7 +1376,7 @@ export class LayoutTextbox extends LayoutPane {
         else if (textPositionY === 2) // bottom
             return 1.0;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public getTextAlignment(): number {
@@ -1389,7 +1389,7 @@ export class LayoutTextbox extends LayoutPane {
         else if (this.textAlignment === RLYTTextAlignment.Right)
             return 1.0;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private setCharWriterFont(charWriter: CharWriter): void {
@@ -1516,7 +1516,7 @@ export class LayoutWindow extends LayoutPane {
         else if (flip === RLYTTextureFlip.Rotate180)
             vec4.set(dst, 1, 1, 0, 0);
         else if (flip === RLYTTextureFlip.Rotate90 || flip === RLYTTextureFlip.Rotate270)
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private drawFrameGetTexCoord(position: RLYTBasePosition, dst: vec2[], frameW: number, frameH: number, texW: number, texH: number, flip: RLYTTextureFlip): void {
@@ -1595,7 +1595,7 @@ export class LayoutWindow extends LayoutPane {
         else if (position === RLYTBasePosition.BottomRight)
             return this.frames[3];
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private getFrameMaterial(layout: Layout, position: RLYTBasePosition): LayoutMaterial {
@@ -1652,7 +1652,7 @@ export class LayoutWindow extends LayoutPane {
         } else if (this.frames.length === 4) {
         } else if (this.frames.length === 8) {
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         renderInstManager.popTemplate();
@@ -1890,7 +1890,7 @@ function getAnimFrame(anim: RLAN, frame: number): number {
             frame -= lastFrame;
         return frame;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -1928,7 +1928,7 @@ export class LayoutAnimation {
         else if (animation.type === RLANAnimationType.Material)
             return layout.findMaterialByName(animation.targetName);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public isOver(): boolean {

@@ -268,7 +268,7 @@ function fpcLy_Layer(globals: fGlobals, layerID: number): layer_class {
     } else if (layerID === 0) {
         return globals.lyRoot;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

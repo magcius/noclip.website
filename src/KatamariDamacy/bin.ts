@@ -57,7 +57,7 @@ function getVifUnpackFormatByteSize(format: number): number {
         assert(vn === 0x03);
         return 2;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -378,7 +378,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                 skipVertices = true;
             } else {
                 console.warn(`Unknown vertex run flags format code ${vertexRunFlags2}`);
-                throw "whoops";
+                throw new Error("whoops");
             }
         };
 
@@ -500,7 +500,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                     }
                 } else {
                     console.error(`Unsupported format ${hexzero(format, 2)}`);
-                    throw "whoops";
+                    throw new Error("whoops");
                 }
             } else if ((cmd & 0x7F) === 0x50) { // DIRECT
                 // We need to be at the start of a vertex run.
@@ -564,7 +564,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                         currentGSConfiguration.test_1_data1 = data1;
                     } else {
                         console.warn(`Unknown GS Register ${hexzero(addr, 2)}`);
-                        throw "whoops";
+                        throw new Error("whoops");
                     }
                     // TODO(jstpierre): Other register settings.
 
@@ -626,7 +626,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                 // Don't need to do anything.
             } else {
                 console.error(`Unknown VIF command ${hexzero(cmd, 2)}`);
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 

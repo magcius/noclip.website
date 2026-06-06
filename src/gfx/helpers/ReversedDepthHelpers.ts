@@ -60,5 +60,5 @@ export function compareDepthValues(a: number, b: number, op: GfxCompareMode, isD
     else if (op === GfxCompareMode.GreaterEqual)
         return a >= b;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }

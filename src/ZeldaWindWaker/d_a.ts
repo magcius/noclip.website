@@ -8,7 +8,7 @@ import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, getMatrixTranslation, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { GlobalSaveManager } from "../SaveManager.js";
-import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TDDraw, TSDraw } from "../gx/DDraw.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -1780,7 +1780,7 @@ class d_a_mgameboard extends fopAc_ac_c {
             else if (size === 4)
                 this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x06)));
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
 
         this.cursorX = 0;
@@ -3280,7 +3280,7 @@ function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: numb
         vec3.normalize(scratchVec3a, scratchVec3a);
 
         // todo
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     return pointIdxCurr;

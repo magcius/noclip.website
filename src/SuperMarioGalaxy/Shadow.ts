@@ -18,7 +18,7 @@ import { ViewerRenderInput } from "../viewer.js";
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { TSDraw, TDDraw } from "./DDraw.js";
+import { TSDraw, TDDraw } from "../gx/DDraw.js";
 import { GX_Program } from "../gx/gx_material.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { colorFromRGBA } from "../Color.js";
@@ -254,7 +254,7 @@ class ShadowController {
         else if (this.calcCollisionMode === CalcCollisionMode.OneTime)
             return (this.calcCollisionTimer === 0);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public updateProjection(sceneObjHolder: SceneObjHolder): void {
@@ -971,7 +971,7 @@ function findPosNrmMtxIndexFromModel(modelData: J3DModelData, jointIndex: number
             return posNrmMtxIndex;
     }
 
-    throw "whoops";
+    throw new Error("whoops");
 }
 
 class ShadowVolumeFlatModel extends ShadowVolumeModel {
@@ -1310,7 +1310,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeLine') {
         createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -1318,12 +1318,12 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     let shadowFile: ArrayBufferSlice | null;
 
     const resourceHolder = actor.modelManager!.resourceHolder;
-    if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG1)
+    if (sceneObjHolder.sceneLoader.gameBit === GameBits.SMG1)
         shadowFile = resourceHolder.arc.findFileData(`${filename}.bcsv`);
-    else if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG2)
+    else if (sceneObjHolder.sceneLoader.gameBit === GameBits.SMG2)
         shadowFile = resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
     else
-        throw "whoops";
+        throw new Error("whoops");
 
     actor.shadowControllerList = new ShadowControllerList();
 

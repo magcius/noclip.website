@@ -116,7 +116,7 @@ function parseTrackOcarina(version: Version, isRotationInt16: boolean, buffer: A
         }
         return { type, timeStart, timeEnd, frames };
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -164,7 +164,7 @@ function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): Animation
         return { type, timeStart, timeEnd, frames };
     }
     else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -174,7 +174,7 @@ function parseTrack(version: Version, isRotationInt16: boolean, buffer: ArrayBuf
     else if (version === Version.Majora || version === Version.LuigisMansion)
         return parseTrackMajora(version, buffer);
     else
-        throw "xxx";
+        throw new Error("xxx");
 }
 
 // "Animation Node"?
@@ -314,7 +314,7 @@ export function parse(version: Version, buffer: ArrayBufferSlice): CSAB {
     else if (version === Version.Majora || version === Version.LuigisMansion)
         return parseMajora(version, buffer);
     else
-        throw "xxx";
+        throw new Error("xxx");
 }
 
 function getAnimFrame(anim: AnimationBase, frame: number): number {
@@ -329,7 +329,7 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
             frame -= lastFrame;
         return frame;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -405,7 +405,7 @@ export function sampleAnimationTrack(track: AnimationTrack, frame: number): numb
     else if (track.type === AnimationTrackType.HERMITE)
         return sampleAnimationTrackHermite(track, frame);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function sampleAnimationTrackRotation(track: AnimationTrack, frame: number): number {
@@ -414,7 +414,7 @@ function sampleAnimationTrackRotation(track: AnimationTrack, frame: number): num
     else if (track.type === AnimationTrackType.HERMITE)
         return sampleAnimationTrackHermite(track, frame);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function calcBoneMatrix(dst: mat4, animationController: AnimationController | null, csab: CSAB | null, bone: Bone): void {

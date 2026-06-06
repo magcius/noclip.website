@@ -417,7 +417,7 @@ export class KCollisionServer {
         } else if (dst.classification === KCHitSphereClassification.Plane) {
             dst.distance = radius - dotFaceNrm;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         const maxDist = this.prismThickness * scale;

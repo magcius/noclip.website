@@ -160,7 +160,7 @@ function getDayPhaseStartTime(phase: DayPhase): number {
     else if (phase === DayPhase.Night)
         return 20 / 24;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function getDayPhaseEndTime(phase: DayPhase): number {
@@ -173,7 +173,7 @@ function getDayPhaseEndTime(phase: DayPhase): number {
     else if (phase === DayPhase.Night)
         return 4 / 24;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function ease(t: number): number {

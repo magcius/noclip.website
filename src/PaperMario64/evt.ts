@@ -315,7 +315,7 @@ export class evtmgr {
         else if (expr < -20000000)
             evt.lw[expr - -30000000] = v;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     private scanend(evt: evt_exec, opena: op[], close: op): void {
@@ -863,7 +863,7 @@ export class evtmgr {
         } break;
         default:
             console.warn("unimplemented op", op[evt.opcode]);
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         if (evt.pc === oldpc && !(evt.flags & evt_flags.userfuncblock))

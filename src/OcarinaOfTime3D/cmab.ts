@@ -126,7 +126,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
         assert(scale === 1);
         assert(bias === 0);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     let keyframeTableIdx: number = 0x10;
@@ -165,7 +165,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
         }
         return { timeStart, timeEnd, type, frames };
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -429,7 +429,7 @@ function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
     else if (track.type === AnimationTrackType.Integer)
         return sampleAnimationTrackInteger(track, frame);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function getAnimFrame(anim: AnimationBase, frame: number): number {
@@ -444,7 +444,7 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
             frame -= lastFrame;
         return frame;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -469,7 +469,7 @@ export class TextureSRTAnimator {
             const sy = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 1;
             calcTexMtx(dst, sx, sy, 0, 0, 0);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 }

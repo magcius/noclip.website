@@ -172,7 +172,7 @@ function animGroupDrawLoadVertexData(draw: AnimGroupData_Draw, vtxArrays: GX_Arr
             } else if (format === GfxFormat.U8_RGBA_NORM) {
                 dstView.setUint32(dstOffs + 0x00, srcView.getUint32(srcOffs + 0x00));
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
     }

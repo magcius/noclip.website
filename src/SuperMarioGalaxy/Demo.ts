@@ -229,7 +229,7 @@ class DemoActionInfo {
             else if (this.actionType === DemoActionType.Kill)
                 actor.makeActorDead(sceneObjHolder);
             else if (this.actionType === DemoActionType.Functor)
-                throw "whoops";
+                throw new Error("whoops");
             else if (this.actionType === DemoActionType.Nerve)
                 actor.setNerve(this.nerves[i]);
             else if (this.actionType === DemoActionType.OnSwitchA)
@@ -256,7 +256,7 @@ class DemoActionInfo {
 
 function translateJpName(sceneObjHolder: SceneObjHolder, jp_name: string): string {
     if (!sceneObjHolder.objNameTable.findRecord((infoIter) => infoIter.getValueString('jp_name') === jp_name))
-        throw "whoops";
+        throw new Error("whoops");
     return sceneObjHolder.objNameTable.getValueString('en_name')!;
 }
 
@@ -458,7 +458,7 @@ export class DemoCastGroupHolder<T extends DemoCastGroup> extends NameObjGroup<T
         for (let i = 0; i < this.objArray.length; i++)
             if (this.objArray[i].name === name)
                 return this.objArray[i];
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public tryRegisterDemoActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter, idInfo: JMapIdInfo): boolean {
@@ -483,15 +483,15 @@ export class DemoDirector extends NameObj {
 
     public getDemoSheetArchiveForZone(sceneObjHolder: SceneObjHolder, zoneId: number): JKRArchive | null {
         if (this.demoSheetArchives[zoneId] === undefined) {
-            if (sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1) {
+            if (sceneObjHolder.sceneLoader.gameBit & GameBits.SMG1) {
                 if (this.demoSheetArchives[0] === undefined)
                     this.demoSheetArchives[0] = assertExists(sceneObjHolder.modelCache.getObjectData('DemoSheet'));
                 this.demoSheetArchives[zoneId] = this.demoSheetArchives[0];
-            } else if (sceneObjHolder.sceneDesc.gameBit & GameBits.SMG2) {
+            } else if (sceneObjHolder.sceneLoader.gameBit & GameBits.SMG2) {
                 const zoneName = sceneObjHolder.scenarioData.zoneNames[zoneId];
                 this.demoSheetArchives[zoneId] = sceneObjHolder.modelCache.getArchive(`StageData/${zoneName}/${zoneName}Demo.arc`);
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 
@@ -517,7 +517,7 @@ export class DemoDirector extends NameObj {
         if (subPartName === null)
             demoExecutor.start(sceneObjHolder, requester, demoName, movementControlType);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public startDemoTimeKeep(sceneObjHolder: SceneObjHolder, requester: NameObj, demoName: string, movementControlType: number, frameType: CinemaFrameType, subPartName: string | null): void {
@@ -578,7 +578,7 @@ function startDemoSystem(sceneObjHolder: SceneObjHolder, requester: NameObj, dem
     if (demoType === DemoType.TimeKeep) {
         sceneObjHolder.demoDirector!.startDemoTimeKeep(sceneObjHolder, requester, demoName, movementControlType, frameType, subPartName);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -591,7 +591,7 @@ function requestStartTimeKeepDemo(sceneObjHolder: SceneObjHolder, requester: Nam
     if (canStartDemo(sceneObjHolder)) {
         startDemoSystem(sceneObjHolder, requester, demoName, movementControlType, demoType, frameType, starPointerType, deleteEffectType, subPartName);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

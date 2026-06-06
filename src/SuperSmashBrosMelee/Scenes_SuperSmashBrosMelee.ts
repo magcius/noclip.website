@@ -89,7 +89,7 @@ class HSDDesc implements SceneDesc {
             // Look for the first thing with _joint suffix.
             const joint = arc.publics.find((sym) => sym.name.endsWith('_joint'));
             if (joint === undefined) {
-                throw "whoops";
+                throw new Error("whoops");
             }
             this.rootName = joint.name.slice(0, -6);
         }

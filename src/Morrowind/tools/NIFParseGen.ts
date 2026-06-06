@@ -223,7 +223,7 @@ class UnaryExpr implements Expr {
 
         switch (this.op) {
             case '!': return !rhs;
-            default: throw "whoops";
+            default: throw new Error("whoops");
         }
     }
 
@@ -1206,7 +1206,7 @@ class CodeGenerator {
         const newRecord = `export function newRecord(recordType: string): NiParse {
     switch (recordType) {
 ${objects.map((type) => `        case '${type.name}': return new ${type.name}();`).join('\n')}
-        default: throw "whoops";
+        default: throw new Error("whoops");
     }
 }`;
 

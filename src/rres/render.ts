@@ -624,12 +624,11 @@ export class MDL0ModelInstance {
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
     }
 
-    public getNodeToWorldMatrixRefernce(nodeName : string): mat4 {
-        const nodes = this.mdl0Model.mdl0.nodes;
-        for (let i = 0; i < nodes.length; i++)
-            if (nodes[i].name === nodeName)
-                return this.instanceStateData.jointToWorldMatrixArray[nodes[i].mtxId];
-        throw "could not find node";
+    public getNodeToWorldMatrixReference(nodeMtxIdx : number): mat4 {
+        if (nodeMtxIdx >= this.instanceStateData.jointToWorldMatrixArray.length || nodeMtxIdx < 0) {
+            throw new Error("Invalid Node");
+        }
+        return this.instanceStateData.jointToWorldMatrixArray[nodeMtxIdx];
     }
 
     public setSortKeyLayer(layer: number): void {

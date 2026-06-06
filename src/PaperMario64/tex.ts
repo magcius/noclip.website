@@ -161,7 +161,7 @@ export function parseTextureArchive(buffer: ArrayBufferSlice): TextureArchive {
             images.push(image0);
             images.push(image1);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         const hasSecondImage = images.length === 2;

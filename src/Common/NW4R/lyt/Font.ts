@@ -7,7 +7,7 @@ import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxWrapMode 
 import { ColorKind, GXMaterialHelperGfx, GXTextureMapping, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render.js";
 import { Texture } from "../../../viewer.js";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder.js";
-import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
+import { TDDraw } from "../../../gx/DDraw.js";
 import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color.js";
 import { vec3, vec4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
@@ -191,7 +191,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
                     cmap[view.getUint16(tableIdx + 0x00)] = view.getUint16(tableIdx + 0x02);
             }
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         tableIdx += blockSize;

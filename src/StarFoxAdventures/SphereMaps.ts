@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { ColorKind, DrawParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, GXTextureMapping, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { projectionMatrixForCuboid, setMatrixTranslation, Vec3Zero } from '../MathHelpers.js';
-import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TSDraw } from "../gx/DDraw.js";
 import { nArray } from '../util.js';
 import { SFAMaterialBuilder } from './MaterialBuilder.js';
 import { makeMaterialTexture, MaterialFactory } from './materials.js';

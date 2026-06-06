@@ -19,6 +19,10 @@ export interface GraphObjBase extends Destroyable {
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void;
 }
 
+export interface SceneLoader {
+    loadSceneById(sceneGroup: string, sceneId: string, sceneSaveState: string | null): void;
+}
+
 export interface SceneContext {
     device: GfxDevice;
     dataFetcher: DataFetcher;
@@ -27,6 +31,7 @@ export interface SceneContext {
     destroyablePool: Destroyable[];
     inputManager: InputManager;
     viewerInput: ViewerRenderInput;
+    sceneLoader: SceneLoader;
     initialSceneTime: number;
 }
 

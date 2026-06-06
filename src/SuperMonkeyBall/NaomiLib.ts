@@ -15,7 +15,7 @@ import { GXMaterialHacks } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { TextureInputGX } from "../gx/gx_texture.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TSDraw } from "../gx/DDraw.js";
 import { assertExists } from "../util.js";
 import { AVTpl } from "./AVTpl.js";
 import { RenderParams } from "./Model.js";

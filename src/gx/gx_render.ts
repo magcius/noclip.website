@@ -256,7 +256,7 @@ export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
     case GX.Anisotropy._4:
         return 4;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -409,7 +409,7 @@ export function autoOptimizeMaterial(material: GX_Material.GXMaterial): void {
 export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
-        throw "whoops";
+        throw new Error("whoops");
     case GX.CullMode.FRONT:
         return GfxCullMode.Front;
     case GX.CullMode.BACK:

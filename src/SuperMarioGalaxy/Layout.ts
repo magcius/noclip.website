@@ -284,7 +284,7 @@ class CustomTagProcessor implements TagProcessor {
         } else if (code === 0x1A) {
             return this.exCmd(writer, rect, str, i);
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -384,7 +384,7 @@ class LayoutManager {
         for (let i = 0; i < this.paneInfo.length; i++)
             if (this.paneInfo[i].pane.name === name)
                 return i;
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     private getPaneInfo(name: string | null = null): LayoutPaneInfo {

@@ -2,12 +2,12 @@
 // Dynamic Draw
 // A helper for all those times that Galaxy just writes triangles raw.
 
-import * as GX from '../gx/gx_enum.js';
-import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist.js';
+import * as GX from './gx_enum.js';
+import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from './gx_displaylist.js';
 import { assert, assertExists, align } from '../util.js';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxInputLayout, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
-import { createInputLayout } from '../gx/gx_render.js';
+import { createInputLayout } from './gx_render.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers.js';
 import { getSystemEndianness, Endianness } from '../endian.js';
 import { ReadonlyVec2, ReadonlyVec3 } from 'gl-matrix';
@@ -24,7 +24,7 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
     else if (cmd === GX.Command.DRAW_TRIANGLE_FAN)
         return GfxTopology.TriFans;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 abstract class TDDrawBase {
@@ -32,10 +32,6 @@ abstract class TDDrawBase {
     protected useNBT = false;
     protected loadedVertexLayout: LoadedVertexLayout | null = null;
     protected inputLayout: GfxInputLayout | null = null;
-    protected vertexBuffer: GfxBuffer | null = null;
-    protected indexBuffer: GfxBuffer | null = null;
-    protected vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    protected indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     // Global information
     protected currentVertex: number;
@@ -51,9 +47,6 @@ abstract class TDDrawBase {
         for (let i = GX.Attr.POS; i <= GX.Attr.TEX7; i++) {
             this.vcd[i] = { type: GX.AttrType.NONE };
         }
-        
-        this.vertexBufferDescriptors = [{ buffer: null! }];
-        this.indexBufferDescriptor = { buffer: null! };
     }
 
     public setVtxDesc(attr: GX.Attr, enabled: boolean): void {
@@ -163,10 +156,9 @@ abstract class TDDrawBase {
 }
 
 export class TDDraw extends TDDrawBase {
-    private recreateVertexBuffer: boolean = true;
-    private recreateIndexBuffer: boolean = true;
-
     private startIndex: number;
+    private vertexBufferDescriptor: GfxVertexBufferDescriptor | null = null;
+    private indexBufferDescriptor: GfxIndexBufferDescriptor | null = null;
 
     constructor(name: string = '') {
         super(name);
@@ -180,7 +172,6 @@ export class TDDraw extends TDDrawBase {
             const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
             const newBuffer = (this.vertexData.buffer as ArrayBuffer).transfer(newByteSizeAligned);
             this.vertexData = new DataView(newBuffer);
-            this.recreateVertexBuffer = true;
         }
     }
 
@@ -190,7 +181,6 @@ export class TDDraw extends TDDrawBase {
             const newSizeAligned = align(newSize, this.indexData.length);
             const newBuffer = (this.indexData.buffer as ArrayBuffer).transfer(newSizeAligned * 2);
             this.indexData = new Uint16Array(newBuffer);
-            this.recreateIndexBuffer = true;
         }
     }
 
@@ -204,30 +194,20 @@ export class TDDraw extends TDDrawBase {
         this.currentVertex = -1;
         this.currentIndex = 0;
         this.startIndex = 0;
+
+        this.vertexBufferDescriptor = null;
+        this.indexBufferDescriptor = null;
     }
 
-    private flushDeviceObjects(device: GfxDevice): void {
-        if (this.recreateVertexBuffer) {
-            if (this.vertexBuffer !== null)
-                device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-            device.setResourceName(this.vertexBuffer, `TDDraw ${this.name}`);
-            this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
-            this.recreateVertexBuffer = false;
-        }
-
-        if (this.recreateIndexBuffer) {
-            if (this.indexBuffer !== null)
-                device.destroyBuffer(this.indexBuffer);
-            this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
-            device.setResourceName(this.indexBuffer, `TDDraw ${this.name} (IB)`);
-            this.indexBufferDescriptor.buffer = this.indexBuffer;
-            this.recreateIndexBuffer = false;
-        }
+    private flushDeviceObjects(cache: GfxRenderCache): void {
+        if (this.vertexBufferDescriptor === null)
+            this.vertexBufferDescriptor = cache.dynamicBufferCache.allocateSize(GfxBufferUsage.Vertex, this.vertexData.byteLength);
+        if (this.indexBufferDescriptor === null)
+            this.indexBufferDescriptor = cache.dynamicBufferCache.allocateSize(GfxBufferUsage.Index, this.indexData.byteLength);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        renderInst.setVertexInput(this.inputLayout, [this.vertexBufferDescriptor], this.indexBufferDescriptor);
         renderInst.setDrawCount(this.currentIndex - this.startIndex, this.startIndex);
     }
 
@@ -236,7 +216,7 @@ export class TDDraw extends TDDrawBase {
     }
 
     public makeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        this.flushDeviceObjects(renderInstManager.gfxRenderCache.device);
+        this.flushDeviceObjects(renderInstManager.gfxRenderCache);
         const renderInst = renderInstManager.newRenderInst();
         this.setOnRenderInst(renderInst);
         this.startIndex = this.currentIndex;
@@ -244,10 +224,10 @@ export class TDDraw extends TDDrawBase {
     }
 
     public endDraw(renderInstManager: GfxRenderInstManager): void {
-        const device = renderInstManager.gfxRenderCache.device;
-        this.flushDeviceObjects(device);
-        device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
-        device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
+        const cache = renderInstManager.gfxRenderCache, device = cache.device;
+        this.flushDeviceObjects(renderInstManager.gfxRenderCache);
+        device.uploadBufferData(this.vertexBufferDescriptor!.buffer, this.vertexBufferDescriptor!.byteOffset!, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBufferDescriptor!.buffer, this.indexBufferDescriptor!.byteOffset!, new Uint8Array(this.indexData.buffer));
     }
 
     public endDrawAndMakeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
@@ -256,23 +236,17 @@ export class TDDraw extends TDDrawBase {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.indexBuffer !== null) {
-            device.destroyBuffer(this.indexBuffer);
-            this.indexBuffer = null;
-            this.recreateIndexBuffer = true;
-        }
-
-        if (this.vertexBuffer !== null) {
-            device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = null;
-            this.recreateVertexBuffer = true;
-        }
     }
 }
 
 // Static Draw helper for places where we might want to make TDDraw into a buffer
 // that does not change very much.
 export class TSDraw extends TDDrawBase {
+    private vertexBuffer: GfxBuffer | null = null;
+    private indexBuffer: GfxBuffer | null = null;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
+
     constructor(name: string = '') {
         super(name);
         this.vertexData = new DataView(new ArrayBuffer(0x400));
@@ -310,10 +284,10 @@ export class TSDraw extends TDDrawBase {
         const device = cache.device;
         this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
         device.setResourceName(this.vertexBuffer, `TSDraw ${this.name}`);
-        this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
+        this.vertexBufferDescriptors[0] = { buffer: this.vertexBuffer };
         this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
         device.setResourceName(this.indexBuffer, `TSDraw ${this.name} (IB)`);
-        this.indexBufferDescriptor.buffer = this.indexBuffer;
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {

@@ -106,7 +106,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
                 return { id, type, value };
             }
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -137,7 +137,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
             if (p.type === PropertyType.FLOAT)
                 return p.value1 as number;
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
 
         function expectPropertyString(id: number) {
@@ -146,7 +146,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
             if (p.type === PropertyType.STRING)
                 return p.value as (string | null);
             else
-                throw "whoops";
+                throw new Error("whoops");
         }
 
         const minX = expectPropertyFloat(0x61);

@@ -65,7 +65,7 @@ function getTextureDimension(type: number): GfxTextureDimension {
     else if (type === rust.BitmapDataType.Tex2D)
         return GfxTextureDimension.n2D;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, bitmapReader: HaloBitmapReader, submap = 0): GfxTexture {

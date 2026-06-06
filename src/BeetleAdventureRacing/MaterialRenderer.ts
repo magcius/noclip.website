@@ -292,7 +292,7 @@ export class MaterialRenderer {
         const cullBack = !!(renderOpts & RenderOptionsFlags.ENABLE_BACKFACE_CULLING);
         const cullFront = !!(renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING);
         if (cullBack && cullFront) {
-            throw "whoops";
+            throw new Error("whoops");
         } else if (cullBack) {
             stateFlags.cullMode = GfxCullMode.Back;
         } else if (cullFront) {

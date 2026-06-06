@@ -9,8 +9,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `../../../data/PokemonSnap_Raw`;
-const pathBaseOut = `../../../data/PokemonSnap`;
+const pathBaseIn  = `./data/PokemonSnap_Raw`;
+const pathBaseOut = `./data/PokemonSnap`;
 
 function extractMap(romData: ArrayBufferSlice, sceneID: number, photo: OverlaySpec, header = 0, objectStart = 0, collisionStart = 0) {
     const view = romData.createDataView(0x57580 + sceneID * 0x24);

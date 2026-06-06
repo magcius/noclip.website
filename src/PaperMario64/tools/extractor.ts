@@ -10,8 +10,8 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `../../../data/pm64_raw`;
-const pathBaseOut = `../../../data/pm64`;
+const pathBaseIn  = `./data/pm64_raw`;
+const pathBaseOut = `./data/pm64`;
 
 interface AssetEntry {
     assetName: string;

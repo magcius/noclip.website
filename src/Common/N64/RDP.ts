@@ -604,7 +604,7 @@ function translateZMode(zmode: ZMode): GfxCompareMode {
         return GfxCompareMode.Less;
     if (zmode === ZMode.ZMODE_DEC)
         return GfxCompareMode.LessEqual;
-    throw "Unknown Z mode: " + zmode;
+    throw new Error("Unknown Z mode: ") + zmode;
 }
 
 export enum BlendParam_PM_Color {
@@ -643,7 +643,7 @@ function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): G
         return GfxBlendFactor.Zero;
     }
 
-    throw "Unknown Blend Param B: "+paramB;
+    throw new Error("Unknown Blend Param B: ")+paramB;
 }
 
 export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDescriptor> {
