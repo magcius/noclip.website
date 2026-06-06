@@ -143,11 +143,8 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
     Scenes_Example.sceneGroup,
-<<<<<<< HEAD
     Scenes_KingdomHeartsDDD.sceneGroup,
     Scenes_KingdomHeartsBBS.sceneGroup,
-=======
->>>>>>> main
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,

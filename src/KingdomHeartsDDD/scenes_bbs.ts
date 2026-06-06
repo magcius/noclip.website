@@ -10,10 +10,10 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON } from "./config/arc";
-import { BBS_VALID_PRESET_ARC } from "./config/setdata_bbs";
+import { BBS_VALID_PRESET_ARC } from "./config/setdata";
 import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxTexture } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
-import { decodeBBSTIM2, TIM2Texture } from "./texture_bbs";
+import { decodeBBSTIM2, TIM2Texture } from "./texture";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -235,6 +235,16 @@ class Room implements SceneDesc {
         return new Renderer(device, pmp, { sets, models, animations: new Map() });
     }
 }
+
+/*
+TODO
+
+Clean up TIM2 decoding, possibly use existing common PS2 texture code?
+    I tried using the common PS2 code initially but couldn't get it to work...
+    The texture formats on PSP are extremely similar to PS2, if not the exact same
+
+May your heart be your guiding key
+*/
 
 // Adapted room names from https://openkh.dev/bbs/dictionary/worlds.html
 const id = "KHBBS";

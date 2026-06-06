@@ -3,7 +3,7 @@ import { GfxBufferFrequencyHint, GfxBufferUsage, GfxFormat, GfxSampler, GfxVerte
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 import { BBSModel, BBSPMP, BBSShape } from "./bin_bbs";
-import { BBSShader } from "./shader_bbs";
+import { BBSShader } from "./shader";
 
 export class BBSRoomRenderer extends LuxRoomRenderer {
     constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects) {
