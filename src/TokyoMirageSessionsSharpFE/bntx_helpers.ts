@@ -4,7 +4,7 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import * as GfxPlatform from "../gfx/platform/GfxPlatform";
 import * as nngfx_enum from "../fres_nx/nngfx_enum";
-import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
+import { deswizzle, deswizzleMips, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
 import { assert } from '../util.js';
 
 /**
@@ -118,31 +118,25 @@ async function deswizzle_and_upload_standard(texture: BNTX.BRTI, mip_count: numb
     const channelFormat = nngfx_enum.getChannelFormat(texture.imageFormat);
     const type_format = nngfx_enum.getTypeFormat(texture.imageFormat);
 
+    const deswizzledMips = deswizzleMips(texture.width, texture.height, channelFormat, texture.textureDataArray[0]);
+
     for (let mipLevel = 0; mipLevel < mip_count; mipLevel++)
     {
-        const buffer = texture.textureDataArray[0].mipBuffers[mipLevel];
         const width = Math.max(texture.width >>> mipLevel, 1);
         const height = Math.max(texture.height >>> mipLevel, 1);
         const depth = 1;
-        const blockHeightLog2 = texture.blockHeightLog2;
-        deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 })
-        .then
-        (
-            (deswizzled) =>
-            {
-                const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
-                let remapped_rgba_pixels;
-                if (type_format === nngfx_enum.TypeFormat.Float)
-                {
-                    remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
-                }
-                else
-                {
-                    remapped_rgba_pixels = remap_r8_g8_b8_a8_channels(rgbaTexture.pixels, texture.channelSource);
-                }
-                device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
-            }
-        );
+        const deswizzled = deswizzledMips[mipLevel];
+        const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
+        let remapped_rgba_pixels;
+        if (type_format === nngfx_enum.TypeFormat.Float)
+        {
+            remapped_rgba_pixels = remap_r16_g16_b16_a16_float_channels(rgbaTexture.pixels, texture.channelSource);
+        }
+        else
+        {
+            remapped_rgba_pixels = remap_r8_g8_b8_a8_channels(rgbaTexture.pixels, texture.channelSource);
+        }
+        device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
     }
 }
 

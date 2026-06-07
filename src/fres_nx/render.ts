@@ -6,7 +6,7 @@ import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 
 import * as BNTX from './bntx.js';
-import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture.js';
+import { translateImageFormat, deswizzleMips, decompress, getImageFormatString } from './tegra_texture.js';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres.js';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from './nngfx_enum.js';
@@ -48,19 +48,19 @@ export class BRTITextureHolder extends TextureHolder {
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
 
+        const deswizzledMips = deswizzleMips(textureEntry.width, textureEntry.height, channelFormat, textureEntry.textureDataArray[0]);
+
         for (let i = 0; i < textureEntry.textureDataArray[0].mipBuffers.length; i++) {
             const mipLevel = i;
 
-            const buffer = textureEntry.textureDataArray[0].mipBuffers[i];
+            const deswizzled = deswizzledMips[mipLevel];
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const blockHeightLog2 = textureEntry.blockHeightLog2;
-            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then((deswizzled) => {
-                const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
-                const rgbaPixels = rgbaTexture.pixels;
-                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-            });
+
+            const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
+            const rgbaPixels = rgbaTexture.pixels;
+            device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
         }
 
         const extraInfo = new Map<string, string>();

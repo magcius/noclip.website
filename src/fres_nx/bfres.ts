@@ -1175,8 +1175,6 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         const texturePatternAnimationArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x10, littleEndian);
         const curveArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x18, littleEndian);
         const constantArrayOffset = view.getUint32(materialAnimationEntryOffset + 0x20, littleEndian);
-        const firstShaderParamCurveIndex = view.getUint16(materialAnimationEntryOffset + 0x28, littleEndian);
-        const firstTexturePatternCurveIndex = view.getUint16(materialAnimationEntryOffset + 0x2A, littleEndian);
         const shaderParamAnimationCount = view.getUint16(materialAnimationEntryOffset + 0x32, littleEndian);
         const texturePatternAnimationCount = view.getUint16(materialAnimationEntryOffset + 0x34, littleEndian);
         const constantCount = view.getUint16(materialAnimationEntryOffset + 0x36, littleEndian);
@@ -1197,7 +1195,7 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         for (let i = 0; i < texturePatternAnimationCount; i++) {
             const offs = i * 0x10;
             const samplerName = readBinStr(buffer, view.getUint32(texturePatternAnimationArrayOffset + offs, littleEndian), littleEndian);
-            const curveIndex = firstTexturePatternCurveIndex + view.getUint16(texturePatternAnimationArrayOffset + offs + 0x08, littleEndian);
+            const curveIndex = view.getUint16(texturePatternAnimationArrayOffset + offs + 0x08, littleEndian);
             const constantIndex = view.getUint16(texturePatternAnimationArrayOffset + offs + 0x0A, littleEndian);
             texturePatternAnimations[i] = { samplerName, curveIndex, constantIndex };
         }
@@ -1206,7 +1204,7 @@ function parseFMAA(buffer: ArrayBufferSlice, fresVersion: Version, offset: numbe
         for (let i = 0; i < shaderParamAnimationCount; i++) {
             const offs = i * 0x18;
             const paramName = readBinStr(buffer, view.getUint32(shaderParamAnimationArrayOffset + offs, littleEndian), littleEndian);
-            const firstCurveIndex = firstShaderParamCurveIndex + view.getUint16(shaderParamAnimationArrayOffset + offs + 0x08, littleEndian);
+            const firstCurveIndex = view.getUint16(shaderParamAnimationArrayOffset + offs + 0x08, littleEndian);
             const floatCurvesCount = view.getUint16(shaderParamAnimationArrayOffset + offs + 0x0A, littleEndian);
             const integerCurvesCount = view.getUint16(shaderParamAnimationArrayOffset + offs + 0x0C, littleEndian);
             const firstConstantIndex = view.getUint16(shaderParamAnimationArrayOffset + offs + 0x0E, littleEndian);

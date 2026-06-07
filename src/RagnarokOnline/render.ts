@@ -15,9 +15,9 @@ import { DeviceProgram } from "../Program.js";
 import * as UI from "../ui.js";
 import { SceneContext } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { DecodedImage } from "./bmp.js";
 import { GndMap, GndSurface } from "./gnd.js";
-import { AnimatedDrawGroup, AnimatedModelMesh, AnimatedPose, ModelAnimator, ModelDrawGroup, ModelMesh, MODEL_VERTEX_STRIDE_BYTES } from "./model.js";
+import { AnimatedPose, ModelAnimator, MODEL_VERTEX_STRIDE_BYTES } from "./model.js";
+import type { AnimatedModelMesh, ModelMesh } from "./model.js";
 import { buildWaterMesh, WaterAnimator, WaterParams, WATER_VERTEX_STRIDE_BYTES } from "./water.js";
 import { SpriteActor, SpriteKind, SpriteRenderer } from "./sprite.js";
 import { SprModel } from "./spr.js";
@@ -570,10 +570,12 @@ function buildTerrainMesh(gnd: GndMap): TerrainMesh {
     };
 }
 
-interface ModelData {
+export interface SharedModelEntry {
+    mesh: Pick<ModelMesh, "groups" | "bbox"> | null;
+    animatedMesh: Pick<AnimatedModelMesh, "groups" | "nodes" | "animLength" | "modernRsm2" | "bbox"> | null;
+    pose: AnimatedPose | null;
     vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     indexBufferDescriptor: GfxIndexBufferDescriptor;
-    groups: ModelDrawGroup[];
     textures: (GfxTexture | null)[];
 }
 
@@ -588,30 +590,20 @@ export interface AnimatedModelPlacement {
     animSpeed: number;
 }
 
-interface AnimatedModelData {
-    vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    indexBufferDescriptor: GfxIndexBufferDescriptor;
-    groups: AnimatedDrawGroup[];
-    textures: (GfxTexture | null)[];
-    pose: AnimatedPose;
-    nodeCount: number;
-}
-
 interface LiveModelInstance {
-    data: ModelData;
+    entry: SharedModelEntry;
     worldMatrix: mat4;
 }
 
 interface LiveAnimatedModelInstance {
-    data: AnimatedModelData;
+    entry: SharedModelEntry;
     placementMatrix: mat4;
     animator: ModelAnimator;
 }
 
 export interface ModelSceneData {
-    meshes: Map<string, { mesh: ModelMesh, textures: (DecodedImage | null)[] }>;
+    entries: Map<string, SharedModelEntry>;
     instances: ModelPlacement[];
-    animatedMeshes: Map<string, { mesh: AnimatedModelMesh, textures: (DecodedImage | null)[] }>;
     animatedInstances: AnimatedModelPlacement[];
 }
 
@@ -633,7 +625,7 @@ export interface WaterSceneData {
     gndHeight: number;
     zoom: number;
     params: WaterParams;
-    frames: (DecodedImage | null)[];
+    frames: (GfxTexture | null)[];
 }
 
 export interface WarpTarget {
@@ -648,36 +640,6 @@ export interface WarpTarget {
 
 export interface WarpClickSceneData {
     targets: WarpTarget[];
-}
-
-function createRGBATexture(device: GfxDevice, width: number, height: number, rgba: Uint8Array): GfxTexture {
-    const texture = device.createTexture({
-        pixelFormat: GfxFormat.U8_RGBA_NORM,
-        width, height,
-        depthOrArrayLayers: 1,
-        numLevels: 1,
-        dimension: GfxTextureDimension.n2D,
-        usage: GfxTextureUsage.Sampled,
-    });
-    device.uploadTextureData(texture, 0, [rgba]);
-    return texture;
-}
-
-function uploadModelGeometry(
-    device: GfxDevice,
-    mesh: { vertexData: ArrayBuffer, indexData: Uint32Array },
-    textures: (DecodedImage | null)[],
-): { vertexBufferDescriptors: GfxVertexBufferDescriptor[], indexBufferDescriptor: GfxIndexBufferDescriptor, textures: (GfxTexture | null)[] } | null {
-    if (mesh.indexData.length === 0)
-        return null;
-    const vbuf = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mesh.vertexData);
-    const ibuf = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexData.buffer);
-    const gpuTextures = textures.map((img) => img !== null ? createRGBATexture(device, img.width, img.height, img.rgba) : null);
-    return {
-        vertexBufferDescriptors: [{ buffer: vbuf, byteOffset: 0 }],
-        indexBufferDescriptor: { buffer: ibuf, byteOffset: 0 },
-        textures: gpuTextures,
-    };
 }
 
 export class RagnarokTerrainRenderer implements SceneGfx {
@@ -749,10 +711,8 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private modelInputLayout: GfxInputLayout | null = null;
     private modelSamplerLinear: GfxSampler | null = null;
     private modelSamplerNearest: GfxSampler | null = null;
-    private modelData = new Map<string, ModelData>();
     private modelInstances: LiveModelInstance[] = [];
 
-    private animatedModelData = new Map<string, AnimatedModelData>();
     private animatedInstances: LiveAnimatedModelInstance[] = [];
     private animNodeMatrices: mat4[] = [];
     private scratchWorld = mat4.create();
@@ -810,7 +770,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
     private pressActive = false;
     private mouseListenerTarget: HTMLElement | null = null;
 
-    constructor(private sceneContext: SceneContext, private mapId: string, gnd: GndMap, textureImages: (DecodedImage | null)[], modelSceneData: ModelSceneData | null, waterData: WaterSceneData | null, lightData: LightSceneData | null, fogData: FogSceneData | null, entityData: EntitySceneData | null, warpPortalData: WarpPortalSceneData | null, grannyData: GrannyInstance[] | null, weatherParams: WeatherParams | null, warpClickData: WarpClickSceneData | null, pointLights: PointLight[] | null, skyData: SkySceneData | null, particleData: ParticleSceneData | null, bgm: Bgm, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null) {
+    constructor(private sceneContext: SceneContext, private mapId: string, gnd: GndMap, groundTextures: (GfxTexture | null)[], modelSceneData: ModelSceneData | null, waterData: WaterSceneData | null, lightData: LightSceneData | null, fogData: FogSceneData | null, entityData: EntitySceneData | null, warpPortalData: WarpPortalSceneData | null, grannyData: GrannyInstance[] | null, weatherParams: WeatherParams | null, warpClickData: WarpClickSceneData | null, pointLights: PointLight[] | null, skyData: SkySceneData | null, particleData: ParticleSceneData | null, bgm: Bgm, private rebuildEntityLayer: (() => Promise<EntityLayerBundle>) | null) {
         const device = sceneContext.device;
         this.gnd = gnd;
         this.renderHelper = new GfxRenderHelper(device);
@@ -859,7 +819,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.vertexBufferDescriptors = [{ buffer: vertexBuffer, byteOffset: 0 }];
         this.indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
 
-        this.textures = textureImages.map((img) => img !== null ? createRGBATexture(device, img.width, img.height, img.rgba) : null);
+        this.textures = groundTextures;
 
         const lightmapAtlasSize = mesh.lightmapAtlasGridSide * 8;
         this.lightmapTexture = device.createTexture({
@@ -1105,7 +1065,7 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.waterIndexBufferDescriptor = { buffer: ibuf, byteOffset: 0 };
         this.waterIndexCount = mesh.indexData.length;
 
-        this.waterFrameTextures = waterData.frames.map((img) => img !== null ? createRGBATexture(device, img.width, img.height, img.rgba) : null);
+        this.waterFrameTextures = waterData.frames;
 
         this.waterParams = waterData.params;
         this.waterAnimator = new WaterAnimator(waterData.params.animSpeed, waterData.params.waveSpeed);
@@ -1142,48 +1102,21 @@ export class RagnarokTerrainRenderer implements SceneGfx {
             wrapT: GfxWrapMode.Clamp,
         });
 
-        for (const [key, { mesh, textures }] of sceneData.meshes) {
-            const up = uploadModelGeometry(device, mesh, textures);
-            if (up === null)
-                continue;
-            this.modelData.set(key, {
-                vertexBufferDescriptors: up.vertexBufferDescriptors,
-                indexBufferDescriptor: up.indexBufferDescriptor,
-                groups: mesh.groups,
-                textures: up.textures,
-            });
-        }
-
         for (const placement of sceneData.instances) {
-            const data = this.modelData.get(placement.modelKey);
-            if (data === undefined)
+            const entry = sceneData.entries.get(placement.modelKey);
+            if (entry === undefined || entry.mesh === null)
                 continue;
-            this.modelInstances.push({ data, worldMatrix: placement.worldMatrix });
-        }
-
-        for (const [key, { mesh, textures }] of sceneData.animatedMeshes) {
-            const up = uploadModelGeometry(device, mesh, textures);
-            if (up === null)
-                continue;
-            this.animatedModelData.set(key, {
-                vertexBufferDescriptors: up.vertexBufferDescriptors,
-                indexBufferDescriptor: up.indexBufferDescriptor,
-                groups: mesh.groups,
-                textures: up.textures,
-                pose: new AnimatedPose(mesh),
-                nodeCount: mesh.nodes.length,
-            });
+            this.modelInstances.push({ entry, worldMatrix: placement.worldMatrix });
         }
 
         for (const placement of sceneData.animatedInstances) {
-            const data = this.animatedModelData.get(placement.modelKey);
-            if (data === undefined)
+            const entry = sceneData.entries.get(placement.modelKey);
+            if (entry === undefined || entry.animatedMesh === null)
                 continue;
-            const mesh = sceneData.animatedMeshes.get(placement.modelKey)!.mesh;
             this.animatedInstances.push({
-                data,
+                entry,
                 placementMatrix: placement.placementMatrix,
-                animator: new ModelAnimator(mesh.animLength, placement.animSpeed),
+                animator: new ModelAnimator(entry.animatedMesh.animLength, placement.animSpeed),
             });
         }
     }
@@ -1811,15 +1744,16 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         sceneOffs += this.fillPointLightUniforms(sceneMapped, sceneOffs);
 
         for (const inst of this.modelInstances) {
-            for (const group of inst.data.groups) {
+            const entry = inst.entry;
+            for (const group of entry.mesh!.groups) {
                 if (group.indexCount === 0)
                     continue;
-                const tex = (group.textureId >= 0 && group.textureId < inst.data.textures.length) ? inst.data.textures[group.textureId] : null;
+                const tex = (group.textureId >= 0 && group.textureId < entry.textures.length) ? entry.textures[group.textureId] : null;
                 if (tex === null)
                     continue;
 
                 const renderInst = renderInstManager.newRenderInst();
-                renderInst.setVertexInput(this.modelInputLayout, inst.data.vertexBufferDescriptors, inst.data.indexBufferDescriptor);
+                renderInst.setVertexInput(this.modelInputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
 
                 let offs = renderInst.allocateUniformBuffer(ModelProgram.ub_ModelParams, 16);
                 const mapped = renderInst.mapUniformBufferF32(ModelProgram.ub_ModelParams);
@@ -1834,21 +1768,23 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         }
 
         for (const inst of this.animatedInstances) {
-            inst.data.pose.evaluate(inst.animator.currentFrame, this.animNodeMatrices);
+            const entry = inst.entry;
+            const animMesh = entry.animatedMesh!;
+            entry.pose!.evaluate(inst.animator.currentFrame, this.animNodeMatrices);
 
-            for (const group of inst.data.groups) {
+            for (const group of animMesh.groups) {
                 if (group.indexCount === 0)
                     continue;
-                const tex = (group.textureId >= 0 && group.textureId < inst.data.textures.length) ? inst.data.textures[group.textureId] : null;
+                const tex = (group.textureId >= 0 && group.textureId < entry.textures.length) ? entry.textures[group.textureId] : null;
                 if (tex === null)
                     continue;
-                if (group.nodeIndex < 0 || group.nodeIndex >= inst.data.nodeCount)
+                if (group.nodeIndex < 0 || group.nodeIndex >= animMesh.nodes.length)
                     continue;
 
                 mat4.mul(this.scratchWorld, inst.placementMatrix, this.animNodeMatrices[group.nodeIndex]);
 
                 const renderInst = renderInstManager.newRenderInst();
-                renderInst.setVertexInput(this.modelInputLayout, inst.data.vertexBufferDescriptors, inst.data.indexBufferDescriptor);
+                renderInst.setVertexInput(this.modelInputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
 
                 let offs = renderInst.allocateUniformBuffer(ModelProgram.ub_ModelParams, 16);
                 const mapped = renderInst.mapUniformBufferF32(ModelProgram.ub_ModelParams);
@@ -2011,30 +1947,10 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         device.destroyBuffer(this.vertexBufferDescriptors[0].buffer);
         device.destroyBuffer(this.indexBufferDescriptor.buffer);
         device.destroyTexture(this.lightmapTexture);
-        for (const t of this.textures)
-            if (t !== null)
-                device.destroyTexture(t);
-        for (const data of this.modelData.values()) {
-            device.destroyBuffer(data.vertexBufferDescriptors[0].buffer);
-            device.destroyBuffer(data.indexBufferDescriptor.buffer);
-            for (const t of data.textures)
-                if (t !== null)
-                    device.destroyTexture(t);
-        }
-        for (const data of this.animatedModelData.values()) {
-            device.destroyBuffer(data.vertexBufferDescriptors[0].buffer);
-            device.destroyBuffer(data.indexBufferDescriptor.buffer);
-            for (const t of data.textures)
-                if (t !== null)
-                    device.destroyTexture(t);
-        }
         if (this.waterVertexBufferDescriptors !== null)
             device.destroyBuffer(this.waterVertexBufferDescriptors[0].buffer);
         if (this.waterIndexBufferDescriptor !== null)
             device.destroyBuffer(this.waterIndexBufferDescriptor.buffer);
-        for (const t of this.waterFrameTextures)
-            if (t !== null)
-                device.destroyTexture(t);
         if (this.spriteRenderer !== null)
             this.spriteRenderer.destroy(device);
         if (this.npcLabelRenderer !== null)
