@@ -23,23 +23,28 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
             }
         }
         this.parts[i] = new ModelRenderer(cache, model.name, model, materials, [], undefined);
-        this.parts[i].shiftMatrices = [computeLuxShiftMatrix(info.scale, info.rotation, info.position)];
+        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, info.position), setId: -1 }];
     }
 
-    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, instance: LuxOLOInstance, indices: number[], textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
-        const bbsModel = model as BBSModel;
-        const materials: LuxMaterialInstance[] = Array(bbsModel.tims.length);
-        for (let i = 0; i < bbsModel.tims.length; i++) {
-            const tim = bbsModel.tims[i];
-            const globalIndex = textures.findIndex(t => t.name === tim.name);
-            if (globalIndex >= 0) {
-                materials[i] = new LuxMaterialInstance({ textureName: tim.name, scrollX: tim.scrollX, scrollY: tim.scrollY, textureOffset: 0 }, [textures[globalIndex]], gfxSampler);
+    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
+        const i = this.objects.findIndex(r => r.name === instance.name);
+        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId };
+        if (i > -1) {
+            this.objects[i].instances.push(modelInstance);
+        } else {
+            const bbsModel = model as BBSModel;
+            const materials: LuxMaterialInstance[] = Array(bbsModel.tims.length);
+            for (let i = 0; i < bbsModel.tims.length; i++) {
+                const tim = bbsModel.tims[i];
+                const globalIndex = textures.findIndex(t => t.name === tim.name);
+                if (globalIndex >= 0) {
+                    materials[i] = new LuxMaterialInstance({ textureName: tim.name, scrollX: tim.scrollX, scrollY: tim.scrollY, textureOffset: 0 }, [textures[globalIndex]], gfxSampler);
+                }
             }
+            const renderer = new ModelRenderer(cache, instance.name, model, materials, [], undefined);
+            renderer.instances = [modelInstance];
+            this.objects.push(renderer);
         }
-        const renderer = new ModelRenderer(cache, instance.name, model, materials, [], undefined);
-        renderer.shiftMatrices = [computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position)];
-        indices.push(this.objects.length);
-        this.objects.push(renderer);
     }
 }
 
@@ -70,7 +75,7 @@ class ShapeRenderer extends LuxShapeRenderer {
     }
 
     protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
-                const inVertexAttributeDescriptors = [
+        const inVertexAttributeDescriptors = [
             { location: BBSShader.a_Position, bufferIndex: BBSShader.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
             { location: BBSShader.a_Color, bufferIndex: BBSShader.a_Color, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
             { location: BBSShader.a_UV, bufferIndex: BBSShader.a_UV, format: GfxFormat.F32_RG, bufferByteOffset: 0 },

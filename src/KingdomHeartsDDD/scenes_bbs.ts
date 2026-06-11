@@ -172,7 +172,6 @@ class Room implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        device.checkForLeaks();
         const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${this.id}.arc`);
         const pmp = new BBSParser(arcFile).parsePMPFromARC()!;
 
@@ -239,9 +238,13 @@ class Room implements SceneDesc {
 /*
 TODO
 
-Clean up TIM2 decoding, possibly use existing common PS2 texture code?
-    I tried using the common PS2 code initially but couldn't get it to work...
-    The texture formats on PSP are extremely similar to PS2, if not the exact same
+Fix occasional 404 errors when fetching models from OLOs (already two checks for location, need a third?)
+Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
+    This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
+Level object models have vertex color data, but it doesn't look right so color is hardcoded to white
+Make weight/joint allocation more efficient instead of padding to 8 per vertex
+Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work)
+Check for billboard textures, move DDD's code for it to Lux if there's any
 
 May your heart be your guiding key
 */
@@ -296,9 +299,13 @@ const sceneDescs = [
     "Enchanted Dominion", // sb = sleeping beauty
     new Room("SB01", "Dungeon Cell"),
     new Room("SB02", "Gates"),
+    new Room("SB39", "Gates"),
     new Room("SB03", "Maleficent's Throne"),
     new Room("SB04", "Dungeon"),
     new Room("SB05", "Hall"),
+    new Room("SB17", "Hall"),
+    new Room("SB19", "Hall"),
+    new Room("SB38", "Hall"),
     new Room("SB06", "Forbidden Mountain"),
     new Room("SB07", "Waterside"),
     new Room("SB08", "Forest Clearing"),
@@ -307,13 +314,9 @@ const sceneDescs = [
     new Room("SB11", "Audience Chamber"),
     new Room("SB12", "Audience Chamber"),
     new Room("SB14", "Hallway"),
-    new Room("SB15", "Aurora's Chamber"),
     new Room("SB16", "Tower Room"),
-    new Room("SB17", "Hall"),
+    new Room("SB15", "Aurora's Chamber"),
     new Room("SB18", "Aurora's Chamber"),
-    new Room("SB19", "Hall"),
-    new Room("SB38", "Hall"),
-    new Room("SB39", "Gates"),
     "Myseterious Tower", // yt = yensid tower
     new Room("YT01", "Sorcerer's Chamber"),
     new Room("YT02", "Mysterious Tower"),

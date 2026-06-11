@@ -41,32 +41,37 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
             }
         }
         this.parts[i] = new ModelRenderer(cache, model.name, model, materials, modelTXAs);
-        this.parts[i].shiftMatrices = [computeLuxShiftMatrix(info.scale, info.rotation, info.position)];
+        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, info.position), setId: -1 }];
     }
 
-    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, instance: LuxOLOInstance, indices: number[], textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
-        const pmo = model as DreamDropPMO;
-        const materials: LuxMaterialInstance[] = Array(pmo.materials.length);
-        const modelTXAs: LuxTXA[] = [];
-        for (let k = 0; k < pmo.materials.length; k++) {
-            if (!pmo.materials[k]) {
-                continue;
-            }
-            const t = textures.filter(texture => texture.name.startsWith(pmo.materials[k].textureName));
-            if (t.length > 0) {
-                materials[k] = new LuxMaterialInstance(pmo.materials[k], t, gfxSampler);
-                for (const txa of txas) {
-                    if (txa.textureName === pmo.materials[k].textureName) {
-                        modelTXAs.push(txa);
-                        break;
+    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
+        const i = this.objects.findIndex(r => r.name === instance.name);
+        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId };
+        if (i > -1) {
+            this.objects[i].instances.push(modelInstance);
+        } else {
+            const pmo = model as DreamDropPMO;
+            const materials: LuxMaterialInstance[] = Array(pmo.materials.length);
+            const modelTXAs: LuxTXA[] = [];
+            for (let k = 0; k < pmo.materials.length; k++) {
+                if (!pmo.materials[k]) {
+                    continue;
+                }
+                const t = textures.filter(texture => texture.name.startsWith(pmo.materials[k].textureName));
+                if (t.length > 0) {
+                    materials[k] = new LuxMaterialInstance(pmo.materials[k], t, gfxSampler);
+                    for (const txa of txas) {
+                        if (txa.textureName === pmo.materials[k].textureName) {
+                            modelTXAs.push(txa);
+                            break;
+                        }
                     }
                 }
             }
+            const renderer = new ModelRenderer(cache, instance.name, model, materials, modelTXAs, animation);
+            renderer.instances = [modelInstance];
+            this.objects.push(renderer);
         }
-        const renderer = new ModelRenderer(cache, instance.name, model, materials, modelTXAs, animation);
-        renderer.shiftMatrices = [computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position)];
-        indices.push(this.objects.length);
-        this.objects.push(renderer);
     }
 }
 

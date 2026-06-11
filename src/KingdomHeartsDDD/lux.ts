@@ -15,7 +15,8 @@ import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 
-// shared code between DDD and BBS, herein prefixed with "Lux"
+// Shared code between DDD and BBS, herein prefixed with "Lux"
+// Credit to OOT3D for the basis of the skeletal animation code
 
 export enum LuxModelFlagRenderMode {
     UNK,
@@ -79,6 +80,11 @@ export interface LuxModel {
     bbox: number[];
     shapes: LuxShape[];
     skeleton?: LuxSkeleton;
+}
+
+export interface LuxModelInstance {
+    shiftMatrix: mat4;
+    setId: number;
 }
 
 interface LuxSkeleton {
@@ -162,7 +168,7 @@ export interface LuxRoomObjects {
 }
 
 const FRAME_TIME = 0.03;
-const WORLD_SCALE = 200.0;
+const WORLD_SCALE = 200.0; // to make camera movement better, tiny XYZ coords are scaled up
 const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
 const SCRATCH_IDENTITY = mat4.create();
@@ -384,7 +390,7 @@ export class LuxShapeRenderer implements Destroyable {
 export class LuxModelRenderer implements Destroyable, Layer {
     public name: string;
     public visible: boolean = true;
-    public shiftMatrices: mat4[] = [];
+    public instances: LuxModelInstance[] = [];
     protected bboxPoints: Float32Array;
     protected shapes: LuxShapeRenderer[];
     protected hasTXA: boolean;
@@ -430,14 +436,18 @@ export class LuxModelRenderer implements Destroyable, Layer {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
+    public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, selectedSets: number[]) {
         let ranAnimation = this.animation === undefined;
         let ranTXA = !this.hasTXA;
         const template = renderHelper.renderInstManager.pushTemplate();
 
-        for (const shiftMatrix of this.shiftMatrices) {
+        for (const instance of this.instances) {
+            if (instance.setId !== -1 && !selectedSets.includes(instance.setId)) {
+                continue;
+            }
+
             if (!this.isSkybox) {
-                mat4.mul(SCRATCH_MVP, viewerInput.camera.clipFromWorldMatrix, shiftMatrix);
+                mat4.mul(SCRATCH_MVP, viewerInput.camera.clipFromWorldMatrix, instance.shiftMatrix);
                 if (!this.inView(this.bboxPoints, SCRATCH_MVP)) {
                     continue;
                 }
@@ -457,7 +467,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
             } else {
                 computeViewMatrix(SCRATCH_VIEW, viewerInput.camera);
             }
-            mat4.mul(SCRATCH_VIEW, SCRATCH_VIEW, shiftMatrix);
+            mat4.mul(SCRATCH_VIEW, SCRATCH_VIEW, instance.shiftMatrix);
             if (this.isBillboard && !this.isSkybox) {
                 calcBillboardMatrix(SCRATCH_VIEW, SCRATCH_VIEW, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
             }
@@ -559,7 +569,6 @@ export class LuxRoomRenderer implements Destroyable {
     public objects: LuxModelRenderer[];
     public sets: LuxObjectSet[];
     public selectedSetIndices: number[];
-    private setIndices: number[];
     private allSetIndices: number[][];
 
     constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[]) {
@@ -580,27 +589,18 @@ export class LuxRoomRenderer implements Destroyable {
         this.objects = [];
         this.allSetIndices = [];
         for (let i = 0; i < this.sets.length; i++) {
-            const indices: number[] = [];
-            const models: LuxModelRenderer[] = [];
             for (let j = 0; j < this.sets[i].instances.length; j++) {
                 const instance = this.sets[i].instances[j];
                 const model = objects.models.get(instance.name);
                 if (!model) {
                     continue;
                 }
-                const instanceRenderer = models.find(mr => mr.name === instance.name);
-                if (instanceRenderer) {
-                    instanceRenderer.shiftMatrices.push(computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position));
-                } else {
-                    this.setRoomObject(cache, model, instance, indices, textures, gfxSampler, txas, objects.animations.get(instance.name));
-                }
+                this.setRoomObject(cache, model, i, instance, textures, gfxSampler, txas, objects.animations.get(instance.name));
             }
-            this.allSetIndices[i] = indices;
         }
         if (this.allSetIndices.length === 0) {
             this.allSetIndices = [[]];
         }
-        this.setIndices = [];
         this.selectedSetIndices = [];
     }
 
@@ -609,10 +609,6 @@ export class LuxRoomRenderer implements Destroyable {
             this.selectedSetIndices = this.selectedSetIndices.filter(i => i !== index);
         } else {
             this.selectedSetIndices.push(index);
-        }
-        this.setIndices = [];
-        for (const i of this.selectedSetIndices) {
-            this.setIndices.push(...this.allSetIndices[i]);
         }
     }
 
@@ -631,13 +627,13 @@ export class LuxRoomRenderer implements Destroyable {
 
         for (let i = 0; i < this.parts.length; i++) {
             if (this.parts[i].visible) {
-                this.parts[i].prepareToRender(device, renderHelper, viewerInput);
+                this.parts[i].prepareToRender(device, renderHelper, viewerInput, []);
             }
         }
 
-        for (const i of this.setIndices) {
+        for (let i = 0; i < this.objects.length; i++) {
             if (this.objects[i].visible) {
-                this.objects[i].prepareToRender(device, renderHelper, viewerInput);
+                this.objects[i].prepareToRender(device, renderHelper, viewerInput, this.selectedSetIndices);
             }
         }
 
@@ -654,7 +650,7 @@ export class LuxRoomRenderer implements Destroyable {
 
     }
 
-    protected setRoomObject(cache: GfxRenderCache, model: LuxModel, instance: LuxOLOInstance, indices: number[], textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
+    protected setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
 
     }
 }

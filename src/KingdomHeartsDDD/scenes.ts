@@ -278,9 +278,14 @@ Proper depth sorting. Bboxes are inconsistent, so typical depth sorting complete
 Some skeletal animations might use hermite interpolation. Linear interpolation is assumed and some animations look wrong with it
     b_de060 and b_de140 for examples
 TXAs need cleanup and the functionality to animate opacity between frames like in the game
+    Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
+    Will probably need an altered shader that takes two texture inputs, idk how else to do it
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
 Figure out other ways level objects are loaded besides OLO (e.g. world map g objects)
 Clean up class/interface names
+Invesigate PMO model issue from BBS. Very rare here in DDD, but see Mickey in Musketeers for an example
+    I thought it was a vertex color issue originally, but it actually seems like a problem with the UVs
+    It's weird because only some parts of the same model have wrong UVs, while others are correct
 
 May your heart be your guiding key
 */

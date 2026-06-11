@@ -444,9 +444,8 @@ export class BBSParser extends DreamDropParser {
             shape.joints = new Uint8Array(vertexCount * 8);
             for (let i = 0; i < vertexCount; i++) {
                 const ret2 = this.offset;
-                let incAmount = 0;
 
-                if (hasSkeleton && flags.weightFormat != CoordinateFormat.NO_VERTEX) {
+                if (hasSkeleton && flags.weightFormat !== CoordinateFormat.NO_VERTEX) {
                     for (let j = 0; j < w; j++) {
                         switch (flags.weightFormat) {
                             case CoordinateFormat.NORMALIZED_8_BITS:
@@ -476,14 +475,12 @@ export class BBSParser extends DreamDropParser {
                         shape.uvs[(i * 2) + 1] = this.getByte() / NORMALIZED_8_SCALE;
                         break;
                     case CoordinateFormat.NORMALIZED_16_BITS:
-                        incAmount = (2 - ((this.offset - ret2) & 1)) & 1;
-                        this.offset += incAmount;
+                        this.offset += (2 - ((this.offset - ret2) & 1)) & 1;
                         shape.uvs[i * 2] = this.getUshort() / NORMALIZED_16_SCALE;
                         shape.uvs[(i * 2) + 1] = this.getUshort() / NORMALIZED_16_SCALE;
                         break;
                     case CoordinateFormat.FLOAT_32_BITS:
-                        incAmount = (4 - ((this.offset - ret2) & 3)) & 3;
-                        this.offset += incAmount;
+                        this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                         shape.uvs[i * 2] = this.getFloat();
                         shape.uvs[(i * 2) + 1] = this.getFloat();
                         break;
@@ -534,8 +531,7 @@ export class BBSParser extends DreamDropParser {
                             }
                             break;
                         case ColorFormat.ABGR_8888_32BITS:
-                            incAmount = (4 - ((this.offset - ret2) & 3)) & 3;
-                            this.offset += incAmount;
+                            this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                             shape.colors[(i * 4) + 0] = this.getByte();
                             shape.colors[(i * 4) + 1] = this.getByte();
                             shape.colors[(i * 4) + 2] = this.getByte();
@@ -543,17 +539,16 @@ export class BBSParser extends DreamDropParser {
                             break;
                     }
                 }
-                shape.colors[i * 4] /= COLOR_SCALE;
-                shape.colors[(i * 4) + 1] /= COLOR_SCALE;
-                shape.colors[(i * 4) + 2] /= COLOR_SCALE;
-                shape.colors[(i * 4) + 3] /= COLOR_SCALE;
-                // temp workaround for skeletoned mesh colors being inconsistent (???) 
-                // this still doesn't fix some models, idk how since the colors are forced to be white?
                 if (hasSkeleton) {
                     shape.colors[i * 4] = 1.0;
                     shape.colors[(i * 4) + 1] = 1.0;
                     shape.colors[(i * 4) + 2] = 1.0;
                     shape.colors[(i * 4) + 3] = 1.0;
+                } else {
+                    shape.colors[i * 4] /= COLOR_SCALE;
+                    shape.colors[(i * 4) + 1] /= COLOR_SCALE;
+                    shape.colors[(i * 4) + 2] /= COLOR_SCALE;
+                    shape.colors[(i * 4) + 3] /= COLOR_SCALE;
                 }
 
                 switch (flags.vertexFormat) {
@@ -563,15 +558,13 @@ export class BBSParser extends DreamDropParser {
                         shape.vertices[(i * 3) + 2] = this.getByte() / NORMALIZED_8_SCALE;
                         break;
                     case CoordinateFormat.NORMALIZED_16_BITS:
-                        incAmount = (2 - ((this.offset - ret2) & 1)) & 1;
-                        this.offset += incAmount;
+                        this.offset += (2 - ((this.offset - ret2) & 1)) & 1;
                         shape.vertices[i * 3] = this.getShort() / NORMALIZED_16_SCALE;
                         shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_16_SCALE;
                         shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_16_SCALE;
                         break;
                     case CoordinateFormat.FLOAT_32_BITS:
-                        incAmount = (4 - ((this.offset - ret2) & 3)) & 3;
-                        this.offset += incAmount;
+                        this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                         shape.vertices[i * 3] = this.getFloat();
                         shape.vertices[(i * 3) + 1] = this.getFloat();
                         shape.vertices[(i * 3) + 2] = this.getFloat();
