@@ -188,6 +188,7 @@ class Room implements SceneDesc {
             }
         }
 
+        // try to locate model files from the sets (they don't give a location, only a name...)
         const models: Map<string, BBSModel> = new Map();
         const validModels = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
         for (const set of sets) {
@@ -241,10 +242,13 @@ TODO
 Fix occasional 404 errors when fetching models from OLOs (already two checks for location, need a third?)
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
-Level object models have vertex color data, but it doesn't look right so color is hardcoded to white
+Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
 Make weight/joint allocation more efficient instead of padding to 8 per vertex
 Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work)
 Check for billboard textures, move DDD's code for it to Lux if there's any
+Investigate webgl texture error in JB10 (probably a mismatched texture header?)
+Add default OLOs
+Add save states
 
 May your heart be your guiding key
 */
@@ -254,16 +258,16 @@ const id = "KHBBS";
 const name = "Kingdom Hearts Birth by Sleep";
 const sceneDescs = [
     "Land of Departure",
-    new Room("DP01", "Forecourt (Day)"),
+    new Room("DP01", "Forecourt"),
     new Room("DP07", "Forecourt (Night)"),
     new Room("DP14", "Forecourt (No Lights)"),
-    new Room("DP08", "Forecourt (Broken)"),
+    new Room("DP08", "Forecourt (Ruined)"),
     new Room("DP02", "Great Hall"),
-    new Room("DP09", "Great Hall (Broken)"),
+    new Room("DP09", "Great Hall (Ruined)"),
     new Room("DP03", "Ventus's Room"),
     new Room("DP04", "Ventus's Room (Night)"),
     new Room("DP05", "Mountain Path"),
-    new Room("DP16", "Mountain Path"),
+    new Room("DP16", "Mountain Path (Boss)"),
     new Room("DP06", "Summit"),
     new Room("DP15", "Ruins (Night)"),
     new Room("DP11", "Chamber of Waking"),
@@ -381,7 +385,7 @@ const sceneDescs = [
     new Room("PP14", "Night Sky"),
     "Disney Town", // dc = disney castle
     new Room("DC01", "Library"),
-    new Room("DC02", "Main Plaza"), // toon town real?
+    new Room("DC02", "Main Plaza"),
     new Room("DC03", "Fruitball Court"),
     new Room("DC14", "Fruitball (Minigame)"),
     new Room("DC13", "Ice Cream (Minigame)"),
@@ -438,10 +442,24 @@ const sceneDescs = [
     new Room("BD19", "Peter Pan BG"),
     "World Map",
     new Room("WM01", "World Map"),
-    "Events", // jb = re-used jungle book id?
+    "Events",
     new Room("JB50", "Lanes Between"),
     new Room("JB52", "Realm of Darkness"),
     new Room("JB53", "World Map Event"),
+    "Jungle Book (Unfinished)",
+    new Room("JB01", "Louie's Ruins"),
+    new Room("JB09", "Eminence"),
+    new Room("JB10", "Jungle"),
+    new Room("JB11", "Man-Village River"),
+    "Jungle Book (Placeholder Rooms)",
+    new Room("JB02", "Court"),
+    new Room("JB03", "Path Crossroads"),
+    new Room("JB04", "UG Ruins Entrance"),
+    new Room("JB05", "UG Ruins Passage 1"),
+    new Room("JB06", "UG Ruins Passage 2"),
+    new Room("JB07", "UG Courtyard"),
+    new Room("JB08", "Jungle Near Ruins"),
+    new Room("JB12", "Bog")
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
