@@ -10,7 +10,7 @@ export enum CTRTFormat {
     RGB_888,
     RGBA_5551,
     RGB_565,
-    RGBA_4444, // unused
+    RGBA_4444,
     LA8,
     HILO8, // unused
     L8,
@@ -41,6 +41,8 @@ export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
             return decodeTexture(TextureFormat.RGBA5551, ctrt.width, ctrt.height, ctrt.data);
         case CTRTFormat.RGB_565:
             return decodeTexture(TextureFormat.RGB565, ctrt.width, ctrt.height, ctrt.data);
+        case CTRTFormat.RGBA_4444:
+            return decodeTexture(TextureFormat.RGBA4444, ctrt.width, ctrt.height, ctrt.data);
         case CTRTFormat.LA8:
             return decodeTexture(TextureFormat.LA8, ctrt.width, ctrt.height, ctrt.data);
         case CTRTFormat.L8:

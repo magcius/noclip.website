@@ -53,7 +53,7 @@ function getArcSubDirectory(name: string) {
         case "w":
             return "weapon";
         default:
-            throw `Unknown chara prefix for \"${name}\"`;
+            throw `Unknown arc prefix for \"${name}\"`;
     }
 }
 
@@ -450,15 +450,15 @@ const sceneDescs = [
     new Room("JB09", "Eminence"),
     new Room("JB10", "Jungle"),
     new Room("JB11", "Man-Village River"),
-    "Jungle Book (Placeholder Rooms)",
-    new Room("JB02", "Court"),
-    new Room("JB03", "Path Crossroads"),
-    new Room("JB04", "UG Ruins Entrance"),
-    new Room("JB05", "UG Ruins Passage 1"),
-    new Room("JB06", "UG Ruins Passage 2"),
-    new Room("JB07", "UG Courtyard"),
-    new Room("JB08", "Jungle Near Ruins"),
-    new Room("JB12", "Bog")
+    "Placeholder Rooms",
+    new Room("JB02", "jb02 Court"),
+    new Room("JB03", "jb03 Path Crossroads"),
+    new Room("JB04", "jb04 UG Ruins Entrance"),
+    new Room("JB05", "jb05 UG Ruins Passage 1"),
+    new Room("JB06", "jb06 UG Ruins Passage 2"),
+    new Room("JB07", "jb07 UG Courtyard"),
+    new Room("JB08", "jb08 Jungle Near Ruins"),
+    new Room("JB12", "jb12 Bog")
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

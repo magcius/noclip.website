@@ -12,7 +12,7 @@ import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
-import { DREAMDROP_INVALID_SETDATA, DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_OLO, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/data";
+import { DREAMDROP_INVALID_SETDATA, DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_DROP_OLO, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_OLO, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture, LuxTXA } from "./lux";
 
 function getCharaSubDirectory(name: string) {
@@ -237,6 +237,14 @@ class Room implements SceneDesc {
             }
         }
 
+        if (DREAMDROP_VALID_DROP_OLO.indexOf(this.id) !== -1) {
+            for (const [setName, oloName] of new Map<string, string>([["Dive Objects", this.id], ["Dive Ring Prizes", "d_ring_prize"]])) {
+                const oloFile = await context.dataFetcher.fetchData(`${pathBase}/minigame/${oloName}.olo`);
+                const olo = new DreamDropParser(oloFile).parseOLO();
+                sets.push({ name: setName, instances: olo.objects });
+            }
+        }
+
         const models: Map<string, DreamDropPMO> = new Map();
         const animations: Map<string, LuxSkeletalAnimation> = new Map();
         const validModels = [...DREAMDROP_VALID_BOSS, ...DREAMDROP_VALID_D_OBJ, ...DREAMDROP_VALID_E_OBJ, ...DREAMDROP_VALID_ENEMY, ...DREAMDROP_VALID_F_OBJ,
@@ -285,6 +293,7 @@ Clean up class/interface names
 Invesigate PMO model issue from BBS. Very rare here in DDD, but see Mickey in Musketeers for an example
     I thought it was a vertex color issue originally, but it actually seems like a problem with the UVs
     It's weird because only some parts of the same model have wrong UVs, while others are correct
+Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect) skybox geometry
 
 May your heart be your guiding key
 */
@@ -455,7 +464,7 @@ const sceneDescs = [
     new Room("de10", "Petting Plaza"),
     "World Map",
     new Room("wm01", "World Map"),
-    "Treasure Planet",
+    "Treasure Planet (Unfinished)",
     new Room("tp01", "The Legacy's Deck"),
     "Unfinished Rooms",
     new Room("di60", "di60 Ocean"),
