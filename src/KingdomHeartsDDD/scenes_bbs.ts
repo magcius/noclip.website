@@ -9,8 +9,7 @@ import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel }
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
-import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON } from "./config/arc";
-import { BBS_VALID_PRESET_ARC } from "./config/setdata";
+import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON, BBS_VALID_PRESET_ARC } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxTexture } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, TIM2Texture } from "./texture";
