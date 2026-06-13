@@ -1860,6 +1860,9 @@ export type MobyClassHeader = {
 }
 export const SIZEOF_MOBY_CLASS = 0x48;
 export function readMobyClassHeader(view: DataViewExt): MobyClassHeader {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_low.h#L138
+    */
     return {
         packetTableOffset: view.getInt32(0x0),
         meshInfo: readMobyMeshInfo(view.subview(0x4)),
@@ -1897,6 +1900,9 @@ export type MobyMeshInfo = {
 };
 
 export function readMobyMeshInfo(view: DataViewExt): MobyMeshInfo {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_low.h#L131
+    */
     return {
         highLodCount: view.getUint8(0x0),
         lowLodCount: view.getUint8(0x1),
