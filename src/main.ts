@@ -463,11 +463,11 @@ class Main {
         this._onRequestAnimationFrame();
     }
 
-    private _reloadCurrentSceneDesc(sceneSaveState: string | null = null): void {
-        if (sceneSaveState === null)
-            sceneSaveState = this._getSceneSaveState();
+    private _reloadCurrentSceneDesc(saveState: SaveState | null = null): void {
+        if (saveState === null)
+            saveState = this._getSceneSaveState();
         if (this.currentSceneDesc !== null)
-            this._loadSceneDesc(this.currentSceneDesc, sceneSaveState, true);
+            this._loadSceneDesc(this.currentSceneDesc, saveState, true);
     }
 
     private initializePlatforms(): void {
@@ -583,43 +583,46 @@ class Main {
             this._saveCurrentTimeState(this._getCurrentSceneDescId()!);
     }
 
-    private _decodeHashString(hashString: string): [string, string] {
-        let sceneDescId: string = '', sceneSaveState: string = '';
+    private _decodeHashString(hashString: string): [string, SaveState | null] {
+        let sceneDescId: string = '', saveStateStr: string | null = null;
         const firstSemicolon = hashString.indexOf(';');
         if (firstSemicolon >= 0) {
             sceneDescId = hashString.slice(0, firstSemicolon);
-            sceneSaveState = hashString.slice(firstSemicolon + 1);
+            saveStateStr = hashString.slice(firstSemicolon + 1);
         } else {
             sceneDescId = hashString;
         }
 
-        return [sceneDescId, sceneSaveState];
+        const saveState = saveStateStr !== null ? this._deserializeSaveState(saveStateStr) : null;
+        return [sceneDescId, saveState];
     }
 
-    private _decodeHash(): [string, string] {
+    private _decodeHash(): [string | null, SaveState | null] {
         const hash = window.location.hash;
         if (hash.startsWith('#')) {
             return this._decodeHashString(decodeURIComponent(hash.slice(1)));
         } else {
-            return ['', ''];
+            return ['', null];
         }
     }
 
     private _onHashChange(): void {
         const [sceneDescId, sceneSaveState] = this._decodeHash();
-        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        const sceneDesc = sceneDescId !== null ? this.sceneDatabase.getSceneDescForId(sceneDescId) : null;
         if (sceneDesc !== null)
             this._loadSceneDesc(sceneDesc, sceneSaveState);
     }
 
     private _loadInitialStateFromHash(): void {
-        const [sceneDescId, sceneSaveState] = this._decodeHash();
-        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        let [sceneDescId, sceneSaveState] = this._decodeHash();
+        const sceneDesc = sceneDescId !== null ? this.sceneDatabase.getSceneDescForId(sceneDescId) : null;
         if (sceneDesc !== null) {
             // Load save slot 0 from session storage.
-            const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 0);
-            const sceneState = this.saveManager.loadState(key) ?? sceneSaveState;
-            this._loadSceneDesc(sceneDesc, sceneState);
+            if (sceneSaveState === null) {
+                const key = this.saveManager.getSaveStateSlotKey(sceneDescId!, 0);
+                sceneSaveState = this._deserializeSaveState(this.saveManager.loadState(key));
+            }
+            this._loadSceneDesc(sceneDesc, sceneSaveState);
         }
     }
 
@@ -744,7 +747,7 @@ class Main {
         resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio / this.pixelSize);
     }
 
-    private _getSceneSaveState() {
+    private _getSceneSaveState(): SaveState {
         const saveState: SaveState = {
             sceneTime: 0,
             cameraWorldMatrix: this.viewer.camera.worldMatrix,
@@ -758,41 +761,12 @@ class Main {
             saveState.extraData = new ArrayBufferSlice(extraData, 0, byteLength);
         }
 
+        return saveState;
+    }
+
+    private _getSceneSaveStateStr() {
+        const saveState = this._getSceneSaveState();
         return this.saveStateSerializer.getSaveState(saveState);
-    }
-
-    private _tryLoadSceneSaveState(str: string): boolean {
-        const saveState: SaveState = {
-            sceneTime: 0,
-            cameraWorldMatrix: this.viewer.camera.worldMatrix,
-            extraData: null,
-        };
-
-        if (!this.saveStateSerializer.loadSaveState(saveState, str))
-            return false;
-
-        this.viewer.sceneTime = saveState.sceneTime;
-
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.extraData !== null)
-            this.viewer.scene.deserializeSaveState(saveState.extraData);
-
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.cameraUpdateForced();
-
-        return true;
-    }
-
-    private _loadSceneSaveState(state: string | null): boolean {
-        if (state === '' || state === null)
-            return false;
-
-        if (this._tryLoadSceneSaveState(state)) {
-            // Force an update of the URL whenever we successfully load state...
-            this._saveStateAndUpdateURL();
-            return true;
-        } else {
-            return false;
-        }
     }
 
     private _getCurrentSceneDescId() {
@@ -829,7 +803,7 @@ class Main {
         if (this.currentSceneDesc === null)
             return;
 
-        const sceneStateStr = this._getSceneSaveState();
+        const sceneStateStr = this._getSceneSaveStateStr();
         const currentSceneDescId = this._getCurrentSceneDescId()!;
         const key = this.saveManager.getSaveStateSlotKey(currentSceneDescId, 0);
         this.saveManager.saveTemporaryState(key, sceneStateStr);
@@ -865,7 +839,44 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
-    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null, timeState: TimeState | null): void {
+    private _applySaveState(saveState: SaveState): void {
+        mat4.copy(this.viewer.camera.worldMatrix, saveState.cameraWorldMatrix);
+        this.viewer.sceneTime = saveState.sceneTime;
+
+        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.extraData !== null)
+            this.viewer.scene.deserializeSaveState(saveState.extraData);
+
+        if (this.viewer.cameraController !== null)
+            this.viewer.cameraController.cameraUpdateForced();
+    }
+
+    private _deserializeSaveState(str: string | null): SaveState | null {
+        if (str === null)
+            return null;
+
+        const saveState: SaveState = {
+            sceneTime: 0,
+            cameraWorldMatrix: mat4.create(),
+            extraData: null,
+        };
+
+        if (!this.saveStateSerializer.loadSaveState(saveState, str))
+            return null;
+
+        return saveState;
+    }
+
+    private _loadSaveStateString(str: string | null): boolean {
+        const saveState = this._deserializeSaveState(str);
+        if (saveState !== null) {
+            this._applySaveState(saveState);
+            return true;
+        } else {
+            return true;
+        }
+    }
+
+    private _onSceneChanged(scene: SceneGfx, saveState: SaveState | null, timeState: TimeState | null): void {
         scene.onstatechanged = () => {
             this._saveStateAndUpdateURL();
         };
@@ -889,21 +900,24 @@ class Main {
         if (timeState !== null)
             this._applyTimeState(timeState);
 
-        if (!this._loadSceneSaveState(sceneStateStr)) {
+        if (saveState !== null) {
+            this._applySaveState(saveState);
+            this._saveStateAndUpdateURL();
+        } else {
             const camera = this.viewer.camera;
 
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
-            const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
+            const didLoadSaveState = this._loadSaveStateString(this.saveManager.loadState(key));
 
-            if (!didLoadCameraState) {
+            if (!didLoadSaveState) {
                 if (scene.getDefaultWorldMatrix !== undefined)
                     scene.getDefaultWorldMatrix(camera.worldMatrix);
                 else
                     mat4.identity(camera.worldMatrix);
             }
-
-            mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
+
+        mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
 
         this._saveStateAndUpdateURL();
         this.ui.sceneChanged();
@@ -915,15 +929,15 @@ class Main {
 
     private doSaveStatesAction(action: SaveStatesAction, key: string): void {
         if (action === SaveStatesAction.Save) {
-            this.saveManager.saveState(key, this._getSceneSaveState());
+            this.saveManager.saveState(key, this._getSceneSaveStateStr());
         } else if (action === SaveStatesAction.Delete) {
             this.saveManager.deleteState(key);
         } else if (action === SaveStatesAction.Load) {
             const state = this.saveManager.loadState(key);
-            this._loadSceneSaveState(state);
+            this._loadSaveStateString(state);
         } else if (action === SaveStatesAction.LoadDefault) {
             const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
-            this._loadSceneSaveState(state);
+            this._loadSaveStateString(state);
         }
     }
 
@@ -951,9 +965,10 @@ class Main {
         this.destroyablePool.length = 0;
     }
 
-    private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
+    private _loadSceneDesc(sceneDesc: SceneDesc, saveState: SaveState | null = null, force: boolean = false): void {
         if (this.currentSceneDesc === sceneDesc && !force) {
-            this._loadSceneSaveState(sceneStateStr);
+            if (saveState !== null)
+                this._applySaveState(saveState);
             return;
         }
 
@@ -1015,7 +1030,7 @@ class Main {
                 dataFetcher.setProgress();
                 this.loadingSceneDesc = null;
                 this.viewer.setScene(scene);
-                this._onSceneChanged(scene, sceneStateStr, timeState);
+                this._onSceneChanged(scene, saveState, timeState);
             }
         });
 
@@ -1024,9 +1039,9 @@ class Main {
     }
 
     // SceneLoader API
-    public loadSceneById(sceneGroup: string, sceneId: string, sceneSaveState: string | null): void {
+    public loadSceneById(sceneGroup: string, sceneId: string, saveState: SaveState | null): void {
         const sceneDesc = assertExists(this.sceneDatabase.getSceneDescForGroupAndId(sceneGroup, sceneId));
-        this._loadSceneDesc(sceneDesc, sceneSaveState, true);
+        this._loadSceneDesc(sceneDesc, saveState, true);
     }
 
     private _makeUI() {

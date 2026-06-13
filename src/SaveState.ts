@@ -30,26 +30,9 @@ function deserializeCameraV2_V3(m: mat4, view: DataView, byteOffs: number): numb
     return 0x04*4*3;
 }
 
-export function serializeMat4_V2_V3(view: DataView, byteOffs: number, m: ReadonlyMat4): number {
-    view.setFloat32(byteOffs + 0x00, m[0],  true);
-    view.setFloat32(byteOffs + 0x04, m[4],  true);
-    view.setFloat32(byteOffs + 0x08, m[8],  true);
-    view.setFloat32(byteOffs + 0x0C, m[12], true);
-    view.setFloat32(byteOffs + 0x10, m[1],  true);
-    view.setFloat32(byteOffs + 0x14, m[5],  true);
-    view.setFloat32(byteOffs + 0x18, m[9],  true);
-    view.setFloat32(byteOffs + 0x1C, m[13], true);
-    view.setFloat32(byteOffs + 0x20, m[2],  true);
-    view.setFloat32(byteOffs + 0x24, m[6],  true);
-    view.setFloat32(byteOffs + 0x28, m[10], true);
-    view.setFloat32(byteOffs + 0x2C, m[14], true);
-    // 12 floats = 48 bytes
-    return 0x04*4*3;
-}
-
 const scratchQuat = quat.create();
 function compressFrame_V1(view: DataView, byteOffs: number, m: ReadonlyMat4): number {
-    // 3 floats for position + 30-bit quaternion for rotation = 16 bytes
+    // 3 floats for position + 32-bit quaternion for rotation = 16 bytes
     view.setFloat32(byteOffs + 0x00, m[12], true);
     view.setFloat32(byteOffs + 0x04, m[13], true);
     view.setFloat32(byteOffs + 0x08, m[14], true);
