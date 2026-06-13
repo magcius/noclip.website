@@ -89,23 +89,21 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
                 header: packetHeaders[j],
                 body: packetBody,
             });
-            if (rgbaRemap) {
-                const rgbaRemapEntry = rgbaRemap[rgbaRemapIndex];
-                regularVertPtr += packetBody.regularVerts.length;
-                morphingVertPtr += packetBody.morphingVerts.length;
-                if (regularVertPtr * 2 >= rgbaRemapEntry.block1!.length) {
-                    assert(regularVertPtr * 2 === rgbaRemapEntry.block1!.length);
-                    if (rgbaRemapEntry.block2) {
-                        assert(morphingVertPtr * 2 === rgbaRemapEntry.block2!.length);
-                    }
-                    rgbaRemapIndex++;
-                    regularVertPtr = 0;
-                    morphingVertPtr = 0;
-                }
-            }
-        }
-        if (rgbaRemap) {
-            // assert(rgbaRemapIndex === rgbaRemap.length);
+            // disabled, needs more reverse engineering work
+            // if (rgbaRemap) {
+            //     const rgbaRemapEntry = rgbaRemap[rgbaRemapIndex];
+            //     regularVertPtr += packetBody.regularVerts.length;
+            //     morphingVertPtr += packetBody.morphingVerts.length;
+            //     if (regularVertPtr * 2 >= rgbaRemapEntry.block1!.length) {
+            //         assert(regularVertPtr * 2 === rgbaRemapEntry.block1!.length);
+            //         if (rgbaRemapEntry.block2) {
+            //             assert(morphingVertPtr * 2 === rgbaRemapEntry.block2!.length);
+            //         }
+            //         rgbaRemapIndex++;
+            //         regularVertPtr = 0;
+            //         morphingVertPtr = 0;
+            //     }
+            // }
         }
 
         packets.push(packetsInThisLod);
@@ -405,17 +403,18 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
         morphingRgbaIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyzw(0));
         ptr += tieVuHeader.morphingVertexCount * 0x4;
     } else {
-        if (rgbaRemaps) {
-            for (let i = 0; i < regularVerts.length; i++) {
-                assert(rgbaRemaps.block1 !== null);
-                const rgbaIndex = rgbaRemaps.block1[(rgbaRemapBaseRegularVert + i) * 2];
-                assert(rgbaIndex !== undefined);
-                regularRgbaIndices.push(rgbaIndex);
-            }
+        if (rgbaRemaps) { 
+            // disabled, this needs more reverse engineering work
+            // for (let i = 0; i < regularVerts.length; i++) {
+            //     assert(rgbaRemaps.block1 !== null);
+            //     const rgbaIndex = rgbaRemaps.block1[(rgbaRemapBaseRegularVert + i) * 2];
+            //     assert(rgbaIndex !== undefined);
+            //     regularRgbaIndices.push(rgbaIndex);
+            // }
         }
     }
 
-    // I found a way to parse this but I dunno what it does
+    // I can parse this but I dunno what it does
     alignTo(0x10);
     const unknownFlags: number[] = [];
     let unknownFlagsRemaining = tieVuHeader.stripCount + 1;
@@ -465,7 +464,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
             normalIndex = morphingNormalIndices[i].x; // all 3 components are normal indices, not sure why there are 3, maybe to do with lod morphing
             rgbaIndex = morphingRgbaIndices[i].x - 64;
         } else {
-            // TODO
+            // TODO: rgba remaps for rac2
         }
         imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {

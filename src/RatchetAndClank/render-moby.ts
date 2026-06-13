@@ -285,7 +285,7 @@ export class MobyGeometry {
                     if (adGif.tex0.low === -1) {
                         textureIndex = -1;
                     } else {
-                        textureIndex = textureIndices[adGif.tex0.low];
+                        textureIndex = textureIndices[adGif.tex0.low] ?? 0; // FIXME: should not fall back to zero
                     }
                     assert(textureIndex !== undefined);
                     currentMaterial = {
@@ -415,7 +415,7 @@ export class MobyRenderer {
                 };
                 if (distanceToCamera > farDist) continue;
                 lod = distanceToCamera < midDist ? 0 : 1;
-                lodAlpha = 1.0 - (distanceToCamera - midDist) / (farDist - midDist);
+                lodAlpha = Math.max(1, 1 - (distanceToCamera - midDist) / (farDist - midDist));
             } else {
                 lod = lodSetting;
             }

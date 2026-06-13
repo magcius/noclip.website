@@ -20,7 +20,7 @@ if (gn < 1 || gn > 4) {
     process.exit(1);
 }
 
-const baseDataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), `./data`);
+const baseDataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), `../../../data`);
 
 const outputDir = path.join(baseDataDir, `RatchetAndClank${gn}`);
 await fs.mkdir(outputDir, { recursive: true });
@@ -110,7 +110,6 @@ for (const levelSectors of tableOfContents.levelSectors) {
 
     // level/chunk_n
     const chunkFiles: { tfragFile: DataViewExt, collisionFile: DataViewExt }[] = [];
-    const collisionChunkFiles: DataViewExt[] = [];
     for (let chunkNum = 0; chunkNum < levelDescriptor.chunks.chunks.length; chunkNum++) {
         const chunkSector = levelDescriptor.chunks.chunks[chunkNum];
         if (chunkSector.startSector === 0) continue;
@@ -137,47 +136,74 @@ for (const levelSectors of tableOfContents.levelSectors) {
     const metaFile = { files, levelDataHeader, levelDescriptor };
     await extractLevelFile(`level_{}.json`, new DataViewExt(encoder.encode(JSON.stringify(metaFile)).buffer, { littleEndian: true }));
 
-    // // test parsing everything
-    // const resources: LevelResources = {
-    //     levelCoreHeader: null,
-    //     gameplayHeader: null,
-    //     levelSettings: null,
-    //     paths: null,
-    //     grindPaths: null,
-    //     directionLights: null,
-    //     pointLights: null,
-    //     collisionGetter: null,
-    //     tfrags: null,
-    //     tfragTextures: null,
-    //     tieTextures: null,
-    //     tieOClasses: null,
-    //     tieClasses: null,
-    //     tieClassTextureIndices: null,
-    //     tieInstances: null,
-    //     tieInstancesByOClass: null,
-    //     shrubTextures: null,
-    //     shrubOClasses: null,
-    //     shrubClasses: null,
-    //     shrubClassTextureIndices: null,
-    //     shrubInstances: null,
-    //     shrubInstancesByOClass: null,
-    //     sky: null,
-    //     skyTextures: null,
-    //     mobyInstances: null,
-    // };
-    // await load(resources, {
-    //     coreDataFilePromise: Promise.resolve(decompress(levelCoreDataWad)),
-    //     gameplayFilePromise: Promise.resolve(decompress(gameplayFile)),
-    //     coreIndexFilePromise: Promise.resolve(levelCoreIndex),
-    //     gsRamFilePromise: Promise.resolve(gsRam),
-    // });
+    // test parsing everything
+    const resources: LevelResources = {
+        levelCoreHeader: null,
+        gameplayHeader: null,
+        gsTable: null,
+        levelSettings: null,
+        paths: null,
+        grindPaths: null,
+        directionLights: null,
+        pointLights: null,
+        collisionGetter: null,
+        tfrags: null,
+        tfragTextures: null,
+        tieTextures: null,
+        tieOClasses: null,
+        tieClasses: null,
+        tieClassTextureIndices: null,
+        tieInstances: null,
+        tieInstancesByOClass: null,
+        tieAmbientRgbas: null,
+        mobyTextures: null,
+        mobyGsStashList: null,
+        mobyOClasses: null,
+        mobyClasses: null,
+        mobyClassTextureIndices: null,
+        mobyInstances: null,
+        mobyInstancesByOClass: null,
+        shrubTextures: null,
+        shrubOClasses: null,
+        shrubClasses: null,
+        shrubClassTextureIndices: null,
+        shrubInstances: null,
+        shrubInstancesByOClass: null,
+        sky: null,
+        skyTextures: null,
+    };
+    const requiredProperties = Object.fromEntries(Object.entries(resources).map(kv => {
+        if (["tieAmbientRgbas"].includes(kv[0])) return [kv[0], false];
+        else return [kv[0],true]
+    }))
+    if (chunkFiles.length) {
+        for (let i = 0; i < chunkFiles.length; i++) {
+            await load(gn, i, resources, {
+                coreDataFilePromise: Promise.resolve(decompress(levelCoreDataWad)),
+                gameplayFilePromise: Promise.resolve(decompress(gameplayFile)),
+                coreIndexFilePromise: Promise.resolve(levelCoreIndex),
+                gsRamFilePromise: Promise.resolve(gsRam),
+                chunkTfragFilePromise: Promise.resolve(decompress(chunkFiles[i].tfragFile)),
+                chunkCollisionFilePromise: Promise.resolve(decompress(chunkFiles[i].collisionFile))
+            });
+        }
+    } else {
+        await load(gn, null, resources, {
+            coreDataFilePromise: Promise.resolve(decompress(levelCoreDataWad)),
+            gameplayFilePromise: Promise.resolve(decompress(gameplayFile)),
+            coreIndexFilePromise: Promise.resolve(levelCoreIndex),
+            gsRamFilePromise: Promise.resolve(gsRam),
+            chunkTfragFilePromise: null,
+            chunkCollisionFilePromise: null
+        });
+    }
 
-    // // assert every key is populated
-    // for (const [key, value] of Object.entries(resources)) {
-    //     if (value === null) {
-    //         throw new Error(`Level ${levelNum}: ${key} was not populated`);
-    //     }
-    // }
+    // assert every key is populated
+    for (const [key, required] of Object.entries(requiredProperties)) {
+        if (required && !resources[key as keyof typeof resources]) {
+            throw new Error(`Level ${levelNum}: ${key} was not populated`);
+        }
+    }
 }
 
 await disk.close();
