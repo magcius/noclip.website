@@ -5,6 +5,7 @@ import { DataFetcher } from "./DataFetcher.js";
 import { DataShare } from "./DataShare.js";
 import { GfxRenderInstManager } from "./gfx/render/GfxRenderInstManager.js";
 import InputManager from "./InputManager.js";
+import { SaveState } from "./SaveState.js";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;
@@ -20,7 +21,7 @@ export interface GraphObjBase extends Destroyable {
 }
 
 export interface SceneLoader {
-    loadSceneById(sceneGroup: string, sceneId: string, sceneSaveState: string | null): void;
+    loadSceneById(sceneGroup: string, sceneId: string, saveState: SaveState | null): void;
 }
 
 export interface SceneContext {

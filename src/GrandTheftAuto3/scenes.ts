@@ -1,25 +1,21 @@
 
 import * as rw from 'librw';
-import meta from './scenes.json';
-import { SceneDesc, SceneGroup, SceneGfx } from '../viewer.js';
-import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal/index.js';
-import { decompress } from '../Common/Compression/Deflate.js';
-import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
-import { DataFetcher } from '../DataFetcher.js';
-import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render.js';
-import { SceneContext, Destroyable } from '../SceneBase.js';
-import { assert, assertExists, leftPad } from '../util.js';
-import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags, INTERIOR_EVERYWHERE } from './item.js';
-import { parseTimeCycle, ColorSet } from './time.js';
-import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water.js';
-import { mat4 } from 'gl-matrix';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { colorNewCopy, OpaqueBlack } from '../Color.js';
-import { MathConstants } from '../MathHelpers.js';
-import { serializeMat4 } from '../Camera.js';
-import { btoa } from '../Ascii85.js';
 import { decompressBC } from '../Common/bc_texture.js';
+import { decompress } from '../Common/Compression/Deflate.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { Destroyable, SceneContext } from '../SceneBase.js';
+import { assert, assertExists, leftPad } from '../util.js';
+import { BasisFile, BasisFormat, initializeBasis } from '../vendor/basis_universal/index.js';
+import { SceneDesc, SceneGfx, SceneGroup } from '../viewer.js';
+import { createItemInstance, INTERIOR_EVERYWHERE, ItemDefinition, ItemPlacement, ObjectDefinition, ObjectFlags, parseItemDefinition, parseItemPlacement, parseItemPlacementBinary } from './item.js';
+import { AreaRenderer, DrawParams, GTA3Renderer, MeshFragData, MeshInstance, ModelCache, rwTexture, SceneRenderer, SkyRenderer, Texture, TextureArray } from './render.js';
+import meta from './scenes.json';
+import { ColorSet, parseTimeCycle } from './time.js';
+import { parseWater, parseWaterPro, waterDefinition, waterMeshFragData } from './water.js';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;
@@ -257,25 +253,6 @@ export class GTA3SceneDesc implements SceneDesc {
                 }
             }
         }
-    }
-
-    private generateSaveStates(ipls: ItemPlacement[]): { [k: string]: string } {
-        const worldMatrix = mat4.create();
-        const saveStateTmp = new Uint8Array(512);
-        const saveStateView = new DataView(saveStateTmp.buffer);
-        const saveStates = new Map<string, string>();
-        for (const ipl of ipls) for (const enex of ipl.interiors) {
-            if (enex.interior === 0 || enex.name === 'changer') continue;
-            mat4.identity(worldMatrix);
-            const eyeHeight = 1.6; // metres
-            mat4.translate(worldMatrix, worldMatrix, [enex.exitPos[1], enex.exitPos[2] + eyeHeight, enex.exitPos[0]]);
-            mat4.rotateY(worldMatrix, worldMatrix, MathConstants.DEG_TO_RAD * (enex.exitAngle - 90));
-            const len = 1 + serializeMat4(saveStateView, 1, worldMatrix);
-            const saveState = 'A' + btoa(saveStateTmp, len);
-            const key = `SaveState_${this.meta.id}/${enex.interior}/${enex.name}/1`;
-            saveStates.set(key, saveState);
-        }
-        return Object.assign({}, ...[...saveStates.entries()].sort().map(([k, v]) => ({[k]: v})));
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {

@@ -1,22 +1,25 @@
+
 import { mat4 } from "gl-matrix";
-import { btoa } from "../Ascii85.js";
-import { serializeMat4 } from "../Camera.js";
 import { SceneLoader } from "../SceneBase.js";
+import { SaveState } from "../SaveState.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 const SCENE_GROUP_ID = "RagnarokOnline";
 
-const STATE_BYTES = 1 + 48 + 1 + 4;
-const scratch = new Uint8Array(STATE_BYTES);
-const scratchView = new DataView(scratch.buffer);
-
 export function triggerTravel(sceneLoader: SceneLoader, destMapId: string, arrivalCellX: number | undefined, arrivalCellY: number | undefined, sourceCameraWorldMatrix: mat4): void {
-    scratchView.setUint8(0, 0);
-    serializeMat4(scratchView, 1, sourceCameraWorldMatrix);
-    let byteLength = 1 + 48;
+    let extraData: ArrayBufferSlice | null = null;
     if (arrivalCellX !== undefined && arrivalCellY !== undefined) {
-        scratchView.setUint8(byteLength++, 1);
-        scratchView.setInt16(byteLength, arrivalCellX, true); byteLength += 2;
-        scratchView.setInt16(byteLength, arrivalCellY, true); byteLength += 2;
+        extraData = new ArrayBufferSlice(new ArrayBuffer(5));
+        const view = extraData.createDataView();
+        view.setUint8(0, 1);
+        view.setInt16(1, arrivalCellX, true);
+        view.setInt16(3, arrivalCellY, true);
     }
-    sceneLoader.loadSceneById(SCENE_GROUP_ID, destMapId, `A${btoa(scratch, byteLength)}`);
+
+    const saveState: SaveState = {
+        cameraWorldMatrix: sourceCameraWorldMatrix,
+        sceneData: extraData,
+    };
+
+    sceneLoader.loadSceneById(SCENE_GROUP_ID, destMapId, saveState);
 }
