@@ -1836,7 +1836,7 @@ export type MobyClassHeader = {
     jointCount: number,
     unknown9: number,
     rac1ByteA: number,
-    rac12ByteB: number, // rac12 -> if 0 use rac2 format, else 1; rac34 -> team textures
+    rac12ByteB: number, // rac12 -> if 0 use rac2 format, else use rac1 format; rac34 -> team textures
     sequenceCount: number,
     soundCount: number,
     lodTrans: number,
@@ -1865,7 +1865,7 @@ export function readMobyClassHeader(view: DataViewExt): MobyClassHeader {
         jointCount: view.getUint8(0x8),
         unknown9: view.getUint8(0x9),
         rac1ByteA: view.getUint8(0xa),
-        rac12ByteB: view.getUint8(0xb), // rac12 -> if 0 use rac2 format, else 1; rac34 -> team textures
+        rac12ByteB: view.getUint8(0xb),
         sequenceCount: view.getUint8(0xc),
         soundCount: view.getUint8(0xd),
         lodTrans: view.getUint8(0xe),
@@ -1913,30 +1913,29 @@ export function readMobyMesh(gn: GN, mobyView: DataViewExt, packetTableOffset: n
     const packets = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader));
     const packetsLod0 = packets.slice(0, meshInfo.highLodCount);
     const packetsLod1 = packets.slice(meshInfo.highLodCount);
-
-    // const metalPacketHeaders = mobyView.subdivide(packetTableOffset + meshInfo.metalBegin * 0x10, meshInfo.metalCount, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
-    // const metalPackets = metalPacketHeaders.map(header => mobyView.subview(header.vertexOffset, header.vertexDataSize * 0x10)).map(readMobyMeshPacket);
+    // TODO: read metal packets
 
     return {
         packetHeaders,
         packetsByLod: [packetsLod0, packetsLod1],
-        // metalPacketHeaders,
-        // metalPackets,
     };
 }
 
 export type MobyMeshPacketHeader = {
     vifListOffset: number,
-    vifListSize: number, // In 16 byte units.
-    vifListTextureUnpackOffset: number, // No third UNPACK if zero.
+    vifListSize: number,
+    vifListTextureUnpackOffset: number,
     vertexOffset: number,
-    vertexDataSize: number, // Includes header, in 16 byte units.
-    unknownD: number, // unknown_d == (0xf + transfer_vertex_count * 6) / 0x10
-    unknownE: number, // unknown_e == (3 + transfer_vertex_count) / 4
-    transferVertexCount: number, // Number of vertices sent to VU1.
+    vertexDataSize: number,
+    unknownD: number,
+    unknownE: number,
+    transferVertexCount: number,
 };
 export const SIZEOF_MOBY_MESH_PACKET_HEADER = 0x10;
 export function readMobyMeshPacketHeader(view: DataViewExt): MobyMeshPacketHeader {
+    /**
+     * https://github.com/chaoticgd/wrench/blob/master/src/engine/moby_packet.h#L83
+     */
     return {
         vifListOffset: view.getInt32(0x0),
         vifListSize: view.getUint16(0x4),
@@ -2001,6 +2000,12 @@ export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHe
 
 export function readMobyVertexTable(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader) {
     let arrayOffset = packetHeader.vertexOffset;
+    function alignTo(size: number) {
+        if (arrayOffset % size !== 0) {
+            arrayOffset += size - (arrayOffset % size);
+        }
+    }
+
     const vertexTableHeader = readVertexTableHeader(meshGn, packetView.subview(arrayOffset));
     arrayOffset += SIZEOF_VERTEX_TABLE_HEADER(meshGn);
 
@@ -2017,40 +2022,44 @@ export function readMobyVertexTable(meshGn: GN, packetView: DataViewExt, packetH
     const matrixTransfers = packetView.subdivide(arrayOffset, vertexTableHeader.matrixTransferCount, SIZEOF_MOBY_MATRIX_TRANSFER).map(view => readMobyMatrixTransfer(view));
     arrayOffset += vertexTableHeader.matrixTransferCount * SIZEOF_MOBY_MATRIX_TRANSFER;
 
-    // align 8
-    if (arrayOffset % 4 != 0) {
-        arrayOffset += 2;
-    }
-    if (arrayOffset % 8 != 0) {
-        arrayOffset += 4;
-    }
+    alignTo(8);
 
+    // appends verts to the list by cloning them from the cache
     const duplicateVertices = packetView.getArrayOfNumbers(arrayOffset, vertexTableHeader.duplicateVertexCount, Uint16Array).map(value => value >> 7);
 
-    // fix write addr
+    /*
+    I am so confused by this...
+    */
+
+    // shift all the cache slot values 7 verts to the left
     for (let i = 7; i < vertices.length; i++) {
         vertices[i - 7].cacheAddress = vertices[i].cacheAddress;
     }
 
-    let epilogueVertexCount = 0;
+    // calculate how many blocks are left
+    let epilogueCount = 0;
     if (meshGn === 1) {
-        epilogueVertexCount = (vertexTableHeader.unknownE - vertexTableHeader.vertexTableOffset) / 0x10 - vertexCount;
+        epilogueCount = (vertexTableHeader.unknownE - vertexTableHeader.vertexTableOffset) / 0x10 - vertexCount;
     } else {
-        epilogueVertexCount = packetHeader.vertexDataSize - vertexTableHeader.vertexTableOffset / 0x10 - vertexCount;
+        epilogueCount = packetHeader.vertexDataSize - vertexTableHeader.vertexTableOffset / 0x10 - vertexCount;
     }
-    assert(epilogueVertexCount < 7);
+    assert(epilogueCount < 7);
+
+    // starting at the 7th last vertex, populate cache addresses from epilogue
     vertexOffset += Math.max(7 - vertexCount, 0) * SIZEOF_MOBY_VERTEX;
-    for (let i = Math.max(7 - vertexCount, 0); i < epilogueVertexCount; i++) {
-        const vertex = readMobyEpilogueVertex(packetView.subview(vertexOffset));
-        vertexOffset += SIZEOF_MOBY_VERTEX;
+    for (let i = Math.max(7 - vertexCount, 0); i < epilogueCount; i++) {
+        const cacheAddress = readMobyVertexCacheAddress(packetView.subview(vertexOffset));
+        vertexOffset += SIZEOF_MOBY_VERTEX; // advance a full vertex even though we only read 2 bytes
         const dest = vertexCount + i - 7;
-        vertices[dest].cacheAddress = vertex.writeAddress;
+        vertices[dest].cacheAddress = cacheAddress;
     }
-    const last = readMobyEpilogueVertex(packetView.subview(vertexOffset - 0x10));
-    for (let i = Math.max(7 - vertexCount - epilogueVertexCount, 0); i < 6; i++) {
-        const dest = vertexCount + epilogueVertexCount + i - 7;
+
+    // once we reach the last 16 byte block, read up to 6 more cache addresses from the last block starting at 0x4
+    const trailingCacheAddresses = packetView.getArrayOfNumbers(vertexOffset - SIZEOF_MOBY_VERTEX + 0x4, 6, Uint16Array);
+    for (let i = Math.max(7 - vertexCount - epilogueCount, 0); i < 6; i++) {
+        const dest = vertexCount + epilogueCount + i - 7;
         if (dest < vertices.length) {
-            vertices[dest].cacheAddress = last.additionalIndices[i];
+            vertices[dest].cacheAddress = trailingCacheAddresses[i];
         }
     }
 
@@ -2069,6 +2078,9 @@ export interface MobyIndicesHeader {
 }
 export const SIZEOF_MOBY_INDICES_HEADER = 0x4;
 export function readMobyIndicesHeader(view: DataViewExt): MobyIndicesHeader {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_packet.h#L36
+    */
     return {
         unknown0: view.getUint8(0x0),
         textureUnpackOffsetQuadwords: view.getUint8(0x1),
@@ -2088,6 +2100,9 @@ export interface MobyTexturePrimitive {
 };
 export const SIZEOF_MOBY_TEXTURE_PRIMITIVE = 0x40;
 export function readMobyTexturePrimitive(view: DataViewExt): MobyTexturePrimitive {
+    /*
+    https://github.com/chaoticgd/wrench/blob/master/src/engine/moby_packet.h#L44
+    */
     return {
         tex1: readGifAdData(view.subview(0x0)),
         superSecretIndex1: view.getInt32(0xc),
@@ -2112,6 +2127,9 @@ export type VertexTableHeader = {
 };
 export const SIZEOF_VERTEX_TABLE_HEADER = (meshGn: GN) => meshGn === 1 ? 0x20 : 0x10;
 export function readVertexTableHeader(gn: GN, view: DataViewExt): VertexTableHeader {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_vertex.cpp#L25-L45
+    */
     if (gn === 1) {
         return {
             matrixTransferCount: view.getInt32(0x0),
@@ -2149,10 +2167,11 @@ export type MobyVertex = {
 export const SIZEOF_MOBY_VERTEX = 0x10;
 export function readMobyVertex(view: DataViewExt): MobyVertex {
     /*
+    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/moby_vertex.h#L31-L70
     Skip skinning data for now because it's very complicated
     */
     return {
-        cacheAddress: view.getUint16(0x0) & 0x1FF, // 9 bit
+        cacheAddress: readMobyVertexCacheAddress(view), // 9 bit
         normalAzumith: view.getInt8(0x8),
         normalElevation: view.getInt8(0x9),
         x: view.getInt16(0xa),
@@ -2161,11 +2180,8 @@ export function readMobyVertex(view: DataViewExt): MobyVertex {
     };
 }
 
-export function readMobyEpilogueVertex(view: DataViewExt) {
-    return {
-        writeAddress: view.getUint16(0x0) & 0x1FF, // 9 bit
-        additionalIndices: view.getArrayOfNumbers(0x4, 6, Uint16Array),
-    };
+export function readMobyVertexCacheAddress(view: DataViewExt) {
+    return view.getUint16(0x0) & 0x1FF;
 }
 
 export type MobyMatrixTransfer = {
@@ -2174,6 +2190,9 @@ export type MobyMatrixTransfer = {
 };
 export const SIZEOF_MOBY_MATRIX_TRANSFER = 0x2;
 export function readMobyMatrixTransfer(view: DataViewExt) {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_vertex.h#L99
+    */
     return {
         sprJointIndex: view.getUint8(0x0),
         vu0DestAddr: view.getUint8(0x1),
