@@ -58,7 +58,7 @@ function getVifUnpackFormatByteSize(format: number): number {
         assert(vn === 0x03);
         return 2;
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -685,7 +685,7 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
                 }
             } else {
                 console.error(`Unsupported format ${hexzero(format, 2)}`);
-                throw "whoops";
+                throw new Error("whoops");
             }
         } else if ((cmd & 0x7F) === 0x50 || (cmd & 0x7F) === 0x51) { // DIRECT
             // We need to be at the start of a vertex run.
@@ -725,7 +725,7 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
                     currentGSConfiguration.depthWrite = (data1 & 1) === 0;
                 } else {
                     console.warn(`Unknown GS Register ${hexzero(addr, 2)}`);
-                    throw "whoops";
+                    throw new Error("whoops");
                 }
 
                 packetsIdx += 0x10;
@@ -789,7 +789,7 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
             packetsIdx += 0x04;
         } else {
             console.error(`Unknown VIF command ${hexzero(cmd, 2)} at ${hexzero(packetsIdx, 4)}`);
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 }

@@ -136,7 +136,7 @@ export class AreaLightInfo {
         else if (lightType === LightType.Planet)
             return this.Planet;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 }
 
@@ -155,7 +155,7 @@ function blendActorLightPos(dst: LightInfo, camera: Camera, a: LightInfo, b: Lig
         vec3.transformMat4(scratchVec3, dst.Position, camera.viewMatrix);
         vec3.lerp(dst.Position, a.Position, b.Position, t);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

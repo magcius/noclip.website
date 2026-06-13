@@ -527,7 +527,7 @@ export class GX_Program extends DeviceProgram {
             const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
             return nrm ? `MulNormalMatrix(UnpackMatrix(u_PosMtx[${pnMtxIdx}]), ${src})` : `(UnpackMatrix(u_PosMtx[${pnMtxIdx}]) * ${src})`;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -545,7 +545,7 @@ export class GX_Program extends DeviceProgram {
         if (index === GX.TexCoordID.TEXCOORD5) return `(a_TexMtx4567Idx.y * 256.0)`;
         if (index === GX.TexCoordID.TEXCOORD6) return `(a_TexMtx4567Idx.z * 256.0)`;
         if (index === GX.TexCoordID.TEXCOORD7) return `(a_TexMtx4567Idx.w * 256.0)`;
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     // TexGen
@@ -588,7 +588,7 @@ export class GX_Program extends DeviceProgram {
             const texMtxIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
             return `(UnpackMatrix(u_PostTexMtx[${texMtxIdx}]) * ${src})`;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -710,7 +710,7 @@ varying vec4 v_Color1;
         case GX.IndTexScale._64: return `1.0/64.0`;
         case GX.IndTexScale._128: return `1.0/128.0`;
         case GX.IndTexScale._256: return `1.0/256.0`;
-        default: throw "whoops";
+        default: throw new Error("whoops");
         }
     }
 
@@ -815,7 +815,7 @@ varying vec4 v_Color1;
         case GX.IndTexAlphaSel.T: return `${baseCoord}.y`;
         case GX.IndTexAlphaSel.U: return `${baseCoord}.z`;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -827,7 +827,7 @@ varying vec4 v_Color1;
         case GX.IndTexFormat._4: return `TevMask(${baseCoord}, 0xF0)`;
         case GX.IndTexFormat._3: return `TevMask(${baseCoord}, 0xF8)`;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -884,7 +884,7 @@ varying vec4 v_Color1;
         case GX.CC.RASA:
             return `${swapA}${swapA}${swapA}`;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -920,7 +920,7 @@ varying vec4 v_Color1;
         case GX.CA.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CA.ZERO:  return `0.0`;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -1076,7 +1076,7 @@ varying vec4 v_Color1;
         case GX.IndTexMtxID.T2:
             return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -1232,7 +1232,7 @@ varying vec4 v_Color1;
         } else if (fogType === GX.FogType.ORTHO_REVEXP2) {
             return `1.0 - exp2(-8.0 * (1.0 - ${base}) * (1.0 - ${base}));`;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -1268,7 +1268,7 @@ ${this.generateFogAdj(`t_FogBase`)}
         case GfxFormat.F32_RG:   return 'vec2';
         case GfxFormat.F32_RGB:  return 'vec3';
         case GfxFormat.F32_RGBA: return 'vec4';
-        default: throw "whoops";
+        default: throw new Error("whoops");
         }
     }
 
@@ -1534,7 +1534,7 @@ export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID
     case GX.ColorChannelID.COLOR_NULL:
         return GX.RasColorChannelID.COLOR_ZERO;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 

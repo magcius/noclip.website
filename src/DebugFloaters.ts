@@ -702,7 +702,7 @@ class GlobalMIDIControls {
         else if (midi.kind === 'slider')
             return 0 + midi.index;
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 
     public bindObject(obj: { [k: string]: any }): void {

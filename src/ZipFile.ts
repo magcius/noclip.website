@@ -193,6 +193,6 @@ export function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
         const compressedData = entry.data.slice(0x04 + propertiesSize);
         return LZMA.decompress(compressedData, properties, entry.uncompressedSize!);
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 }

@@ -29,7 +29,7 @@ function loadAsset(img: ArrayBufferLike, asset: Asset) {
     return img.slice(2048 * asset.offset, 2048 * (asset.offset + asset.size));
 }
 
-const pathBase = "../../../data/GrandTheftAuto3/models/gta3";
+const pathBase = "./data/GrandTheftAuto3/models/gta3";
 
 function main() {
     const assets = loadDIR(readFileSync(pathBase + ".dir").buffer);

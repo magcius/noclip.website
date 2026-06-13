@@ -82,9 +82,11 @@ export enum GfxFormat {
     U8_RGBA_SRGB    = makeFormat(FormatTypeFlags.U8,        FormatCompFlags.RGBA,             FormatFlags.sRGB | FormatFlags.Normalized),
     U16_R           = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.R,                FormatFlags.None),
     U16_R_NORM      = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.R,                FormatFlags.Normalized),
+    U16_RG          = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.RG,               FormatFlags.None),
     U16_RG_NORM     = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.RG,               FormatFlags.Normalized),
-    U16_RGBA_NORM   = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.RGBA,             FormatFlags.Normalized),
     U16_RGB         = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.RGB,              FormatFlags.None),
+    U16_RGBA        = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.RGBA,             FormatFlags.None),
+    U16_RGBA_NORM   = makeFormat(FormatTypeFlags.U16,       FormatCompFlags.RGBA,             FormatFlags.Normalized),
     U32_R           = makeFormat(FormatTypeFlags.U32,       FormatCompFlags.R,                FormatFlags.None),
     U32_RG          = makeFormat(FormatTypeFlags.U32,       FormatCompFlags.RG,               FormatFlags.None),
     S8_R            = makeFormat(FormatTypeFlags.S8,        FormatCompFlags.R,                FormatFlags.None),
@@ -161,7 +163,7 @@ export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): 1 | 2 | 
     case FormatTypeFlags.S8:
         return 1;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -195,7 +197,7 @@ export function getFormatByteSize(fmt: GfxFormat): number {
     case FormatTypeFlags.BC5_UNORM:
     case FormatTypeFlags.BC5_SNORM:
     case FormatTypeFlags.BC7:
-        throw "whoops"; // Not valid to call on compressed texture formats...
+        throw new Error("whoops"); // Not valid to call on compressed texture formats...
     default:
         const typeByteSize = getFormatTypeFlagsByteSize(typeFlags);
         const componentCount = getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
@@ -227,7 +229,7 @@ export function getFormatSamplerKind(fmt: GfxFormat): GfxSamplerFormatKind {
     else if (typeFlags === FormatTypeFlags.S8 || typeFlags === FormatTypeFlags.S16 || typeFlags === FormatTypeFlags.S32)
         return GfxSamplerFormatKind.Sint;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function isFormatTextureCompressionBC(fmt: GfxFormat): boolean {

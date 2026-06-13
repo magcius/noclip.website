@@ -98,6 +98,6 @@ export class ParamFile {
         else if (field.type === 'u8')
             return this.view.getUint8(this.dataOffs[row] + field.fieldOffs);
         else
-            throw "whoops";
+            throw new Error("whoops");
     }
 }

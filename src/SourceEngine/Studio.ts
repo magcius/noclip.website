@@ -1833,7 +1833,7 @@ class StudioModelMeshInstance {
         else if (data.vertexSize === 3*0x04)
             this.staticLightingMode = StaticLightingMode.StudioVertexLighting3;
         else
-            throw "whoops";
+            throw new Error("whoops");
 
         const colorDescriptor: GfxVertexBufferDescriptor = { buffer: data.buffer, byteOffset: mesh.byteOffset };
         [this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor] = this.meshData.createVertexInput(cache, this.staticLightingMode, colorDescriptor);

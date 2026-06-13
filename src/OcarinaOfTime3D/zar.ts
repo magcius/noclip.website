@@ -133,5 +133,5 @@ export function parse(buffer: ArrayBufferSlice): ZAR {
     else if ([Magic.GAR5].includes(magic))
         return parseLM3DS(buffer);
     else
-        throw "whoops";
+        throw new Error("whoops");
 }

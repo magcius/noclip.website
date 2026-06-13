@@ -402,7 +402,7 @@ export class BaseEntity {
 
     private updateStudioPose(): void {
         if (this.modelStudio === null)
-            throw "whoops";
+            throw new Error("whoops");
 
         mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
         this.modelStudio.setupPoseFromSequence(this.seqindex, this.seqtime);
@@ -528,7 +528,7 @@ export class BaseEntity {
 
     public getAttachmentMatrix(attachmentIndex: number): ReadonlyMat4 {
         if (this.modelStudio === null)
-            throw "whoops";
+            throw new Error("whoops");
 
         this.updateModelMatrix();
         this.updateStudioPose();

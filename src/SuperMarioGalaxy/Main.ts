@@ -1074,7 +1074,7 @@ class AreaObjContainer extends NameObj {
         for (let i = 0; i < this.managers.length; i++)
             if (this.managers[i].name === managerName)
                 return this.managers[i];
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     public getAreaObj<T extends AreaObj>(managerName: string, position: ReadonlyVec3): T | null {

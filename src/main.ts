@@ -59,7 +59,6 @@ import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_Metroi
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum.js';
 import * as Scenes_PokemonHGSS from './nns_g3d/Scenes_PokemonHGSS.js';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool.js';
-import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007.js';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes.js';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater.js';
 import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource.js';
@@ -112,6 +111,8 @@ import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_RatchetAndClank from './RatchetAndClank/scenes.js';
+import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
+import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -140,7 +141,6 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
     Scenes_Example.sceneGroup,
-
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
@@ -202,6 +202,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_Fez.sceneGroup,
+    Scenes_RagnarokOnline.sceneGroup,
     Scenes_CounterStrikeSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
     Scenes_HalfLife2DM.sceneGroup,
@@ -230,13 +231,13 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_CasperSD.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
+    Scenes_PaperMarioTheOrigamiKing.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SpongebobRevengeOfTheFlyingDutchman.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
-    Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
@@ -319,12 +320,17 @@ class SceneDatabase {
         return this.idToSceneDesc.get(sceneDescId) ?? null;
     }
 
+    public getSceneDescForGroupAndId(sceneGroupId: string, sceneId: string): SceneDesc | null {
+        const sceneDescId = `${sceneGroupId}/${sceneId}`;
+        return this.getSceneDescForId(sceneDescId);
+    }
+
     public addSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc): void {
         assert(sceneGroup.sceneDescs.includes(sceneDesc));
-        const id = this._makeSceneDescId(sceneGroup, sceneDesc);
+        const sceneDescId = this._makeSceneDescId(sceneGroup, sceneDesc);
         this.sceneDescToGroup.set(sceneDesc, sceneGroup);
-        this.sceneDescToId.set(sceneDesc, id);
-        this.idToSceneDesc.set(id, sceneDesc);
+        this.sceneDescToId.set(sceneDesc, sceneDescId);
+        this.idToSceneDesc.set(sceneDescId, sceneDesc);
 
         if (this.onchanged !== null)
             this.onchanged();
@@ -1004,12 +1010,13 @@ class Main {
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
+        const sceneLoader = this;
 
         const timeState = IS_DEVELOPMENT ? this._loadTimeState(this.sceneDatabase.getSceneDescId(sceneDesc)) : null;
         const initialSceneTime = timeState !== null ? timeState.sceneTime : 0;
 
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, initialSceneTime,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, sceneLoader, initialSceneTime,
         };
 
         // We save loadSceneDelta's worth of old objects -- the idea being that if you're navigating between similar
@@ -1029,7 +1036,7 @@ class Main {
 
         if (promise === null) {
             console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         promise.then((scene: SceneGfx) => {
@@ -1043,6 +1050,12 @@ class Main {
 
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
+    }
+
+    // SceneLoader API
+    public loadSceneById(sceneGroup: string, sceneId: string, sceneSaveState: string | null): void {
+        const sceneDesc = assertExists(this.sceneDatabase.getSceneDescForGroupAndId(sceneGroup, sceneId));
+        this._loadSceneDesc(sceneDesc, sceneSaveState, true);
     }
 
     private _makeUI() {
@@ -1061,13 +1074,6 @@ class Main {
 
     private _toggleUI(visible?: boolean) {
         this.ui.toggleUI(visible);
-    }
-
-    private _getSceneDownloadPrefix() {
-        const sceneGroup = this.sceneDatabase.getSceneDescGroup(this.currentSceneDesc!);
-        const sceneId = this.currentSceneDesc!.id;
-        const date = new Date();
-        return `${sceneGroup.id}_${sceneId}_${date.toISOString()}`;
     }
 
     // Hooks for people who want to mess with stuff.

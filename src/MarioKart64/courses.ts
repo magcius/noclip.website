@@ -19,7 +19,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { clamp, computeModelMatrixSRT, computeModelMatrixT, lerp, lerpAngle, MatrixAxis, scaleMatrix, setMatrixAxisONB, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { clamp, computeModelMatrixSRT, computeModelMatrixT, lerp, lerpAngle, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
 import { NumberHolder } from '../MetroidPrime/particles/base_generator.js';
 import { getDerivativeBspline, getPointBspline } from '../Spline.js';
 import { interpS16 } from '../StarFoxAdventures/util.js';
@@ -1700,7 +1700,7 @@ class Entity {
             const right = vec3.normalize(scratchVec3a, vec3.cross(scratchVec3a, unit, up));
             const front = vec3.normalize(scratchVec3b, vec3.cross(scratchVec3b, right, up));
 
-            setMatrixAxisONB(dst, front, MatrixAxis.Z, up, MatrixAxis.Y);
+            setMatrixAxis(dst, right, up, front);
             setMatrixTranslation(dst, [this.pos[0], this.surfaceHeight + 0.8, this.pos[2]]);
             scaleMatrix(dst, dst, scale);
         }

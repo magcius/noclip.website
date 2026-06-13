@@ -20,7 +20,7 @@ if (gn < 1 || gn > 4) {
     process.exit(1);
 }
 
-const baseDataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), `../../../data`);
+const baseDataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), `./data`);
 
 const outputDir = path.join(baseDataDir, `RatchetAndClank${gn}`);
 await fs.mkdir(outputDir, { recursive: true });

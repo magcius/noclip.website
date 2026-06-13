@@ -21,7 +21,7 @@ function fetchBin(path: string, dataFetcher: DataFetcher): Promise<BIN.BIN> {
             const roomBinFile = assertExists(rarc.findFile('room.bin'));
             binBuffer = roomBinFile.buffer;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         const name = path.split('/').pop()!;

@@ -90,10 +90,10 @@ export function parse(buffer: ArrayBufferSlice, name: string, isSRGB: boolean): 
             assert(ddpf_dwABitMask === 0xFF000000);
             format = 'RGBA';
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     } else {
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     const dwCaps = view.getUint32(0x6C, true);

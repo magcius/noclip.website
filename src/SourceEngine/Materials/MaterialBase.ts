@@ -649,7 +649,7 @@ export abstract class BaseMaterial {
             megaStateFlags.depthWrite = true;
             this.isTranslucent = false;
         } else {
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 

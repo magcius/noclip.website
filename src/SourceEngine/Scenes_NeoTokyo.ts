@@ -34,6 +34,7 @@ const name = 'NeoTokyo';
 const sceneDescs = [
     new NeoTokyoSceneDesc('nt_ballistrade_ctg'),
     new NeoTokyoSceneDesc('nt_bullet_tdm'),
+    new NeoTokyoSceneDesc('nt_dawn_ctg'),
     new NeoTokyoSceneDesc('nt_decom_ctg'),
     new NeoTokyoSceneDesc('nt_disengage_ctg'),
     new NeoTokyoSceneDesc('nt_dusk_ctg'),
@@ -48,11 +49,13 @@ const sceneDescs = [
     new NeoTokyoSceneDesc('nt_rise_ctg'),
     new NeoTokyoSceneDesc('nt_sentinel_ctg'),
     new NeoTokyoSceneDesc('nt_shrine_ctg'),
+    new NeoTokyoSceneDesc('nt_skyline_ctg'),
     new NeoTokyoSceneDesc('nt_subsurface_ctg'),
     new NeoTokyoSceneDesc('nt_saitama_ctg'),
     new NeoTokyoSceneDesc('nt_tarmac_ctg'),
     new NeoTokyoSceneDesc('nt_threadplate_ctg'),
+    new NeoTokyoSceneDesc('nt_transit_ctg'),
     new NeoTokyoSceneDesc('nt_vtol_ctg'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

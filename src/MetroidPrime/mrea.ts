@@ -1419,7 +1419,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                     hasOPAC = true;
                 }
             } else {
-                throw "whoops";
+                throw new Error("whoops");
             }
         }
 
@@ -1537,7 +1537,7 @@ function areaVersionToGameVersion(areaVersion: AreaVersion): GameVersion {
     else if (areaVersion === AreaVersion.DKCR)
         return GameVersion.DKCR;
     else
-        throw "whoops";
+        throw new Error("whoops");
 }
 
 export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSystem, version: GameVersion): MaterialSet {

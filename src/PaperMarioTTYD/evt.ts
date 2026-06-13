@@ -980,7 +980,7 @@ export class evtmgr {
         } break;
         default:
             console.warn("unimplemented op", op[evt.opcode]);
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         if (evt.pc === oldpc && !(evt.flags & evt_flags.userfuncblock))
@@ -1314,6 +1314,6 @@ function intplGetValue(a: number, b: number, mode: number, frm: number, numFrm: 
     case 2: return a + frm**3 * (b - a) / numFrm**3;
     case 3: return a + frm**4 * (b - a) / numFrm**4;
     case 11: return a + (b - a) * (1.0 - Math.cos(Math.PI * frm) / numFrm) / 2.0;
-    default: throw "whoops";
+    default: throw new Error("whoops");
     }
 }

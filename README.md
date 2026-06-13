@@ -8,7 +8,34 @@ The reverse engineering of model formats was done by many people. See the applic
 
 Contributions are very welcome! New games, new features, and bug fixes are all very appreciated. Even small contributions like proper map names, grouping maps and new default savestates are extremely helpful.
 
-If you would like contribute, there is a Getting Started guide in the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv), pinned in the #development channel. A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
+## AI Contributions Policy
+
+* If AI was used in any capacity for your contribution (coding, reverse engineering, authoring commit messages or PR descriptions), this must be disclosed in your pull request.
+* Please only submit contributions that you have tested, reviewed, and feel you understand.
+* All comments or documentation *must* be fully human-authored. Any AI-written or even AI-assisted comments are not allowed.
+* Project maintainers reserve the right to reject contributions at any time, for any reason, including if they suspect this policy has not been correctly followed.
+
+## Development Guide
+
+To develop for noclip.website, you'll need these requisites:
+
+* Your code editor of choice (for example, [Visual Studio Code](https://code.visualstudio.com/), [WebStorm](https://www.jetbrains.com/webstorm/)),
+* [Node.js](https://nodejs.org/en/download). Choose the latest LTS version and choose the `pnpm` package manager,
+* [rustup](https://rust-lang.org/learn/get-started/).
+
+Then, use the following commands to set up your environment (only needed every so often):
+* Install dependencies from npm: `pnpm install`,
+* Set up the required rust binaries:
+  ```shell
+  rustup target add wasm32-unknown-unknown
+  cd rust
+  cargo install cargo-run-bin
+  cargo bin --install
+  ```
+
+Finally, to build and run the project, use `pnpm start`. This will start a live-reloading environment and uses filesystem watchers to auto-build the project.
+
+For any questions related to development, see the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv)'s #development channel. A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
 
 ## Controls
 

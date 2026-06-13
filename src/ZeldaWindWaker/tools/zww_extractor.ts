@@ -23,8 +23,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/ZeldaWindWaker_raw`;
-const pathBaseOut = `../../../data/ZeldaWindWaker`;
+const pathBaseIn  = `./data/ZeldaWindWaker_raw`;
+const pathBaseOut = `./data/ZeldaWindWaker`;
 
 interface SymbolMapEntry {
     sectionName: string;
