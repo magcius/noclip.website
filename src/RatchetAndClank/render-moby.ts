@@ -415,7 +415,7 @@ export class MobyRenderer {
                 };
                 if (distanceToCamera > farDist) continue;
                 lod = distanceToCamera < midDist ? 0 : 1;
-                lodAlpha = Math.max(1, 1 - (distanceToCamera - midDist) / (farDist - midDist));
+                lodAlpha = Math.min(1, 1 - (distanceToCamera - midDist) / (farDist - midDist));
             } else {
                 lod = lodSetting;
             }
