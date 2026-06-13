@@ -749,16 +749,15 @@ class Main {
 
     private _getSceneSaveState(): SaveState {
         const saveState: SaveState = {
-            sceneTime: 0,
             cameraWorldMatrix: this.viewer.camera.worldMatrix,
-            extraData: null,
+            sceneData: null,
         };
 
         // TODO(jstpierre): Pass DataView into serializeSaveState
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState) {
             const extraData = new ArrayBuffer(512);
             const byteLength = this.viewer.scene.serializeSaveState(extraData, 0);
-            saveState.extraData = new ArrayBufferSlice(extraData, 0, byteLength);
+            saveState.sceneData = new ArrayBufferSlice(extraData, 0, byteLength);
         }
 
         return saveState;
@@ -841,10 +840,9 @@ class Main {
 
     private _applySaveState(saveState: SaveState): void {
         mat4.copy(this.viewer.camera.worldMatrix, saveState.cameraWorldMatrix);
-        this.viewer.sceneTime = saveState.sceneTime;
 
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.extraData !== null)
-            this.viewer.scene.deserializeSaveState(saveState.extraData);
+        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.sceneData !== null)
+            this.viewer.scene.deserializeSaveState(saveState.sceneData);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -855,9 +853,8 @@ class Main {
             return null;
 
         const saveState: SaveState = {
-            sceneTime: 0,
             cameraWorldMatrix: mat4.create(),
-            extraData: null,
+            sceneData: null,
         };
 
         if (!this.saveStateSerializer.loadSaveState(saveState, str))

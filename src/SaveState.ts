@@ -5,9 +5,8 @@ import { atob, btoa } from "./Ascii85";
 import { assert } from "./util";
 
 export interface SaveState {
-    sceneTime: number;
     cameraWorldMatrix: mat4;
-    extraData: ArrayBufferSlice | null;
+    sceneData: ArrayBufferSlice | null;
 }
 
 function deserializeCameraV2_V3(m: mat4, view: DataView, byteOffs: number): number {
@@ -89,11 +88,11 @@ export class SaveStateSerializer {
         const byteLength = atob(this._saveStateTmp, 0, str);
 
         let byteOffs = 0;
-        dst.sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
+        // const sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
         byteOffs += 0x04;
 
         byteOffs += deserializeCameraV2_V3(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
-        dst.extraData = byteOffs < byteLength ? new ArrayBufferSlice(this._saveStateTmp.buffer, byteOffs, byteLength - byteOffs) : null;
+        dst.sceneData = byteOffs < byteLength ? new ArrayBufferSlice(this._saveStateTmp.buffer, byteOffs, byteLength - byteOffs) : null;
         return true;
     }
 
@@ -104,14 +103,13 @@ export class SaveStateSerializer {
         const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
         byteOffs++;
 
-        dst.sceneTime = 0; // Scene time not serialized in V3
         if (optionsBits & OptionsBitsV3.CompressFrame_V1) {
             byteOffs += decompressFrame_V1(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
         } else {
             byteOffs += deserializeCameraV2_V3(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
         }
 
-        dst.extraData = byteOffs < byteLength ? new ArrayBufferSlice(this._saveStateTmp.buffer, byteOffs, byteLength - byteOffs) : null;
+        dst.sceneData = byteOffs < byteLength ? new ArrayBufferSlice(this._saveStateTmp.buffer, byteOffs, byteLength - byteOffs) : null;
         return true;
     }
 
@@ -139,9 +137,9 @@ export class SaveStateSerializer {
 
         byteOffs += compressFrame_V1(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
 
-        if (saveState.extraData !== null) {
-            this._saveStateTmp.set(saveState.extraData.createTypedArray(Uint8Array), byteOffs);
-            byteOffs += saveState.extraData.byteLength;
+        if (saveState.sceneData !== null) {
+            this._saveStateTmp.set(saveState.sceneData.createTypedArray(Uint8Array), byteOffs);
+            byteOffs += saveState.sceneData.byteLength;
         }
 
         const s = btoa(this._saveStateTmp, byteOffs);

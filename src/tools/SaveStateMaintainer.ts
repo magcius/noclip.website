@@ -8,9 +8,8 @@ const saveStateSerializer = new SaveStateSerializer();
 
 function upgradeSaveState(str: string, key: string): string | null {
     const saveState: SaveState = {
-        sceneTime: 0,
         cameraWorldMatrix: mat4.create(),
-        extraData: null,
+        sceneData: null,
     };
 
     if (!saveStateSerializer.loadSaveState(saveState, str)) {

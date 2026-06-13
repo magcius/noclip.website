@@ -17,9 +17,8 @@ export function triggerTravel(sceneLoader: SceneLoader, destMapId: string, arriv
     }
 
     const saveState: SaveState = {
-        sceneTime: 0,
         cameraWorldMatrix: sourceCameraWorldMatrix,
-        extraData,
+        sceneData: extraData,
     };
 
     sceneLoader.loadSceneById(SCENE_GROUP_ID, destMapId, saveState);
