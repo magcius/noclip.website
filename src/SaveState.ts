@@ -1,5 +1,5 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, quat, ReadonlyMat4 } from "gl-matrix";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { atob, btoa } from "./Ascii85";
 import { assert } from "./util";
@@ -30,7 +30,7 @@ function deserializeCameraV2_V3(m: mat4, view: DataView, byteOffs: number): numb
     return 0x04*4*3;
 }
 
-export function serializeMat4_V2_V3(view: DataView, byteOffs: number, m: mat4): number {
+export function serializeMat4_V2_V3(view: DataView, byteOffs: number, m: ReadonlyMat4): number {
     view.setFloat32(byteOffs + 0x00, m[0],  true);
     view.setFloat32(byteOffs + 0x04, m[4],  true);
     view.setFloat32(byteOffs + 0x08, m[8],  true);
@@ -43,7 +43,59 @@ export function serializeMat4_V2_V3(view: DataView, byteOffs: number, m: mat4): 
     view.setFloat32(byteOffs + 0x24, m[6],  true);
     view.setFloat32(byteOffs + 0x28, m[10], true);
     view.setFloat32(byteOffs + 0x2C, m[14], true);
+    // 12 floats = 48 bytes
     return 0x04*4*3;
+}
+
+const scratchQuat = quat.create();
+function compressFrame_V1(view: DataView, byteOffs: number, m: ReadonlyMat4): number {
+    // 3 floats for position + 30-bit quaternion for rotation = 16 bytes
+    view.setFloat32(byteOffs + 0x00, m[12], true);
+    view.setFloat32(byteOffs + 0x04, m[13], true);
+    view.setFloat32(byteOffs + 0x08, m[14], true);
+
+    const q = scratchQuat;
+    mat4.getRotation(q, m);
+
+    // https://marc-b-reynolds.github.io/quaternions/2017/05/02/QuatQuantPart1.html#basic-half-angle-leftsqrtqright_2
+    const s = Math.sqrt(1.0 + q[3]);
+
+    // Values are in range [-1, sqrt2].
+    const x = ((q[0] / s) + 1.0) / (1.0 + Math.SQRT2) * 0x3FF;
+    const y = ((q[1] / s) + 1.0) / (1.0 + Math.SQRT2) * 0xFFF;
+    const z = ((q[2] / s) + 1.0) / (1.0 + Math.SQRT2) * 0x3FF;
+
+    assert(x >= 0 && x < 0x3FF);
+    assert(y >= 0 && y < 0xFFF);
+    assert(z >= 0 && z < 0x3FF);
+
+    const qn = x << 22 | y << 10 | z;
+    view.setUint32(byteOffs + 0x0C, qn, true);
+    return 4*4;
+}
+
+function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
+    const qn = view.getUint32(byteOffs + 0x0C, true);
+
+    const x = (((qn >>> 22) & 0x3FF) / 0x3FF) * (1.0 + Math.SQRT2) - 1.0;
+    const y = (((qn >>> 10) & 0xFFF) / 0xFFF) * (1.0 + Math.SQRT2) - 1.0;
+    const z = (((qn >>>  0) & 0x3FF) / 0x3FF) * (1.0 + Math.SQRT2) - 1.0;
+
+    const d = x*x + y*y + z*z;
+    const s = Math.sqrt(2.0 - d);
+
+    const q = scratchQuat;
+    quat.set(q, x*s, y*s, z*s, 1.0 - d);
+    mat4.fromQuat(m, q);
+
+    m[12] = view.getFloat32(byteOffs + 0x00, true);
+    m[13] = view.getFloat32(byteOffs + 0x04, true);
+    m[14] = view.getFloat32(byteOffs + 0x08, true);
+    return 4*4;
+}
+
+enum OptionsBitsV3 {
+    CompressFrame_V1 = 1,
 }
 
 export class SaveStateSerializer {
@@ -67,11 +119,15 @@ export class SaveStateSerializer {
 
         let byteOffs = 0;
         const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
-        assert(optionsBits === 0);
         byteOffs++;
 
         dst.sceneTime = 0; // Scene time not serialized in V3
-        byteOffs += deserializeCameraV2_V3(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
+        if (optionsBits & OptionsBitsV3.CompressFrame_V1) {
+            byteOffs += decompressFrame_V1(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
+        } else {
+            byteOffs += deserializeCameraV2_V3(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
+        }
+
         dst.extraData = byteOffs < byteLength ? new ArrayBufferSlice(this._saveStateTmp.buffer, byteOffs, byteLength - byteOffs) : null;
         return true;
     }
@@ -94,11 +150,11 @@ export class SaveStateSerializer {
     public getSaveState(saveState: Readonly<SaveState>): string {
         let byteOffs = 0;
 
-        const optionsBits = 0;
+        const optionsBits = OptionsBitsV3.CompressFrame_V1;
         this._saveStateView.setUint8(byteOffs, optionsBits);
         byteOffs++;
 
-        byteOffs += serializeMat4_V2_V3(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
+        byteOffs += compressFrame_V1(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
 
         if (saveState.extraData !== null) {
             this._saveStateTmp.set(saveState.extraData.createTypedArray(Uint8Array), byteOffs);
