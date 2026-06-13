@@ -764,15 +764,14 @@ class Main {
     private _tryLoadSceneSaveState(str: string): boolean {
         const saveState: SaveState = {
             sceneTime: 0,
-            cameraWorldMatrix: mat4.create(),
-            extraData: null!,
+            cameraWorldMatrix: this.viewer.camera.worldMatrix,
+            extraData: null,
         };
 
         if (!this.saveStateSerializer.loadSaveState(saveState, str))
             return false;
 
         this.viewer.sceneTime = saveState.sceneTime;
-        mat4.copy(this.viewer.camera.worldMatrix, saveState.cameraWorldMatrix);
 
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.extraData !== null)
             this.viewer.scene.deserializeSaveState(saveState.extraData);
