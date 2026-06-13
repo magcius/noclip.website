@@ -1,7 +1,7 @@
 import { mat4 } from "gl-matrix";
 import { btoa } from "../Ascii85.js";
-import { serializeMat4 } from "../Camera.js";
 import { SceneLoader } from "../SceneBase.js";
+import { serializeMat4_V2_V3 } from "../SaveState.js";
 
 const SCENE_GROUP_ID = "RagnarokOnline";
 
@@ -11,7 +11,7 @@ const scratchView = new DataView(scratch.buffer);
 
 export function triggerTravel(sceneLoader: SceneLoader, destMapId: string, arrivalCellX: number | undefined, arrivalCellY: number | undefined, sourceCameraWorldMatrix: mat4): void {
     scratchView.setUint8(0, 0);
-    serializeMat4(scratchView, 1, sourceCameraWorldMatrix);
+    serializeMat4_V2_V3(scratchView, 1, sourceCameraWorldMatrix);
     let byteLength = 1 + 48;
     if (arrivalCellX !== undefined && arrivalCellY !== undefined) {
         scratchView.setUint8(byteLength++, 1);

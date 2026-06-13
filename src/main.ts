@@ -117,11 +117,10 @@ import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/sce
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
 import { UI, Panel } from './ui.js';
-import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera.js';
+import { FPSCameraController } from './Camera.js';
 import { assertExists, assert } from './util.js';
 import { loadRustLib } from './rustlib.js';
 import { DataFetcher } from './DataFetcher.js';
-import { atob, btoa } from './Ascii85.js';
 import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager.js';
 import { RenderStatistics } from './RenderStatistics.js';
@@ -137,6 +136,8 @@ import { WebXRContext } from './WebXR.js';
 import { debugJunk } from './DebugJunk.js';
 import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
+import { SaveState, SaveStateSerializer } from './SaveState.js';
+import ArrayBufferSlice from './ArrayBufferSlice.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
@@ -376,6 +377,8 @@ class Main {
 
     private droppedFileGroup: SceneGroup;
     private sceneDatabase = new SceneDatabase(sceneGroups);
+
+    private saveStateSerializer = new SaveStateSerializer();
 
     private currentSceneDesc: SceneDesc | null = null;
 
@@ -741,73 +744,43 @@ class Main {
         resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio / this.pixelSize);
     }
 
-    private _saveStateTmp = new Uint8Array(512);
-    private _saveStateView = new DataView(this._saveStateTmp.buffer);
-    // TODO(jstpierre): Save this in main instead of having this called 8 bajillion times...
     private _getSceneSaveState() {
-        let byteOffs = 0;
-
-        const optionsBits = 0;
-        this._saveStateView.setUint8(byteOffs, optionsBits);
-        byteOffs++;
-
-        byteOffs += serializeCamera(this._saveStateView, byteOffs, this.viewer.camera);
+        const saveState: SaveState = {
+            sceneTime: 0,
+            cameraWorldMatrix: this.viewer.camera.worldMatrix,
+            extraData: null,
+        };
 
         // TODO(jstpierre): Pass DataView into serializeSaveState
-        if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs);
+        if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState) {
+            const extraData = new ArrayBuffer(512);
+            const byteLength = this.viewer.scene.serializeSaveState(extraData, 0);
+            saveState.extraData = new ArrayBufferSlice(extraData, 0, byteLength);
+        }
 
-        const s = btoa(this._saveStateTmp, byteOffs);
-        return `ShareData=${s}`;
+        return this.saveStateSerializer.getSaveState(saveState);
     }
 
-    private _loadSceneSaveStateVersion2(state: string): boolean {
-        const byteLength = atob(this._saveStateTmp, 0, state);
+    private _tryLoadSceneSaveState(str: string): boolean {
+        const saveState: SaveState = {
+            sceneTime: 0,
+            cameraWorldMatrix: mat4.create(),
+            extraData: null!,
+        };
 
-        let byteOffs = 0;
-        this.viewer.sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
-        byteOffs += 0x04;
-        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
+        if (!this.saveStateSerializer.loadSaveState(saveState, str))
+            return false;
+
+        this.viewer.sceneTime = saveState.sceneTime;
+        mat4.copy(this.viewer.camera.worldMatrix, saveState.cameraWorldMatrix);
+
+        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.extraData !== null)
+            this.viewer.scene.deserializeSaveState(saveState.extraData);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
 
         return true;
-    }
-
-    private _loadSceneSaveStateVersion3(state: string): boolean {
-        const byteLength = atob(this._saveStateTmp, 0, state);
-
-        let byteOffs = 0;
-        const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
-        assert(optionsBits === 0);
-        byteOffs++;
-
-        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
-
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.cameraUpdateForced();
-
-        return true;
-    }
-
-    private _tryLoadSceneSaveState(state: string): boolean {
-        // Version 2 starts with ZNCA8, which is Ascii85 for 'NC\0\0'
-        if (state.startsWith('ZNCA8') && state.endsWith('='))
-            return this._loadSceneSaveStateVersion2(state.slice(5, -1));
-
-        // Version 3 starts with 'A' and has no '=' at the end.
-        if (state.startsWith('A'))
-            return this._loadSceneSaveStateVersion3(state.slice(1));
-
-        if (state.startsWith('ShareData='))
-            return this._loadSceneSaveStateVersion3(state.slice(10));
-
-        return false;
     }
 
     private _loadSceneSaveState(state: string | null): boolean {

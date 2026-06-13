@@ -17,9 +17,9 @@ import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { colorNewCopy, OpaqueBlack } from '../Color.js';
 import { MathConstants } from '../MathHelpers.js';
-import { serializeMat4 } from '../Camera.js';
 import { btoa } from '../Ascii85.js';
 import { decompressBC } from '../Common/bc_texture.js';
+import { serializeMat4_V2_V3 } from '../SaveState';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;
@@ -270,7 +270,7 @@ export class GTA3SceneDesc implements SceneDesc {
             const eyeHeight = 1.6; // metres
             mat4.translate(worldMatrix, worldMatrix, [enex.exitPos[1], enex.exitPos[2] + eyeHeight, enex.exitPos[0]]);
             mat4.rotateY(worldMatrix, worldMatrix, MathConstants.DEG_TO_RAD * (enex.exitAngle - 90));
-            const len = 1 + serializeMat4(saveStateView, 1, worldMatrix);
+            const len = 1 + serializeMat4_V2_V3(saveStateView, 1, worldMatrix);
             const saveState = 'A' + btoa(saveStateTmp, len);
             const key = `SaveState_${this.meta.id}/${enex.interior}/${enex.name}/1`;
             saveStates.set(key, saveState);
