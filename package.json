@@ -61,7 +61,7 @@
     "start": {
       "command": "rsbuild dev",
       "dependencies": [
-        "build:wasm-release"
+        "build:wasm-debug"
       ],
       "service": true,
       "cascade": false,
