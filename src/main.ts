@@ -872,7 +872,7 @@ class Main {
             this._applySaveState(saveState);
             return true;
         } else {
-            return true;
+            return false;
         }
     }
 
