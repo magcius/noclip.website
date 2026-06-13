@@ -4,7 +4,7 @@ import { GN } from "./utils";
 
 export const SECTOR_SIZE = 0x800;
 
-export const ENTRY_POINTS: Record<number, number> = {
+export const ENTRY_POINTS: Record<GN, number> = {
     1: 1500,
     2: 1001,
     3: 1001,
@@ -14,6 +14,8 @@ export const ENTRY_POINTS: Record<number, number> = {
 export const TOC_MAX_SECTORS = 1024;
 export const TOC_MAX_SIZE = TOC_MAX_SECTORS * SECTOR_SIZE;
 
+// used as hints as to whether the file is a level or not (in rac234)
+// these are int32
 export const LEVEL_SECTOR_START_BYTES = new Set([
     0x0030,
     0x0164,
