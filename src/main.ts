@@ -760,7 +760,7 @@ class Main {
             saveState.sceneData = new ArrayBufferSlice(extraData, 0, byteLength);
         }
 
-        if (GlobalSaveManager.loadSetting("SaveStateFovY", false) && this.viewer.camera.fovY !== Camera.DefaultFovY) {
+        if (this.saveManager.loadSetting("SaveStateFovY", false) && this.viewer.camera.fovY !== Camera.DefaultFovY) {
             saveState.fovY = this.viewer.camera.fovY;
         }
 
