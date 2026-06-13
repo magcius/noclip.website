@@ -12,12 +12,12 @@ function upgradeSaveState(str: string, key: string): string | null {
         sceneData: null,
     };
 
-    if (!saveStateSerializer.loadSaveState(saveState, str)) {
+    if (!saveStateSerializer.deserializeSaveState(saveState, str)) {
         console.warn(`Failed to parse "${key}"`);
         return null;
     }
 
-    return saveStateSerializer.getSaveState(saveState);
+    return saveStateSerializer.serializeSaveState(saveState);
 }
 
 function main() {

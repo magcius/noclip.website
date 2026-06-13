@@ -117,7 +117,7 @@ import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/sce
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
 import { UI, Panel } from './ui.js';
-import { FPSCameraController } from './Camera.js';
+import { Camera, FPSCameraController } from './Camera.js';
 import { assertExists, assert } from './util.js';
 import { loadRustLib } from './rustlib.js';
 import { DataFetcher } from './DataFetcher.js';
@@ -760,12 +760,16 @@ class Main {
             saveState.sceneData = new ArrayBufferSlice(extraData, 0, byteLength);
         }
 
+        if (GlobalSaveManager.loadSetting("SaveStateFovY", false) && this.viewer.camera.fovY !== Camera.DefaultFovY) {
+            saveState.fovY = this.viewer.camera.fovY;
+        }
+
         return saveState;
     }
 
     private _getSceneSaveStateStr() {
         const saveState = this._getSceneSaveState();
-        return this.saveStateSerializer.getSaveState(saveState);
+        return this.saveStateSerializer.serializeSaveState(saveState);
     }
 
     private _getCurrentSceneDescId() {
@@ -846,6 +850,11 @@ class Main {
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
+
+        if (saveState.fovY !== undefined)
+            this.viewer.camera.fovY = saveState.fovY;
+
+        this.ui.sceneChanged();
     }
 
     private _deserializeSaveState(str: string | null): SaveState | null {
@@ -857,7 +866,7 @@ class Main {
             sceneData: null,
         };
 
-        if (!this.saveStateSerializer.loadSaveState(saveState, str))
+        if (!this.saveStateSerializer.deserializeSaveState(saveState, str))
             return null;
 
         return saveState;
@@ -899,7 +908,6 @@ class Main {
 
         if (saveState !== null) {
             this._applySaveState(saveState);
-            this._saveStateAndUpdateURL();
         } else {
             const camera = this.viewer.camera;
 
@@ -917,7 +925,6 @@ class Main {
         mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
 
         this._saveStateAndUpdateURL();
-        this.ui.sceneChanged();
     }
 
     private _onSceneDescSelected(sceneDesc: SceneDesc) {

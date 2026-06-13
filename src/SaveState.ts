@@ -7,6 +7,7 @@ import { assert } from "./util";
 export interface SaveState {
     cameraWorldMatrix: mat4;
     sceneData: ArrayBufferSlice | null;
+    fovY?: number;
 }
 
 function deserializeCameraV2_V3(m: mat4, view: DataView, byteOffs: number): number {
@@ -77,7 +78,8 @@ function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
 }
 
 enum OptionsBitsV3 {
-    CompressFrame_V1 = 1,
+    CompressFrame_V1 = 0b0001,
+    FovY = 0b0010,
 }
 
 export class SaveStateSerializer {
@@ -109,11 +111,16 @@ export class SaveStateSerializer {
             byteOffs += deserializeCameraV2_V3(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
         }
 
+        if (optionsBits & OptionsBitsV3.FovY) {
+            dst.fovY = this._saveStateView.getInt16(byteOffs, true) / 512;
+            byteOffs += 2;
+        }
+
         dst.sceneData = byteOffs < byteLength ? new ArrayBufferSlice(this._saveStateTmp.buffer, byteOffs, byteLength - byteOffs) : null;
         return true;
     }
 
-    public loadSaveState(dst: SaveState, str: string): boolean {
+    public deserializeSaveState(dst: SaveState, str: string): boolean {
         // Version 2 starts with ZNCA8, which is Ascii85 for 'NC\0\0'
         if (str.startsWith('ZNCA8') && str.endsWith('='))
             return this.loadSaveStateV2(dst, str.slice(5, -1));
@@ -128,19 +135,24 @@ export class SaveStateSerializer {
         return false;
     }
 
-    public getSaveState(saveState: Readonly<SaveState>): string {
-        let byteOffs = 0;
+    public serializeSaveState(saveState: Readonly<SaveState>): string {
+        let byteOffs = 1;
 
-        const optionsBits = OptionsBitsV3.CompressFrame_V1;
-        this._saveStateView.setUint8(byteOffs, optionsBits);
-        byteOffs++;
-
+        let optionsBits = OptionsBitsV3.CompressFrame_V1;
         byteOffs += compressFrame_V1(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
+
+        if (saveState.fovY !== undefined) {
+            optionsBits |= OptionsBitsV3.FovY;
+            this._saveStateView.setUint16(byteOffs, saveState.fovY * 512, true);
+            byteOffs += 2;
+        }
 
         if (saveState.sceneData !== null) {
             this._saveStateTmp.set(saveState.sceneData.createTypedArray(Uint8Array), byteOffs);
             byteOffs += saveState.sceneData.byteLength;
         }
+
+        this._saveStateView.setUint8(0, optionsBits);
 
         const s = btoa(this._saveStateTmp, byteOffs);
         return `ShareData=${s}`;
