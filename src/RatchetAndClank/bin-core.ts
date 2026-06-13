@@ -163,6 +163,10 @@ export function readTieRgbaRemap(view: DataViewExt, header: TieClassHeader): Rgb
         };
 
         let ptr = 0x10;
+        function alignTo(size: number) {
+            if (ptr % size !== 0) ptr += size - (ptr % size);
+        }
+
         const block1 = descriptor.block1Size ? packetView.subview(ptr, descriptor.block1Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array).map(v => v / 4) : null;
         ptr += descriptor.block1Size;
         const block2 = descriptor.block2Size ? packetView.subview(ptr, descriptor.block2Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
@@ -175,9 +179,7 @@ export function readTieRgbaRemap(view: DataViewExt, header: TieClassHeader): Rgb
         ptr += descriptor.block5Size;
         const block6 = descriptor.block6Size ? packetView.subview(ptr, descriptor.block6Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
         ptr += descriptor.block6Size;
-
-        // align 16
-        ptr += (16 - (ptr % 16)) % 16;
+        alignTo(0x10)
 
         packets.push({ packetSizeBytes, block1, block2, block3, block4, block5, block6 });
 
@@ -354,9 +356,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
 
     let ptr = 0;
     function alignTo(size: number) {
-        if (ptr % size !== 0) {
-            ptr += size - (ptr % size);
-        }
+        if (ptr % size !== 0) ptr += size - (ptr % size);
     }
 
     const AD_GIFS = 4;
@@ -2003,9 +2003,7 @@ export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHe
 export function readMobyVertexTable(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader) {
     let arrayOffset = packetHeader.vertexOffset;
     function alignTo(size: number) {
-        if (arrayOffset % size !== 0) {
-            arrayOffset += size - (arrayOffset % size);
-        }
+        if (arrayOffset % size !== 0) arrayOffset += size - (arrayOffset % size);
     }
 
     const vertexTableHeader = readVertexTableHeader(meshGn, packetView.subview(arrayOffset));

@@ -757,6 +757,7 @@ export const sceneGroup1: SceneGroup = {
 export const sceneGroup2: SceneGroup = {
     id: "RatchetAndClank2",
     name: "Ratchet & Clank: Going Commando",
+    hidden: !IS_DEVELOPMENT,
     sceneDescs: [
         new RatchetAndClank2SceneDesc(0, null, "Flying Lab, Aranos (Tutorial)"),
         new RatchetAndClank2SceneDesc(1, 0, "Megacorp Outlet, Oozla"),

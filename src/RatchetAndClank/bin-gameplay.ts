@@ -94,67 +94,67 @@ export function readGameplayHeader(gn: GN, view: DataViewExt) {
             struct GameplayHeader {
                 // 0x0
                 int32 levelSettings;
-                // 0x4 - InstanceBlock<DirLightInstance, DirectionalLightPacked>
+                // 0x4
                 int32 directionLightInstances;
-                // 0x8 - InstanceBlock<CameraInstance, CameraPacked>
+                // 0x8
                 int32 cameraInstances;
-                // 0xc - InstanceBlock<SoundInstance, SoundInstancePacked>
+                // 0xc
                 int32 soundInstances;
                 // 0x10 - 0x2c
                 // help message fields
-                // 0x30 - TieClassBlock
+                // 0x30
                 int32 tieClasses;
-                // 0x34 - InstanceBlock<TieInstance, GcUyaDlTieInstance>
+                // 0x34
                 int32 tieInstances;
-                // 0x38 - GroupBlock<TieGroupInstance>
+                // 0x38
                 int32 tieGroups;
-                // 0x3c - ShrubClassBlock
+                // 0x3c
                 int32 shrubClasses;
-                // 0x40 - InstanceBlock<ShrubInstance, ShrubInstancePacked>
+                // 0x40
                 int32 shrubInstances;
-                // 0x44 - GroupBlock<ShrubGroupInstance>
+                // 0x44
                 int32 shrubGroups;
-                // 0x48 - ClassBlock
+                // 0x48
                 int32 mobyClasses;
-                // 0x4c - GcUyaMobyBlock
+                // 0x4c
                 int32 mobyInstances;
-                // 0x50 - GroupBlock<MobyGroupInstance>
+                // 0x50
                 int32 mobyGroups;
-                // 0x54 - SharedDataBlock
+                // 0x54
                 int32 sharedData;
-                // 0x58 - PvarFixupBlock
+                // 0x58
                 int32 pvarMobyLinks;
-                // 0x5c - PvarTableBlock
+                // 0x5c
                 int32 pvarTable;
-                // 0x60 - PvarDataBlock
+                // 0x60
                 int32 pvarData;
-                // 0x64 - PvarFixupBlock
+                // 0x64
                 int32 pvarRelativePointers;
-                // 0x68 - InstanceBlock<CuboidInstance, ShapePacked>
+                // 0x68
                 int32 cuboids;
-                // 0x6c - InstanceBlock<SphereInstance, ShapePacked>
+                // 0x6c
                 int32 spheres;
-                // 0x70 - InstanceBlock<CylinderInstance, ShapePacked>
+                // 0x70
                 int32 cylinders;
-                // 0x74 - InstanceBlock<PillInstance, ShapePacked>
+                // 0x74
                 int32 pills;
-                // 0x78 - PathBlock
+                // 0x78
                 int32 paths;
-                // 0x7c - GrindPathBlock
+                // 0x7c
                 int32 grindPaths;
-                // 0x80 - GcUyaPointLightsBlock
+                // 0x80
                 int32 pointLights;
-                // 0x84 - EnvTransitionBlock
+                // 0x84
                 int32 envTransitions;
-                // 0x88 - CamCollGridBlock
+                // 0x88
                 int32 camCollGrid;
-                // 0x8c - GcUyaDlEnvSamplePointBlock
+                // 0x8c
                 int32 envSamplePoints;
-                // 0x90 - OcclusionMappingsBlock
+                // 0x90
                 int32 occlusion;
-                // 0x94 - TieAmbientRgbaBlock
+                // 0x94
                 int32 tieAmbientRgbas;
-                // 0x98 - AreasBlock
+                // 0x98
                 int32 areas;
             }
             */
