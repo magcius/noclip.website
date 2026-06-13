@@ -205,7 +205,7 @@ export class ShrubGeometry {
         const vertexArrayBuffer = new Float32Array(vertexCount * ShrubProgram.elementsPerVertex);
         let vertexPtr = 0;
         let currentMaterial: { texture: number, clamp: number } | undefined;
-        let tri = [null, null, null] as [ShrubVertex | null, ShrubVertex | null, ShrubVertex | null];
+        const tri = [null, null, null] as [ShrubVertex | null, ShrubVertex | null, ShrubVertex | null];
 
         for (let packetIndex = 0; packetIndex < shrub.body.packets.length; packetIndex++) {
             const commandBuffer = shrub.body.packets[packetIndex];
@@ -338,12 +338,11 @@ export class ShrubRenderer {
             }
             if (lodAlpha <= 0) continue;
 
-            // this is much slower than doing nothing because of the jumps into rust
             // find bounding sphere and frustum cull
-            // const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
-            // if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * shrubGeometry.shrub.header.scale * objectScale)) {
-            //     continue;
-            // }
+            const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
+            if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * shrubGeometry.shrub.header.scale * objectScale)) {
+                continue;
+            }
 
             shrubInstancesToDraw.push({
                 objectMatrix,

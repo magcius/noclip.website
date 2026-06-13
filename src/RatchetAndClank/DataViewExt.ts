@@ -1,3 +1,5 @@
+import { vec3, vec4 } from "gl-matrix";
+
 export type DataViewExtOptions = {
     /**
      * The default endianness to use when reading/writing values. This overrides the last arg on all get/set methods of the base DataView class.
@@ -283,6 +285,23 @@ export class DataViewExt<T extends ArrayBufferLike = ArrayBufferLike> extends Da
         const b = this.getFloat32(offset + 0x8, littleEndian);
         const a = this.getFloat32(offset + 0xc, littleEndian);
         return { r, g, b, a };
+    }
+
+    getFloat32_Vec3(offset: number, littleEndian: boolean = this.defaultLittleEndian) {
+        return vec3.fromValues(
+            this.getFloat32(offset + 0x0, littleEndian),
+            this.getFloat32(offset + 0x4, littleEndian),
+            this.getFloat32(offset + 0x8, littleEndian),
+        );
+    }
+
+    getFloat32_Vec4(offset: number, littleEndian: boolean = this.defaultLittleEndian) {
+        return vec4.fromValues(
+            this.getFloat32(offset + 0x0, littleEndian),
+            this.getFloat32(offset + 0x4, littleEndian),
+            this.getFloat32(offset + 0x8, littleEndian),
+            this.getFloat32(offset + 0xc, littleEndian),
+        );
     }
 
     getInt16_Xy(offset: number, littleEndian: boolean = this.defaultLittleEndian) {

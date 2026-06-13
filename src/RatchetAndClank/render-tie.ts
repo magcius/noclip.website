@@ -5,8 +5,8 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
 import { RatchetShaderLib } from "./shader-lib";
-import { TieClass, TieImaginaryGsCommand, TieVertex, TieVertexWithNormalAndRgba } from "./bin-core";
-import { ImaginaryGsCommandType, MegaBuffer } from "./utils";
+import { TieClass, TieVertexWithNormalAndRgba } from "./bin-core";
+import { GN, ImaginaryGsCommandType, MegaBuffer } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { mat4, vec3 } from "gl-matrix";
@@ -65,7 +65,7 @@ layout(location = ${TieProgram.a_InstanceTransform1}) in vec4 a_InstanceTransfor
 layout(location = ${TieProgram.a_InstanceTransform2}) in vec4 a_InstanceTransform2;
 layout(location = ${TieProgram.a_InstanceTransform3}) in vec4 a_InstanceTransform3;
 layout(location = ${TieProgram.a_InstanceDirectionLights}) in vec4 a_InstanceDirectionLights;
-layout(location = ${TieProgram.a_InstanceExtraData}) in vec4 a_InstanceExtraData; // x = ambient RGBA row index, y = lod morph factor
+layout(location = ${TieProgram.a_InstanceExtraData}) in vec4 a_InstanceExtraData; // x = ambient RGBA row index, y = lod morph factor, z = enable vertex colors
 
 out vec2 v_ST;
 out vec4 v_Rgba;
@@ -85,8 +85,11 @@ void main() {
     gl_Position = UnpackMatrix(u_ClipFromWorld) * positionWorld;
     v_ST = a_ST;
 
-    ivec2 ambientRgbaTexcoord = ivec2(int(a_ExtraData.z), int(a_InstanceExtraData.x));
-    vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
+    vec4 rgba = vec4(0.5, 0.5, 0.5, 1.0);
+    if (a_InstanceExtraData.z == 1.0) { // enable/disable vertex colors
+        ivec2 ambientRgbaTexcoord = ivec2(int(a_ExtraData.z), int(a_InstanceExtraData.x));
+        rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
+    }
     rgba.rgb *= 2.0; // not sure about this
     vec4 lights = a_InstanceDirectionLights;
     vec3 normal = normalize(inverse(transpose(mat3(instanceTransform))) * a_Normal);
@@ -244,7 +247,8 @@ export class TieGeometry {
                                 assert(v !== null);
                                 const { vertex, normalIndex, rgbaIndex } = v;
                                 const fixedTexcoord = fixedTexcoords[i];
-                                const normal = tie.normalsData[normalIndex];
+                                let normal = tie.normalsData[normalIndex];
+                                if (normal === undefined) normal = { x: 1 / normalScale, y: 0, z: 0 }; // FIXME: rac2 normal indices don't work
 
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.x;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.y;
@@ -343,7 +347,8 @@ export class TieRenderer {
         this.tieProgram = renderHelper.renderCache.createProgram(new TieProgram());
     }
 
-    renderTie(renderInstList: GfxRenderInstList, tieGeometriesByLod: (TieGeometry | null)[], tieClass: TieClass, tieInstanceBatch: TieInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
+    renderTie(renderInstList: GfxRenderInstList, tieGeometriesByLod: (TieGeometry | null)[], tieClass: TieClass, tieInstanceBatch: TieInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, settingLodPreset: number, settingLodBias: number, gn:GN, instanceDataBuffer: MegaBuffer): void {
+        const enableVertexColors = gn === 1;
 
         type TieDrawInstance = { objectMatrix: mat4, directionLights: number[], rgbasRow: number, lodMorphFactor: number };
         const tieInstancesToDrawByLod: TieDrawInstance[][] = [[], [], []];
@@ -383,12 +388,11 @@ export class TieRenderer {
             if (modelLodLevel === 2 && !hasLod2) { modelLodLevel = 1; lodMorphFactor = 0; }
             if (modelLodLevel === 1 && !hasLod1) { modelLodLevel = 0; lodMorphFactor = 0; }
 
-            // this is much slower than doing nothing
             // find bounding sphere and frustum cull
-            // const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
-            // if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * tieClass.scale * objectScale)) {
-            //     continue;
-            // }
+            const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
+            if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * tieClass.scale * objectScale)) {
+                continue;
+            }
 
             tieInstancesToDrawByLod[modelLodLevel].push({
                 objectMatrix,
@@ -416,7 +420,7 @@ export class TieRenderer {
                 const inst = tieInstancesToDraw[i];
                 instanceDataBuffer.ptr += fillMatrix4x4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.objectMatrix);
                 instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.directionLights[0], inst.directionLights[1], inst.directionLights[2], inst.directionLights[3]);
-                instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.rgbasRow, inst.lodMorphFactor, 0, 0);
+                instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.rgbasRow, inst.lodMorphFactor, enableVertexColors ? 1 : 0, 0);
             }
 
             renderInst.setVertexInput(

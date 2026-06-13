@@ -2,7 +2,7 @@ import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GsPrimitiveType } from "../Common/PS2/GS";
 import { DataViewExt } from "./DataViewExt";
 import { assert } from "../util";
-import { getBits, ImaginaryGsCommand, ImaginaryGsCommandBuffer, truncateTrailing0xFF } from "./utils";
+import { getBits, GN, ImaginaryGsCommand, ImaginaryGsCommandBuffer, truncateTrailing0xFF } from "./utils";
 import { readVifCommandList, VifUnpackFormat, VifUnpackReader } from "./vif";
 
 export interface GsRamTableEntry {
@@ -27,7 +27,10 @@ export function readGsRamTableEntry(view: DataViewExt) {
 }
 
 export interface TieClass {
+    header: TieClassHeader,
     normalsData: { x: number, y: number, z: number }[],
+    rgbaRemaps: (RgbaRemapPacket[] | null)[] | null; // [lod][packet], not present in rac1
+    remapsReadable: boolean[],
     nearDist: number,
     midDist: number,
     farDist: number,
@@ -40,53 +43,237 @@ export interface TiePacket {
     header: TiePacketHeader,
     body: TiePacketBody,
 };
-export function readTieClass(view: DataViewExt, oClass: number): TieClass {
+export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClass {
     /*
     https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L37
     */
 
-    // `packetOffsets[i]` points to `TiePacketHeader headers[packetCount[i]]`
-    // (relative to this struct)
-    const packetOffsets = view.getArrayOfNumbers(0x0, 3, Uint32Array);
-    const packetCounts = view.getArrayOfNumbers(0x20, 3, Uint8Array);
+    const header = readTieClassHeader(gn, view);
 
+    // `header.packetOffsets[i]` points to `TiePacketHeader packets[header.packetCount[i]]`
+    // (relative to this struct)
     const packets: TiePacket[][] = [];
 
-    const textureCount = view.getUint8(0x23);
-    const adGifsOffset = view.getUint32(0x2c);
-    const adGifs = view.subdivide(adGifsOffset, textureCount, SIZEOF_TIE_AD_GIFS).map(readTieAdGifs);
+    const adGifs = view.subdivide(header.adGifsOffset, header.textureCount, SIZEOF_TIE_AD_GIFS).map(readTieAdGifs);
 
-    const normalsOffset = view.getUint32(0xc);
-    const normalsData = view.subdivide(normalsOffset, 64, 8).map(view => view.getInt16_Xyzw(0));
+    const normalsData = view.subdivide(header.normalsOffset, header.normalsCount, 8).map(view => view.getInt16_Xyzw(0));
+
+    let rgbaRemaps = null;
+    const remapsReadable = [false, false, false];
+    if (gn >= 2) {
+        rgbaRemaps = header.rgbaRemapOffsets!.map((offset, i) => {
+            if (offset === header.adGifsOffset || header.lodHeaders![i].vertCount === 0) return null;
+            return readTieRgbaRemap(view.subview(header.normalsOffset + offset), header);
+        });
+    }
 
     // there are always 3 lods
     for (let i = 0; i < 3; i++) {
-        const packetOffset = packetOffsets[i];
-        const packetCount = packetCounts[i];
+        const packetOffset = header.packetOffsets[i];
+        const packetCount = header.packetCounts[i];
         const packetHeaders = view.subdivide(packetOffset, packetCount, SIZEOF_TIE_PACKET_HEADER).map(readTiePacketHeader);
+
+        const hasBlock3 = rgbaRemaps?.[i]?.some(packet => !!packet.block3);
+        const hasBlock4 = rgbaRemaps?.[i]?.some(packet => !!packet.block4);
+        const knownRemapFormat = !hasBlock3 && !hasBlock4;
+        const rgbaRemap = knownRemapFormat ? rgbaRemaps?.[i] : null;
+        let rgbaRemapIndex = 0;
+        let regularVertPtr = 0;
+        let morphingVertPtr = 0;
 
         const packetsInThisLod: TiePacket[] = [];
         for (let j = 0; j < packetCount; j++) {
             const packetDataOffset = packetOffset + packetHeaders[j].data;
-            const packetBody = readTiePacketBody(view.subview(packetDataOffset), packetHeaders[j], adGifs, oClass, i, j);
+            const packetBody = readTiePacketBody(gn, view.subview(packetDataOffset), packetHeaders[j], rgbaRemap ? rgbaRemap[rgbaRemapIndex] : null, regularVertPtr, morphingVertPtr, adGifs, oClass, i, j);
             packetsInThisLod.push({
                 header: packetHeaders[j],
                 body: packetBody,
-            })
+            });
+            // disabled, needs more reverse engineering work
+            // if (rgbaRemap) {
+            //     const rgbaRemapEntry = rgbaRemap[rgbaRemapIndex];
+            //     regularVertPtr += packetBody.regularVerts.length;
+            //     morphingVertPtr += packetBody.morphingVerts.length;
+            //     if (regularVertPtr * 2 >= rgbaRemapEntry.block1!.length) {
+            //         assert(regularVertPtr * 2 === rgbaRemapEntry.block1!.length);
+            //         if (rgbaRemapEntry.block2) {
+            //             assert(morphingVertPtr * 2 === rgbaRemapEntry.block2!.length);
+            //         }
+            //         rgbaRemapIndex++;
+            //         regularVertPtr = 0;
+            //         morphingVertPtr = 0;
+            //     }
+            // }
         }
 
         packets.push(packetsInThisLod);
     }
 
     return {
+        header,
         normalsData,
-        nearDist: view.getFloat32(0x10),
-        midDist: view.getFloat32(0x14),
-        farDist: view.getFloat32(0x18),
-        bsphere: view.getFloat32_Xyzw(0x30),
-        scale: view.getFloat32(0x40),
+        rgbaRemaps,
+        remapsReadable,
+        nearDist: header.nearDist,
+        midDist: header.midDist,
+        farDist: header.farDist,
+        bsphere: header.bsphere,
+        scale: header.scale,
         packets,
         adGifs,
+    };
+}
+
+type RgbaRemapPacket = {
+    packetSizeBytes: number,
+    block1: number[] | null, // <- looks a map from non-morphing vert index to rgba index
+    block2: number[] | null,
+    block3: number[] | null,
+    block4: number[] | null,
+    block5: number[] | null,
+    block6: number[] | null,
+}
+
+// needs more reverse engineering work
+// I can parse the headers but no idea what the inner data is
+export function readTieRgbaRemap(view: DataViewExt, header: TieClassHeader): RgbaRemapPacket[] {
+    const packetSizeList = view.getArrayOfNumbers(0x0, 32, Uint8Array);
+    const packetSizeListBytes = [];
+    for (let i = 0; i < packetSizeList.length; i++) {
+        if (packetSizeList[i] === 0) break;
+        packetSizeListBytes.push(packetSizeList[i] * 16);
+    }
+
+    const packets: RgbaRemapPacket[] = [];
+
+    let packetView = view.subview(0x20);
+    for (let i = 0; i < packetSizeListBytes.length; i++) {
+        const packetSizeBytes = packetSizeListBytes[i];
+        if (packetSizeBytes === 0) break;
+
+        const descriptor = {
+            block1Size: packetView.getUint16(0x0),
+            block2Size: packetView.getUint16(0x2),
+            block4Size: packetView.getUint16(0x4),
+            block5Size: packetView.getUint16(0x6),
+            block6Size: packetView.getUint16(0x8),
+            block3Size: packetView.getUint16(0xa),
+            unknown1: packetView.getUint16(0xc),
+            totalSize: packetView.getUint16(0xe),
+        };
+
+        let ptr = 0x10;
+        function alignTo(size: number) {
+            if (ptr % size !== 0) ptr += size - (ptr % size);
+        }
+
+        const block1 = descriptor.block1Size ? packetView.subview(ptr, descriptor.block1Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array).map(v => v / 4) : null;
+        ptr += descriptor.block1Size;
+        const block2 = descriptor.block2Size ? packetView.subview(ptr, descriptor.block2Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block2Size;
+        const block3 = descriptor.block3Size ? packetView.subview(ptr, descriptor.block3Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block3Size;
+        const block4 = descriptor.block4Size ? packetView.subview(ptr, descriptor.block4Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block4Size;
+        const block5 = descriptor.block5Size ? packetView.subview(ptr, descriptor.block5Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block5Size;
+        const block6 = descriptor.block6Size ? packetView.subview(ptr, descriptor.block6Size).getArrayOfNumbers(0, 0xFFFF, Uint16Array) : null;
+        ptr += descriptor.block6Size;
+        alignTo(0x10)
+
+        packets.push({ packetSizeBytes, block1, block2, block3, block4, block5, block6 });
+
+        assert(ptr === descriptor.totalSize);
+        assert(ptr === packetSizeBytes);
+
+        packetView = packetView.subview(packetSizeBytes);
+    }
+
+    return packets;
+}
+
+export type TieClassHeader = {
+    packetOffsets: number[],
+    packetCounts: number[],
+    normalsOffset: number,
+    normalsCount: number,
+    textureCount: number,
+    nearDist: number,
+    midDist: number,
+    farDist: number,
+    adGifsOffset: number,
+    bsphere: { x: number, y: number, z: number, w: number },
+}
+export function readTieClassHeader(gn: GN, view: DataViewExt) {
+    switch (gn) {
+        case 1: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L37
+            */
+            return {
+                packetOffsets: view.getArrayOfNumbers(0x0, 3, Uint32Array),
+                normalsOffset: view.getUint32(0xc),
+                normalsCount: 64, // always 64 normals in rac1
+                nearDist: view.getFloat32(0x10),
+                midDist: view.getFloat32(0x14),
+                farDist: view.getFloat32(0x18),
+                packetCounts: view.getArrayOfNumbers(0x20, 3, Uint8Array),
+                textureCount: view.getUint8(0x23),
+                adGifsOffset: view.getUint32(0x2c),
+                bsphere: view.getFloat32_Xyzw(0x30),
+                scale: view.getFloat32(0x40),
+            };
+        }
+        case 2:
+        case 3:
+        case 4: {
+            /*
+            https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L64
+            */
+            return {
+                packetOffsets: view.getArrayOfNumbers(0x0, 3, Uint32Array),
+                packetCounts: view.getArrayOfNumbers(0xc, 3, Uint8Array),
+                textureCount: view.getUint8(0xf),
+                nearDist: view.getFloat32(0x10),
+                midDist: view.getFloat32(0x14),
+                farDist: view.getFloat32(0x18),
+                adGifsOffset: view.getInt32(0x1c),
+                instanceIndex: view.getInt32(0x20),
+                cacheSizes: view.getArrayOfNumbers(0x24, 3, Uint16Array),
+                rgbaRemapOffsets: view.getArrayOfNumbers(0x2a, 3, Uint16Array),
+                ambientRgbasOffset: view.getInt32(0x30),
+                normalsOffset: view.getInt32(0x34),
+                normalsCount: view.getInt16(0x38),
+                ambientSize: view.getInt16(0x3a),
+                modeBits: view.getInt16(0x3c),
+                instanceCount: view.getInt16(0x3e),
+                scale: view.getFloat32(0x40),
+                oClass: view.getInt16(0x44),
+                tClass: view.getInt16(0x46),
+                mipDist: view.getFloat32(0x48),
+                glowRgba: view.getInt32(0x4c),
+                bsphere: view.getFloat32_Xyzw(0x50),
+                lodHeaders: view.subdivide(0x60, 3, SIZEOF_TIE_LOD_HEADER).map(readTieLodHeader),
+                glowRemapOffsets: view.getArrayOfNumbers(0x78, 3, Uint16Array),
+            };
+        }
+    }
+}
+
+export type TieLodHeader = {
+    vertCount: number,
+    triCount: number,
+    stripCount: number,
+};
+export const SIZEOF_TIE_LOD_HEADER = 0x8;
+export function readTieLodHeader(view: DataViewExt) {
+    /*
+    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L30
+    */
+    return {
+        vertCount: view.getInt16(0x0),
+        triCount: view.getInt16(0x2),
+        stripCount: view.getInt16(0x4),
     };
 }
 
@@ -138,7 +325,7 @@ const tieCommandSizes = {
 };
 
 export type TiePacketBody = ReturnType<typeof readTiePacketBody>;
-export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketHeader, adGifs: TieGifAds[], oClass: number, lod: number, packetIndex: number) {
+export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: TiePacketHeader, rgbaRemaps: RgbaRemapPacket | null, rgbaRemapBaseRegularVert: number, rgbaRemapBaseMorphingVert: number, adGifs: TieGifAds[], oClass: number, lod: number, packetIndex: number) {
     /*
     struct TiePacketBody {
         // 0x0
@@ -152,24 +339,24 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
         // align 0x10
         TieRegularVertex regularVerts[tieVuHeader.regularVertexCount];
         TieMorphingVertex morphingVerts[tieVuHeader.morphingVertexCount];
+        if (gn === 1) {
+            // align 0x10
+            uint8 regularNormalIndices[tieVuHeader.regularVertexCount];
+            // align 0x4
+            uint8vec4 morphingNormalIndices[tieVuHeader.morphingVertexCount];
+            // align 0x10
+            uint8 regularRgbaIndices[tieVuHeader.regularVertexCount];
+            // align 0x4
+            uint8vec4 morphingRgbaIndices[tieVuHeader.morphingVertexCount];
+        }
         // align 0x10
-        uint8 regularNormalIndices[tieVuHeader.regularVertexCount];
-        // align 0x4
-        uint8vec4 morphingNormalIndices[tieVuHeader.morphingVertexCount];
-        // align 0x10
-        uint8 regularRgbaIndices[tieVuHeader.regularVertexCount];
-        // align 0x4
-        uint8vec4 morphingRgbaIndices[tieVuHeader.morphingVertexCount];
-        // align 0x10
-        uint8 unknown[?];
+        uint8 unknownFlags[until the (stripCount + 1)'th flag that is either 0x7, 0xFC, or 0xF6];
     }
     */
 
     let ptr = 0;
     function alignTo(size: number) {
-        if (ptr % size !== 0) {
-            ptr += size - (ptr % size);
-        }
+        if (ptr % size !== 0) ptr += size - (ptr % size);
     }
 
     const AD_GIFS = 4;
@@ -195,24 +382,55 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
     const morphingVerts = view.subdivide(ptr, morphingVertexCount, SIZEOF_TIE_MORPHING_VERTEX).map(readTieMorphingVertex);
     ptr += morphingVertexCount * SIZEOF_TIE_MORPHING_VERTEX;
 
-    // indices into the tie's normal array
-    alignTo(0x10);
-    const regularNormalIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
-    ptr += tieVuHeader.regularVertexCount * 0x1;
-    alignTo(0x4);
-    const morphingNormalIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyz(0));
-    ptr += tieVuHeader.morphingVertexCount * 0x4;
+    // normal and rgba indices for rac1 only
+    let regularNormalIndices: number[] = [];
+    let morphingNormalIndices: { x: number, y: number, z: number }[] = [];
+    let regularRgbaIndices: number[] = [];
+    let morphingRgbaIndices: { x: number, y: number, z: number }[] = [];
+    if (gn === 1) {
+        // indices into the tie's normal array
+        alignTo(0x10);
+        regularNormalIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
+        ptr += tieVuHeader.regularVertexCount * 0x1;
+        alignTo(0x4);
+        morphingNormalIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyz(0));
+        ptr += tieVuHeader.morphingVertexCount * 0x4;
 
-    // indices into the instance's rgba array
-    alignTo(0x10);
-    const regularRgbaIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
-    ptr += tieVuHeader.regularVertexCount * 0x1;
-    alignTo(0x4);
-    const morphingRgbaIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyzw(0));
-    ptr += tieVuHeader.morphingVertexCount * 0x4;
+        // indices into the instance's rgba array
+        alignTo(0x10);
+        regularRgbaIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
+        ptr += tieVuHeader.regularVertexCount * 0x1;
+        alignTo(0x4);
+        morphingRgbaIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyzw(0));
+        ptr += tieVuHeader.morphingVertexCount * 0x4;
+    } else {
+        if (rgbaRemaps) { 
+            // disabled, this needs more reverse engineering work
+            // for (let i = 0; i < regularVerts.length; i++) {
+            //     assert(rgbaRemaps.block1 !== null);
+            //     const rgbaIndex = rgbaRemaps.block1[(rgbaRemapBaseRegularVert + i) * 2];
+            //     assert(rgbaIndex !== undefined);
+            //     regularRgbaIndices.push(rgbaIndex);
+            // }
+        }
+    }
 
-    // there's one more array of bytes after this but not sure what it is or what its length is (usually 50-60 bytes)
+    // I can calculate the length of this but not sure what it is
     alignTo(0x10);
+    const unknownFlags: number[] = [];
+    let unknownFlagsRemaining = tieVuHeader.stripCount + 1;
+    while (true) {
+        const flag = view.getUint8(ptr++);
+        if (flag == 0x7 || flag == 0xFC || flag == 0xF6) {
+            unknownFlagsRemaining--;
+            unknownFlags.push(flag);
+            if (unknownFlagsRemaining === 0) break;
+        } else if (flag == 0x3) {
+            unknownFlags.push(flag);
+        } else {
+            assert(false);
+        }
+    }
 
     const imaginaryGsBuffer = new ImaginaryGsCommandBuffer<TieStrip, { material: number, clamp: number }, TieVertexWithNormalAndRgba>();
 
@@ -226,8 +444,14 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
     // Some are written twice.
     for (let i = 0; i < regularVerts.length; i++) {
         const vertex = regularVerts[i];
-        const normalIndex = regularNormalIndices[i];
-        const rgbaIndex = regularRgbaIndices[i] - 64;
+        let normalIndex = 0;
+        let rgbaIndex = 0;
+        if (gn === 1) {
+            normalIndex = regularNormalIndices[i];
+            rgbaIndex = regularRgbaIndices[i] - 64;
+        } else {
+            // TODO: rgba remaps for rac2
+        }
         imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
             imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
@@ -235,8 +459,14 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
     }
     for (let i = 0; i < morphingVerts.length; i++) {
         const vertex = morphingVerts[i];
-        const normalIndex = morphingNormalIndices[i].x; // all 3 components are normal indices, not sure why there are 3, maybe to do with lod morphing
-        const rgbaIndex = morphingRgbaIndices[i].x - 64;
+        let normalIndex = 0;
+        let rgbaIndex = 0;
+        if (gn === 1) {
+            normalIndex = morphingNormalIndices[i].x; // all 3 components are normal indices, not sure why there are 3, maybe to do with lod morphing
+            rgbaIndex = morphingRgbaIndices[i].x - 64;
+        } else {
+            // TODO: rgba remaps for rac2
+        }
         imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
             imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
@@ -271,6 +501,7 @@ export function readTiePacketBody(view: DataViewExt, tiePacketHeader: TiePacketH
         morphingNormalIndices,
         regularRgbaIndices,
         morphingRgbaIndices,
+        unknownFlags,
         commandBuffer: imaginaryGsBuffer.finish(),
     }
 }
@@ -1346,13 +1577,13 @@ export function readSkyFace(view: DataViewExt): SkyFace {
 export interface Collision {
     header: CollisionHeader,
     meshGrid: CollisionOctant[],
-    heroGroups: HeroCollisionGroups,
+    heroGroups: HeroCollisionGroups | null,
 };
 
 export function readCollision(view: DataViewExt): Collision {
     const header = readCollisionHeader(view);
     const meshGrid = readCollisionMeshGrid(view.subview(header.mesh));
-    const heroGroups = readHeroCollisionGroups(view.subview(header.heroGroups));
+    const heroGroups = header.heroGroups ? readHeroCollisionGroups(view.subview(header.heroGroups)) : null;
     return {
         header,
         meshGrid,
@@ -1553,8 +1784,9 @@ export interface HeroCollisionGroups {
     groupData: HeroCollisionGroupData[],
 };
 
-export function readHeroCollisionGroups(view: DataViewExt): HeroCollisionGroups {
+export function readHeroCollisionGroups(view: DataViewExt): HeroCollisionGroups | null {
     const header = readHeroCollisionGroupsHeader(view);
+    if (!header.count) return null;
     const groupData = [];
     for (const group of header.groups) {
         const groupView = view.subview(group.offset);
@@ -1572,5 +1804,403 @@ export function readHeroCollisionGroups(view: DataViewExt): HeroCollisionGroups 
     return {
         header,
         groupData,
+    }
+}
+
+export type MobyClass = {
+    oClass: number,
+    header: MobyClassHeader,
+    mesh: MobyMesh | null,
+};
+export function readMobyClass(gn: GN, view: DataViewExt, oClass: number): MobyClass {
+    const header = readMobyClassHeader(view);
+
+    // downgrade to rac1 format in rac2 if the flag is set
+    let meshGn = gn;
+    if (gn === 2 && header.rac12ByteB !== 0) meshGn = 1;
+
+    let mesh: MobyMesh | null = null;
+    if (header.packetTableOffset !== 0) {
+        mesh = readMobyMesh(meshGn, view, header.packetTableOffset, header.meshInfo);
+    }
+
+    return {
+        oClass,
+        header,
+        mesh,
+    };
+}
+
+export type MobyClassHeader = {
+    packetTableOffset: number,
+    meshInfo: MobyMeshInfo,
+    jointCount: number,
+    unknown9: number,
+    rac1ByteA: number,
+    rac12ByteB: number, // rac12 -> if 0 use rac2 format, else use rac1 format; rac34 -> team textures
+    sequenceCount: number,
+    soundCount: number,
+    lodTrans: number,
+    shadow: number,
+    collision: number,
+    skeleton: number,
+    commonTrans: number,
+    joints: number,
+    gifUsage: number,
+    scale: number,
+    soundDefs: number,
+    bangles: number,
+    mipDist: number,
+    corncob: number,
+    boundingSphere: { x: number, y: number, z: number, w: number },
+    glowRgba: number,
+    modeBits: number,
+    type: number,
+    modeBits2: number,
+}
+export const SIZEOF_MOBY_CLASS = 0x48;
+export function readMobyClassHeader(view: DataViewExt): MobyClassHeader {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_low.h#L138
+    */
+    return {
+        packetTableOffset: view.getInt32(0x0),
+        meshInfo: readMobyMeshInfo(view.subview(0x4)),
+        jointCount: view.getUint8(0x8),
+        unknown9: view.getUint8(0x9),
+        rac1ByteA: view.getUint8(0xa),
+        rac12ByteB: view.getUint8(0xb),
+        sequenceCount: view.getUint8(0xc),
+        soundCount: view.getUint8(0xd),
+        lodTrans: view.getUint8(0xe),
+        shadow: view.getUint8(0xf),
+        collision: view.getInt32(0x10),
+        skeleton: view.getInt32(0x14),
+        commonTrans: view.getInt32(0x18),
+        joints: view.getInt32(0x1c),
+        gifUsage: view.getInt32(0x20),
+        scale: view.getFloat32(0x24),
+        soundDefs: view.getInt32(0x28),
+        bangles: view.getUint8(0x2c),
+        mipDist: view.getUint8(0x2d),
+        corncob: view.getInt16(0x2e),
+        boundingSphere: view.getFloat32_Xyzw(0x30),
+        glowRgba: view.getInt32(0x40),
+        modeBits: view.getInt16(0x44),
+        type: view.getUint8(0x46),
+        modeBits2: view.getUint8(0x47),
+    };
+}
+
+export type MobyMeshInfo = {
+    highLodCount: number,
+    lowLodCount: number,
+    metalCount: number,
+    metalBegin: number,
+};
+
+export function readMobyMeshInfo(view: DataViewExt): MobyMeshInfo {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_low.h#L131
+    */
+    return {
+        highLodCount: view.getUint8(0x0),
+        lowLodCount: view.getUint8(0x1),
+        metalCount: view.getUint8(0x2),
+        metalBegin: view.getUint8(0x3),
+    }
+}
+
+export interface MobyMesh {
+    packetHeaders: MobyMeshPacketHeader[],
+    packetsByLod: [MobyMeshPacket[], MobyMeshPacket[]],
+};
+export function readMobyMesh(gn: GN, mobyView: DataViewExt, packetTableOffset: number, meshInfo: MobyMeshInfo): MobyMesh {
+    const packetHeaders = mobyView.subdivide(packetTableOffset, meshInfo.highLodCount + meshInfo.lowLodCount, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
+    const packets = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader));
+    const packetsLod0 = packets.slice(0, meshInfo.highLodCount);
+    const packetsLod1 = packets.slice(meshInfo.highLodCount);
+    // TODO: read metal packets
+
+    return {
+        packetHeaders,
+        packetsByLod: [packetsLod0, packetsLod1],
+    };
+}
+
+export type MobyMeshPacketHeader = {
+    vifListOffset: number,
+    vifListSize: number,
+    vifListTextureUnpackOffset: number,
+    vertexOffset: number,
+    vertexDataSize: number,
+    unknownD: number,
+    unknownE: number,
+    transferVertexCount: number,
+};
+export const SIZEOF_MOBY_MESH_PACKET_HEADER = 0x10;
+export function readMobyMeshPacketHeader(view: DataViewExt): MobyMeshPacketHeader {
+    /**
+     * https://github.com/chaoticgd/wrench/blob/master/src/engine/moby_packet.h#L83
+     */
+    return {
+        vifListOffset: view.getInt32(0x0),
+        vifListSize: view.getUint16(0x4),
+        vifListTextureUnpackOffset: view.getUint16(0x6),
+        vertexOffset: view.getInt32(0x8),
+        vertexDataSize: view.getUint8(0xc),
+        unknownD: view.getUint8(0xd),
+        unknownE: view.getUint8(0xe),
+        transferVertexCount: view.getUint8(0xf),
+    };
+}
+
+export interface MobyMeshPacket {
+    texcoords: { s: number, t: number }[],
+    indicesHeader: MobyIndicesHeader,
+    indices: Int8Array,
+    secretIndices: number[],
+    textures: MobyTexturePrimitive[],
+    vertices: MobyVertex[],
+    duplicateVertices: number[],
+};
+export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader): MobyMeshPacket {
+    const vifCommands = readVifCommandList(packetView.subview(packetHeader.vifListOffset, packetHeader.vifListSize * 0x10));
+    const unpackReader = new VifUnpackReader(vifCommands);
+
+    const unpack1 = unpackReader.next();
+    const texcoords = unpack1.subdivide(0, 0xFFFF, 0x4).map(view => ({
+        s: view.getInt16(0x0),
+        t: view.getInt16(0x2),
+    }));
+
+    const unpack2 = unpackReader.next();
+    const indicesHeader = readMobyIndicesHeader(unpack2);
+    const indices = unpack2.subview(0x4).getTypedArrayView(Int8Array);
+
+    // they've packed vertex indices into all the padding bytes...
+    const secretIndices: number[] = [indicesHeader.secretIndex];
+
+    const textures: MobyTexturePrimitive[] = [];
+
+    assert(!!packetHeader.vifListTextureUnpackOffset === !!unpackReader.hasNext());
+    if (packetHeader.vifListTextureUnpackOffset) {
+        const unpack3 = unpackReader.next();
+        assert(unpack3.byteLength % 0x40 === 0);
+        for (let i = 0; i < unpack3.byteLength / 0x40; i++) {
+            secretIndices.push(unpack3.getInt8(i * 0x10 + 0xc));
+            textures.push(readMobyTexturePrimitive(unpack3.subview(i * 0x40)));
+        }
+    }
+
+    const vertexTable = readMobyVertexTable(meshGn, packetView, packetHeader);
+
+    return {
+        texcoords,
+        indicesHeader,
+        indices,
+        secretIndices,
+        textures,
+        vertices: vertexTable.vertices,
+        duplicateVertices: vertexTable.duplicateVertices,
+    };
+}
+
+export function readMobyVertexTable(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader) {
+    let arrayOffset = packetHeader.vertexOffset;
+    function alignTo(size: number) {
+        if (arrayOffset % size !== 0) arrayOffset += size - (arrayOffset % size);
+    }
+
+    const vertexTableHeader = readVertexTableHeader(meshGn, packetView.subview(arrayOffset));
+    arrayOffset += SIZEOF_VERTEX_TABLE_HEADER(meshGn);
+
+    assert(vertexTableHeader.vertexTableOffset / 0x10 <= packetHeader.vertexDataSize);
+    assert(vertexTableHeader.transferVertexCount === packetHeader.transferVertexCount);
+    assert(packetHeader.unknownD === Math.floor((0xf + packetHeader.transferVertexCount * 6) / 0x10));
+    assert(packetHeader.unknownE === Math.floor((3 + packetHeader.transferVertexCount) / 4));
+
+    let vertexOffset = packetHeader.vertexOffset + vertexTableHeader.vertexTableOffset;
+    const vertexCount = vertexTableHeader.twoWayBlendVertexCount + vertexTableHeader.threeWayBlendVertexCount + vertexTableHeader.mainVertexCount;
+    const vertices = packetView.subview(vertexOffset).subdivide(0, vertexCount, SIZEOF_MOBY_VERTEX).map(view => readMobyVertex(view));
+    vertexOffset += vertexCount * SIZEOF_MOBY_VERTEX;
+
+    const matrixTransfers = packetView.subdivide(arrayOffset, vertexTableHeader.matrixTransferCount, SIZEOF_MOBY_MATRIX_TRANSFER).map(view => readMobyMatrixTransfer(view));
+    arrayOffset += vertexTableHeader.matrixTransferCount * SIZEOF_MOBY_MATRIX_TRANSFER;
+
+    alignTo(8);
+
+    // appends verts to the list by cloning them from the cache
+    const duplicateVertices = packetView.getArrayOfNumbers(arrayOffset, vertexTableHeader.duplicateVertexCount, Uint16Array).map(value => value >> 7);
+
+    /*
+    I am so confused by this...
+    */
+
+    // shift all the cache slot values 7 verts to the left
+    for (let i = 7; i < vertices.length; i++) {
+        vertices[i - 7].cacheAddress = vertices[i].cacheAddress;
+    }
+
+    // calculate how many blocks are left
+    let epilogueCount = 0;
+    if (meshGn === 1) {
+        epilogueCount = (vertexTableHeader.unknownE - vertexTableHeader.vertexTableOffset) / 0x10 - vertexCount;
+    } else {
+        epilogueCount = packetHeader.vertexDataSize - vertexTableHeader.vertexTableOffset / 0x10 - vertexCount;
+    }
+    assert(epilogueCount < 7);
+
+    // starting at the 7th last vertex, populate cache addresses from epilogue
+    vertexOffset += Math.max(7 - vertexCount, 0) * SIZEOF_MOBY_VERTEX;
+    for (let i = Math.max(7 - vertexCount, 0); i < epilogueCount; i++) {
+        const cacheAddress = readMobyVertexCacheAddress(packetView.subview(vertexOffset));
+        vertexOffset += SIZEOF_MOBY_VERTEX; // advance a full vertex even though we only read 2 bytes
+        const dest = vertexCount + i - 7;
+        vertices[dest].cacheAddress = cacheAddress;
+    }
+
+    // once we reach the last 16 byte block, read up to 6 more cache addresses from the last block starting at 0x4
+    const trailingCacheAddresses = packetView.getArrayOfNumbers(vertexOffset - SIZEOF_MOBY_VERTEX + 0x4, 6, Uint16Array);
+    for (let i = Math.max(7 - vertexCount - epilogueCount, 0); i < 6; i++) {
+        const dest = vertexCount + epilogueCount + i - 7;
+        if (dest < vertices.length) {
+            vertices[dest].cacheAddress = trailingCacheAddresses[i];
+        }
+    }
+
+    return {
+        vertexTableHeader,
+        vertices,
+        matrixTransfers,
+        duplicateVertices,
+    };
+}
+
+export interface MobyIndicesHeader {
+    unknown0: number,
+    textureUnpackOffsetQuadwords: number,
+    secretIndex: number,
+}
+export const SIZEOF_MOBY_INDICES_HEADER = 0x4;
+export function readMobyIndicesHeader(view: DataViewExt): MobyIndicesHeader {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_packet.h#L36
+    */
+    return {
+        unknown0: view.getUint8(0x0),
+        textureUnpackOffsetQuadwords: view.getUint8(0x1),
+        secretIndex: view.getInt8(0x2),
+    };
+}
+
+export interface MobyTexturePrimitive {
+    tex1: GifAd,
+    superSecretIndex1: number,
+    clamp: GifAd,
+    superSecretIndex2: number,
+    tex0: GifAd,
+    superSecretIndex3: number,
+    miptbp1: GifAd,
+    superSecretIndex4: number,
+};
+export const SIZEOF_MOBY_TEXTURE_PRIMITIVE = 0x40;
+export function readMobyTexturePrimitive(view: DataViewExt): MobyTexturePrimitive {
+    /*
+    https://github.com/chaoticgd/wrench/blob/master/src/engine/moby_packet.h#L44
+    */
+    return {
+        tex1: readGifAdData(view.subview(0x0)),
+        superSecretIndex1: view.getInt32(0xc),
+        clamp: readGifAdData(view.subview(0x10)),
+        superSecretIndex2: view.getInt32(0x1c),
+        tex0: readGifAdData(view.subview(0x20)),
+        superSecretIndex3: view.getInt32(0x2c),
+        miptbp1: readGifAdData(view.subview(0x30)),
+        superSecretIndex4: view.getInt32(0x3c),
+    };
+}
+
+export type VertexTableHeader = {
+    matrixTransferCount: number,
+    twoWayBlendVertexCount: number,
+    threeWayBlendVertexCount: number,
+    mainVertexCount: number,
+    duplicateVertexCount: number,
+    transferVertexCount: number,
+    vertexTableOffset: number,
+    unknownE: number,
+};
+export const SIZEOF_VERTEX_TABLE_HEADER = (meshGn: GN) => meshGn === 1 ? 0x20 : 0x10;
+export function readVertexTableHeader(gn: GN, view: DataViewExt): VertexTableHeader {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_vertex.cpp#L25-L45
+    */
+    if (gn === 1) {
+        return {
+            matrixTransferCount: view.getInt32(0x0),
+            twoWayBlendVertexCount: view.getInt32(0x4),
+            threeWayBlendVertexCount: view.getInt32(0x8),
+            mainVertexCount: view.getInt32(0xc),
+            duplicateVertexCount: view.getInt32(0x10),
+            transferVertexCount: view.getInt32(0x14),
+            vertexTableOffset: view.getInt32(0x18),
+            unknownE: view.getInt32(0x1c),
+        };
+    } else {
+        // same but with 16 bit fields instead of 32 bit
+        return {
+            matrixTransferCount: view.getInt16(0x0),
+            twoWayBlendVertexCount: view.getInt16(0x2),
+            threeWayBlendVertexCount: view.getInt16(0x4),
+            mainVertexCount: view.getInt16(0x6),
+            duplicateVertexCount: view.getInt16(0x8),
+            transferVertexCount: view.getInt16(0xa),
+            vertexTableOffset: view.getInt16(0xc),
+            unknownE: view.getInt16(0xe),
+        };
+    }
+}
+
+export type MobyVertex = {
+    cacheAddress: number,
+    normalAzumith: number,
+    normalElevation: number,
+    x: number,
+    y: number,
+    z: number,
+}
+export const SIZEOF_MOBY_VERTEX = 0x10;
+export function readMobyVertex(view: DataViewExt): MobyVertex {
+    /*
+    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/moby_vertex.h#L31-L70
+    Skip skinning data for now because it's very complicated
+    */
+    return {
+        cacheAddress: readMobyVertexCacheAddress(view), // 9 bit
+        normalAzumith: view.getInt8(0x8),
+        normalElevation: view.getInt8(0x9),
+        x: view.getInt16(0xa),
+        y: view.getInt16(0xc),
+        z: view.getInt16(0xe),
+    };
+}
+
+export function readMobyVertexCacheAddress(view: DataViewExt) {
+    return view.getUint16(0x0) & 0x1FF;
+}
+
+export type MobyMatrixTransfer = {
+    sprJointIndex: number,
+    vu0DestAddr: number,
+};
+export const SIZEOF_MOBY_MATRIX_TRANSFER = 0x2;
+export function readMobyMatrixTransfer(view: DataViewExt) {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_vertex.h#L99
+    */
+    return {
+        sprJointIndex: view.getUint8(0x0),
+        vu0DestAddr: view.getUint8(0x1),
     }
 }

@@ -2,7 +2,7 @@ import { Color } from "../Color";
 import { DataViewExt } from "./DataViewExt";
 import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { SkyHeader, SkyTextureEntry } from "./bin-core";
-import { TieInstance } from "./bin-gameplay";
+import { TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
 import { assert } from "../util";
 import { TextureEntry } from "./bin-index";
 
@@ -193,7 +193,11 @@ export function createGfxTextureArrayForPaletteTextures(device: GfxDevice, name:
 }
 
 // create a 64xN texture, where each row contains the 64-wide vertex color lookup table for one tie instance
-export function createTieRgbaTexture(device: GfxDevice, tieInstances: TieInstance[]): GfxTexture {
+export function createTieRgbaTexture_Rac1(device: GfxDevice, tieInstances: TieInstance[]): GfxTexture {
+    if (tieInstances.length === 0) {
+        return create1x1x1ErrorArrayTexture(device);
+    }
+
     const gfxTexture = device.createTexture({
         dimension: GfxTextureDimension.n2D,
         pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -211,6 +215,36 @@ export function createTieRgbaTexture(device: GfxDevice, tieInstances: TieInstanc
         const instance = tieInstances[i];
         for (let j = 0; j < 64; j++) {
             const a1bgr5 = instance.ambientRgbas[j];
+            data[ptr++] = ((a1bgr5 >> 0) & 0x1F) << 3;
+            data[ptr++] = ((a1bgr5 >> 5) & 0x1F) << 3;
+            data[ptr++] = ((a1bgr5 >> 10) & 0x1F) << 3;
+            data[ptr++] = 255;
+        }
+    }
+
+    device.uploadTextureData(gfxTexture, 0, [data]);
+
+    return gfxTexture;
+}
+
+export function createTieRgbaTexture_Rac234(device: GfxDevice, tieRgbasBlock: TieAmbientRgbaBlock): GfxTexture {
+    const gfxTexture = device.createTexture({
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.U8_RGBA_NORM,
+        width: tieRgbasBlock.maxCount, // a bit wasteful (usually ~520 columns)
+        height: tieRgbasBlock.list.length,
+        depthOrArrayLayers: 1,
+        numLevels: 1,
+        usage: GfxTextureUsage.Sampled,
+    });
+    device.setResourceName(gfxTexture, `Tie Ambient RGBAs`);
+
+    const data = new Uint8Array(tieRgbasBlock.maxCount * tieRgbasBlock.list.length * 4);
+    for (let i = 0; i < tieRgbasBlock.list.length; i++) {
+        const row = tieRgbasBlock.list[i];
+        let ptr = i * tieRgbasBlock.maxCount * 4;
+        for (let j = 0; j < tieRgbasBlock.maxCount; j++) {
+            const a1bgr5 = j < row.count ? row.ambientRgbas[j] : 0b1_11111_00000_11111;
             data[ptr++] = ((a1bgr5 >> 0) & 0x1F) << 3;
             data[ptr++] = ((a1bgr5 >> 5) & 0x1F) << 3;
             data[ptr++] = ((a1bgr5 >> 10) & 0x1F) << 3;
@@ -255,10 +289,11 @@ export interface TextureAtlases {
     gfxTextures: { [size in 16 | 32 | 64 | 128 | 256]: GfxTexture },
     tfragTextureRemap: { sizeBucket: number, index: number }[],
     tieTextureRemap: { sizeBucket: number, index: number }[],
+    mobyTextureRemap: { sizeBucket: number, index: number }[],
     shrubTextureRemap: { sizeBucket: number, index: number }[],
 };
 
-export function createTextureAtlases(device: GfxDevice, tfragTextures: PaletteTexture[], tieTextures: PaletteTexture[], shrubTextures: PaletteTexture[]): TextureAtlases {
+export function createTextureAtlases(device: GfxDevice, tfragTextures: PaletteTexture[], tieTextures: PaletteTexture[], mobyTextures: PaletteTexture[], shrubTextures: PaletteTexture[]): TextureAtlases {
     const texturesBySize: TexturesBySize = {
         16: [],
         32: [],
@@ -269,6 +304,7 @@ export function createTextureAtlases(device: GfxDevice, tfragTextures: PaletteTe
 
     const tfragTextureRemap = assignTexturesToSizeBucket(texturesBySize, tfragTextures);
     const tieTextureRemap = assignTexturesToSizeBucket(texturesBySize, tieTextures);
+    const mobyTextureRemap = assignTexturesToSizeBucket(texturesBySize, mobyTextures);
     const shrubTextureRemap = assignTexturesToSizeBucket(texturesBySize, shrubTextures);
 
     const gfxTextures = {
@@ -283,6 +319,7 @@ export function createTextureAtlases(device: GfxDevice, tfragTextures: PaletteTe
         gfxTextures,
         tfragTextureRemap,
         tieTextureRemap,
+        mobyTextureRemap,
         shrubTextureRemap,
     };
 }
