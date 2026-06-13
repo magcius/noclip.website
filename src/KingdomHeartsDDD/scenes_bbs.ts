@@ -9,10 +9,10 @@ import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel }
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
-import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON, BBS_VALID_PRESET_ARC } from "./config/data";
-import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxTexture } from "./lux";
+import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON, BBS_PAM, BBS_VALID_PRESET_ARC } from "./config/data";
+import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
-import { decodeBBSTIM2, TIM2Texture } from "./texture";
+import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -87,13 +87,13 @@ class Renderer implements SceneGfx {
         this.textures = Array(tims.length);
         for (let i = 0; i < tims.length; i++) {
             const { rgba, width, height, format } = decodeBBSTIM2(tims[i].data);
-            const t = new TIM2Texture(device, tims[i].name, width, height, rgba, format);
+            const t = new BBSTIM2Texture(device, tims[i].name, width, height, rgba, format);
             this.textures[i] = t;
         }
 
         const viewerTextures: ViewerTexture[] = Array(this.textures.length);
         for (let i = 0; i < this.textures.length; i++) {
-            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture, extraInfo: new Map([["Format", `${BBSPixelFormat[(this.textures[i] as TIM2Texture).format]}`]]) };
+            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture, extraInfo: new Map([["Format", `${BBSPixelFormat[(this.textures[i] as BBSTIM2Texture).format]}`]]) };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
@@ -189,6 +189,7 @@ class Room implements SceneDesc {
 
         // try to locate model files from the sets (they don't give a location, only a name...)
         const models: Map<string, BBSModel> = new Map();
+        const animations: Map<string, LuxSkeletalAnimation> = new Map();
         const validModels = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
         for (const set of sets) {
             for (const instance of set.instances) {
@@ -211,11 +212,19 @@ class Room implements SceneDesc {
                 } else {
                     const subdir = getArcSubDirectory(instance.name);
                     const modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
-                    const pmo = new BBSParser(modelArcFile).parsePMOFromARC(instance.name);
+                    const p = new BBSParser(modelArcFile);
+                    const pmo = p.parsePMOFromARC(instance.name);
                     if (!pmo) {
                         check2 = true;
                     } else {
+                        console.log("Loaded", instance.name, "from arc", arcName);
                         models.set(instance.name, pmo);
+                        if (BBS_PAM.has(instance.name) && !animations.has(instance.name)) {
+                            const mapping = BBS_PAM.get(instance.name)!;
+                            const pam = p.parsePAMFromARC(mapping.name)!;
+                            console.log(pam);
+                            animations.set(instance.name, pam.animations[mapping.index]);
+                        }
                     }
                 }
                 if (check2) {
@@ -226,12 +235,13 @@ class Room implements SceneDesc {
                         continue;
                     }
                     const pmo = new BBSParser(modelFile).parseModel(instance.name);
+                    console.log("Loaded", instance.name, "from CHARA", u);
                     models.set(instance.name, pmo);
                 }
             }
         }
 
-        return new Renderer(device, pmp, { sets, models, animations: new Map() });
+        return new Renderer(device, pmp, { sets, models, animations });
     }
 }
 
@@ -242,8 +252,7 @@ Fix occasional 404 errors when fetching models from OLOs (already two checks for
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
 Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
-Make weight/joint allocation more efficient instead of padding to 8 per vertex
-Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work)
+Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work but the data structures are very similar if not the same)
 Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in JB10 (probably a mismatched texture header?)
 Add default OLOs

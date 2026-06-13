@@ -9,6 +9,20 @@ import { CTRTFormat } from "./texture";
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
 // Some things had to be tweaked or fixed here, but mostly the same
 
+// File types
+// CTT: Texture file
+// PMO: Model file
+// PAM: Skeletal animation
+// TXA: Texture animation
+// BCD: Raw collision data
+// PMP: Pack of PMOs and textures for a single room
+// OLO: List of object instances
+// MCV: Camera/cutscene related
+// LUB: Compiled Lua script
+// ESE: Effect file
+// FEP: Effect file
+// BIN: Many uses and formats
+
 /**
  * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
  */
@@ -483,18 +497,23 @@ export class DreamDropParser {
         const animationCount = this.getUint32();
         this.offset += 6;
         const version = this.getUshort();
-        if (version !== 2) {
+        if (version > 2 || version < 1) {
             console.warn("Unimplemented PAM version", version);
         }
 
         const infos: AnimationInfo[] = Array(animationCount);
         for (let i = 0; i < animationCount; i++) {
             const offset = this.getUint32();
-            const nameOffset = this.getUint32();
-            const ret = this.offset;
-            this.offset = nameOffset;
-            const name = this.getString();
-            this.offset = ret;
+            let name;
+            if (version === 1) {
+                name = this.getString(12); 
+            } else {
+                const nameOffset = this.getUint32();
+                const ret = this.offset;
+                this.offset = nameOffset;
+                name = this.getString();
+                this.offset = ret;
+            }
             infos[i] = { offset, name };
         }
 

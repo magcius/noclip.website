@@ -130,7 +130,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         });
     }
 
-    protected override setShader(cache: GfxRenderCache, boneCount: number): void {
+    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number): void {
         this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount));
     }
 }

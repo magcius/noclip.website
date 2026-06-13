@@ -22,7 +22,7 @@ export enum CTRTFormat {
     ETC1A4
 }
 
-export class CTRTexture extends LuxTexture {
+export class DreamDropCTRTexture extends LuxTexture {
     constructor(device: GfxDevice, name: string, width: number, height: number, data: Uint8Array, public format: CTRTFormat) {
         super(device, name, width, height, data);
     }
@@ -167,7 +167,7 @@ function invertRedBlue(data: Uint8Array, format: BBSPixelFormat, length: number)
     }
 }
 
-export class TIM2Texture extends LuxTexture {
+export class BBSTIM2Texture extends LuxTexture {
     constructor(device: GfxDevice, name: string, width: number, height: number, data: Uint8Array, public format: BBSPixelFormat) {
         super(device, name, width, height, data);
     }

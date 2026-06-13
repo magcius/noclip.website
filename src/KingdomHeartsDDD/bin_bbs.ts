@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { DreamDropParser } from "./bin";
-import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPMP, LuxShape } from "./lux";
+import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPAM, LuxPMP, LuxShape } from "./lux";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 // Credit: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
@@ -183,6 +183,17 @@ export class BBSParser extends DreamDropParser {
         } else {
             this.offset = pmoEntry.offset;
             return this.getPMO(name, -1, true);
+        }
+    }
+
+    public parsePAMFromARC(name: string): LuxPAM | undefined {
+        const entries = this.parseARC();
+        const pamEntry = entries.find(e => e.name.toLowerCase().includes(".pam") && e.name.startsWith(name) && e.dirPointer === 0);
+        if (!pamEntry) {
+            return undefined;
+        } else {
+            this.view = this.buffer.createDataView(pamEntry.offset, pamEntry.size);
+            return this.parsePAM();
         }
     }
 
@@ -439,9 +450,8 @@ export class BBSParser extends DreamDropParser {
             const w = flags.skinWeightCount + 1;
             const shape = new BBSShape(vertexCount, textureIndex, attribute, boneIndices, triStripValues, flags, w);
 
-            // weights/joints padded to 8 since there can be up to 8 per vertex
-            shape.weights = new Float32Array(vertexCount * 8);
-            shape.joints = new Uint8Array(vertexCount * 8);
+            shape.weights = new Float32Array(vertexCount * w);
+            shape.joints = new Uint8Array(vertexCount * w);
             for (let i = 0; i < vertexCount; i++) {
                 const ret2 = this.offset;
 
@@ -449,23 +459,19 @@ export class BBSParser extends DreamDropParser {
                     for (let j = 0; j < w; j++) {
                         switch (flags.weightFormat) {
                             case CoordinateFormat.NORMALIZED_8_BITS:
-                                shape.weights[(i * 8) + j] = this.getByte() / NORMALIZED_8_SCALE;
+                                shape.weights[(i * w) + j] = this.getByte() / NORMALIZED_8_SCALE;
                                 break;
                             case CoordinateFormat.NORMALIZED_16_BITS:
-                                shape.weights[(i * 8) + j] = this.getUshort() / NORMALIZED_16_SCALE;
+                                shape.weights[(i * w) + j] = this.getUshort() / NORMALIZED_16_SCALE;
                                 break;
                             case CoordinateFormat.FLOAT_32_BITS:
-                                shape.weights[(i * 8) + j] = this.getFloat();
+                                shape.weights[(i * w) + j] = this.getFloat();
                             default:
                                 console.warn("Unimplemented weight format", flags.weightFormat);
-                                shape.weights[(i * 8) + j] = 0;
+                                shape.weights[(i * w) + j] = 0;
                                 break;
                         }
-                        shape.joints[(i * 8) + j] = boneIndices[j];
-                    }
-                    for (let j = w; j < 8; j++) {
-                        shape.weights[(i * 8) + j] = 0.0;
-                        shape.joints[(i * 8) + j] = 0;
+                        shape.joints[(i * w) + j] = boneIndices[j];
                     }
                 }
 

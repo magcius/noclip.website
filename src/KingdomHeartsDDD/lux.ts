@@ -14,6 +14,7 @@ import { Layer } from "../ui";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
@@ -328,7 +329,7 @@ export class LuxShapeRenderer implements Destroyable {
         }
         this.hasTXA = txa !== undefined;
 
-        this.setShader(cache, boneCount);
+        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount);
         
         this.drawCount = shape.indices.length;
         this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shape.indices.buffer), byteOffset: 0 };
@@ -382,10 +383,13 @@ export class LuxShapeRenderer implements Destroyable {
         
     }
 
-    protected setShader(cache: GfxRenderCache, boneCount: number) {
+    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number) {
 
     }
 }
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 
 export class LuxModelRenderer implements Destroyable, Layer {
     public name: string;
@@ -473,16 +477,26 @@ export class LuxModelRenderer implements Destroyable, Layer {
             }
             offset += fillMatrix4x3(d, offset, SCRATCH_VIEW);
             // u_BoneSRT (12 * boneCount)
-            if (this.animation) {
-                for (let i = 0; i < this.bones.length; i++) {
-                    if (this.animation) {
-                        mat4.mul(SCRATCH_BONE, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)], this.bones[i].inverseTransform);
-                        offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
-                    } else {
-                        offset += fillMatrix4x3(d, offset, SCRATCH_IDENTITY);
-                    }
+            for (let i = 0; i < this.bones.length; i++) {
+                if (this.animation) {
+                    mat4.mul(SCRATCH_BONE, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)], this.bones[i].inverseTransform);
+                    offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
+                } else {
+                    offset += fillMatrix4x3(d, offset, SCRATCH_IDENTITY);
                 }
             }
+            // if (this.boneMatrices.length > 0) {
+            //     const ctx = getDebugOverlayCanvas2D();
+            //     for (let i = 1; i < this.boneMatrices.length; i++) {
+            //         vec3.set(scratchVec3a, 0, 0, 0);
+            //         mat4.mul(SCRATCH_BONE, instance.shiftMatrix, this.boneMatrices[this.bones[i].parentIndex][Math.trunc(this.currentPAMFrame)]);
+            //         vec3.transformMat4(scratchVec3a, scratchVec3a, SCRATCH_BONE);
+            //         vec3.set(scratchVec3b, 0, 0, 0);
+            //         mat4.mul(SCRATCH_BONE, instance.shiftMatrix, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)]);
+            //         vec3.transformMat4(scratchVec3b, scratchVec3b, SCRATCH_BONE);
+            //         drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b);
+            //     }
+            // }
 
             for (const shape of this.shapes) {
                 shape.prepareToRender(renderHelper, viewerInput, ranTXA);

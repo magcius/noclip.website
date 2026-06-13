@@ -7,7 +7,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
-import { CTRTexture, CTRTFormat, decodeDreamDropCTRT } from "./texture";
+import { DreamDropCTRTexture, CTRTFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
@@ -91,7 +91,7 @@ class Renderer implements SceneGfx {
         this.textures = Array(ctrts.length);
         for (let i = 0; i < ctrts.length; i++) {
             const pixels = decodeDreamDropCTRT(ctrts[i]);
-            const t = new CTRTexture(device, ctrts[i].name, ctrts[i].width, ctrts[i].height, pixels, ctrts[i].format);
+            const t = new DreamDropCTRTexture(device, ctrts[i].name, ctrts[i].width, ctrts[i].height, pixels, ctrts[i].format);
             this.textures[i] = t;
         }
 
@@ -99,7 +99,7 @@ class Renderer implements SceneGfx {
         for (let i = 0; i < this.textures.length; i++) {
             viewerTextures[i] = {
                 gfxTexture: this.textures[i].gfxTexture,
-                extraInfo: new Map([["Format", `${CTRTFormat[(this.textures[i] as CTRTexture).format]}`]])
+                extraInfo: new Map([["Format", `${CTRTFormat[(this.textures[i] as DreamDropCTRTexture).format]}`]])
             };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
@@ -221,6 +221,7 @@ class Room implements SceneDesc {
                     instances.push(...olo.objects);
                 }
                 if (instances.length > 0) {
+                    // this filtering is left over from debugging and might not be needed... keeping it just in case
                     const uniqueInstances = instances.filter((instance, index, self) =>
                         index === self.findIndex((t) => (
                             t.name === instance.name &&
@@ -288,12 +289,18 @@ TXAs need cleanup and the functionality to animate opacity between frames like i
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
     Will probably need an altered shader that takes two texture inputs, idk how else to do it
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
-Figure out other ways level objects are loaded besides OLO (e.g. world map g objects)
+Figure out how world map objects are loaded
+    The models exist in chara/gim/g_wm*
+    There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)
+    The Lua scripts could reference them, and those are easy to decompile, but no luck there either
 Clean up class/interface names
 Invesigate PMO model issue from BBS. Very rare here in DDD, but see Mickey in Musketeers for an example
-    I thought it was a vertex color issue originally, but it actually seems like a problem with the UVs
-    It's weird because only some parts of the same model have wrong UVs, while others are correct
+    It seems like a problem with the UVs. Parts of the same model can have wrong UVs, while others are correct
 Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect) skybox geometry
+Investigate other file types such as GPL, SEB, EAD, ABC, and PVD
+    MCV is camera/cutscene related and BCD is collision data. Neither of those are needed for noclip
+    Likewise, the particle effect files like FEP and ESE would be neat, but probably not worth the effort
+    See note in bin.ts for list of known or already used types
 
 May your heart be your guiding key
 */
