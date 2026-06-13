@@ -14,7 +14,7 @@ export const ENTRY_POINTS: Record<number, number> = {
 export const TOC_MAX_SECTORS = 1024;
 export const TOC_MAX_SIZE = TOC_MAX_SECTORS * SECTOR_SIZE;
 
-export const SILLY_MAGIC_NUMBERS = new Set([
+export const LEVEL_SECTOR_START_BYTES = new Set([
     0x0030,
     0x0164,
     0x22b8,
@@ -58,7 +58,7 @@ export async function readTableOfContents_Rac1(view: DataViewExt): Promise<Table
 export async function readTableOfContents_Rac234(gn: GN, view: DataViewExt, isSuspiciouslyLevelShaped: (sector: number) => Promise<boolean>): Promise<TableOfContents> {
     assert(gn >= 2);
 
-    // search the TOC for a sequence of 6 valid level sector ranges in a row
+    // search the TOC for a sequence of 6 pointers that point to something that looks like a level
     let levelTableStart = 0;
     for (let i = 0; i < view.byteLength / 4 - 12; i++) {
         let parts = 0;
@@ -79,7 +79,7 @@ export async function readTableOfContents_Rac234(gn: GN, view: DataViewExt, isSu
     const levelSectorViews = view.subdivide(levelTableStart, 100, 0x8 * 3);
     const levelSectors = [];
     for (let i = 0; i < levelSectorViews.length; i++) {
-        const levelSector = levelSectorViews[i].getInt32PairAs(0, "startSector", "sizeInSectors");
+        const levelSector = levelSectorViews[i].getInt32PairAs(0, "startSector", "sizeInSectors"); // FIXME: different offset for rac3+
         if (levelSector.startSector === 0) break;
         levelSectors.push(levelSector);
     }
@@ -87,15 +87,6 @@ export async function readTableOfContents_Rac234(gn: GN, view: DataViewExt, isSu
     return {
         levelSectors,
     };
-}
-
-function readLevelSectorRange_Rac234(gn: GN, view: DataViewExt) {
-    const ranges = view.subdivide(0, 3, 0x8).map(view => {
-        return view.getInt32PairAs(0, "startSector", "sizeInSectors");
-    });
-    // read the level, audio, and scenes sector ranges and return just the level range
-    const levelLocation = gn === 2 ? 0 : 1;
-    return ranges[levelLocation];
 }
 
 export interface LevelDescriptor {
@@ -127,7 +118,7 @@ export function readLevelDescriptor(gn: GN, view: DataViewExt): LevelDescriptor 
             return {
                 id: view.getInt32(0),
                 headerSize,
-                sector: 0, // <- because sectors are absolute in rac1
+                sector: 0, // sector pointers are absolute in rac1
                 data: view.getInt32PairAs(0x8, "startSector", "sizeInSectors"), // points to LevelDataHeader
                 gameplay: view.getInt32PairAs(0x10, "startSector", "sizeInSectors"), // points to GameplayHeader
                 gameplayPal: view.getInt32PairAs(0x18, "startSector", "sizeInSectors"),
@@ -161,7 +152,7 @@ export function readLevelDescriptor(gn: GN, view: DataViewExt): LevelDescriptor 
 
             return {
                 headerSize,
-                sector: view.getUint32(0x4), // unknown
+                sector: view.getUint32(0x4), // other sector pointers are relative to this sector
                 id: view.getInt32(0x8),
                 reverb: view.getInt32(0xc),
                 data: view.getInt32PairAs(0x10, "startSector", "sizeInSectors"), // points to LevelDataHeader

@@ -247,7 +247,7 @@ export function readLevelSettings(gn: GN, view: DataViewExt): LevelSettings {
 
 export function readChunkPlanes(view: DataViewExt): ChunkPlane[] {
     const planes = [readChunkPlane(view)];
-    let count = planes[0].count;
+    let count = planes[0].count; // the number of planes is stored inside the first plane
     for (let i = 1; i < count; i++) {
         planes.push(readChunkPlane(view.subview(i * SIZEOF_CHUNK_PLANE)));
     }
@@ -263,6 +263,9 @@ export type ChunkPlane = {
 }
 export const SIZEOF_CHUNK_PLANE = 0x20;
 export function readChunkPlane(view: DataViewExt): ChunkPlane {
+    /*
+    https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/instancemgr/gameplay_impl_misc.inl#L60
+    */
     const point = view.getFloat32_Vec3(0);
     const normal = view.getFloat32_Vec3(0x10);
     return {

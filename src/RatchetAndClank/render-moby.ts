@@ -112,14 +112,8 @@ flat in int v_TextureIndex;
 flat in int v_Clamp;
 
 void main() {
-    // gl_FragColor = vec4(vec3(v_TextureIndex) / 8.0, 1.0);
-    // gl_FragColor = vec4(vec3(light), 1.0);
-    // gl_FragColor = v_Rgba;
-    // gl_FragColor = vec4(vec2(light) * v_ST, 0.0, v_Rgba.a);
-    // return;
-
     if (v_TextureIndex < 0) {
-        // some objects have negative textures
+        // some objects have negative textures, probably indicates special materials
         // used on water, triggers, and sometimes for seemingly no reason
         discard;
     }
@@ -270,10 +264,9 @@ export class MobyGeometry {
                     assert(secretIndex !== undefined);
 
                     if (secretIndex === 0) {
-                        // the game inserts 3 indices at the end to account for a race,
-                        // the packet ends when we see a 0 index in both the index buffer and the secret indices,
-                        // but the game uses async vertex transformation, so some have already been sent to VU1,
-                        // those transformed verts will be ignored.
+                        // the game has async vertex transformations, there are 3 verts in flight at any one time
+                        // when it reaches the end of the list it will terminate the async process early and the
+                        // in flight verts will be discarded
                         for (let j = 0; j < 9; j++) outputVerts.pop();
                         break;
                     }
@@ -308,9 +301,16 @@ export class MobyGeometry {
                         const v = tri[j];
                         assert(!!v);
                         outputVerts.push({
-                            ...v,
+                            cacheAddress: v.cacheAddress,
+                            normalAzumith: v.normalAzumith,
+                            normalElevation: v.normalElevation,
+                            x: v.x,
+                            y: v.y,
+                            z: v.z,
+                            s: v.s,
+                            t: v.t,
                             textureIndex: currentMaterial.texture,
-                            clamp: currentMaterial.clamp, // TODO
+                            clamp: currentMaterial.clamp,
                         });
                     }
                 }
@@ -420,6 +420,12 @@ export class MobyRenderer {
                 lod = lodSetting;
             }
             lod = Math.min(lod, maxLod);
+
+            // find bounding sphere and frustum cull
+            const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
+            if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * mobyClass.header.scale * objectScale)) {
+                continue;
+            }
 
             mobyInstancesToDrawByLod[lod].push({
                 objectMatrix,

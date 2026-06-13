@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs, { FileHandle } from "node:fs/promises";
-import { ENTRY_POINTS, readChunkHeader, readLevelDataHeader, readLevelDescriptor, readTableOfContents_Rac1, readTableOfContents_Rac234, SECTOR_SIZE, SILLY_MAGIC_NUMBERS, TableOfContents, TOC_MAX_SIZE } from "../bin-toc.ts";
+import { ENTRY_POINTS, LEVEL_SECTOR_START_BYTES, readChunkHeader, readLevelDataHeader, readLevelDescriptor, readTableOfContents_Rac1, readTableOfContents_Rac234, SECTOR_SIZE, TableOfContents, TOC_MAX_SIZE } from "../bin-toc.ts";
 import { DataViewExt } from "../DataViewExt.ts";
 import { readLevelCoreHeader } from "../bin-index.ts";
 import { WadDecompressor } from "../decompress.ts";
@@ -46,7 +46,7 @@ async function isSuspiciouslyLevelShaped_Rac234(startSector: number) {
     const headerSize = await readFromDisk(disk, startSector, 4);
     const view = new DataViewExt(headerSize, { littleEndian: true });
     const size = view.getInt32(0);
-    return SILLY_MAGIC_NUMBERS.has(size);
+    return LEVEL_SECTOR_START_BYTES.has(size);
 }
 
 function decompress(compressed: DataViewExt) {

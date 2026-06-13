@@ -126,7 +126,7 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
 
 type RgbaRemapPacket = {
     packetSizeBytes: number,
-    block1: number[] | null,
+    block1: number[] | null, // <- looks a map from non-morphing vert index to rgba index
     block2: number[] | null,
     block3: number[] | null,
     block4: number[] | null,
@@ -134,7 +134,8 @@ type RgbaRemapPacket = {
     block6: number[] | null,
 }
 
-// I know how to parse this but I have no idea what it does
+// needs more reverse engineering work
+// I can parse the headers but no idea what the inner data is
 export function readTieRgbaRemap(view: DataViewExt, header: TieClassHeader): RgbaRemapPacket[] {
     const packetSizeList = view.getArrayOfNumbers(0x0, 32, Uint8Array);
     const packetSizeListBytes = [];
@@ -414,7 +415,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
         }
     }
 
-    // I can parse this but I dunno what it does
+    // I can calculate the length of this but not sure what it is
     alignTo(0x10);
     const unknownFlags: number[] = [];
     let unknownFlagsRemaining = tieVuHeader.stripCount + 1;
@@ -449,7 +450,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
             normalIndex = regularNormalIndices[i];
             rgbaIndex = regularRgbaIndices[i] - 64;
         } else {
-            rgbaIndex = regularRgbaIndices[i];
+            // TODO: rgba remaps for rac2
         }
         imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
@@ -1971,6 +1972,7 @@ export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHe
     const indicesHeader = readMobyIndicesHeader(unpack2);
     const indices = unpack2.subview(0x4).getTypedArrayView(Int8Array);
 
+    // they've packed vertex indices into all the padding bytes...
     const secretIndices: number[] = [indicesHeader.secretIndex];
 
     const textures: MobyTexturePrimitive[] = [];

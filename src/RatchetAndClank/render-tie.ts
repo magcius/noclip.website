@@ -86,7 +86,7 @@ void main() {
     v_ST = a_ST;
 
     vec4 rgba = vec4(0.5, 0.5, 0.5, 1.0);
-    if (a_InstanceExtraData.z == 1.0) {
+    if (a_InstanceExtraData.z == 1.0) { // enable/disable vertex colors
         ivec2 ambientRgbaTexcoord = ivec2(int(a_ExtraData.z), int(a_InstanceExtraData.x));
         rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
     }
@@ -113,8 +113,6 @@ flat in int v_TextureIndex;
 flat in int v_Clamp;
 
 void main() {
-    // gl_FragColor = v_Rgba;
-    // return;
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
     vec2 texRemap = u_TextureRemaps.ties[v_TextureIndex].xy;
     vec4 textureSample = ratchetSampler(texRemap.x, texRemap.y, v_Clamp, v_ST);
@@ -250,9 +248,7 @@ export class TieGeometry {
                                 const { vertex, normalIndex, rgbaIndex } = v;
                                 const fixedTexcoord = fixedTexcoords[i];
                                 let normal = tie.normalsData[normalIndex];
-                                if (normal === undefined) {
-                                    normal = { x: 1 / normalScale, y: 0, z: 0 };
-                                }
+                                if (normal === undefined) normal = { x: 1 / normalScale, y: 0, z: 0 }; // FIXME: rac2 normal indices don't work
 
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.x;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.y;
@@ -392,12 +388,11 @@ export class TieRenderer {
             if (modelLodLevel === 2 && !hasLod2) { modelLodLevel = 1; lodMorphFactor = 0; }
             if (modelLodLevel === 1 && !hasLod1) { modelLodLevel = 0; lodMorphFactor = 0; }
 
-            // this is much slower than doing nothing
             // find bounding sphere and frustum cull
-            // const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
-            // if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * tieClass.scale * objectScale)) {
-            //     continue;
-            // }
+            const objectScale = Math.hypot(objectMatrix[0], objectMatrix[1], objectMatrix[2]);
+            if (!cameraFrustum.containsSphere(position, 0x7FFF / 1024 * tieClass.scale * objectScale)) {
+                continue;
+            }
 
             tieInstancesToDrawByLod[modelLodLevel].push({
                 objectMatrix,

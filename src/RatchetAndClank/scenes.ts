@@ -523,7 +523,7 @@ class RatchetAndClankScene implements SceneGfx {
             for (let i = 0; i < mobyInstances.length; i++) {
                 const mobyInstance = mobyInstances[i];
                 const mobyClass = this.levelResources.mobyClasses?.get(mobyInstance.oClass);
-                // if (mobyClass && mobyClass.mesh) continue;
+                if (mobyClass && mobyClass.mesh) continue;
                 const pos = vec3.fromValues(mobyInstance.position.x, mobyInstance.position.y, mobyInstance.position.z);
                 vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
                 this.renderHelper.debugDraw.drawLocator(pos, 0.3, White);
@@ -649,7 +649,7 @@ class RatchetAndClankScene implements SceneGfx {
         };
         renderSettingsPanel.contents.appendChild(enableSky.elem);
 
-        const showInvisibleMobyPositions = new UI.Checkbox('Show Moby Positions', this.settings.showInvisibleMobyPositions);
+        const showInvisibleMobyPositions = new UI.Checkbox('Show Hidden Moby Positions', this.settings.showInvisibleMobyPositions);
         showInvisibleMobyPositions.onchanged = () => {
             this.settings.showInvisibleMobyPositions = showInvisibleMobyPositions.checked;
         };
