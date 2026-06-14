@@ -166,7 +166,7 @@ export function processTrackFile(
     try {
       resource = getResource(track, res);
     } catch (e) {
-      console.error("Error fetching resource", res.resourceName, e);
+      console.log("Error fetching resource", res.resourceName, e);
       continue;
     }
 
