@@ -1,4 +1,4 @@
-import "./wasm_exec.js";
+import { ActorData, ActorTransforms, RumbleRacingTrackFile } from "./rr.js";
 import { mat4 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
@@ -34,14 +34,10 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
-import {
-  RumbleRacingTrackFile,
-  Actor,
-  ActorTransforms,
-  ExcludeInfo,
-} from "./types";
 import { TrackProgram } from "./TrackProgram";
 import { ObfGeometry, O3DGeometry } from "./Geometry";
+import { ExcludeInfo } from "./types.js";
+import { Actor } from "./asset/Cact.js";
 
 const pathBase = `RumbleRacing`;
 
@@ -75,21 +71,21 @@ class RumbleRacingScene implements SceneGfx {
 
     this.setActorTransforms();
 
-    for (const actor of this.trackFile.Actors) {
+    for (const actor of this.trackFile.actors) {
       this.actorMatrices.set(
-        actor.ResourceIndex,
+        actor.resourceIndex,
         buildActorMatrix(actor, GLOBAL_SCALE),
       );
     }
 
-    for (const obf of this.trackFile.Obfs) {
+    for (const obf of this.trackFile.obfs) {
       this.trackGeometries.push(new ObfGeometry(cache, obf, this.exclude));
     }
 
-    for (let i = 0; i < this.trackFile.O3Ds.length; i++) {
-      const o3d = this.trackFile.O3Ds[i];
+    for (let i = 0; i < this.trackFile.o3ds.length; i++) {
+      const o3d = this.trackFile.o3ds[i];
       this.o3dGeometries.set(
-        o3d.ResourceIndex,
+        o3d.resourceIndex,
         new O3DGeometry(cache, o3d, this.exclude),
       );
     }
@@ -108,9 +104,9 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private setActorTransforms() {
-    for (const actor of this.trackFile.Actors) {
-      if (this.actorTrans && this.actorTrans[actor.ResourceIndex]) {
-        actor.transform = this.actorTrans[actor.ResourceIndex];
+    for (const actor of this.trackFile.actors) {
+      if (this.actorTrans && this.actorTrans[actor.resourceIndex]) {
+        actor.transform = this.actorTrans[actor.resourceIndex];
         // console.log("Set trans for", actor.Name, actor.transform);
       }
       // else {
@@ -122,25 +118,25 @@ class RumbleRacingScene implements SceneGfx {
   private handleTextures() {
     const device = this.renderHelper.device;
 
-    for (const texture of this.trackFile.Textures.sort(
-      (a, b) => a.TextureId - b.TextureId,
+    for (const texture of this.trackFile.textures.sort(
+      (a, b) => a.textureId - b.textureId,
     )) {
-      const binary = atob(texture.PngBytes);
-      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      // const binary = atob(texture.pngBytes);
+      // const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
 
       const tex = device.createTexture(
         makeTextureDescriptor2D(
           GfxFormat.U8_RGBA_NORM,
-          texture.Width,
-          texture.Height,
+          texture.width,
+          texture.height,
           1,
         ),
       );
 
-      device.uploadTextureData(tex, 0, [bytes]);
-      device.setResourceName(tex, `texture_${texture.TextureId}`);
+      device.uploadTextureData(tex, 0, [texture.pngBytes]);
+      device.setResourceName(tex, `texture_${texture.textureId}`);
 
-      this.textureMap.set(texture.TextureId, tex);
+      this.textureMap.set(texture.textureId, tex);
       this.textureHolder.viewerTextures.push({ gfxTexture: tex });
     }
 
@@ -221,11 +217,11 @@ class RumbleRacingScene implements SceneGfx {
     }
 
     if (this.showActors) {
-      for (const actor of this.trackFile.Actors) {
-        const o3dGeom = this.o3dGeometries.get(actor.O3DResourceIndex);
+      for (const actor of this.trackFile.actors) {
+        const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
 
-        const actorMatrix = this.actorMatrices.get(actor.ResourceIndex)!;
+        const actorMatrix = this.actorMatrices.get(actor.resourceIndex)!;
 
         if (o3dGeom.isAnimated) {
           const frame = o3dGeom.obfGeometries[o3dGeom.animationFrame];
@@ -368,7 +364,7 @@ class RumbleRacingScene implements SceneGfx {
   }
 }
 
-function buildActorMatrix(actor: Actor, globalScale: number): mat4 {
+function buildActorMatrix(actor: ActorData, globalScale: number): mat4 {
   const m = mat4.create();
 
   if (actor.transform) {
@@ -467,10 +463,10 @@ class RumbleRacingSceneDesc implements SceneDesc {
         },
       );
 
-    const existingTexIds = new Set(trackData.Textures.map((x) => x.TextureId));
-    trackData.Textures.push(
-      ...shared.globalTrackFile.Textures.filter(
-        (t) => !existingTexIds.has(t.TextureId),
+    const existingTexIds = new Set(trackData.textures.map((x) => x.textureId));
+    trackData.textures.push(
+      ...shared.globalTrackFile.textures.filter(
+        (t) => !existingTexIds.has(t.textureId),
       ),
     );
 
