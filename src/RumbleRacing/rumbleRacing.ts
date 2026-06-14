@@ -1,4 +1,9 @@
-import { parseTrackFile, getResourceList, getResource } from "./file/track";
+import {
+  parseTrackFile,
+  getResourceList,
+  getResource,
+  ParsedAsset,
+} from "./file/track";
 import { ObfNode } from "./asset/o3d/obf";
 import { getTextures } from "./asset/txf/TXF";
 import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
@@ -175,7 +180,7 @@ export function processTrackFile(
 
     if (isGlobalFile && !res.resourceName.includes("GLOBAL")) continue;
 
-    let resource: ReturnType<typeof getResource>;
+    let resource: ParsedAsset;
     try {
       resource = getResource(track, res);
     } catch (e) {
