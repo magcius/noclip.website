@@ -16,7 +16,12 @@ export interface O3D {
   obfs: Obf[];
 }
 
-export function parseO3D(isAnimated: boolean, buf: Uint8Array, header: SHDR, resName: string): O3D {
+export function parseO3D(
+  isAnimated: boolean,
+  buf: Uint8Array,
+  header: SHDR,
+  resName: string,
+): O3D {
   const o3d: O3D = {
     kind: "O3D",
     rawData: buf,

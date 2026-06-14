@@ -26,5 +26,14 @@ export function parseHEAD(buf: Uint8Array): HEAD {
     ptrs.push(readUint32LE(pointers, i));
   }
 
-  return { size, allocBytes: alloc, totalTextures, clheIterations, zthesCount, headPointerCount, unusedByte, ztheFilePointers: ptrs };
+  return {
+    size,
+    allocBytes: alloc,
+    totalTextures,
+    clheIterations,
+    zthesCount,
+    headPointerCount,
+    unusedByte,
+    ztheFilePointers: ptrs,
+  };
 }

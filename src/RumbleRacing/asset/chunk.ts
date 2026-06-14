@@ -22,7 +22,9 @@ export function parseChunks(data: Uint8Array): AssetChunk[] {
     const magic = data.slice(offset, offset + 4);
     const size = readUint32LE(data, offset + 4);
     if (size < 8) {
-      throw new Error(`invalid chunk size ${size} for "${new TextDecoder().decode(magic)}"`);
+      throw new Error(
+        `invalid chunk size ${size} for "${new TextDecoder().decode(magic)}"`,
+      );
     }
     const chunkEnd = offset + size;
     if (chunkEnd > data.length) {

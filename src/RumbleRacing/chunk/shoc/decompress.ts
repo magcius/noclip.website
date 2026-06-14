@@ -48,7 +48,10 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
     const lengthNib = (b0 >> 4) & 7;
     let length = lengthNib;
     if (length === 7) {
-      if (i >= n) throw new Error(`unexpected end of input while reading extended length at input ${i}`);
+      if (i >= n)
+        throw new Error(
+          `unexpected end of input while reading extended length at input ${i}`,
+        );
       length = readU8(i) + 7;
       i++;
     }
@@ -57,7 +60,8 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
     const full = ((b0 << 8) | b1) >>> 0;
     const off = (full & 0x0fff) | b1;
     let srcStart = dst.length - off;
-    if (srcStart < 0) throw new Error(`invalid LZ offset ${off} (dstlen=${dst.length})`);
+    if (srcStart < 0)
+      throw new Error(`invalid LZ offset ${off} (dstlen=${dst.length})`);
 
     const reverse = (full & 0x8000) !== 0;
 
@@ -107,11 +111,15 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
       let p = srcStart + 2;
       let remain = copyLen;
       while (remain >= 8) {
-        if (p < 0 || p >= dst.length) throw new Error(`reverse read OOB p=${p} (dstlen=${dst.length})`);
+        if (p < 0 || p >= dst.length)
+          throw new Error(`reverse read OOB p=${p} (dstlen=${dst.length})`);
         const seq: number[] = [dst[p]];
         for (let neg = 1; neg <= 7; neg++) {
           const idx = p - neg;
-          if (idx < 0 || idx >= dst.length) throw new Error(`reverse read OOB idx=${idx} (dstlen=${dst.length})`);
+          if (idx < 0 || idx >= dst.length)
+            throw new Error(
+              `reverse read OOB idx=${idx} (dstlen=${dst.length})`,
+            );
           seq.push(dst[idx]);
         }
         for (const b of seq) dst.push(b);
@@ -119,7 +127,10 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
         remain -= 8;
       }
       while (remain > 0) {
-        if (p < 0 || p >= dst.length) throw new Error(`reverse remainder read OOB p=${p} (dstlen=${dst.length})`);
+        if (p < 0 || p >= dst.length)
+          throw new Error(
+            `reverse remainder read OOB p=${p} (dstlen=${dst.length})`,
+          );
         dst.push(dst[p]);
         p--;
         remain--;

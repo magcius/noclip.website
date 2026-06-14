@@ -1,9 +1,6 @@
 import { BinaryReader } from "../helpers/bytes";
 import { TopLevelChunk, readTopLevelChunk } from "../chunk/chunk";
-import { Shoc } from "../chunk/shoc/shoc";
 import { SHDR } from "../chunk/shoc/shdr";
-import { SDAT } from "../chunk/shoc/sdat";
-import { Rdat } from "../chunk/shoc/rdat";
 import { decompress } from "../chunk/shoc/decompress";
 import { parseRLst, RLst, ResourceEntry } from "../asset/RLst";
 import { parseActor, Actor } from "../asset/Cact";
@@ -44,7 +41,10 @@ export function readTrackChunks(data: Uint8Array): TopLevelChunk[] {
   return chunks;
 }
 
-export function parseTrackFile(data: Uint8Array, fileName: string = "unknown"): TrackFile {
+export function parseTrackFile(
+  data: Uint8Array,
+  fileName: string = "unknown",
+): TrackFile {
   return {
     fileName,
     fileSize: data.length,
@@ -63,12 +63,18 @@ function getHeadersForType(track: TrackFile, assetType: string): SHDR[] {
   return headers;
 }
 
-function getHeaderForResource(track: TrackFile, res: ResourceEntry): SHDR | null {
+function getHeaderForResource(
+  track: TrackFile,
+  res: ResourceEntry,
+): SHDR | null {
   for (const chunk of track.topLevelChunks) {
     if (chunk.kind !== "SHOC") continue;
     const meta = chunk.metadata;
     if (meta.kind !== "SHDR") continue;
-    if (meta.assetType === res.typeTag && meta.assetIndex === res.resourceIndex) {
+    if (
+      meta.assetType === res.typeTag &&
+      meta.assetIndex === res.resourceIndex
+    ) {
       return meta;
     }
   }
@@ -120,17 +126,26 @@ export function getResourceList(track: TrackFile): RLst {
   return combined;
 }
 
-export function getResource(track: TrackFile, resource: ResourceEntry): ParsedAsset {
+export function getResource(
+  track: TrackFile,
+  resource: ResourceEntry,
+): ParsedAsset {
   const header = getHeaderForResource(track, resource);
-  if (!header) throw new Error(`Header not found for resource ${resource.resourceName}`);
+  if (!header)
+    throw new Error(`Header not found for resource ${resource.resourceName}`);
   const data = getDataForHeader(track, header);
 
   switch (resource.typeTag) {
-    case "TxtR": return parseTxtR(data, header);
-    case "Cact": return parseActor(data);
-    case "obf ": return parseObf(data);
-    case "o3d ": return parseO3D(false, data, header, resource.resourceName);
-    case "o3da": return parseO3D(true, data, header, resource.resourceName);
+    case "TxtR":
+      return parseTxtR(data, header);
+    case "Cact":
+      return parseActor(data);
+    case "obf ":
+      return parseObf(data);
+    case "o3d ":
+      return parseO3D(false, data, header, resource.resourceName);
+    case "o3da":
+      return parseO3D(true, data, header, resource.resourceName);
     case "txf ":
     case "txf2": {
       const name = `${resource.resourceIndex}_${resource.resourceName}`;

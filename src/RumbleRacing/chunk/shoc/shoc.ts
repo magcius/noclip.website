@@ -20,14 +20,22 @@ function parseSubChunk(data: Uint8Array, shocIndex: number): ShocMetadata {
 
   const inner = data.slice(12);
   switch (fourCC) {
-    case "SHDR": return parseSHDR(inner, shocIndex);
-    case "SDAT": return parseSDAT(inner);
-    case "Rdat": return parseRdat(inner);
-    default: throw new Error("Unhandled SHOC sub-chunk: " + fourCC);
+    case "SHDR":
+      return parseSHDR(inner, shocIndex);
+    case "SDAT":
+      return parseSDAT(inner);
+    case "Rdat":
+      return parseRdat(inner);
+    default:
+      throw new Error("Unhandled SHOC sub-chunk: " + fourCC);
   }
 }
 
-export function readSHOCChunk(r: BinaryReader, startPos: number, index: number): Shoc {
+export function readSHOCChunk(
+  r: BinaryReader,
+  startPos: number,
+  index: number,
+): Shoc {
   const chunkSize = r.readUint32LE();
   const data = r.readBytes(chunkSize - 8);
 

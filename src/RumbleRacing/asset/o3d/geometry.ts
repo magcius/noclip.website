@@ -1,8 +1,20 @@
 import { VifCommand, UnpackData } from "./vif";
 
-export interface Vertex { x: number; y: number; z: number; }
-export interface Normal { adcBitSet: boolean; x: number; y: number; z: number; }
-export interface UV { u: number; v: number; }
+export interface Vertex {
+  x: number;
+  y: number;
+  z: number;
+}
+export interface Normal {
+  adcBitSet: boolean;
+  x: number;
+  y: number;
+  z: number;
+}
+export interface UV {
+  u: number;
+  v: number;
+}
 
 export interface Primitive {
   totalVertsInPrimitive: number;
@@ -60,7 +72,11 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
       filtered[i].unpack?.type === "V4_32" &&
       filtered[i + 1].unpack?.type === "V4_32"
     ) {
-      const bufHeader = filtered[i].unpack!.v4_32.map(e => ({ v1: e.v1, v2: e.v2, lastOffset: e.offset }));
+      const bufHeader = filtered[i].unpack!.v4_32.map((e) => ({
+        v1: e.v1,
+        v2: e.v2,
+        lastOffset: e.offset,
+      }));
       i++;
 
       const strips: StripChunk[] = [];
@@ -126,8 +142,11 @@ function findTextureId(textures: TextureMeta, dataAddress: number): number {
   return bestId;
 }
 
-export function getGeometry(commandStream: VifCommand[], textures: TextureMeta): Geometry {
-  const filtered = commandStream.filter(c => c.kind === "UNPACK");
+export function getGeometry(
+  commandStream: VifCommand[],
+  textures: TextureMeta,
+): Geometry {
+  const filtered = commandStream.filter((c) => c.kind === "UNPACK");
   const chunks = getBufferChunks(filtered);
   const geometry: Geometry = { buffers: [] };
 
@@ -152,15 +171,36 @@ export function getGeometry(commandStream: VifCommand[], textures: TextureMeta):
       for (const triple of sChunk.dataTriples) {
         const { a: cmdA, b: cmdB, c: cmdC } = triple;
 
-        if (cmdA.type === "V3_32" && cmdB.type === "V3_32" && cmdC.type === "V2_32") {
+        if (
+          cmdA.type === "V3_32" &&
+          cmdB.type === "V3_32" &&
+          cmdC.type === "V2_32"
+        ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
-            strip.normals.push({ x: cmdA.v3_32[j].v1, y: cmdA.v3_32[j].v2, z: cmdA.v3_32[j].v3, adcBitSet: cmdA.v3_32[j].adcBitSet });
-            strip.vertices.push({ x: cmdB.v3_32[j].v1, y: cmdB.v3_32[j].v2, z: cmdB.v3_32[j].v3 });
+            strip.normals.push({
+              x: cmdA.v3_32[j].v1,
+              y: cmdA.v3_32[j].v2,
+              z: cmdA.v3_32[j].v3,
+              adcBitSet: cmdA.v3_32[j].adcBitSet,
+            });
+            strip.vertices.push({
+              x: cmdB.v3_32[j].v1,
+              y: cmdB.v3_32[j].v2,
+              z: cmdB.v3_32[j].v3,
+            });
             strip.uvs.push({ u: cmdC.v2_32[j].v1, v: cmdC.v2_32[j].v2 });
           }
-        } else if (cmdA.type === "V3_32" && cmdB.type === "V2_32" && cmdC.type === "V4_8") {
+        } else if (
+          cmdA.type === "V3_32" &&
+          cmdB.type === "V2_32" &&
+          cmdC.type === "V4_8"
+        ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
-            strip.vertices.push({ x: cmdA.v3_32[j].v1, y: cmdA.v3_32[j].v2, z: cmdA.v3_32[j].v3 });
+            strip.vertices.push({
+              x: cmdA.v3_32[j].v1,
+              y: cmdA.v3_32[j].v2,
+              z: cmdA.v3_32[j].v3,
+            });
             strip.uvs.push({ u: cmdB.v2_32[j].v1, v: cmdB.v2_32[j].v2 });
             strip.normals.push({
               x: cmdC.v4_8[j].v1 / 255.0,

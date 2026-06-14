@@ -11,7 +11,11 @@ export interface GenericAsset extends Asset {
   header: SHDR;
 }
 
-export function parseGenericAsset(buf: Uint8Array, tag: string, header: SHDR): GenericAsset {
+export function parseGenericAsset(
+  buf: Uint8Array,
+  tag: string,
+  header: SHDR,
+): GenericAsset {
   return {
     kind: "GenericAsset",
     tag,

@@ -20,7 +20,10 @@ function mapLinearIndexToCoord(linearIndex: number): Coord {
   return { x, y };
 }
 
-export function groupBytesIntoChunks(data: Uint8Array, chunkSize: number): PixelBytes[] {
+export function groupBytesIntoChunks(
+  data: Uint8Array,
+  chunkSize: number,
+): PixelBytes[] {
   const chunks: PixelBytes[] = [];
   for (let i = 0; i < data.length; i += chunkSize) {
     const end = Math.min(i + chunkSize, data.length);
@@ -31,7 +34,9 @@ export function groupBytesIntoChunks(data: Uint8Array, chunkSize: number): Pixel
 
 export function swizzleClutPstm8<T>(data: T[]): T[] {
   if (data.length !== 256) {
-    throw new Error(`input array must contain exactly 256 elements, but got ${data.length}`);
+    throw new Error(
+      `input array must contain exactly 256 elements, but got ${data.length}`,
+    );
   }
   const result = new Array<T>(256);
   for (let i = 0; i < 256; i++) {

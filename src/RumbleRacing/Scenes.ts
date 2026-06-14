@@ -1,6 +1,7 @@
 import {
   ActorData,
   ActorTransforms,
+  ExcludeInfo,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
@@ -39,7 +40,6 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
-import { ExcludeInfo } from "./types";
 import { O3DGeometry, ObfGeometry } from "./geometry";
 import { TrackProgram } from "./trackProgram";
 

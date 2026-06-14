@@ -1,8 +1,13 @@
 import { TXF } from "./TXF";
 import { CLHEEntry } from "./CLHE";
 import { ZTHETexture } from "./ZTHE";
-import { groupBytesIntoChunks, swizzleClutPstm8, swizzleClutPstm4_16, PixelBytes } from "../../helpers/pstm8";
-import { readUint32LE, readUint16LE } from "../../helpers/bytes";
+import {
+  groupBytesIntoChunks,
+  swizzleClutPstm8,
+  swizzleClutPstm4_16,
+  PixelBytes,
+} from "../../helpers/pstm8";
+import { readUint32LE } from "../../helpers/bytes";
 
 export interface RGBAImage {
   pix: Uint8Array;
@@ -66,26 +71,46 @@ export function extractTexturesFromZTHE(
 
     let paletteSize: number;
     switch (zthe.texelStorageFormat) {
-      case PSMT8: paletteSize = 256; break;
-      case PSMT4: paletteSize = 16; break;
-      default: throw new Error("Unhandled indexed texel format!");
+      case PSMT8:
+        paletteSize = 256;
+        break;
+      case PSMT4:
+        paletteSize = 16;
+        break;
+      default:
+        throw new Error("Unhandled indexed texel format!");
     }
 
     let pixelBytes: number;
     switch (clutHeader.pixelFormat) {
-      case PSMCT32: pixelBytes = 4; paletteSize *= 4; break;
-      case PSMCT16: pixelBytes = 2; paletteSize *= 2; break;
-      default: throw new Error("Unhandled clut size!");
+      case PSMCT32:
+        pixelBytes = 4;
+        paletteSize *= 4;
+        break;
+      case PSMCT16:
+        pixelBytes = 2;
+        paletteSize *= 2;
+        break;
+      default:
+        throw new Error("Unhandled clut size!");
     }
 
-    const paletteDataUnswizzled = txf.clutData.rawData.slice(paletteStart, paletteStart + paletteSize);
+    const paletteDataUnswizzled = txf.clutData.rawData.slice(
+      paletteStart,
+      paletteStart + paletteSize,
+    );
     const grouped = groupBytesIntoChunks(paletteDataUnswizzled, pixelBytes);
 
     let swizzled: PixelBytes[];
     switch (zthe.texelStorageFormat) {
-      case PSMT8: swizzled = swizzleClutPstm8(grouped); break;
-      case PSMT4: swizzled = swizzleClutPstm4_16(grouped); break;
-      default: throw new Error("unhandled!");
+      case PSMT8:
+        swizzled = swizzleClutPstm8(grouped);
+        break;
+      case PSMT4:
+        swizzled = swizzleClutPstm4_16(grouped);
+        break;
+      default:
+        throw new Error("unhandled!");
     }
 
     const height = txImage.blockHeightPixels;
@@ -94,9 +119,13 @@ export function extractTexturesFromZTHE(
     const size = height * width;
     let colorSize = size;
     switch (zthe.texelStorageFormat) {
-      case PSMT8: break;
-      case PSMT4: colorSize = Math.floor(size / 2); break;
-      default: throw new Error("Something went wrong!");
+      case PSMT8:
+        break;
+      case PSMT4:
+        colorSize = Math.floor(size / 2);
+        break;
+      default:
+        throw new Error("Something went wrong!");
     }
 
     const start = txImage.txdaAddressOffset;
@@ -130,9 +159,14 @@ export function extractTexturesFromZTHE(
       let R: number, G: number, B: number, A: number;
 
       switch (clutHeader.pixelFormat) {
-        case PSMCT16: [R, G, B, A] = extract16bitRGBA(finalPixel); break;
-        case PSMCT32: [R, G, B, A] = extract32bitRGBA(finalPixel); break;
-        default: throw new Error("Something went wrong!");
+        case PSMCT16:
+          [R, G, B, A] = extract16bitRGBA(finalPixel);
+          break;
+        case PSMCT32:
+          [R, G, B, A] = extract32bitRGBA(finalPixel);
+          break;
+        default:
+          throw new Error("Something went wrong!");
       }
 
       pix[pxIndex * 4 + 0] = R;
@@ -151,9 +185,11 @@ export function extractTexturesFromZTHE(
     break; // only extract highest level mipmap
   }
 
-  return [{
-    name: `texture_${zthe.textureId}`,
-    textureId: zthe.textureId,
-    files: mipMaps,
-  }];
+  return [
+    {
+      name: `texture_${zthe.textureId}`,
+      textureId: zthe.textureId,
+      files: mipMaps,
+    },
+  ];
 }

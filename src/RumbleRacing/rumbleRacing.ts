@@ -1,6 +1,19 @@
 import { parseTrackFile, getResourceList, getResource } from "./file/track";
 import { ObfNode } from "./asset/o3d/obf";
 import { getTextures } from "./asset/txf/TXF";
+import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
+
+export interface ExcludeInfo {
+  textureIds?: Set<number>;
+  nodeIds?: Set<number>;
+}
+
+export interface DrawCall {
+  vertexBuffer: GfxBuffer;
+  indexBuffer: GfxBuffer;
+  indexCount: number;
+  textureId: number;
+}
 
 export interface JsonBuffer {
   bufferIndex: number;

@@ -70,19 +70,31 @@ export class BinaryReader {
 }
 
 export function readUint32LE(data: Uint8Array, offset: number): number {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(offset, true);
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(
+    offset,
+    true,
+  );
 }
 
 export function readUint16LE(data: Uint8Array, offset: number): number {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(offset, true);
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(
+    offset,
+    true,
+  );
 }
 
 export function readInt16LE(data: Uint8Array, offset: number): number {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength).getInt16(offset, true);
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getInt16(
+    offset,
+    true,
+  );
 }
 
 export function readFloat32LE(data: Uint8Array, offset: number): number {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength).getFloat32(offset, true);
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getFloat32(
+    offset,
+    true,
+  );
 }
 
 export function uint32ToFloat32(bits: number): number {

@@ -1,7 +1,11 @@
-import { readUint32LE, readUint16LE, readInt16LE, readFloat32LE } from "../../helpers/bytes";
+import {
+  readUint32LE,
+  readUint16LE,
+  readInt16LE,
+  readFloat32LE,
+} from "../../helpers/bytes";
 import { AssetChunk } from "../chunk";
 import { parseVif, VifCommand } from "./vif";
-import { getGeometry, Geometry, TextureMeta } from "./geometry";
 
 export interface ELHE_Header {
   raw: AssetChunk;
@@ -75,7 +79,9 @@ export function parseObfChunks(data: Uint8Array): ObfChunk[] {
     const size = readUint32LE(data, offset + 4);
     const chunkEnd = offset + size + 8;
     if (chunkEnd > data.length) {
-      throw new Error(`chunk size ${size} exceeds remaining data at offset ${offset}`);
+      throw new Error(
+        `chunk size ${size} exceeds remaining data at offset ${offset}`,
+      );
     }
     const payload = data.slice(offset, chunkEnd);
 

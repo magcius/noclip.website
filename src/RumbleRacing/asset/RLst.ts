@@ -1,4 +1,4 @@
-import { BinaryReader, reverseBytesInPlace } from "../helpers/bytes";
+import { BinaryReader } from "../helpers/bytes";
 
 export interface ResourceEntry {
   typeTag: string;
@@ -30,7 +30,9 @@ export function parseRLst(data: Uint8Array, fileName: string): RLst {
     const nameBytes = r.readBytes(24);
 
     const nullIdx = nameBytes.indexOf(0);
-    const name = new TextDecoder().decode(nullIdx === -1 ? nameBytes : nameBytes.slice(0, nullIdx));
+    const name = new TextDecoder().decode(
+      nullIdx === -1 ? nameBytes : nameBytes.slice(0, nullIdx),
+    );
 
     entries.push({ typeTag, resourceIndex: index, resourceName: name });
   }
