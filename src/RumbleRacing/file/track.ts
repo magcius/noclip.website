@@ -4,13 +4,12 @@ import { SHDR } from "../chunk/shoc/shdr";
 import { decompress } from "../chunk/shoc/decompress";
 import { parseRLst, RLst, ResourceEntry } from "../asset/RLst";
 import { parseActor, Actor } from "../asset/Cact";
-import { parseTxtR, TxtR } from "../asset/TxtR";
 import { parseGenericAsset, GenericAsset } from "../asset/asset";
 import { parseObf, Obf } from "../asset/o3d/obf";
 import { parseO3D, O3D } from "../asset/o3d/o3d";
 import { parseTXF, TXF } from "../asset/txf/TXF";
 
-export type ParsedAsset = Actor | Obf | O3D | TXF | TxtR | GenericAsset;
+export type ParsedAsset = Actor | Obf | O3D | TXF | GenericAsset;
 
 export interface TrackFile {
   fileName: string;
@@ -136,8 +135,6 @@ export function getResource(
   const data = getDataForHeader(track, header);
 
   switch (resource.typeTag) {
-    case "TxtR":
-      return parseTxtR(data, header);
     case "Cact":
       return parseActor(data);
     case "obf ":
