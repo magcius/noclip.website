@@ -39,6 +39,7 @@ import { Bgm } from "./bgm.js";
 import { MAX_POINT_LIGHTS, pickActiveLights, PointLight, POINT_LIGHT_FALLOFF_EXPONENT, POINT_LIGHT_INTENSITY } from "./lights.js";
 import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from "../BitMap.js";
 import { assertExists } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export interface EntityLayerBundle {
     entityData: EntitySceneData;
@@ -1847,21 +1848,22 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         return offs;
     }
 
-    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
-        const view = new DataView(src);
+    public deserializeSaveState(src: ArrayBufferSlice): void {
+        const view = src.createDataView();
+        let offs = 0;
 
-        if (byteLength - offs < 1)
-            return offs;
+        if (view.byteLength - offs < 1)
+            return;
         const hasArrival = view.getUint8(offs++);
         if (hasArrival === 1) {
-            if (byteLength - offs < 4)
-                return offs;
+            if (view.byteLength - offs < 4)
+                return;
             this.arrivalCellX = view.getInt16(offs, true); offs += 2;
             this.arrivalCellY = view.getInt16(offs, true); offs += 2;
         }
 
-        if (byteLength - offs < 6)
-            return offs;
+        if (view.byteLength - offs < 6)
+            return;
         const fogPacked = view.getUint8(offs++);
         this.fogEnabled = (fogPacked & 0x01) !== 0;
         this.fogDistanceMode = (fogPacked & 0x02) !== 0;
@@ -1869,19 +1871,19 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.fogNear = view.getUint16(offs, true); offs += 2;
         this.fogFar = view.getUint16(offs, true); offs += 2;
 
-        if (byteLength - offs < 4)
-            return offs;
+        if (view.byteLength - offs < 4)
+            return;
         this.light.longitudeDeg = view.getInt16(offs, true); offs += 2;
         this.light.pitchDeg = view.getInt16(offs, true); offs += 2;
         this.updateSunDir();
 
-        if (byteLength - offs < 1)
-            return offs;
+        if (view.byteLength - offs < 1)
+            return;
         this.nightDegree = view.getUint8(offs++) / 255;
 
         const layerBytes = bitMapGetSerializedByteLength(NUM_LAYER_BITS);
-        if (byteLength - offs < layerBytes)
-            return offs;
+        if (view.byteLength - offs < layerBytes)
+            return;
         const bits = new BitMap(NUM_LAYER_BITS);
         offs = bitMapDeserialize(view, offs, bits);
         const spr = this.spriteRenderer;
@@ -1897,7 +1899,6 @@ export class RagnarokTerrainRenderer implements SceneGfx {
         this.showNameLabels = bits.getBit(LayerBit.NameLabels);
         this.weatherEnabled = bits.getBit(LayerBit.Weather);
         this.showWarpPortals = bits.getBit(LayerBit.WarpPortals);
-        return offs;
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {

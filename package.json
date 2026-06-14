@@ -131,12 +131,6 @@
       ]
     }
   },
-  "bin": {
-    "nc-bcsvtool": "./src/tools/bcsvtool.ts",
-    "nc-rarctool": "./src/tools/rarctool.ts",
-    "nc-crg1tool": "./src/tools/crg1tool.ts",
-    "nc-bnd3tool": "./src/DarkSouls/tools/bnd3tool.ts"
-  },
   "browserslist": [
     "last 2 Chrome versions"
   ],

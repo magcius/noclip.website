@@ -28,7 +28,10 @@ export function readLevelCoreHeader(view: DataViewExt) {
         fxBankOffset: view.getInt32(0x68),
         partDefsOffset: view.getInt32(0x6c),
         soundRemapOffset: view.getInt32(0x70),
+        ratchetSequencesOrLightCuboidOffset: view.getInt32(0x74), // rac1: ratchet sequences, rac234: light cuboids
         sceneViewSize: view.getInt32(0x7c),
+        gadgetCountOrUnknown: view.getInt32(0x80), // rac1: gadget count, rac234: unknown
+        gadgetOffsetOrMobyStashCount: view.getInt32(0x84), // rac1: gadget offset, rac234: moby stash count
         assetsCompressedSize: view.getInt32(0x88),
         assetsDecompressedSize: view.getInt32(0x8c),
         chromeMapTexture: view.getInt32(0x90),

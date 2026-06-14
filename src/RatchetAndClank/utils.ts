@@ -4,6 +4,10 @@ import { Color } from "../Color";
 import { assert, nArray } from "../util";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { ClassEntry } from "./bin-index";
+import { ChunkPlane, MobyInstance } from "./bin-gameplay";
+
+// game number shorthand
+export type GN = 1 | 2 | 3 | 4;
 
 // rotate the whole world 90 degrees
 const _noclipSpaceFromRatchetSpace = mat4.create();
@@ -48,6 +52,51 @@ export function makeClassOClassMap<T>(entries: { oClass: number }[], classes: T[
         }
     }
     return map;
+}
+
+// return the chunk index that a position belongs to
+export function ownerChunk(pos: vec3, chunkPlanes: ChunkPlane[]): number {
+    if (!chunkPlanes) return 0;
+    for (let j = 0; j < chunkPlanes.length; j++) {
+        const plane = chunkPlanes[j];
+        const v = vec3.sub(vec3.create(), pos, plane._pointInNoclipSpace);
+        const dot = vec3.dot(v, plane._normalInNoclipSpace);
+        if (dot >= 0) {
+            return j + 1;
+        }
+    }
+    return 0;
+}
+
+// filter tie or shrub instances matching a chunk id
+export function filterInstancesByChunkPlane<T extends { _matrixInNoclipSpace: mat4 }>(chunkNumber: number | null, instances: T[], chunkPlanes: ChunkPlane[] | undefined): T[] {
+    if (!chunkPlanes) return instances;
+    if (chunkNumber === null) return instances;
+    const out: T[] = [];
+    for (let i = 0; i < instances.length; i++) {
+        const instance = instances[i];
+        const pos = mat4.getTranslation(vec3.create(), instance._matrixInNoclipSpace);
+        if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
+            out.push(instance);
+        }
+    }
+    return out;
+}
+
+// filter moby instances matching a chunk id
+export function filterMobyInstancesByChunkPlane(chunkNumber: number | null, instances: MobyInstance[], chunkPlanes: ChunkPlane[] | undefined): MobyInstance[] {
+    if (!chunkPlanes) return instances;
+    if (chunkNumber === null) return instances;
+    const out: MobyInstance[] = [];
+    for (let i = 0; i < instances.length; i++) {
+        const instance = instances[i];
+        const pos = vec3.fromValues(instance.position.x, instance.position.y, instance.position.z);
+        vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
+        if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
+            out.push(instance);
+        }
+    }
+    return out;
 }
 
 // get bits from startBit to endBit (inclusive)

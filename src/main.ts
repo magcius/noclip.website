@@ -110,7 +110,7 @@ import * as Scenes_Spyro from './Spyro/scenes.js';
 import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
-import * as Scenes_RatchetAndClank1 from './RatchetAndClank/scenes.js';
+import * as Scenes_RatchetAndClank from './RatchetAndClank/scenes.js';
 import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
 import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
 import * as Scenes_RumbleRacing from "./RumbleRacing/Scenes.js";
@@ -118,11 +118,10 @@ import * as Scenes_RumbleRacing from "./RumbleRacing/Scenes.js";
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
 import { UI, Panel } from './ui.js';
-import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera.js';
+import { Camera, FPSCameraController } from './Camera.js';
 import { assertExists, assert } from './util.js';
 import { loadRustLib } from './rustlib.js';
 import { DataFetcher } from './DataFetcher.js';
-import { atob, btoa } from './Ascii85.js';
 import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager.js';
 import { RenderStatistics } from './RenderStatistics.js';
@@ -138,6 +137,8 @@ import { WebXRContext } from './WebXR.js';
 import { debugJunk } from './DebugJunk.js';
 import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
+import { SaveState, SaveStateSerializer } from './SaveState.js';
+import ArrayBufferSlice from './ArrayBufferSlice.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
     "Development",
@@ -222,7 +223,8 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Spyro.sceneGroup,
     Scenes_Spyro.sceneGroup2,
     Scenes_Spyro.sceneGroup3,
-    Scenes_RatchetAndClank1.sceneGroup,
+    Scenes_RatchetAndClank.sceneGroup1,
+    Scenes_RatchetAndClank.sceneGroup2,
     Scenes_PlusForXP.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
@@ -379,6 +381,8 @@ class Main {
     private droppedFileGroup: SceneGroup;
     private sceneDatabase = new SceneDatabase(sceneGroups);
 
+    private saveStateSerializer = new SaveStateSerializer();
+
     private currentSceneDesc: SceneDesc | null = null;
 
     private loadingSceneDesc: SceneDesc | null = null;
@@ -462,11 +466,11 @@ class Main {
         this._onRequestAnimationFrame();
     }
 
-    private _reloadCurrentSceneDesc(sceneSaveState: string | null = null): void {
-        if (sceneSaveState === null)
-            sceneSaveState = this._getSceneSaveState();
+    private _reloadCurrentSceneDesc(saveState: SaveState | null = null): void {
+        if (saveState === null)
+            saveState = this._getSceneSaveState();
         if (this.currentSceneDesc !== null)
-            this._loadSceneDesc(this.currentSceneDesc, sceneSaveState, true);
+            this._loadSceneDesc(this.currentSceneDesc, saveState, true);
     }
 
     private initializePlatforms(): void {
@@ -582,43 +586,46 @@ class Main {
             this._saveCurrentTimeState(this._getCurrentSceneDescId()!);
     }
 
-    private _decodeHashString(hashString: string): [string, string] {
-        let sceneDescId: string = '', sceneSaveState: string = '';
+    private _decodeHashString(hashString: string): [string, SaveState | null] {
+        let sceneDescId: string = '', saveStateStr: string | null = null;
         const firstSemicolon = hashString.indexOf(';');
         if (firstSemicolon >= 0) {
             sceneDescId = hashString.slice(0, firstSemicolon);
-            sceneSaveState = hashString.slice(firstSemicolon + 1);
+            saveStateStr = hashString.slice(firstSemicolon + 1);
         } else {
             sceneDescId = hashString;
         }
 
-        return [sceneDescId, sceneSaveState];
+        const saveState = saveStateStr !== null ? this._deserializeSaveState(saveStateStr) : null;
+        return [sceneDescId, saveState];
     }
 
-    private _decodeHash(): [string, string] {
+    private _decodeHash(): [string | null, SaveState | null] {
         const hash = window.location.hash;
         if (hash.startsWith('#')) {
             return this._decodeHashString(decodeURIComponent(hash.slice(1)));
         } else {
-            return ['', ''];
+            return ['', null];
         }
     }
 
     private _onHashChange(): void {
         const [sceneDescId, sceneSaveState] = this._decodeHash();
-        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        const sceneDesc = sceneDescId !== null ? this.sceneDatabase.getSceneDescForId(sceneDescId) : null;
         if (sceneDesc !== null)
             this._loadSceneDesc(sceneDesc, sceneSaveState);
     }
 
     private _loadInitialStateFromHash(): void {
-        const [sceneDescId, sceneSaveState] = this._decodeHash();
-        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        let [sceneDescId, sceneSaveState] = this._decodeHash();
+        const sceneDesc = sceneDescId !== null ? this.sceneDatabase.getSceneDescForId(sceneDescId) : null;
         if (sceneDesc !== null) {
             // Load save slot 0 from session storage.
-            const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 0);
-            const sceneState = this.saveManager.loadState(key) ?? sceneSaveState;
-            this._loadSceneDesc(sceneDesc, sceneState);
+            if (sceneSaveState === null) {
+                const key = this.saveManager.getSaveStateSlotKey(sceneDescId!, 0);
+                sceneSaveState = this._deserializeSaveState(this.saveManager.loadState(key));
+            }
+            this._loadSceneDesc(sceneDesc, sceneSaveState);
         }
     }
 
@@ -644,7 +651,7 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('KeyT'))
             this.ui.sceneSelect.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
-            if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
+            if (inputManager.isKeyDownEventTriggered('Digit' + i)) {
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
                     const action = this._pickSaveStatesAction(inputManager);
@@ -681,7 +688,7 @@ class Main {
                 this.webXRContext.xrSession.addEventListener('end', () => {
                     this.ui.toggleWebXRCheckbox(false);
                 });
-            } catch(e) {
+            } catch (e) {
                 console.error("Failed to start XR");
                 this.ui.toggleWebXRCheckbox(false);
             }
@@ -743,86 +750,29 @@ class Main {
         resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio / this.pixelSize);
     }
 
-    private _saveStateTmp = new Uint8Array(512);
-    private _saveStateView = new DataView(this._saveStateTmp.buffer);
-    // TODO(jstpierre): Save this in main instead of having this called 8 bajillion times...
-    private _getSceneSaveState() {
-        let byteOffs = 0;
-
-        const optionsBits = 0;
-        this._saveStateView.setUint8(byteOffs, optionsBits);
-        byteOffs++;
-
-        byteOffs += serializeCamera(this._saveStateView, byteOffs, this.viewer.camera);
+    private _getSceneSaveState(): SaveState {
+        const saveState: SaveState = {
+            cameraWorldMatrix: this.viewer.camera.worldMatrix,
+            sceneData: null,
+        };
 
         // TODO(jstpierre): Pass DataView into serializeSaveState
-        if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs);
-
-        const s = btoa(this._saveStateTmp, byteOffs);
-        return `ShareData=${s}`;
-    }
-
-    private _loadSceneSaveStateVersion2(state: string): boolean {
-        const byteLength = atob(this._saveStateTmp, 0, state);
-
-        let byteOffs = 0;
-        this.viewer.sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
-        byteOffs += 0x04;
-        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
-
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.cameraUpdateForced();
-
-        return true;
-    }
-
-    private _loadSceneSaveStateVersion3(state: string): boolean {
-        const byteLength = atob(this._saveStateTmp, 0, state);
-
-        let byteOffs = 0;
-        const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
-        assert(optionsBits === 0);
-        byteOffs++;
-
-        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
-
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.cameraUpdateForced();
-
-        return true;
-    }
-
-    private _tryLoadSceneSaveState(state: string): boolean {
-        // Version 2 starts with ZNCA8, which is Ascii85 for 'NC\0\0'
-        if (state.startsWith('ZNCA8') && state.endsWith('='))
-            return this._loadSceneSaveStateVersion2(state.slice(5, -1));
-
-        // Version 3 starts with 'A' and has no '=' at the end.
-        if (state.startsWith('A'))
-            return this._loadSceneSaveStateVersion3(state.slice(1));
-
-        if (state.startsWith('ShareData='))
-            return this._loadSceneSaveStateVersion3(state.slice(10));
-
-        return false;
-    }
-
-    private _loadSceneSaveState(state: string | null): boolean {
-        if (state === '' || state === null)
-            return false;
-
-        if (this._tryLoadSceneSaveState(state)) {
-            // Force an update of the URL whenever we successfully load state...
-            this._saveStateAndUpdateURL();
-            return true;
-        } else {
-            return false;
+        if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState) {
+            const extraData = new ArrayBuffer(512);
+            const byteLength = this.viewer.scene.serializeSaveState(extraData, 0);
+            saveState.sceneData = new ArrayBufferSlice(extraData, 0, byteLength);
         }
+
+        if (this.saveManager.loadSetting("SaveStateFovY", false) && this.viewer.camera.fovY !== Camera.DefaultFovY) {
+            saveState.fovY = this.viewer.camera.fovY;
+        }
+
+        return saveState;
+    }
+
+    private _getSceneSaveStateStr() {
+        const saveState = this._getSceneSaveState();
+        return this.saveStateSerializer.serializeSaveState(saveState);
     }
 
     private _getCurrentSceneDescId() {
@@ -859,7 +809,7 @@ class Main {
         if (this.currentSceneDesc === null)
             return;
 
-        const sceneStateStr = this._getSceneSaveState();
+        const sceneStateStr = this._getSceneSaveStateStr();
         const currentSceneDescId = this._getCurrentSceneDescId()!;
         const key = this.saveManager.getSaveStateSlotKey(currentSceneDescId, 0);
         this.saveManager.saveTemporaryState(key, sceneStateStr);
@@ -895,7 +845,47 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
-    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null, timeState: TimeState | null): void {
+    private _applySaveState(saveState: SaveState): void {
+        mat4.copy(this.viewer.camera.worldMatrix, saveState.cameraWorldMatrix);
+
+        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState && saveState.sceneData !== null)
+            this.viewer.scene.deserializeSaveState(saveState.sceneData);
+
+        if (this.viewer.cameraController !== null)
+            this.viewer.cameraController.cameraUpdateForced();
+
+        if (saveState.fovY !== undefined)
+            this.viewer.camera.fovY = saveState.fovY;
+
+        this.ui.sceneChanged();
+    }
+
+    private _deserializeSaveState(str: string | null): SaveState | null {
+        if (str === null)
+            return null;
+
+        const saveState: SaveState = {
+            cameraWorldMatrix: mat4.create(),
+            sceneData: null,
+        };
+
+        if (!this.saveStateSerializer.deserializeSaveState(saveState, str))
+            return null;
+
+        return saveState;
+    }
+
+    private _loadSaveStateString(str: string | null): boolean {
+        const saveState = this._deserializeSaveState(str);
+        if (saveState !== null) {
+            this._applySaveState(saveState);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private _onSceneChanged(scene: SceneGfx, saveState: SaveState | null, timeState: TimeState | null): void {
         scene.onstatechanged = () => {
             this._saveStateAndUpdateURL();
         };
@@ -919,24 +909,25 @@ class Main {
         if (timeState !== null)
             this._applyTimeState(timeState);
 
-        if (!this._loadSceneSaveState(sceneStateStr)) {
+        if (saveState !== null) {
+            this._applySaveState(saveState);
+        } else {
             const camera = this.viewer.camera;
 
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
-            const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
+            const didLoadSaveState = this._loadSaveStateString(this.saveManager.loadState(key));
 
-            if (!didLoadCameraState) {
+            if (!didLoadSaveState) {
                 if (scene.getDefaultWorldMatrix !== undefined)
                     scene.getDefaultWorldMatrix(camera.worldMatrix);
                 else
                     mat4.identity(camera.worldMatrix);
             }
-
-            mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
 
+        mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
+
         this._saveStateAndUpdateURL();
-        this.ui.sceneChanged();
     }
 
     private _onSceneDescSelected(sceneDesc: SceneDesc) {
@@ -945,15 +936,15 @@ class Main {
 
     private doSaveStatesAction(action: SaveStatesAction, key: string): void {
         if (action === SaveStatesAction.Save) {
-            this.saveManager.saveState(key, this._getSceneSaveState());
+            this.saveManager.saveState(key, this._getSceneSaveStateStr());
         } else if (action === SaveStatesAction.Delete) {
             this.saveManager.deleteState(key);
         } else if (action === SaveStatesAction.Load) {
             const state = this.saveManager.loadState(key);
-            this._loadSceneSaveState(state);
+            this._loadSaveStateString(state);
         } else if (action === SaveStatesAction.LoadDefault) {
             const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
-            this._loadSceneSaveState(state);
+            this._loadSaveStateString(state);
         }
     }
 
@@ -981,9 +972,10 @@ class Main {
         this.destroyablePool.length = 0;
     }
 
-    private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
+    private _loadSceneDesc(sceneDesc: SceneDesc, saveState: SaveState | null = null, force: boolean = false): void {
         if (this.currentSceneDesc === sceneDesc && !force) {
-            this._loadSceneSaveState(sceneStateStr);
+            if (saveState !== null)
+                this._applySaveState(saveState);
             return;
         }
 
@@ -1045,7 +1037,7 @@ class Main {
                 dataFetcher.setProgress();
                 this.loadingSceneDesc = null;
                 this.viewer.setScene(scene);
-                this._onSceneChanged(scene, sceneStateStr, timeState);
+                this._onSceneChanged(scene, saveState, timeState);
             }
         });
 
@@ -1054,9 +1046,9 @@ class Main {
     }
 
     // SceneLoader API
-    public loadSceneById(sceneGroup: string, sceneId: string, sceneSaveState: string | null): void {
+    public loadSceneById(sceneGroup: string, sceneId: string, saveState: SaveState | null): void {
         const sceneDesc = assertExists(this.sceneDatabase.getSceneDescForGroupAndId(sceneGroup, sceneId));
-        this._loadSceneDesc(sceneDesc, sceneSaveState, true);
+        this._loadSceneDesc(sceneDesc, saveState, true);
     }
 
     private _makeUI() {
