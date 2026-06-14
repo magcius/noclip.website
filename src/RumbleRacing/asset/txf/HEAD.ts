@@ -7,7 +7,6 @@ export interface HEAD {
   clheIterations: number;
   zthesCount: number;
   headPointerCount: number;
-  unusedByte: number;
   ztheFilePointers: number[];
 }
 
@@ -18,7 +17,6 @@ export function parseHEAD(buf: Uint8Array): HEAD {
   const clheIterations = buf[12];
   const zthesCount = buf[13];
   const headPointerCount = buf[14];
-  const unusedByte = buf[15];
 
   const pointers = buf.slice(16);
   const ptrs: number[] = [];
@@ -33,7 +31,6 @@ export function parseHEAD(buf: Uint8Array): HEAD {
     clheIterations,
     zthesCount,
     headPointerCount,
-    unusedByte,
     ztheFilePointers: ptrs,
   };
 }

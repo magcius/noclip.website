@@ -2,7 +2,6 @@ import { readUint32LE, readUint16LE } from "../../helpers/bytes";
 
 export interface ZTHETextureMetaHeader {
   txdaAddressOffset: number;
-  unk: number;
   blockHeightPixels: number;
   selfPlusMemAllocRes: number;
   ramDestWidth: number;
@@ -41,7 +40,6 @@ export function parseZTHE(buf: Uint8Array): ZTHE {
       const hData = data.slice(offset, offset + 0xc);
       metaHeaders.push({
         txdaAddressOffset: readUint32LE(hData, 0),
-        unk: readUint16LE(hData, 0x4),
         blockHeightPixels: readUint16LE(hData, 0x6),
         selfPlusMemAllocRes: readUint16LE(hData, 0x8),
         ramDestWidth: readUint16LE(hData, 0xa),
