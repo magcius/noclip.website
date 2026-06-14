@@ -23,32 +23,7 @@ export interface Generic {
   data: Uint8Array;
 }
 
-export interface SWVR {
-  kind: "SWVR";
-  index: number;
-  startAddress: number;
-  data: Uint8Array;
-  fileName: string;
-  fullData: Uint8Array;
-}
-
-export interface VAGB {
-  kind: "VAGB";
-  index: number;
-  startAddress: number;
-  data: Uint8Array;
-  fullData: Uint8Array;
-}
-
-export interface VAGM {
-  kind: "VAGM";
-  index: number;
-  startAddress: number;
-  data: Uint8Array;
-  fullData: Uint8Array;
-}
-
-export type TopLevelChunk = Ctrl | Fill | Generic | SWVR | VAGB | VAGM | Shoc;
+export type TopLevelChunk = Ctrl | Fill | Generic | Shoc;
 
 export function readCTRLChunk(
   r: BinaryReader,
@@ -90,70 +65,6 @@ export function readGenericChunk(
   return { kind: "GENERIC", fourCC, index, startAddress: startPos, data };
 }
 
-export function readSWVRChunk(
-  r: BinaryReader,
-  startPos: number,
-  pos: number,
-  index: number,
-): SWVR {
-  const chunkSize = r.readUint32LE();
-  const data = r.readBytes(chunkSize - 8);
-
-  // Re-read full data including initial tag+size
-  const savedPos = r.tell();
-  r.seek(startPos);
-  const fullData = r.readBytes(chunkSize);
-  r.seek(savedPos);
-
-  let raw = data.slice(12, 12 + 16);
-  const nullIdx = raw.indexOf(0);
-  if (nullIdx !== -1) raw = raw.slice(0, nullIdx);
-  const fileName = new TextDecoder().decode(raw);
-
-  return {
-    kind: "SWVR",
-    index,
-    startAddress: startPos,
-    data,
-    fullData,
-    fileName,
-  };
-}
-
-export function readVAGBChunk(
-  r: BinaryReader,
-  startPos: number,
-  pos: number,
-  index: number,
-): VAGB {
-  const chunkSize = r.readUint32LE();
-  const data = r.readBytes(chunkSize - 8);
-
-  const savedPos = r.tell();
-  r.seek(startPos);
-  const fullData = r.readBytes(chunkSize);
-  r.seek(savedPos);
-
-  return { kind: "VAGB", index, startAddress: startPos, data, fullData };
-}
-
-export function readVAGMChunk(
-  r: BinaryReader,
-  startPos: number,
-  pos: number,
-  index: number,
-): VAGM {
-  const chunkSize = r.readUint32LE();
-  const data = r.readBytes(chunkSize - 8);
-
-  const savedPos = r.tell();
-  r.seek(startPos);
-  const fullData = r.readBytes(chunkSize);
-  r.seek(savedPos);
-
-  return { kind: "VAGM", index, startAddress: startPos, data, fullData };
-}
-
 export function readTopLevelChunk(
   r: BinaryReader,
   chunkIndex: number,
@@ -180,12 +91,6 @@ export function readTopLevelChunk(
       return readSHOCChunk(r, startPos, chunkIndex);
     case "FILL":
       return readFILLChunk(r, startPos, pos, chunkIndex);
-    case "SWVR":
-      return readSWVRChunk(r, startPos, pos, chunkIndex);
-    case "VAGB":
-      return readVAGBChunk(r, startPos, pos, chunkIndex);
-    case "VAGM":
-      return readVAGMChunk(r, startPos, pos, chunkIndex);
     default:
       return readGenericChunk(r, fourCC, startPos, chunkIndex);
   }
