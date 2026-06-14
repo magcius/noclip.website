@@ -14,8 +14,6 @@ export interface NodeMetadata {
   y: number;
   z: number;
   w: number;
-  rawZDebug: string;
-  rawZAddress: number;
   dataLen: number;
   headerOffset: number;
   textureMetadata: TextureMeta;
@@ -77,8 +75,6 @@ function buildTree(
   node.metadata.w = raw.elhe.w;
   node.metadata.dataLen = raw.elda.raw.payload.length;
   node.metadata.headerOffset = raw.elhe.raw.offset;
-  node.metadata.rawZDebug = raw.elhe.rawZDebug.toString(16).padStart(8, "0");
-  node.metadata.rawZAddress = raw.elhe.rawZAddress;
   node.metadata.textureMetadata = buildTextureMetadata(
     raw.elhe,
     raw.eltl,
@@ -102,8 +98,6 @@ function buildTree(
           y: 0,
           z: 0,
           w: 0,
-          rawZDebug: "",
-          rawZAddress: 0,
           dataLen: 0,
           headerOffset: 0,
           textureMetadata: { numTextures: 0, textureEntries: [] },
@@ -138,8 +132,6 @@ export function parseObf(buf: Uint8Array): Obf {
       y: 0,
       z: 0,
       w: 0,
-      rawZDebug: "",
-      rawZAddress: 0,
       dataLen: 0,
       headerOffset: 0,
       textureMetadata: { numTextures: 0, textureEntries: [] },

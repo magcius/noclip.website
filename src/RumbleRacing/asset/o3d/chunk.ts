@@ -15,8 +15,6 @@ export interface ELHE_Header {
   y: number;
   z: number;
   w: number;
-  rawZDebug: number;
-  rawZAddress: number;
 }
 
 export interface ELTL_TextureList {
@@ -44,8 +42,6 @@ export function parseELHE(chunk: AssetChunk): ELHE_Header {
     y: readFloat32LE(p, base + 0x4c),
     z: readFloat32LE(p, base + 0x50),
     w: readFloat32LE(p, base + 0x54),
-    rawZDebug: readUint32LE(p, base + 0x50),
-    rawZAddress: chunk.offset + base + 0x50,
   };
 }
 
