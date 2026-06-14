@@ -1,4 +1,9 @@
-import { ActorData, ActorTransforms, RumbleRacingTrackFile } from "./rr.js";
+import {
+  ActorData,
+  ActorTransforms,
+  processTrackFile,
+  RumbleRacingTrackFile,
+} from "./rr.js";
 import { mat4 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
@@ -38,6 +43,7 @@ import { TrackProgram } from "./TrackProgram";
 import { ObfGeometry, O3DGeometry } from "./Geometry";
 import { ExcludeInfo } from "./types.js";
 import { Actor } from "./asset/Cact.js";
+import { parseTrackFile, TrackFile } from "./file/track.js";
 
 const pathBase = `RumbleRacing`;
 
@@ -428,19 +434,9 @@ class RumbleRacingSceneDesc implements SceneDesc {
       decoder.decode(actorBlob.arrayBuffer),
     ) as unknown as ActorTransforms;
 
-    // @ts-ignore
-    const go = new Go();
-    const wasmUrl = new URL("./rumble-racing.wasm", import.meta.url).href;
-
-    const result = await WebAssembly.instantiateStreaming(
-      fetch(wasmUrl),
-      go.importObject,
-    );
-    go.run(result.instance);
-
-    const trackData: RumbleRacingTrackFile = JSON.parse(
-      // @ts-ignore
-      parseTrackFile(new Uint8Array(trackBlob.arrayBuffer), false),
+    const trackData: RumbleRacingTrackFile = processTrackFile(
+      new Uint8Array(trackBlob.arrayBuffer),
+      false,
     );
 
     const shared =
@@ -451,11 +447,10 @@ class RumbleRacingSceneDesc implements SceneDesc {
             `${pathBase}/DATA/GLBLDATA.TRK`,
           );
 
-          const globalData: RumbleRacingTrackFile = JSON.parse(
-            // @ts-ignore
-            parseTrackFile(new Uint8Array(data.arrayBuffer), true),
+          const globalData: RumbleRacingTrackFile = processTrackFile(
+            new Uint8Array(data.arrayBuffer),
+            true,
           );
-
           return {
             globalTrackFile: globalData,
             destroy(_device) {},
