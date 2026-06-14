@@ -58,9 +58,6 @@ export function extractTexturesFromZTHE(
   txf: TXF,
   clutHeader: CLHEEntry,
   zthe: ZTHETexture,
-  ztheIndex: number,
-  textureIndex: number,
-  clheIndex: number,
 ): Texture[] {
   const mipMaps: TextureFile[] = [];
 

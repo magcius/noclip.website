@@ -107,14 +107,7 @@ export function getTextures(txf: TXF): Texture[] {
     for (let j = 0; j < zthe.textures.length; j++) {
       const tex = zthe.textures[j];
       const clhe = txf.clutHeader.entries[tex.clutHeaderIndex];
-      const extracted = extractTexturesFromZTHE(
-        txf,
-        clhe,
-        tex,
-        i,
-        j,
-        tex.clutHeaderIndex,
-      );
+      const extracted = extractTexturesFromZTHE(txf, clhe, tex);
       textures.push(...extracted);
     }
   }
