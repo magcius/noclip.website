@@ -125,9 +125,6 @@ class RumbleRacingScene implements SceneGfx {
     for (const texture of this.trackFile.textures.sort(
       (a, b) => a.textureId - b.textureId,
     )) {
-      // const binary = atob(texture.pngBytes);
-      // const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-
       const tex = device.createTexture(
         makeTextureDescriptor2D(
           GfxFormat.U8_RGBA_NORM,
