@@ -15,7 +15,7 @@ import {
   ObfData,
   ObfJsonNode,
 } from "./rumbleRacing";
-import { TrackProgram } from "./trackProgram";
+import { TrackProgram } from "./TrackProgram";
 
 export class ObfGeometry {
   public drawCalls: DrawCall[] = [];

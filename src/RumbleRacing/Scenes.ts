@@ -41,7 +41,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
 import { O3DGeometry, ObfGeometry } from "./Geometry";
-import { TrackProgram } from "./trackProgram";
+import { TrackProgram } from "./TrackProgram";
 
 const pathBase = `RumbleRacing`;
 
