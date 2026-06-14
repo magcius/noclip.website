@@ -8,8 +8,14 @@ import {
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { TrackProgram } from "./TrackProgram";
-import { DrawCall, ObfData, ExcludeInfo, ObfJsonNode, O3DData } from "./types";
+import {
+  DrawCall,
+  ExcludeInfo,
+  O3DData,
+  ObfData,
+  ObfJsonNode,
+} from "./rumbleRacing";
+import { TrackProgram } from "./trackProgram";
 
 export class ObfGeometry {
   public drawCalls: DrawCall[] = [];
@@ -46,32 +52,32 @@ export class ObfGeometry {
     });
 
     const parseNode = (node: ObfJsonNode) => {
-      if (node && node.Buffers) {
+      if (node && node.buffers) {
         // don't draw some weird geometry
-        if (exclude.nodeIds?.has(node.HeaderOffset)) {
+        if (exclude.nodeIds?.has(node.headerOffset)) {
           return;
         }
 
-        for (const buffer of node.Buffers) {
-          if (buffer.Vertices.length === 0) continue;
+        for (const buffer of node.buffers) {
+          if (buffer.vertices.length === 0) continue;
 
           // don't draw some unhandled textures
-          if (exclude.textureIds?.has(buffer.TextureId)) {
+          if (exclude.textureIds?.has(buffer.textureId)) {
             continue;
           }
 
-          const data = new Float32Array(buffer.Vertices.length * 8);
-          for (let i = 0; i < buffer.Vertices.length; i++) {
-            data[i * 8 + 0] = buffer.Vertices[i][0];
-            data[i * 8 + 1] = buffer.Vertices[i][1];
-            data[i * 8 + 2] = buffer.Vertices[i][2];
+          const data = new Float32Array(buffer.vertices.length * 8);
+          for (let i = 0; i < buffer.vertices.length; i++) {
+            data[i * 8 + 0] = buffer.vertices[i][0];
+            data[i * 8 + 1] = buffer.vertices[i][1];
+            data[i * 8 + 2] = buffer.vertices[i][2];
 
-            data[i * 8 + 3] = buffer.UVs[i][0];
-            data[i * 8 + 4] = buffer.UVs[i][1];
+            data[i * 8 + 3] = buffer.uvs[i][0];
+            data[i * 8 + 4] = buffer.uvs[i][1];
 
-            data[i * 8 + 5] = buffer.Normals[i][0];
-            data[i * 8 + 6] = buffer.Normals[i][1];
-            data[i * 8 + 7] = buffer.Normals[i][2];
+            data[i * 8 + 5] = buffer.normals[i][0];
+            data[i * 8 + 6] = buffer.normals[i][1];
+            data[i * 8 + 7] = buffer.normals[i][2];
           }
 
           const vBuf = createBufferFromData(
@@ -84,24 +90,24 @@ export class ObfGeometry {
             device,
             GfxBufferUsage.Index,
             GfxBufferFrequencyHint.Static,
-            new Uint32Array(buffer.Indices).buffer,
+            new Uint32Array(buffer.indices).buffer,
           );
 
           this.drawCalls.push({
             vertexBuffer: vBuf,
             indexBuffer: iBuf,
-            indexCount: buffer.Indices.length,
-            textureId: buffer.TextureId,
+            indexCount: buffer.indices.length,
+            textureId: buffer.textureId,
           });
         }
       }
-      if (node && node.Children) {
-        for (const child of node.Children) parseNode(child);
+      if (node && node.children) {
+        for (const child of node.children) parseNode(child);
       }
     };
 
-    if (obf && obf.RootNode) {
-      parseNode(obf.RootNode);
+    if (obf && obf.rootNode) {
+      parseNode(obf.rootNode);
     }
   }
 
@@ -118,8 +124,8 @@ export class O3DGeometry {
   public isAnimated;
 
   constructor(cache: GfxRenderCache, o3d: O3DData, exclude: ExcludeInfo) {
-    this.isAnimated = o3d.IsAnimated;
-    for (const obf of o3d.Obfs) {
+    this.isAnimated = o3d.isAnimated;
+    for (const obf of o3d.obfs) {
       this.obfGeometries.push(new ObfGeometry(cache, obf, exclude));
     }
   }

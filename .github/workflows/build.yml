@@ -18,11 +18,6 @@ jobs:
     - name: Setup pnpm
       uses: pnpm/action-setup@v6
 
-    - name: Setup Go 1.25.1
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.25.1'
-
     - name: Cache Node dependencies
       uses: actions/setup-node@v6
       with:

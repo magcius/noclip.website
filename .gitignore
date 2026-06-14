@@ -56,7 +56,6 @@ data/*
 !data/.gitkeep
 !data/Examples/
 dist/
-rumble-racing.wasm
 
 .wireit
 
