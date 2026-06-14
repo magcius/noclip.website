@@ -8,8 +8,8 @@ import {
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { O3DData, ObfData, ObfJsonNode } from "./rr";
-import { TrackProgram } from "./TrackProgram";
+import { O3DData, ObfData, ObfJsonNode } from "./rumbleRacing";
+import { TrackProgram } from "./trackProgram";
 import { DrawCall, ExcludeInfo } from "./types";
 
 export class ObfGeometry {

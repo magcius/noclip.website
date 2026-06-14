@@ -3,7 +3,7 @@ import {
   ActorTransforms,
   processTrackFile,
   RumbleRacingTrackFile,
-} from "./rr.js";
+} from "./rumbleRacing";
 import { mat4 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
@@ -39,11 +39,9 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
-import { TrackProgram } from "./TrackProgram";
-import { ObfGeometry, O3DGeometry } from "./Geometry";
-import { ExcludeInfo } from "./types.js";
-import { Actor } from "./asset/Cact.js";
-import { parseTrackFile, TrackFile } from "./file/track.js";
+import { ExcludeInfo } from "./types";
+import { O3DGeometry, ObfGeometry } from "./geometry";
+import { TrackProgram } from "./trackProgram";
 
 const pathBase = `RumbleRacing`;
 
