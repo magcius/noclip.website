@@ -406,9 +406,10 @@ class RatchetAndClankScene implements SceneGfx {
         };
 
         for (const remapArray of remapArrays) {
-            for (let i = 0; i < 256; i++) {
-                const remap = remapArray[i];
-                data[offs++] = bitsAsFloat32(packRemap(remap));
+            for (let i = 0; i < 256; i += 2) {
+                const packed0 = packRemap(remapArray[i + 0]);
+                const packed1 = packRemap(remapArray[i + 1]);
+                data[offs++] = bitsAsFloat32(packed1 << 16 | packed0);
             }
         }
     }

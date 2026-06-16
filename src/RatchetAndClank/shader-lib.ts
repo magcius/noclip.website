@@ -9,7 +9,7 @@ export const RatchetShaderLib = {
         4, // background color
         12, // fog params
         16 * 16, // directional lights
-        4 * 64 * 4, // texture remaps (3 arrays of 64 vec4s)
+        4 * 32 * 4, // texture remaps (3 arrays of 64 vec4s)
     ].reduce((a, b) => a + b, 0),
     SceneParams: `
 
@@ -35,12 +35,12 @@ struct DirectionLight {
     vec4 colorB;
 };
 
-// size 4*64*4
+// size 4*32*4
 struct TextureRemaps {
-    vec4 tfrags[64];
-    vec4 ties[64];
-    vec4 mobys[64];
-    vec4 shrubs[64];
+    vec4 tfrags[32];
+    vec4 ties[32];
+    vec4 mobys[32];
+    vec4 shrubs[32];
 };
 
 layout(std140) uniform ub_SceneParams {
@@ -147,10 +147,11 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
 
     `,
     Sampler: `
-ivec2 getTexRemap(in vec4 remapArray[64], in int index) {
-    uint v32 = floatBitsToUint(remapArray[index >> 2][index & 0x03]);
-    uint bucket = (v32 & 0x07u);
-    uint slice = (v32 >> 3u);
+ivec2 getTexRemap(in vec4 remapArray[32], in int index) {
+    uint v32 = floatBitsToUint(remapArray[index >> 3][(index >> 1) & 0x03]);
+    uint v16 = (v32 >> ((index & 0x01) * 16)) & 0xFFFFu;
+    uint bucket = (v16 & 0x07u);
+    uint slice = (v16 >> 3u);
     return ivec2(bucket, slice);
 }
 
