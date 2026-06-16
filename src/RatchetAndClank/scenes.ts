@@ -400,7 +400,7 @@ class RatchetAndClankScene implements SceneGfx {
         for (const remapArray of remapArrays) {
             for (let i = 0; i < 256; i++) {
                 const remap = remapArray[i];
-                data[offs++] = remap ? remap.sizeBucket : 0;
+                data[offs++] = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
                 data[offs++] = remap ? remap.index : 0;
                 data[offs++] = 0;
                 data[offs++] = 0;

@@ -161,23 +161,24 @@ Custom texture sampling function that can dynamically select textures and sampli
 */
 vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
     int lod = 0;
-    float bucket = float(remap.x);
-    float slice = float(remap.y);
+    int bucket = remap.x + 4;
+    int bucketSize = 1 << bucket;
+    int slice = remap.y;
 
     if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
         // GS manual page 62
         // ps2 selects mips based on depth not texcoords
         // L and K are guesses
         // the mesh classes have mip biases that aren't implemented yet
-        float K = log2(bucket) - 10.0 - (u_LodSettings.y / 40.0);
+        float K = float(bucket) - 10.0 - (u_LodSettings.y / 40.0);
         float L = 0.0;
         float LOD = (log2(1.0 / gl_FragCoord.w) * pow(2.0, L)) + K;
 
-        float maxLod = log2(bucket) - 2.0;
+        float maxLod = float(bucket) - 2.0;
         lod = int(clamp(LOD, 0.0, maxLod));
     }
 
-    vec2 texSize = vec2(bucket) / pow(2.0, float(lod));
+    vec2 texSize = vec2(bucketSize) / pow(2.0, float(lod));
     vec2 texelCoord = st * texSize - 0.5;
     
     vec2 texelFloor = floor(texelCoord);
@@ -217,27 +218,27 @@ vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
     }
     
     vec4 s00, s10, s01, s11;
-    if (bucket == 16.0) {
+    if (bucket == 4) {
         s00 = texelFetch(TEXTURE(u_Texture_16), ivec3(tc00, slice), lod);
         s10 = texelFetch(TEXTURE(u_Texture_16), ivec3(tc10, slice), lod);
         s01 = texelFetch(TEXTURE(u_Texture_16), ivec3(tc01, slice), lod);
         s11 = texelFetch(TEXTURE(u_Texture_16), ivec3(tc11, slice), lod);
-    } else if (bucket == 32.0) {
+    } else if (bucket == 5) {
         s00 = texelFetch(TEXTURE(u_Texture_32), ivec3(tc00, slice), lod);
         s10 = texelFetch(TEXTURE(u_Texture_32), ivec3(tc10, slice), lod);
         s01 = texelFetch(TEXTURE(u_Texture_32), ivec3(tc01, slice), lod);
         s11 = texelFetch(TEXTURE(u_Texture_32), ivec3(tc11, slice), lod);
-    } else if (bucket == 64.0) {
+    } else if (bucket == 6) {
         s00 = texelFetch(TEXTURE(u_Texture_64), ivec3(tc00, slice), lod);
         s10 = texelFetch(TEXTURE(u_Texture_64), ivec3(tc10, slice), lod);
         s01 = texelFetch(TEXTURE(u_Texture_64), ivec3(tc01, slice), lod);
         s11 = texelFetch(TEXTURE(u_Texture_64), ivec3(tc11, slice), lod);
-    } else if (bucket == 128.0) {
+    } else if (bucket == 7) {
         s00 = texelFetch(TEXTURE(u_Texture_128), ivec3(tc00, slice), lod);
         s10 = texelFetch(TEXTURE(u_Texture_128), ivec3(tc10, slice), lod);
         s01 = texelFetch(TEXTURE(u_Texture_128), ivec3(tc01, slice), lod);
         s11 = texelFetch(TEXTURE(u_Texture_128), ivec3(tc11, slice), lod);
-    } else if (bucket == 256.0) {
+    } else if (bucket == 8) {
         s00 = texelFetch(TEXTURE(u_Texture_256), ivec3(tc00, slice), lod);
         s10 = texelFetch(TEXTURE(u_Texture_256), ivec3(tc10, slice), lod);
         s01 = texelFetch(TEXTURE(u_Texture_256), ivec3(tc01, slice), lod);
