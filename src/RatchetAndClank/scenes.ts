@@ -23,6 +23,7 @@ import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
 import { MobyGeometry, MobyRenderer } from "./render-moby";
+import { bitsAsFloat32 } from "../MathHelpers";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
@@ -407,7 +408,7 @@ class RatchetAndClankScene implements SceneGfx {
         for (const remapArray of remapArrays) {
             for (let i = 0; i < 256; i++) {
                 const remap = remapArray[i];
-                data[offs++] = packRemap(remap);
+                data[offs++] = bitsAsFloat32(packRemap(remap));
             }
         }
     }

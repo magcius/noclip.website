@@ -39,7 +39,7 @@ struct DirectionLight {
 struct TextureRemaps {
     vec4 tfrags[64];
     vec4 ties[64];
-    vec4 mobys[256];
+    vec4 mobys[64];
     vec4 shrubs[64];
 };
 
@@ -148,9 +148,9 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
     `,
     Sampler: `
 ivec2 getTexRemap(in vec4 remapArray[64], in int index) {
-    int v32 = int(remapArray[index >> 2][index & 0x03]);
-    int bucket = (v32 & 0x07);
-    int slice = (v32 >> 3);
+    uint v32 = floatBitsToUint(remapArray[index >> 2][index & 0x03]);
+    uint bucket = (v32 & 0x07u);
+    uint slice = (v32 >> 3u);
     return ivec2(bucket, slice);
 }
 
