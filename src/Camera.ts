@@ -259,14 +259,23 @@ export class FPSCameraController implements CameraController {
 
     public update(inputManager: InputManager, dt: number): CameraUpdateResult {
         const camera = this.camera;
+
+        // Camera reset
+        {
+            if (inputManager.isKeyDownEventTriggered('KeyB')) {
+                mat4.identity(camera.worldMatrix);
+                vec3.zero(camera.linearVelocity);
+                this.cameraUpdateForced();
+                camera.worldMatrixUpdated();
+                return CameraUpdateResult.Changed;
+            }
+            else if (inputManager.isKeyDown('KeyB')) {
+                return CameraUpdateResult.Unchanged;
+            }
+        }
+
         let updated = false;
         let important = false;
-
-        if (inputManager.isKeyDown('KeyB')) {
-            mat4.identity(camera.worldMatrix);
-            this.cameraUpdateForced();
-            updated = true;
-        }
 
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
