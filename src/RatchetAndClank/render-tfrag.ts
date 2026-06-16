@@ -56,7 +56,7 @@ layout(location = ${TfragProgram.a_DirLightIndices}) in vec4 a_DirLightIndices;
 out vec4 v_Rgba;
 out vec2 v_ST;
 out float v_FogFactor;
-flat out int v_TextureLayer;
+flat out int v_TextureIndex;
 flat out int v_Clamp;
 
 ${RatchetShaderLib.LightingFunctions}
@@ -73,7 +73,7 @@ void main() {
 
     v_ST = a_ST.xy;
     v_FogFactor = fogFactor(t_PositionWorld.xyz);
-    v_TextureLayer = int(a_TextureParams.x);
+    v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
 }
 `;
@@ -85,12 +85,12 @@ ${RatchetShaderLib.Sampler}
 in vec4 v_Rgba;
 in vec2 v_ST;
 in float v_FogFactor;
-flat in int v_TextureLayer;
+flat in int v_TextureIndex;
 flat in int v_Clamp;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    ivec2 texRemap = getTexRemap(u_TextureRemaps.tfrags, v_TextureLayer);
+    ivec2 texRemap = getTexRemap(u_TextureRemaps.tfrags, v_TextureIndex);
     vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
     gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor);
 }
