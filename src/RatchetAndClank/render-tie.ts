@@ -1,18 +1,18 @@
+import { mat4, vec3 } from "gl-matrix";
+import { Frustum } from "../Geometry";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxSamplerFormatKind, GfxTextureDimension, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { DeviceProgram } from "../Program";
-import { assert } from "../util";
-import { RatchetShaderLib } from "./shader-lib";
-import { TieClass, TieVertexWithNormalAndRgba } from "./bin-core";
-import { GN, ImaginaryGsCommandType, MegaBuffer } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
-import { mat4, vec3 } from "gl-matrix";
+import { DeviceProgram } from "../Program";
+import { assert } from "../util";
+import { TieClass, TieVertexWithNormalAndRgba } from "./bin-core";
 import { TieInstance } from "./bin-gameplay";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { Frustum } from "../Geometry";
+import { RatchetShaderLib } from "./shader-lib";
+import { GN, ImaginaryGsCommandType, MegaBuffer } from "./utils";
 
 export class TieProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -114,8 +114,8 @@ flat in int v_Clamp;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    vec2 texRemap = u_TextureRemaps.ties[v_TextureIndex].xy;
-    vec4 textureSample = ratchetSampler(texRemap.x, texRemap.y, v_Clamp, v_ST);
+    ivec2 texRemap = getTexRemap(u_TextureRemaps.ties, v_TextureIndex);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
     gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor);
 }
 `;

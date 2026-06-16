@@ -148,6 +148,10 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
 
     `,
     Sampler: `
+ivec2 getTexRemap(in vec4 remapArray[256], in int index) {
+    return ivec2(remapArray[index]);
+}
+
 /*
 Custom texture sampling function that can dynamically select textures and sampling parameters.
 - bucket: the atlas to read from
@@ -155,8 +159,10 @@ Custom texture sampling function that can dynamically select textures and sampli
 - clampRegister: bit 1 = S clamp, bit 3 = T clamp (other bits are used for region clamp, not supported)
 - st: the texture coordinates
 */
-vec4 ratchetSampler(float bucket, float slice, int clampRegister, vec2 st) {
+vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
     int lod = 0;
+    float bucket = float(remap.x);
+    float slice = float(remap.y);
 
     if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
         // GS manual page 62
