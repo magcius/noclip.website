@@ -227,8 +227,8 @@ export class FPSCameraController implements CameraController {
     private mouseMovement = vec3.create();
 
     private keyMoveSpeed = 60;
-    private keyMoveShiftMult = 5;
-    private keyMoveSlashMult = 0.1;
+    private keyMoveFastMult = 5;
+    private keyMoveSlowMult = 0.1;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
@@ -250,10 +250,11 @@ export class FPSCameraController implements CameraController {
     }
 
     public setKeyMoveSpeed(speed: number): void {
-        this.keyMoveSpeed = speed;
+        const MIN_CAMERA_SPEED = 1;
+        this.keyMoveSpeed = Math.max(MIN_CAMERA_SPEED, speed);
     }
 
-    public getKeyMoveSpeed(): number | null {
+    public getKeyMoveSpeed(): number {
         return this.keyMoveSpeed;
     }
 
@@ -267,7 +268,7 @@ export class FPSCameraController implements CameraController {
                 vec3.zero(camera.linearVelocity);
                 this.cameraUpdateForced();
                 camera.worldMatrixUpdated();
-                return CameraUpdateResult.Changed;
+                return CameraUpdateResult.ImportantChange;
             }
             else if (inputManager.isKeyDown('KeyB')) {
                 return CameraUpdateResult.Unchanged;
@@ -277,16 +278,15 @@ export class FPSCameraController implements CameraController {
         let updated = false;
         let important = false;
 
-        this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
-        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
-        const isSlashPressed = inputManager.isKeyDown('IntlBackslash') || inputManager.isKeyDown('Backslash');
+        const fastModifier = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+        const slowModifier = inputManager.isKeyDown('IntlBackslash') || inputManager.isKeyDown('Backslash');
 
         let keyMoveMult = 1;
-        if (isShiftPressed)
-            keyMoveMult = this.keyMoveShiftMult;
+        if (fastModifier)
+            keyMoveMult = this.keyMoveFastMult;
 
-        if (isSlashPressed)
-            keyMoveMult = this.keyMoveSlashMult;
+        if (slowModifier)
+            keyMoveMult = this.keyMoveSlowMult;
 
         if (inputManager.isKeyDownEventTriggered('Numpad4') || inputManager.isKeyDownEventTriggered('Numpad1')) {
             // Save world forward vector from current position.
@@ -308,42 +308,46 @@ export class FPSCameraController implements CameraController {
         const keyMovement = this.keyMovement;
         const keyMoveLowSpeedCap = 0.1;
 
-        if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp') || (inputManager.buttons & 3) === 3) {
-            keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
-            keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity, keyMoveSpeedCap);
-        } else if (Math.abs(keyMovement[2]) >= keyMoveLowSpeedCap) {
-            keyMovement[2] *= this.keyMoveDrag;
-            if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) { important = true; keyMovement[2] = 0.0; }
+        let wishDirection = vec3.create();
+        // Calculate wish direction
+        {
+            if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp') || (inputManager.buttons & 3) === 3) {
+                wishDirection[2] = -1;
+            } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
+                wishDirection[2] = 1;
+            }
+
+            if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
+                wishDirection[0] = -1
+            } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {
+                wishDirection[0] = 1;
+            }
+
+            const swapQE = GlobalSaveManager.loadSetting<boolean>('SwapQE', false);
+            const keyDownQE = swapQE ? 'KeyE' : 'KeyQ';
+            const keyUpQE = swapQE ? 'KeyQ' : 'KeyE';
+
+            if (inputManager.isKeyDown(keyDownQE) || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space')) || inputManager.isKeyDown('KeyC')) {
+                wishDirection[1] = -1;
+            } else if (inputManager.isKeyDown(keyUpQE) || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
+                wishDirection[1] = 1;
+            }
+
+            vec3.normalize(wishDirection, wishDirection);
         }
 
-        keyMovement[2] += -inputManager.getPinchDeltaDist() * keyMoveVelocity;
-
-        if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
-            keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {
-            keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocity, keyMoveSpeedCap);
-        } else if (Math.abs(keyMovement[0]) >= keyMoveLowSpeedCap) {
-            keyMovement[0] *= this.keyMoveDrag;
-            if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) { important = true; keyMovement[0] = 0.0; }
-        }
+        keyMovement.forEach((velocity, index) => {
+            keyMovement[index] = velocity * this.keyMoveDrag;
+            if (Math.abs(keyMovement[index]) < keyMoveLowSpeedCap) {
+                keyMovement[index] = 0.0;
+            }
+            keyMovement[index] += wishDirection[index] * keyMoveVelocity;
+            keyMovement[index] = clampRange(keyMovement[index], keyMoveSpeedCap);
+        });
 
         keyMovement[0] += -inputManager.getTouchDeltaX() * keyMoveVelocity;
-
-        const swapQE = GlobalSaveManager.loadSetting<boolean>('SwapQE', false);
-        const keyDownQE = swapQE ? 'KeyE' : 'KeyQ';
-        const keyUpQE = swapQE ? 'KeyQ' : 'KeyE';
-
-        if (inputManager.isKeyDown(keyDownQE) || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space')) || inputManager.isKeyDown('KeyC')) {
-            keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown(keyUpQE) || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
-            keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
-        } else if (Math.abs(keyMovement[1]) >= keyMoveLowSpeedCap) {
-            keyMovement[1] *= this.keyMoveDrag;
-            if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) { important = true; keyMovement[1] = 0.0; }
-        }
-
         keyMovement[1] += inputManager.getTouchDeltaY() * keyMoveVelocity;
+        keyMovement[2] += -inputManager.getPinchDeltaDist() * keyMoveVelocity;
 
         const viewUp = scratchVec3b;
         // Instead of getting the camera up, instead use view up. Feels more natural.
@@ -392,7 +396,7 @@ export class FPSCameraController implements CameraController {
         mouseMovement[0] += dx;
         mouseMovement[1] += dy;
 
-        const keyAngleChangeVel = isShiftPressed ? this.keyAngleChangeVelFast : this.keyAngleChangeVelSlow;
+        const keyAngleChangeVel = fastModifier ? this.keyAngleChangeVelFast : this.keyAngleChangeVelSlow;
         if (inputManager.isKeyDown('KeyJ'))
             mouseMovement[0] += keyAngleChangeVel * invertXMult;
         else if (inputManager.isKeyDown('KeyL'))
@@ -417,6 +421,11 @@ export class FPSCameraController implements CameraController {
 
             if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
             if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
+        }
+
+        if (vec3.equals(keyMovement, Vec3Zero) && vec3.equals(mouseMovement, Vec3Zero)) {
+            // We've stopped moving, update the position in the url
+            important = true;
         }
 
         this.camera.isOrthographic = false;
