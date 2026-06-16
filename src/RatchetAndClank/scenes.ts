@@ -397,11 +397,18 @@ class RatchetAndClankScene implements SceneGfx {
         // texture remaps (4 * 256 * 3 floats)
         const { textureAtlases } = this.textures;
         const remapArrays = textureAtlases ? [textureAtlases.tfragTextureRemap, textureAtlases.tieTextureRemap, textureAtlases.mobyTextureRemap, textureAtlases.shrubTextureRemap] : [[], [], [], []];
+
+        const packRemap = (remap: typeof remapArrays[0][0]) => {
+            const bucket = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
+            const slice = remap ? remap.index : 0;
+            return (slice << 3) | (bucket & 0x07);
+        };
+
         for (const remapArray of remapArrays) {
             for (let i = 0; i < 256; i++) {
                 const remap = remapArray[i];
-                data[offs++] = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
-                data[offs++] = remap ? remap.index : 0;
+                data[offs++] = packRemap(remap);
+                data[offs++] = 0;
                 data[offs++] = 0;
                 data[offs++] = 0;
             }

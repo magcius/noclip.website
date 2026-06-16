@@ -149,7 +149,10 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
     `,
     Sampler: `
 ivec2 getTexRemap(in vec4 remapArray[256], in int index) {
-    return ivec2(remapArray[index]);
+    int v32 = int(remapArray[index].x);
+    int bucket = (v32 & 0x07);
+    int slice = (v32 >> 3);
+    return ivec2(bucket, slice);
 }
 
 /*
