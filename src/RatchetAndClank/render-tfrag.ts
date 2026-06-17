@@ -10,7 +10,7 @@ import { PaletteTexture } from "./textures";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { noclipSpaceFromRatchetSpace } from "./utils";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 
 export class TfragProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -33,7 +33,7 @@ ${GfxShaderLibrary.MatrixLibrary}
 ${RatchetShaderLib.SceneParams}
 
 layout(std140) uniform ub_TfragParams {
-    Mat4x4 u_WorldFromLocal;
+    Mat3x4 u_WorldFromLocal;
 };
 
 layout(location = 0) uniform sampler2DArray u_Texture_16;
@@ -60,13 +60,14 @@ flat out int v_TextureIndex;
 flat out int v_Clamp;
 
 ${RatchetShaderLib.LightingFunctions}
+${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    mat4 worldTransform = UnpackMatrix(u_WorldFromLocal);
-    vec4 t_PositionWorld = worldTransform * vec4(a_Position.xyz, 1.0f);
-    gl_Position = UnpackMatrix(u_ClipFromWorld) * t_PositionWorld;
+    mat4x3 worldTransform = UnpackMatrix(u_WorldFromLocal);
+    vec3 t_PositionWorld = worldTransform * vec4(a_Position.xyz, 1.0f);
+    gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0f);
 
-    vec3 normal = normalize(inverse(transpose(mat3(worldTransform))) * normalize(a_Normal));
+    vec3 normal = MulNormalMatrix(worldTransform, a_Normal);
     vec4 lights = a_DirLightIndices;
 
     v_Rgba = commonVertexLighting(a_Rgba, normal, lights);
@@ -338,9 +339,9 @@ export class TfragRenderer {
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setGfxProgram(this.tfragProgram);
 
-        const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 16);
+        const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 12);
         let offs = 0;
-        offs += fillMatrix4x4(tfragParams, offs, objectMatrix);
+        offs += fillMatrix4x3(tfragParams, offs, objectMatrix);
 
         renderInst.setVertexInput(
             tfragGeometry.inputLayout,
