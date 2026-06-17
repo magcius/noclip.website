@@ -241,8 +241,6 @@ export class FPSCameraController implements CameraController {
 
     public sceneMoveSpeedMult = 1;
 
-    protected importantUpdateDue = false; // TODO This wasn't necessary before, fix
-
     public cameraUpdateForced(): void {
         vec3.zero(this.keyMovement);
     }
@@ -339,9 +337,12 @@ export class FPSCameraController implements CameraController {
         }
 
         keyMovement.forEach((velocity, index) => {
-            keyMovement[index] = velocity * this.keyMoveDrag;
-            if (Math.abs(keyMovement[index]) < keyMoveLowSpeedCap) {
-                keyMovement[index] = 0.0;
+            if (wishDirection[index] == 0 && Math.abs(keyMovement[index]) >= keyMoveLowSpeedCap) {
+                keyMovement[index] = velocity * this.keyMoveDrag;
+                if (Math.abs(keyMovement[index]) < keyMoveLowSpeedCap) {
+                    important = true;
+                    keyMovement[index] = 0.0;
+                }
             }
             keyMovement[index] += wishDirection[index] * keyMoveVelocity;
             keyMovement[index] = clampRange(keyMovement[index], keyMoveSpeedCap);
@@ -423,18 +424,6 @@ export class FPSCameraController implements CameraController {
 
             if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
             if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
-        }
-
-        if (!updated) {
-            if (this.importantUpdateDue)
-            {
-                // We've stopped moving, update the position in the url
-                important = true;
-                this.importantUpdateDue = false;
-            }
-        }
-        else {
-            this.importantUpdateDue = true;
         }
 
         this.camera.isOrthographic = false;
