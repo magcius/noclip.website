@@ -282,11 +282,10 @@ export class FPSCameraController implements CameraController {
         const slowModifier = inputManager.isKeyDown('IntlBackslash') || inputManager.isKeyDown('Backslash');
 
         let keyMoveMult = 1;
-        if (fastModifier)
-            keyMoveMult = this.keyMoveFastMult;
-
         if (slowModifier)
             keyMoveMult = this.keyMoveSlowMult;
+        else if (fastModifier)
+            keyMoveMult = this.keyMoveFastMult;
 
         if (inputManager.isKeyDownEventTriggered('Numpad4') || inputManager.isKeyDownEventTriggered('Numpad1')) {
             // Save world forward vector from current position.
