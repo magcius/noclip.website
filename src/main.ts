@@ -252,7 +252,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_HalfLife2Ep2.sceneGroup,
     Scenes_MarioKart8Deluxe.sceneGroup,
     Scenes_TheStanleyParable.sceneGroup,
-    Scenes_KingdomHeartsBBS.sceneGroup,
     Scenes_Infra.sceneGroup,
     Scenes_JetSetRadio.sceneGroup,
     Scenes_HalfLife.sceneGroup,
@@ -271,6 +270,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
     Scenes_TopGearRally.sceneGroup,
+    Scenes_KingdomHeartsBBS.sceneGroup,
 ];
 
 enum SaveStatesAction {

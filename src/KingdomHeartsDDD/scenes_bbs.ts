@@ -166,16 +166,18 @@ class Renderer implements SceneGfx {
 
 const pathBase = "KingdomHeartsBBS";
 class Room implements SceneDesc {
-    constructor(public id: string, public name: string) {
+    public id: string;
 
+    constructor(id: string, public name: string) {
+        this.id = id.toLowerCase();
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${this.id}.arc`);
+        const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${this.id.toUpperCase()}.arc`);
         const pmp = new BBSParser(arcFile).parsePMPFromARC()!;
 
         const sets: LuxObjectSet[] = [];
-        for (const presetArcName of BBS_VALID_PRESET_ARC.filter(a => a.startsWith(this.id))) {
+        for (const presetArcName of BBS_VALID_PRESET_ARC.filter(a => a.startsWith(this.id.toUpperCase()))) {
             const presetFile = await context.dataFetcher.fetchData(`${pathBase}/arc/preset/${presetArcName}.arc`);
             const olos = new BBSParser(presetFile).parseOLOFromARC();
             const instances: LuxOLOInstance[] = [];
@@ -217,12 +219,12 @@ class Room implements SceneDesc {
                     if (!pmo) {
                         check2 = true;
                     } else {
-                        console.log("Loaded", instance.name, "from arc", arcName);
+                        //console.log("Loaded", instance.name, "from arc", arcName);
                         models.set(instance.name, pmo);
                         if (BBS_PAM.has(instance.name) && !animations.has(instance.name)) {
                             const mapping = BBS_PAM.get(instance.name)!;
                             const pam = p.parsePAMFromARC(mapping.name)!;
-                            console.log(pam);
+                            //console.log(pam);
                             animations.set(instance.name, pam.animations[mapping.index]);
                         }
                     }
@@ -235,7 +237,7 @@ class Room implements SceneDesc {
                         continue;
                     }
                     const pmo = new BBSParser(modelFile).parseModel(instance.name);
-                    console.log("Loaded", instance.name, "from CHARA", u);
+                    //console.log("Loaded", instance.name, "from CHARA", u);
                     models.set(instance.name, pmo);
                 }
             }
@@ -249,14 +251,19 @@ class Room implements SceneDesc {
 TODO
 
 Fix occasional 404 errors when fetching models from OLOs (already two checks for location, need a third?)
+    Occurs most often in enchanted dominion, disney town and mirage arena
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
+    It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderalla castle
+    Perhaps the scaling is different for UVs sometimes, even in the same geometry, for some reason? The texture is usually just a tiny bit too big
 Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
 Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work but the data structures are very similar if not the same)
 Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in JB10 (probably a mismatched texture header?)
 Add default OLOs
 Add save states
+Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
+Debug ls14, can't get textures?
 
 May your heart be your guiding key
 */
@@ -297,8 +304,8 @@ const sceneDescs = [
     "Castle of Dreams",
     new Room("CD01", "Cinderella's Room"),
     new Room("CD02", "Mousehole"),
-    new Room("CD03", "Wardrobe Room (Messy)"),
-    new Room("CD13", "Wardrobe Room (Organized)"),
+    new Room("CD03", "Wardrobe Room"),
+    new Room("CD13", "Wardrobe Room (Boss)"),
     new Room("CD04", "Entrance"),
     new Room("CD05", "The Chateau"),
     new Room("CD06", "Forest"),
@@ -310,45 +317,45 @@ const sceneDescs = [
     new Room("CD12", "Antechamber"),
     "Enchanted Dominion", // sb = sleeping beauty
     new Room("SB01", "Dungeon Cell"),
-    new Room("SB02", "Gates"),
-    new Room("SB39", "Gates"),
+    new Room("SB02", "Gates"), // default?
+    new Room("SB39", "Gates"), // story event?
     new Room("SB03", "Maleficent's Throne"),
     new Room("SB04", "Dungeon"),
-    new Room("SB05", "Hall"),
-    new Room("SB17", "Hall"),
-    new Room("SB19", "Hall"),
-    new Room("SB38", "Hall"),
+    new Room("SB05", "Hall"), // default?
+    new Room("SB17", "Hall"), // story event?
+    new Room("SB19", "Hall (Ventus)"),
+    new Room("SB38", "Hall (Cutscene)"),
     new Room("SB06", "Forbidden Mountain"),
     new Room("SB07", "Waterside"),
     new Room("SB08", "Forest Clearing"),
     new Room("SB09", "Bridge"),
-    new Room("SB10", "Bridge"),
+    new Room("SB10", "Bridge (Boss)"),
     new Room("SB11", "Audience Chamber"),
-    new Room("SB12", "Audience Chamber"),
+    new Room("SB12", "Audience Chamber (Boss)"),
     new Room("SB14", "Hallway"),
     new Room("SB16", "Tower Room"),
-    new Room("SB15", "Aurora's Chamber"),
-    new Room("SB18", "Aurora's Chamber"),
+    new Room("SB15", "Aurora's Chamber (Bed)"), // cutscene maybe? don't remember...
+    new Room("SB18", "Aurora's Chamber (No Bed)"), // has map chest and shop moogle, default?
     "Myseterious Tower", // yt = yensid tower
-    new Room("YT01", "Sorcerer's Chamber"),
     new Room("YT02", "Mysterious Tower"),
     new Room("YT03", "Entrance"),
     new Room("YT04", "Sorcerer's Chamber"),
+    new Room("YT01", "Sorcerer's Chamber"), // cutscene? only has olos for ventus and generic
     "Radiant Garden",
-    new Room("RG01", "Outer Garden"),
+    new Room("RG10", "Front Doors"),
     new Room("RG02", "Entryway"),
+    new Room("RG01", "Outer Garden"),
+    new Room("RG12", "Outer Gardens"),
     new Room("RG03", "Central Square"),
     new Room("RG13", "Central Square (Night)"),
     new Room("RG14", "Central Square (Boss)"),
     new Room("RG04", "Aqueduct"),
-    new Room("RG05", "Castle Town"),
-    new Room("RG06", "Reactor"),
     new Room("RG07", "Fountain Court"),
+    new Room("RG05", "Castle Town"),
     new Room("RG08", "Merlin's House"),
+    new Room("RG06", "Reactor"),
     new Room("RG09", "Gardens"),
-    new Room("RG10", "Front Doors"),
     new Room("RG11", "Purification Facility"),
-    new Room("RG12", "Outer Gardens"),
     "Olympus Coliseum", // he = hercules
     new Room("HE01", "Coliseum Gates"),
     new Room("HE02", "Vestibule"),
@@ -420,7 +427,7 @@ const sceneDescs = [
     new Room("KG12", "Keyblade Graveyard (Kingdom Hearts) (Boss)"),
     new Room("KG55", "Keyblade Graveyard (Top of the Plateau)"),
     new Room("KG10", "Keyblade Graveyard (Top of the Plateau) (Boss)"),
-    new Room("KG11", "Will's Cage (Boss)"),
+    new Room("KG11", "Will's Cage"),
     new Room("KG50", "Ventus's Mind"),
     new Room("KG51", "Ventus's Mind (Boss)"),
     // new Room("KG52", "Ventus's Mind"),
@@ -445,9 +452,9 @@ const sceneDescs = [
     new Room("BD03", "Cinderella BG"),
     new Room("BD09", "Lilo & Stitch BG"),
     new Room("BD11", "Peter Pan BG"),
+    new Room("BD19", "Peter Pan BG"), // don't know what the difference is
     new Room("BD12", "Disney Castle BG"),
     new Room("BD18", "Winnie the Pooh BG"),
-    new Room("BD19", "Peter Pan BG"),
     "World Map",
     new Room("WM01", "World Map"),
     "Events",
