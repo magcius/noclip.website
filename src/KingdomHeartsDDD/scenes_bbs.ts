@@ -9,7 +9,7 @@ import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel }
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
-import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_WEAPON, BBS_PAM, BBS_VALID_PRESET_ARC } from "./config/data";
+import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_VALID_PRESET_ARC } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
@@ -202,29 +202,69 @@ class Room implements SceneDesc {
                 let check2 = false;
                 let arcName = "";
                 for (const v of validModels) {
-                    let n = instance.name.toLowerCase().startsWith("p") ? 3 : 5;
-                    if (instance.name.substring(0, n).toLowerCase() === v.substring(0, n).toLowerCase()) {
+                    if (instance.name.toLowerCase() === v.toLowerCase()) {
                         invalid = false;
                         arcName = v;
                         break;
                     }
                 }
                 if (invalid) {
+                    // strict search failed, use first n characters of model name
+                    for (const v of validModels) {
+                        let n = instance.name.toLowerCase().startsWith("p") ? 3 : 5;
+                        if (instance.name.substring(0, n).toLowerCase() === v.substring(0, n).toLowerCase()) {
+                            invalid = false;
+                            arcName = v;
+                            break;
+                        }
+                    }
+                }
+                if (invalid) {
                     check2 = true;
                 } else {
                     const subdir = getArcSubDirectory(instance.name);
-                    const modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
-                    const p = new BBSParser(modelArcFile);
-                    const pmo = p.parsePMOFromARC(instance.name);
+                    let modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
+                    let p = new BBSParser(modelArcFile);
+                    let pmoName = instance.name;
+                    if (BBS_MODEL_REMAP.indexOf(instance.name) !== -1) {
+                        // check if model variant (different .epd, .esd files, etc but same geometry & animations)
+                        // since there is more of a heuristic and doesn't work all the time, it's on a whitelist of BBS_MODEL_REMAP
+                        const arcEntries = p.parseARC();
+                        // if dir pointer is "BOSS" or "ENEM". It can be other values like "EFFE" and "PC" which can be ignored
+                        // sometimes there's more than one with the same pointer, don't know how to handle that case... for now just the first
+                        const remapEntry = arcEntries.find(e => e.dirPointer === 1397968706 || e.dirPointer === 1296387653);
+                        if (remapEntry !== undefined) {
+                            // not exactly sure how this works, but the name of this entry corresponds to a "base" ARC file (as if the instance name was it)
+                            pmoName = remapEntry.name;
+                            // need to loop through arc names again to get the correct file name since the list doesn't contain variants
+                            for (const v of validModels) {
+                                if (pmoName.toLowerCase() === v.toLowerCase()) {
+                                    arcName = v;
+                                    break;
+                                }
+                            }
+                            if (pmoName.endsWith("d")) {
+                                pmoName = pmoName.substring(0, pmoName.length - 1);
+                            }
+                            console.log("Remapped", instance.name, "to", pmoName, "in arc", arcName);
+                            modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
+                            p = new BBSParser(modelArcFile);
+                        }
+                    }
+                    if (BBS_ARC_PMO_OVERRIDE.has(pmoName)) {
+                        pmoName = BBS_ARC_PMO_OVERRIDE.get(pmoName)!;
+                    }
+                    const pmo = p.parsePMOFromARC(pmoName);
                     if (!pmo) {
+                        console.log("Could not find PMO of name", pmoName, "in", p.parseARC(), arcName);
                         check2 = true;
                     } else {
-                        //console.log("Loaded", instance.name, "from arc", arcName);
+                        console.log("Loaded", instance.name, "from arc", arcName);
                         models.set(instance.name, pmo);
                         if (BBS_PAM.has(instance.name) && !animations.has(instance.name)) {
                             const mapping = BBS_PAM.get(instance.name)!;
                             const pam = p.parsePAMFromARC(mapping.name)!;
-                            //console.log(pam);
+                            console.log(pam);
                             animations.set(instance.name, pam.animations[mapping.index]);
                         }
                     }
@@ -237,7 +277,7 @@ class Room implements SceneDesc {
                         continue;
                     }
                     const pmo = new BBSParser(modelFile).parseModel(instance.name);
-                    //console.log("Loaded", instance.name, "from CHARA", u);
+                    console.log("Loaded", instance.name, "from CHARA", u);
                     models.set(instance.name, pmo);
                 }
             }
@@ -254,15 +294,24 @@ Fix occasional 404 errors when fetching models from OLOs (already two checks for
     Occurs most often in enchanted dominion, disney town and mirage arena
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
-    It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderalla castle (possibly the skybox of jb01 too)
+    It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderella castle (possibly the skybox of jb01 too)
+        This might actually just be some z-fighting, need to look at it more
     Perhaps the scaling is different for UVs sometimes, even in the same geometry, for some reason? The texture is usually just a tiny bit too big
 Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
+    Maybe they're supposed to be applied differently. Not sure why there'd be data but not use it?
 Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work but the data structures are very similar if not the same)
 Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in JB10 (probably a mismatched texture header?)
 Add default OLOs
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Debug ls14, can't get textures?
+Some unversed will disappear completely when applying animations, need to debug that
+Take another pass at the ordering of room names to be more chronological. Mostly ok for now but needs work
+    Worlds are roughly chronological, though, with extra/cutscene-only/misc worlds at the end
+Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
+    Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup
+Figure out why the shop moogle has its balloon upside down
+    It's consistent with how the skeleton actually is, uncomment the debug rendering to see
 
 May your heart be your guiding key
 */
@@ -288,18 +337,18 @@ const sceneDescs = [
     new Room("DP12", "Castle Oblivion"),
     new Room("DP13", "Character Selection"),
     "Dwarf Woodlands", // sw = snow white
+    new Room("SW12", "Mountain Trail"),
     new Room("SW01", "Mine Entrance"),
     new Room("SW02", "The Mine"),
-    new Room("SW03", "Vault"),
-    new Room("SW04", "Magic Mirror Chamber"),
-    new Room("SW05", "Underground Waterway"),
-    new Room("SW06", "Courtyard"),
     new Room("SW07", "Flower Glade"),
-    new Room("SW08", "Deep Woods"),
+    new Room("SW06", "Courtyard"),
+    new Room("SW03", "Vault"),
+    new Room("SW05", "Underground Waterway"),
+    new Room("SW04", "Magic Mirror Chamber"),
     new Room("SW09", "Inside the Mirror"),
+    new Room("SW08", "Deep Woods"),
     new Room("SW10", "Cottage Clearing"),
     new Room("SW11", "The Cottage"),
-    new Room("SW12", "Mountain Trail"),
     "Castle of Dreams",
     new Room("CD01", "Cinderella's Room"),
     new Room("CD02", "Mousehole"),

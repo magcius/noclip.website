@@ -155,6 +155,27 @@ export class BBSShape extends LuxShape {
 }
 
 export class BBSParser extends DreamDropParser {
+    public parseARC(): ArcEntry[] {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_ARC) {
+            console.warn("Unknown ARC magic", magic);
+        }
+        this.offset += 2;
+        const count = this.getShort();
+        this.offset += 8;
+        const entries: ArcEntry[] = Array(count);
+        for (let i = 0; i < count; i++) {
+            const dirPointer = this.getUint32();
+            const offset = this.getInt32();
+            const size = this.getInt32();
+            this.offset += 4;
+            const name = this.getString(16);
+            entries[i] = { dirPointer, offset, size, name };
+        }
+        return entries;
+    }
+
     public parsePMPFromARC(): BBSPMP | undefined {
         const entries = this.parseARC();
         const pmpEntry = entries.find(e => e.name.toLowerCase().includes(".pmp") && e.dirPointer === 0);
@@ -593,27 +614,6 @@ export class BBSParser extends DreamDropParser {
         }
 
         return shapes;
-    }
-
-    private parseARC(): ArcEntry[] {
-        this.offset = 0;
-        const magic = this.getUint32();
-        if (magic !== MAGIC_ARC) {
-            console.warn("Unknown ARC magic", magic);
-        }
-        this.offset += 2;
-        const count = this.getShort();
-        this.offset += 8;
-        const entries: ArcEntry[] = Array(count);
-        for (let i = 0; i < count; i++) {
-            const dirPointer = this.getUint32();
-            const offset = this.getInt32();
-            const size = this.getInt32();
-            this.offset += 4;
-            const name = this.getString(16);
-            entries[i] = { dirPointer, offset, size, name };
-        }
-        return entries;
     }
 
     private convertPixelFormat(value: number): BBSPixelFormat {
