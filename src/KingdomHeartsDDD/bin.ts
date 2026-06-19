@@ -121,28 +121,6 @@ export class DreamDropShape extends LuxShape {
 }
 
 /**
- * Depth bias based on a shape's attribute 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
-export enum DreamDropShapeAttributeDepthBias {
-    SET = 4
-}
-
-/**
- * Cull modes based on a shape's attribute 4th nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- * 
- * Not currently used since they break rooms in Hunchback and Tron, which have a lot of mirrored models.
- * This might also not be the cull mode nibble at all, but it looks right 90% of the time
- */
-export enum DreamDropShapeAttributeCullMode {
-    BACK,
-    BACK2,
-    BACK3,
-    BACK4,
-    NONE,
-    NONE2
-}
-
-/**
  * Billboard setting from a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
  */
 export enum DreamDropModelFlagBillboard {
@@ -590,8 +568,8 @@ export class DreamDropParser {
                 this.offset = frameOffset;
                 for (let k = 0; k < frameCount; k++) {
                     const dataOffset = this.getUint32();
-                    const num1 = this.getShort();
-                    const num2 = this.getShort();
+                    const displayFrames = this.getShort();
+                    const num2 = this.getShort(); // unknown
                     this.offset += 4;
                     if (dataOffset === 0) {
                         continue;
@@ -601,7 +579,7 @@ export class DreamDropParser {
                         continue;
                     }
                     const data = this.buffer.slice(dataOffset, dataOffset + ctrt.data.byteLength);
-                    frames.push({ displayFrames: num1, num2, data });
+                    frames.push({ displayFrames, data });
                 }
 
                 this.offset = ret2;

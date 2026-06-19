@@ -60,9 +60,7 @@ class ShapeRenderer extends LuxShapeRenderer {
     }
 
     protected override setMegaStateFlags(shape: LuxShape, transparent: boolean): void {
-        this.megaStateFlags = {
-            depthWrite: !transparent
-        };
+        this.megaStateFlags.depthWrite = !transparent;
     }
 
     protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {

@@ -1,10 +1,10 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
-import { GfxBufferFrequencyHint, GfxBufferUsage, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { DreamDropPMO, DreamDropModelFlagBillboard, DreamDropPMP, DreamDropShapeAttributeDepthBias } from "./bin";
+import { DreamDropPMO, DreamDropModelFlagBillboard, DreamDropPMP } from "./bin";
 import { DreamDropRoomConfig } from "./config/room";
 import { DreamDropShader } from "./shader";
-import { computeLuxShiftMatrix, getLuxShortNibble, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { computeLuxShiftMatrix, getLuxShortNibble, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 
 /**
  * Renderer for a room from _Kingdom Hearts 3D: Dream Drop Distance_
@@ -91,10 +91,9 @@ class ShapeRenderer extends LuxShapeRenderer {
     }
 
     protected override setMegaStateFlags(shape: LuxShape, transparent: boolean): void {
-        this.megaStateFlags = {
-            depthWrite: !transparent,
-            polygonOffset: getLuxShortNibble(shape.attribute, 1) !== DreamDropShapeAttributeDepthBias.SET // need to look at this again...
-        };
+        this.megaStateFlags.depthWrite = !transparent;
+        this.megaStateFlags.polygonOffset = (shape.attribute & LuxShapeAttribute.DROP_SHADOW) === 0;
+        this.megaStateFlags.cullMode = GfxCullMode.None; // different than bbs, unsure what it is in ddd, so default to none
     }
 
     protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {

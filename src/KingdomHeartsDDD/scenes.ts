@@ -283,12 +283,12 @@ TODO
 g_ex010 has a weird PMO format with no shapes or materials, fails at reading shape offsets
 g_nd300 also can't be read
 Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
-Some skeletal animations might use hermite interpolation. Linear interpolation is assumed and some animations look wrong with it
-    b_de060 and b_de140 for examples
 TXAs need cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
     Will probably need an altered shader that takes two texture inputs, idk how else to do it
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
+Figure out the shape attribute flag for back culling (it's different than BBS)
+Figure out the proper interpretation of LuxModelFlagRenderMode, it's probably not meant to be nibbles but works nonetheless
 Figure out how world map objects are loaded
     The models exist in chara/gim/g_wm*
     There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)

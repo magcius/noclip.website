@@ -1,6 +1,6 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { TextureMapping } from "../TextureHolder";
 import { Destroyable } from "../SceneBase";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
@@ -11,11 +11,9 @@ import { makeSortKeyOpaque, GfxRendererLayer } from "../gfx/render/GfxRenderInst
 import { ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
 import { Layer } from "../ui";
-import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp, lerpAngle, MathConstants } from "../MathHelpers";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { White } from "../Color";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
@@ -32,13 +30,17 @@ export enum LuxModelFlagRenderMode {
     BACKGROUND, // not used but "background" geometry has this value I guess?
 }
 
-export enum LuxShapeAttributeBlend {
-    OPAQUE,
-    OPAQUE2,
-    TRANSLUCENT,
-    TRANSLUCENT2,
-    ADDITIVE,
-    ADDITIVE2
+export enum LuxShapeAttribute {
+    NO_BLEND,
+    NO_MATERIAL,
+    GLARE,
+    CULL_BACK = 4, // only seems right for bbs. rarely used anyway...
+    HAS_ALPHA = 16,
+    BLEND_SEMITRANSPARENT = 32,
+    BLEND_ADDITIVE = 64,
+    BLEND_SUBTRACT = 96,
+    DROP_SHADOW = 1024,
+    ENV_MAP = 2048
 }
 
 export interface LuxPMP {
@@ -159,7 +161,6 @@ export interface LuxTextureAnimation {
 
 export interface LuxTXAFrame {
     displayFrames: number; // amount of frames to show the texture, assumed to be in terms of 30 FPS
-    num2: number; // always zero?
     data: ArrayBufferSlice;
 }
 
@@ -190,6 +191,7 @@ function getChannelValue(keyframes: LuxKeyframe[], frame: number, defaultValue: 
     }
     const index0 = index1 - 1;
 
+    // linear interpolation
     return keyframes[index0].value + (keyframes[index1].value - keyframes[index0].value) * ((frame - keyframes[index0].frame) / (keyframes[index1].frame - keyframes[index0].frame));
 }
 
@@ -278,12 +280,11 @@ export class LuxShapeRenderer implements Destroyable {
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
     constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, protected material: LuxMaterialInstance, txa?: LuxTextureAnimation, protected isSkybox: boolean = false, boneCount: number = 0) {
-        const blend = getLuxShortNibble(shape.attribute, 2);
-        const isTranslucent = blend === LuxShapeAttributeBlend.TRANSLUCENT || blend === LuxShapeAttributeBlend.TRANSLUCENT2;
-        const additiveBlend = blend === LuxShapeAttributeBlend.ADDITIVE || blend === LuxShapeAttributeBlend.ADDITIVE2;
+        const isTranslucent = (shape.attribute & LuxShapeAttribute.BLEND_SEMITRANSPARENT) !== 0;
+        const additiveBlend = (shape.attribute & LuxShapeAttribute.BLEND_ADDITIVE) !== 0;
         const transparent = isTranslucent || additiveBlend;
 
-        this.megaStateFlags = {};
+        this.megaStateFlags = { cullMode: (shape.attribute & LuxShapeAttribute.CULL_BACK) !== 0 ? GfxCullMode.Back : GfxCullMode.None };
         this.setMegaStateFlags(shape, transparent);
 
         if (transparent) {
@@ -304,6 +305,7 @@ export class LuxShapeRenderer implements Destroyable {
         if (txa) {
             if (txa.frames.length === 1) {
                 // treat the txa as flipping between two textures for an equal time (give or take 1 frame)
+                // in the actual game, it smoothly animates opacity between frames, this way is just easier for now
                 const f = txa.frames[0].displayFrames === 0 ? 5 : txa.frames[0].displayFrames;
                 this.txaIndices.push(...Array(f).fill(-1));
                 this.txaIndices.push(...Array(f).fill(0));

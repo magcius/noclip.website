@@ -254,14 +254,13 @@ Fix occasional 404 errors when fetching models from OLOs (already two checks for
     Occurs most often in enchanted dominion, disney town and mirage arena
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
-    It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderalla castle
+    It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderalla castle (possibly the skybox of jb01 too)
     Perhaps the scaling is different for UVs sometimes, even in the same geometry, for some reason? The texture is usually just a tiny bit too big
 Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
 Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work but the data structures are very similar if not the same)
 Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in JB10 (probably a mismatched texture header?)
 Add default OLOs
-Add save states
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Debug ls14, can't get textures?
 
