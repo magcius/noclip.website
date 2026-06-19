@@ -180,4 +180,25 @@ export const BBS_VALID_PRESET_ARC = ["CD01AQ", "CD01EX", "CD01VE", "CD02AQ", "CD
 export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["p13ex00", { name: "p13ex_001", index: 1 }], // terra armor/lingering will
     ["b20ex00", { name: "b20ex_000", index: 1 }], // master eraqus
+    ["n10ex00", { name: "n10ex_001", index: 0 }], // shop moogle
+    ["b64ex00", { name: "b64ex_000", index: 1 }], // ventus
+    ["b68ex00", { name: "b68ex_000", index: 1 }], // ventus
+    ["b78ex00", { name: "b78ex_000", index: 1 }], // terra
+    ["b88ex00", { name: "b88ex_000", index: 1 }], // aqua
+    ["b01ex00", { name: "b01ex_000", index: 1 }], // the unknown
+    ["p02ex00", { name: "p02ex_001", index: 1 }], // aqua
+    ["p03ex00", { name: "p03ex_001", index: 1 }], // terra
+    ["g50dp00", { name: "g50dp_000", index: 0 }], // purple flag
+    ["g51dp00", { name: "g51dp_000", index: 0 }], // green flag
+    ["n10sw00", { name: "n10sw_000", index: 0 }], // dopey
+    ["n08sw00", { name: "n08sw_000", index: 0 }], // bashful
+    ["n05sw00", { name: "n05sw_000", index: 0 }], // grumpy
+    ["n04sw00", { name: "n04sw_000", index: 0 }], // doc
+    ["n06sw00", { name: "n06sw_000", index: 0 }], // happy
+    ["n09sw00", { name: "n09sw_000", index: 0 }], // sneezy
+    ["n07sw00", { name: "n07sw_000", index: 0 }], // sleepy
+    ["m01ex00", { name: "m01ex_000", index: 2 }], // flood
+    ["n03sw00", { name: "n03sw_000", index: 0 }], // evil queen
+    ["b01sw00", { name: "b01sw_000", index: 1 }], // mad treant
+    ["b10sw00", { name: "b10sw_001", index: 1 }], // magic mirror
 ]);

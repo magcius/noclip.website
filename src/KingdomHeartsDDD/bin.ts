@@ -159,6 +159,7 @@ const MAGIC_PAM = 5062992;
 const MAGIC_TXA = 4282452;
 
 const NORMALIZED_SCALE = 32768.0;
+const SHORT_SCALE = 65535.0;
 const COLOR_SCALE = 255.0; // standard but might as well
 const UV_SCALE = 2048.0;
 const JOINT_SCALE = 3.0; // why couldn't they just store the actual index? it's only ever 0 to 7...
@@ -615,39 +616,47 @@ export class DreamDropParser {
     }
 
     private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): LuxBoneChannel {
-        const boneChannel: LuxBoneChannel = {};
+        let translationX: LuxKeyframe[] = [];
+        let translationY: LuxKeyframe[] = [];
+        let translationZ: LuxKeyframe[] = [];
+        let rotationX: LuxKeyframe[] = [];
+        let rotationY: LuxKeyframe[] = [];
+        let rotationZ: LuxKeyframe[] = [];
+        let scaleX: LuxKeyframe[] = [];
+        let scaleY: LuxKeyframe[] = [];
+        let scaleZ: LuxKeyframe[] = [];
 
         if (flags.translationX) {
-            boneChannel.translationX = this.parseAnimationData(frameCount);
+            translationX = this.parseAnimationData(frameCount);
         }
         if (flags.translationY) {
-            boneChannel.translationY = this.parseAnimationData(frameCount);
+            translationY = this.parseAnimationData(frameCount);
         }
         if (flags.translationZ) {
-            boneChannel.translationZ = this.parseAnimationData(frameCount);
+            translationZ = this.parseAnimationData(frameCount);
         }
 
         if (flags.rotationX) {
-            boneChannel.rotationX = this.parseAnimationData(frameCount);
+            rotationX = this.parseAnimationData(frameCount);
         }
         if (flags.rotationY) {
-            boneChannel.rotationY = this.parseAnimationData(frameCount);
+            rotationY = this.parseAnimationData(frameCount);
         }
         if (flags.rotationZ) {
-            boneChannel.rotationZ = this.parseAnimationData(frameCount);
+            rotationZ = this.parseAnimationData(frameCount);
         }
 
         if (flags.scaleX) {
-            boneChannel.scaleX = this.parseAnimationData(frameCount);
+            scaleX = this.parseAnimationData(frameCount);
         }
         if (flags.scaleY) {
-            boneChannel.scaleY = this.parseAnimationData(frameCount);
+            scaleY = this.parseAnimationData(frameCount);
         }
         if (flags.scaleZ) {
-            boneChannel.scaleZ = this.parseAnimationData(frameCount);
+            scaleZ = this.parseAnimationData(frameCount);
         }
 
-        return boneChannel;
+        return { translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ };
     }
 
     private parseAnimationData(frameCount: number): LuxKeyframe[] {
@@ -666,17 +675,19 @@ export class DreamDropParser {
                 let value;
                 if (keyframeCount === frameCount) {
                     frame = i;
-                    value = this.getUshort() / NORMALIZED_SCALE;
+                    value = this.getUshort() / SHORT_SCALE;
                 } else {
                     if (frameCount > 255) {
                         frame = this.getUshort();
                     } else {
                         frame = this.getByte();
                     }
-                    value = this.getUshort() / NORMALIZED_SCALE;
+                    value = this.getUshort() / SHORT_SCALE;
                 }
                 keyframes[i] = { frame, value: minValue + value * (maxValue - minValue) };
             }
+        } else {
+            return [{ frame: 0, value: minValue }];
         }
         return keyframes.filter(k => k !== undefined);
     }

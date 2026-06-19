@@ -11,10 +11,11 @@ import { makeSortKeyOpaque, GfxRendererLayer } from "../gfx/render/GfxRenderInst
 import { ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
 import { Layer } from "../ui";
-import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp, lerpAngle, MathConstants } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { White } from "../Color";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
@@ -128,15 +129,15 @@ export interface LuxSkeletalAnimation {
 }
 
 export interface LuxBoneChannel {
-    translationX?: LuxKeyframe[];
-    translationY?: LuxKeyframe[];
-    translationZ?: LuxKeyframe[];
-    rotationX?: LuxKeyframe[];
-    rotationY?: LuxKeyframe[];
-    rotationZ?: LuxKeyframe[];
-    scaleX?: LuxKeyframe[];
-    scaleY?: LuxKeyframe[];
-    scaleZ?: LuxKeyframe[];
+    translationX: LuxKeyframe[];
+    translationY: LuxKeyframe[];
+    translationZ: LuxKeyframe[];
+    rotationX: LuxKeyframe[];
+    rotationY: LuxKeyframe[];
+    rotationZ: LuxKeyframe[];
+    scaleX: LuxKeyframe[];
+    scaleY: LuxKeyframe[];
+    scaleZ: LuxKeyframe[];
 }
 
 export interface LuxKeyframe {
@@ -176,33 +177,20 @@ const SCRATCH_IDENTITY = mat4.create();
 const SCRATCH_BONE = mat4.create();
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
-function getChannelValue(keyframes: LuxKeyframe[] | undefined, frame: number, defaultValue: number): number {
-    if (!keyframes || keyframes.length === 0) {
+function getChannelValue(keyframes: LuxKeyframe[], frame: number, defaultValue: number): number {
+    if (keyframes.length === 0) {
         return defaultValue;
     }
-    if (keyframes.length === 1) {
+
+    const index1 = keyframes.findIndex(kf => frame < kf.frame);
+    if (index1 === 0) {
         return keyframes[0].value;
+    } else if (index1 < 0) {
+        return keyframes[keyframes.length - 1].value;
     }
-    let prev = keyframes[0];
-    let next = keyframes[keyframes.length - 1];
-    if (frame <= prev.frame) {
-        return prev.value;
-    }
-    if (frame >= next.frame) {
-        return next.value;
-    }
-    for (let i = 0; i < keyframes.length - 1; i++) {
-        if (keyframes[i].frame <= frame && keyframes[i + 1].frame >= frame) {
-            prev = keyframes[i];
-            next = keyframes[i + 1];
-            break;
-        }
-    }
-    if (prev.frame === next.frame) {
-        return prev.value;
-    }
-    const t = (frame - prev.frame) / (next.frame - prev.frame);
-    return prev.value + (next.value - prev.value) * t;
+    const index0 = index1 - 1;
+
+    return keyframes[index0].value + (keyframes[index1].value - keyframes[index0].value) * ((frame - keyframes[index0].frame) / (keyframes[index1].frame - keyframes[index0].frame));
 }
 
 export function computeLuxShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
@@ -485,7 +473,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
                     offset += fillMatrix4x3(d, offset, SCRATCH_IDENTITY);
                 }
             }
-            // if (this.boneMatrices.length > 0) {
+            // if (this.boneMatrices.length > 0 && this.instances.indexOf(instance) === 0) {
             //     const ctx = getDebugOverlayCanvas2D();
             //     for (let i = 1; i < this.boneMatrices.length; i++) {
             //         vec3.set(scratchVec3a, 0, 0, 0);
@@ -495,6 +483,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
             //         mat4.mul(SCRATCH_BONE, instance.shiftMatrix, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)]);
             //         vec3.transformMat4(scratchVec3b, scratchVec3b, SCRATCH_BONE);
             //         drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b);
+            //         drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3b, `${i}`, 0, White);
             //     }
             // }
 
