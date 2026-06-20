@@ -25,6 +25,7 @@ import { parseMP1Tweaks, parseMP2Tweaks } from './tweaks.js';
 import { GeneratorMaterialHelpers } from './particles/base_generator.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { TXTR } from './txtr.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 function layerVisibilitySyncToBitMap(layers: UI.Layer[], b: BitMap): void {
     for (let i = 0; i < layers.length; i++)
@@ -231,24 +232,25 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         return offs;
     }
 
-    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
-        const view = new DataView(src);
+    public deserializeSaveState(src: ArrayBufferSlice): void {
+        const view = src.createDataView();
+        let offs = 0;
         const numBytes = bitMapGetSerializedByteLength(this.areaRenderers.length);
-        if (offs + numBytes <= byteLength) {
+        if (offs + numBytes <= view.byteLength) {
             const b = new BitMap(this.areaRenderers.length);
             offs = bitMapDeserialize(view, offs, b);
             layerVisibilitySyncFromBitMap(this.areaRenderers, b);
             this.groupLayerPanel.layerPanel.syncLayerVisibility();
         }
 
-        if (offs + 1 <= byteLength) {
+        if (offs + 1 <= view.byteLength) {
             this.showAllActors = view.getUint8(offs) !== 0;
             offs += 1;
         }
         this.showAllActorsCheckbox.setChecked(this.showAllActors);
 
         if (this.game === ResourceGame.MP1 || this.game === ResourceGame.MP2) {
-            if (offs + 1 <= byteLength) {
+            if (offs + 1 <= view.byteLength) {
                 this._setSuitModel(view.getUint8(offs));
                 offs += 1;
             } else {
@@ -257,19 +259,17 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             this.suitModelButtons.setSelectedIndex(this.suitModel);
         }
 
-        if (offs + 1 <= byteLength) {
+        if (offs + 1 <= view.byteLength) {
             this.enableAnimations = view.getUint8(offs) !== 0;
             offs += 1;
         }
         this.enableAnimationsCheckbox.setChecked(this.enableAnimations);
 
-        if (offs + 1 <= byteLength) {
+        if (offs + 1 <= view.byteLength) {
             this.enableParticles = view.getUint8(offs) !== 0;
             offs += 1;
         }
         this.enableParticlesCheckbox.setChecked(this.enableParticles);
-
-        return offs;
     }
 
     public getCMDLData(cmdl: CMDL): CMDLData {

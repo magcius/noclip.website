@@ -12,20 +12,22 @@ import { FakeTextureHolder } from "../TextureHolder";
 import { TieGeometry, TieProgram, TieRenderer } from "./render-tie";
 import { CameraController } from "../Camera";
 import { LevelResources, load, loadFilesFromNetwork } from "./loader";
-import { createMegaBuffer, MegaBuffer, noclipSpaceFromRatchetSpace, lineChainToLineSegments } from "./utils";
+import { createMegaBuffer, MegaBuffer, noclipSpaceFromRatchetSpace, lineChainToLineSegments, GN } from "./utils";
 import { TfragGeometry, TfragRenderer } from "./render-tfrag";
 import { ShrubGeometry, ShrubRenderer } from "./render-shrub";
 import { colorNewFromRGBA, OpaqueBlack, White } from "../Color";
 import { SkyGeometry, SkyRenderer } from "./render-sky";
 import { RatchetShaderLib } from "./shader-lib";
-import { createGfxTextureForPaletteTexture, createTextureAtlases, createTieRgbaTexture, TextureAtlases } from "./textures";
+import { createGfxTextureForPaletteTexture, createTextureAtlases, createTieRgbaTexture_Rac1, createTieRgbaTexture_Rac234, TextureAtlases } from "./textures";
 import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
+import { MobyGeometry, MobyRenderer } from "./render-moby";
+import { bitsAsFloat32 } from "../MathHelpers";
 
-const pathBase = (gameNumber: number) => `RatchetAndClank${gameNumber}`;
+const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
-class RatchetAndClank1Scene implements SceneGfx {
+class RatchetAndClankScene implements SceneGfx {
     private renderHelper: GfxRenderHelper;
 
     private renderInstList = new GfxRenderInstList();
@@ -41,11 +43,12 @@ class RatchetAndClank1Scene implements SceneGfx {
         showCollision: false,
         enableTfrag: true,
         enableTies: true,
-        enableMobys: false,
+        enableMobys: true,
         enableShrubs: true,
         enableSky: true,
         enableFog: true,
         enableTextures: true,
+        showInvisibleMobyPositions: false,
         showPaths: false,
     };
 
@@ -59,7 +62,8 @@ class RatchetAndClank1Scene implements SceneGfx {
 
     private geometries: {
         tfrag: TfragGeometry | null,
-        ties: Map<number, (TieGeometry | null)[]>, // map of oClass to array of LOD geometries
+        ties: Map<number, (TieGeometry | null)[]>, // 3 lods, lod 0 is always present
+        mobys: Map<number, (MobyGeometry | null)[]>, // 2 lods, both may be null
         shrubs: Map<number, ShrubGeometry>,
         skyShells: Map<number, SkyGeometry>,
         collision: CollisionGeometry | null,
@@ -68,6 +72,7 @@ class RatchetAndClank1Scene implements SceneGfx {
     private renderers: {
         tfrag: TfragRenderer,
         tie: TieRenderer,
+        moby: MobyRenderer,
         shrub: ShrubRenderer,
         sky: SkyRenderer,
         collision: CollisionRenderer,
@@ -76,13 +81,14 @@ class RatchetAndClank1Scene implements SceneGfx {
     private instanceDataBuffer: MegaBuffer;
     private instanceDataBufferCache: GfxDynamicBufferCache;
 
-    constructor(private sceneContext: SceneContext, public gameNumber: number, public levelNumber: number) {
+    constructor(private sceneContext: SceneContext, public gn: GN, public levelNumber: number, public chunkNumber: number | null) {
         this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
         const cache = this.renderHelper.renderCache;
 
         this.levelResources = {
             levelCoreHeader: null,
             gameplayHeader: null,
+            gsTable: null,
             levelSettings: null,
             paths: null,
             grindPaths: null,
@@ -97,6 +103,14 @@ class RatchetAndClank1Scene implements SceneGfx {
             tieClassTextureIndices: null,
             tieInstances: null,
             tieInstancesByOClass: null,
+            tieAmbientRgbas: null,
+            mobyTextures: null,
+            mobyGsStashList: null,
+            mobyOClasses: null,
+            mobyClasses: null,
+            mobyClassTextureIndices: null,
+            mobyInstances: null,
+            mobyInstancesByOClass: null,
             shrubTextures: null,
             shrubOClasses: null,
             shrubClasses: null,
@@ -105,7 +119,6 @@ class RatchetAndClank1Scene implements SceneGfx {
             shrubInstancesByOClass: null,
             sky: null,
             skyTextures: null,
-            mobyInstances: null,
         };
 
         this.samplerGeneral = cache.createSampler({
@@ -133,6 +146,7 @@ class RatchetAndClank1Scene implements SceneGfx {
         this.geometries = {
             tfrag: null,
             ties: new Map(),
+            mobys: new Map(),
             shrubs: new Map(),
             skyShells: new Map(),
             collision: null,
@@ -141,6 +155,7 @@ class RatchetAndClank1Scene implements SceneGfx {
         this.renderers = {
             tfrag: new TfragRenderer(this.renderHelper),
             tie: new TieRenderer(this.renderHelper),
+            moby: new MobyRenderer(this.renderHelper),
             shrub: new ShrubRenderer(this.renderHelper),
             sky: new SkyRenderer(this.renderHelper),
             collision: new CollisionRenderer(this.renderHelper),
@@ -149,8 +164,8 @@ class RatchetAndClank1Scene implements SceneGfx {
         this.instanceDataBuffer = createMegaBuffer(cache.device, "Instance Data", 1024 * 1024);
         this.instanceDataBufferCache = new GfxDynamicBufferCache(cache.device);
 
-        const filePromises = loadFilesFromNetwork(sceneContext.dataFetcher, `${pathBase(this.gameNumber)}/level_${this.levelNumber}`);
-        load(this.levelResources, filePromises).then(() => {
+        const filePromises = loadFilesFromNetwork(sceneContext.dataFetcher, `${pathBase(this.gn)}/level_${this.levelNumber}`, this.chunkNumber);
+        load(this.gn, this.chunkNumber, this.levelResources, filePromises).then(() => {
             if (IS_DEVELOPMENT) console.log(this);
         }).catch((e) => {
             console.error(`Error loading level:`, e);
@@ -188,6 +203,26 @@ class RatchetAndClank1Scene implements SceneGfx {
         }
         this.geometries.ties.set(oClass, tieGeometry);
         return tieGeometry;
+    }
+
+    getOrCreateMobyGeometry(oClass: number): (MobyGeometry | null)[] | null {
+        const existing = this.geometries.mobys.get(oClass);
+        if (existing) return existing;
+
+        const mobyClass = this.levelResources.mobyClasses?.get(oClass);
+        if (!mobyClass) return null;
+        if (!mobyClass.mesh) return null;
+        const mobyTextureIndices = this.levelResources.mobyClassTextureIndices?.get(oClass);
+        if (!mobyTextureIndices) return null;
+
+        const mobyGeometry: (MobyGeometry | null)[] = [null, null];
+        for (let i = 0; i < 2; i++) {
+            if (!mobyClass.mesh.packetsByLod[i].length) continue;
+            mobyGeometry[i] = new MobyGeometry(this.renderHelper.renderCache, oClass, mobyClass, i, mobyTextureIndices);
+        }
+
+        this.geometries.mobys.set(oClass, mobyGeometry);
+        return mobyGeometry;
     }
 
     getOrCreateShrubGeometry(oClass: number): ShrubGeometry | null {
@@ -251,19 +286,31 @@ class RatchetAndClank1Scene implements SceneGfx {
         const existing = this.textures.tieRgbaTexture;
         if (existing) return existing;
 
-        const { tieInstances } = this.levelResources;
-        if (!tieInstances) return null;
+        if (this.gn === 1) {
+            const { tieInstances } = this.levelResources;
+            if (!tieInstances) return null;
 
-        this.textures.tieRgbaTexture = createTieRgbaTexture(this.renderHelper.device, tieInstances);
-        return this.textures.tieRgbaTexture;
+            this.textures.tieRgbaTexture = createTieRgbaTexture_Rac1(this.renderHelper.device, tieInstances);
+            this.textureHolder.viewerTextures.push({ gfxTexture: this.textures.tieRgbaTexture });
+            this.textureHolder.onnewtextures();
+            return this.textures.tieRgbaTexture;
+        } else {
+            const { tieAmbientRgbas } = this.levelResources;
+            if (!tieAmbientRgbas) return null;
+
+            this.textures.tieRgbaTexture = createTieRgbaTexture_Rac234(this.renderHelper.device, tieAmbientRgbas);
+            this.textureHolder.viewerTextures.push({ gfxTexture: this.textures.tieRgbaTexture });
+            this.textureHolder.onnewtextures();
+            return this.textures.tieRgbaTexture;
+        }
     }
 
     getOrCreateAtlasTextures(): GfxSamplerBinding[] | null {
-        const { tfragTextures, tieTextures, shrubTextures } = this.levelResources;
-        if (!tfragTextures || !tieTextures || !shrubTextures) return null;
+        const { tfragTextures, tieTextures, mobyTextures, shrubTextures } = this.levelResources;
+        if (!tfragTextures || !tieTextures || !mobyTextures || !shrubTextures) return null;
 
         if (!this.textures.textureAtlases) {
-            this.textures.textureAtlases = createTextureAtlases(this.renderHelper.device, tfragTextures, tieTextures, shrubTextures);
+            this.textures.textureAtlases = createTextureAtlases(this.renderHelper.device, tfragTextures, tieTextures, mobyTextures, shrubTextures);
         }
         return [
             { gfxTexture: this.textures.textureAtlases.gfxTextures[16], gfxSampler: this.samplerGeneral },
@@ -348,16 +395,21 @@ class RatchetAndClank1Scene implements SceneGfx {
             }
         }
 
-        // texture remaps (4 * 256 * 3 floats)
+        // texture remaps (4 * 32 * 4 floats) (two entries packed into each float)
         const { textureAtlases } = this.textures;
-        const remapArrays = textureAtlases ? [textureAtlases.tfragTextureRemap, textureAtlases.tieTextureRemap, textureAtlases.shrubTextureRemap] : [[], [], []];
+        const remapArrays = textureAtlases ? [textureAtlases.tfragTextureRemap, textureAtlases.tieTextureRemap, textureAtlases.mobyTextureRemap, textureAtlases.shrubTextureRemap] : [[], [], [], []];
+
+        const packRemap = (remap: typeof remapArrays[0][0]) => {
+            const bucket = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
+            const slice = remap ? remap.index : 0;
+            return (slice << 3) | (bucket & 0x07);
+        };
+
         for (const remapArray of remapArrays) {
-            for (let i = 0; i < 256; i++) {
-                const remap = remapArray[i];
-                data[offs++] = remap ? remap.sizeBucket : 0;
-                data[offs++] = remap ? remap.index : 0;
-                data[offs++] = 0;
-                data[offs++] = 0;
+            for (let i = 0; i < 256; i += 2) {
+                const packed0 = packRemap(remapArray[i + 0]);
+                const packed1 = packRemap(remapArray[i + 1]);
+                data[offs++] = bitsAsFloat32(packed1 << 16 | packed0);
             }
         }
     }
@@ -439,25 +491,22 @@ class RatchetAndClank1Scene implements SceneGfx {
                 if (!instances) continue;
                 const geometriesByLod = this.getOrCreateTieGeometry(oClass);
                 if (!geometriesByLod) continue;
-                this.renderers.tie.renderTie(this.renderInstList, geometriesByLod, tieClass, instances, tieTextureMappings, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
+                this.renderers.tie.renderTie(this.renderInstList, geometriesByLod, tieClass, instances, tieTextureMappings, cameraPosition, cameraFrustum, lodSetting, lodBias, this.gn, this.instanceDataBuffer);
             }
         }
 
         // mobys
-        if (this.settings.enableMobys) {
-            const mobyInstances = this.levelResources.mobyInstances ?? [];
-            for (let i = 0; i < mobyInstances.length; i++) {
-                const mobyInstance = mobyInstances[i];
-                const pos = vec3.fromValues(mobyInstance.position.x, mobyInstance.position.y, mobyInstance.position.z);
-                vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
-                this.renderHelper.debugDraw.drawLocator(pos, 0.3, White);
-                const mat = mat4.fromTranslation(mat4.create(), pos);
-                const rotation = quat.create();
-                mat4.getRotation(rotation, viewerInput.camera.worldMatrix);
-                mat4.fromRotationTranslationScale(mat, rotation, pos, vec3.fromValues(0.01, 0.01, 0.01));
-                if (vec3.distance(pos, cameraPosition) < 40) {
-                    this.renderHelper.debugDraw.drawWorldTextMtx(String(mobyInstance.oClass), mat, White);
-                }
+        if (this.settings.enableMobys && atlasTextures) {
+            const mobyOClasses = this.levelResources.mobyOClasses ?? [];
+            for (let i = 0; i < mobyOClasses.length; i++) {
+                const oClass = mobyOClasses[i];
+                const mobyClass = this.levelResources.mobyClasses?.get(oClass);
+                if (!mobyClass) continue;
+                const mobyInstances = this.levelResources.mobyInstancesByOClass?.get(oClass);
+                if (!mobyInstances) continue;
+                const mobyGeometryArr = this.getOrCreateMobyGeometry(oClass);
+                if (!mobyGeometryArr) continue;
+                this.renderers.moby.renderMoby(this.renderInstList, mobyGeometryArr, mobyClass, mobyInstances, atlasTextures, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
             }
         }
 
@@ -471,6 +520,26 @@ class RatchetAndClank1Scene implements SceneGfx {
                 const geometry = this.getOrCreateShrubGeometry(oClass);
                 if (!geometry) continue;
                 this.renderers.shrub.renderShrub(this.renderInstList, geometry, instances, atlasTextures, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
+            }
+        }
+
+        // invisible moby positions
+        if (this.settings.showInvisibleMobyPositions) {
+            const mobyInstances = this.levelResources.mobyInstances ?? [];
+            for (let i = 0; i < mobyInstances.length; i++) {
+                const mobyInstance = mobyInstances[i];
+                const mobyClass = this.levelResources.mobyClasses?.get(mobyInstance.oClass);
+                if (mobyClass && mobyClass.mesh) continue;
+                const pos = vec3.fromValues(mobyInstance.position.x, mobyInstance.position.y, mobyInstance.position.z);
+                vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
+                this.renderHelper.debugDraw.drawLocator(pos, 0.3, White);
+                const mat = mat4.fromTranslation(mat4.create(), pos);
+                const rotation = quat.create();
+                mat4.getRotation(rotation, viewerInput.camera.worldMatrix);
+                mat4.fromRotationTranslationScale(mat, rotation, pos, vec3.fromValues(0.01, 0.01, 0.01));
+                if (vec3.distance(pos, cameraPosition) < 40) {
+                    this.renderHelper.debugDraw.drawWorldTextMtx(String(mobyInstance.oClass), mat, White);
+                }
             }
         }
 
@@ -556,6 +625,12 @@ class RatchetAndClank1Scene implements SceneGfx {
         };
         renderSettingsPanel.contents.appendChild(enableTies.elem);
 
+        const enableMobys = new UI.Checkbox('Enable Mobys', this.settings.enableMobys);
+        enableMobys.onchanged = () => {
+            this.settings.enableMobys = enableMobys.checked;
+        };
+        renderSettingsPanel.contents.appendChild(enableMobys.elem);
+
         const enableShrubs = new UI.Checkbox('Enable Shrubs', this.settings.enableShrubs);
         enableShrubs.onchanged = () => {
             this.settings.enableShrubs = enableShrubs.checked;
@@ -580,11 +655,11 @@ class RatchetAndClank1Scene implements SceneGfx {
         };
         renderSettingsPanel.contents.appendChild(enableSky.elem);
 
-        const enableMobys = new UI.Checkbox('Show Moby Positions', this.settings.enableMobys);
-        enableMobys.onchanged = () => {
-            this.settings.enableMobys = enableMobys.checked;
+        const showInvisibleMobyPositions = new UI.Checkbox('Show Hidden Moby Positions', this.settings.showInvisibleMobyPositions);
+        showInvisibleMobyPositions.onchanged = () => {
+            this.settings.showInvisibleMobyPositions = showInvisibleMobyPositions.checked;
         };
-        renderSettingsPanel.contents.appendChild(enableMobys.elem);
+        renderSettingsPanel.contents.appendChild(showInvisibleMobyPositions.elem);
 
         const showPaths = new UI.Checkbox('Show Paths', this.settings.showPaths);
         showPaths.onchanged = () => {
@@ -601,6 +676,7 @@ class RatchetAndClank1Scene implements SceneGfx {
         const allGeometries = [
             this.geometries.tfrag,
             ...(Array.from(this.geometries.ties.values()).flat(1)),
+            ...(Array.from(this.geometries.mobys.values()).flat(1)),
             ...this.geometries.shrubs.values(),
             ...this.geometries.skyShells.values(),
             this.geometries.collision,
@@ -638,11 +714,27 @@ class RatchetAndClank1SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
-        return new RatchetAndClank1Scene(sceneContext, 1, this.levelNumber);
+        return new RatchetAndClankScene(sceneContext, 1, this.levelNumber, null);
     }
 }
 
-export const sceneGroup: SceneGroup = {
+class RatchetAndClank2SceneDesc implements SceneDesc {
+    id: string;
+
+    constructor(public levelNumber: number, public chunkNumber: number | null, public name: string) {
+        if (chunkNumber === null) {
+            this.id = String(levelNumber);
+        } else {
+            this.id = `${levelNumber}_${chunkNumber}`;
+        }
+    }
+
+    public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
+        return new RatchetAndClankScene(sceneContext, 2, this.levelNumber, this.chunkNumber);
+    }
+}
+
+export const sceneGroup1: SceneGroup = {
     id: "RatchetAndClank1",
     name: "Ratchet & Clank",
     sceneDescs: [
@@ -665,5 +757,52 @@ export const sceneGroup: SceneGroup = {
         new RatchetAndClank1SceneDesc(16, "Gadgetron Site, Kalebo III"),
         new RatchetAndClank1SceneDesc(17, "Drek's Fleet, Veldin Orbit"),
         new RatchetAndClank1SceneDesc(18, "Kyzil Plateau, Veldin"),
+    ],
+};
+
+export const sceneGroup2: SceneGroup = {
+    id: "RatchetAndClank2",
+    name: "Ratchet & Clank: Going Commando",
+    hidden: !IS_DEVELOPMENT,
+    sceneDescs: [
+        new RatchetAndClank2SceneDesc(0, null, "Flying Lab, Aranos (Tutorial)"),
+        new RatchetAndClank2SceneDesc(1, 0, "Megacorp Outlet, Oozla"),
+        new RatchetAndClank2SceneDesc(1, 1, "Megacorp Outlet, Oozla (Secret boss)"),
+        new RatchetAndClank2SceneDesc(25, null, "Wupash Nebula (Space)"),
+        new RatchetAndClank2SceneDesc(2, 0, "Maktar Resort, Maktar Nebula"),
+        new RatchetAndClank2SceneDesc(2, 1, "Maktar Resort, Maktar Nebula (Arena)"),
+        new RatchetAndClank2SceneDesc(26, null, "Jamming Array, Maktar Nebula"),
+        new RatchetAndClank2SceneDesc(3, null, "Megapolis, Endako"),
+        new RatchetAndClank2SceneDesc(4, 0, "Vukovar Canyon, Barlow"),
+        new RatchetAndClank2SceneDesc(4, 1, "Vukovar Canyon, Barlow (Race)"),
+        new RatchetAndClank2SceneDesc(5, null, "Thug Rendezvous, Feltzin System (Space)"),
+        new RatchetAndClank2SceneDesc(6, null, "Canal City, Notak"),
+        new RatchetAndClank2SceneDesc(24, null, "Slip Cognito's Ship Shack"),
+        new RatchetAndClank2SceneDesc(7, 0, "Frozen Base, Siberius"),
+        new RatchetAndClank2SceneDesc(7, 1, "Frozen Base, Siberius (Chase sequence)"),
+        new RatchetAndClank2SceneDesc(8, 0, "Mining Area, Tabora (Tunnel)"),
+        new RatchetAndClank2SceneDesc(8, 1, "Mining Area, Tabora"),
+        new RatchetAndClank2SceneDesc(9, null, "Testing Facility, Dobbo"),
+        new RatchetAndClank2SceneDesc(22, null, "Dobbo Orbit (Giant Clank)"),
+        new RatchetAndClank2SceneDesc(10, null, "Deep Space Disposal, Hrugis Cloud (Space)"),
+        new RatchetAndClank2SceneDesc(11, 0, "Megacorp Games, Joba"),
+        new RatchetAndClank2SceneDesc(11, 1, "Megacorp Games, Joba (Race & Arena)"),
+        new RatchetAndClank2SceneDesc(12, null, "Megacorp Armory, Todano"),
+        new RatchetAndClank2SceneDesc(13, null, "Silver City, Boldan"),
+        new RatchetAndClank2SceneDesc(14, null, "Flying Lab, Aranos"),
+        new RatchetAndClank2SceneDesc(15, null, "Thugs-4-Less Fleet, Gorn (Space)"),
+        new RatchetAndClank2SceneDesc(16, null, "Thug HQ, Snivelak"),
+        new RatchetAndClank2SceneDesc(17, null, "Distribution Facility, Smolg"),
+        new RatchetAndClank2SceneDesc(18, null, "Allgon City, Damosel"),
+        new RatchetAndClank2SceneDesc(23, null, "Damosel Orbit (Giant Clank)"),
+        new RatchetAndClank2SceneDesc(19, 0, "Tundor Wastes, Grelbin"),
+        new RatchetAndClank2SceneDesc(19, 1, "Tundor Wastes, Grelbin (Glider)"),
+        new RatchetAndClank2SceneDesc(19, 2, "Tundor Wastes, Grelbin (Hypnomatic)"),
+        new RatchetAndClank2SceneDesc(20, 0, "Protopet Factory, Yeedil"),
+        new RatchetAndClank2SceneDesc(20, 1, "Protopet Factory, Yeedil (Interior)"),
+        new RatchetAndClank2SceneDesc(20, 2, "Protopet Factory, Yeedil (Final boss)"),
+        new RatchetAndClank2SceneDesc(30, null, "Insomniac Museum, Burbank"),
+        // there is no 21 or 27-29
+
     ],
 };

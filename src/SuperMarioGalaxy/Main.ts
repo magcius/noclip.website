@@ -837,11 +837,11 @@ export class SMGRenderer implements Viewer.SceneGfx {
         return offs;
     }
 
-    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
-        const view = new DataView(src);
-        if (offs < byteLength)
+    public deserializeSaveState(src: ArrayBufferSlice): void {
+        const view = src.createDataView();
+        let offs = 0;
+        if (offs < view.byteLength)
             this.setCurrentScenario(view.getUint8(offs++));
-        return offs;
     }
 
     public destroy(device: GfxDevice): void {

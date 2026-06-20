@@ -2899,20 +2899,18 @@ export class UI {
     }
 
     public sceneChanged() {
-        const cameraControllerClass = this.viewer.cameraController!.constructor as CameraControllerClass;
-        this.viewerSettings.cameraControllerSelected(cameraControllerClass);
-        this.viewerSettings.setupFromCamera(this.viewer.cameraController!, this.viewer.camera);
-
-        // Textures
-        if (this.viewer.scene !== null) {
-            const scene = this.viewer.scene;
-            if (scene.textureHolder !== undefined)
-                this.textureViewer.setTextureList(scene.textureHolder);
-            else
-                this.textureViewer.setTextureList(null);
+        if (this.viewer.cameraController !== null) {
+            const cameraControllerClass = this.viewer.cameraController.constructor as CameraControllerClass;
+            this.viewerSettings.cameraControllerSelected(cameraControllerClass);
+            this.viewerSettings.setupFromCamera(this.viewer.cameraController, this.viewer.camera);
         }
 
-        if (this.studioModeEnabled)
+        if (this.viewer.scene !== null && this.viewer.scene.textureHolder !== undefined)
+            this.textureViewer.setTextureList(this.viewer.scene.textureHolder);
+        else
+            this.textureViewer.setTextureList(null);
+
+        if (this.viewer.scene !== null && this.studioModeEnabled)
             this.studioPanel.onSceneChange();
     }
 

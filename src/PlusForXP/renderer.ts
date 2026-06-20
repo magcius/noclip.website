@@ -30,6 +30,7 @@ import { SCX } from "./scx/types.js";
 import { SceneNode, Simulation, WorldData } from "./types.js";
 import { updateNodeTransform } from "./util.js";
 import { World } from "./world.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 class StandardProgram implements GfxProgramObjBag {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 2 }];
@@ -211,13 +212,13 @@ export default class Renderer implements SceneGfx {
         return offs;
     }
 
-    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
-        const view = new DataView(src);
-        if (offs < byteLength) {
+    public deserializeSaveState(src: ArrayBufferSlice): void {
+        const view = src.createDataView();
+        let offs = 0;
+        if (offs < view.byteLength) {
             this.activeCamera = view.getUint8(offs++);
             this.cameraSelect.selectItem(this.activeCamera);
         }
-        return offs;
     }
 
     render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
