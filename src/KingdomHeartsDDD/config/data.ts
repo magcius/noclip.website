@@ -34,14 +34,74 @@ export const DREAMDROP_VALID_WEP = ["w_ex180", "w_ex18s", "w_ex200", "w_ex20s", 
 /**
  * Default PMO to PAM mapping for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export const DREAMDROP_PAM: Map<string, string> = new Map([
-    ["p_ex010", "p_ex010_00001w"], // sora
-    ["p_ex020", "p_ex020_00001w"], // riku
-    ["b_yt100", "b_yt100_00001e"], // armored ventus
-    ["n_ex010", "n_ex010_00001e"], // moogle
-    ["b_di120", "b_di120_30210e"], // phantom ursula tentacle
-    ["n_tm010", "n_tm010_00001a"], // mickey (three musketeers)
-    ["b_de020", "b_de020_00001e"], // spellican
+export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new Map([
+    ["p_ex010", { name: "p_ex010_00001w", index: 0 }], // sora
+    ["p_ex020", { name: "p_ex020_00001w", index: 0 }], // riku
+    ["b_yt100", { name: "b_yt100_00001e", index: 0 }], // armored ventus
+    ["n_ex010", { name: "n_ex010_00001e", index: 0 }], // moogle
+    ["b_di120", { name: "b_di120_30210e", index: 0 }], // phantom ursula tentacle
+    ["n_tm010", { name: "n_tm010_00001a", index: 0 }], // mickey (three musketeers)
+    ["b_de020", { name: "b_de020_00001e", index: 0 }], // spellican
+    ["m_de011", { name: "m_de010_00001e", index: 0 }], // dream eater meow wow
+    ["m_de141", { name: "m_de140_00001e", index: 0 }], // dream eater bear
+    ["m_de021", { name: "m_de020_00001e", index: 0 }], // dream eater sheep
+    ["m_de061", { name: "m_de060_00001e", index: 0 }], // dream eater snake (?)
+    ["m_de041", { name: "m_de040_00001e", index: 0 }], // dream eater bat
+    ["m_de031", { name: "m_de030_00001e", index: 0 }], // dream eater goat
+    ["m_de051", { name: "m_de050_00001e", index: 0 }], // dream eater spikey gremlin (?)
+    ["m_de091", { name: "m_de090_00001e", index: 0 }], // dream eater spikey fish
+    ["m_de101", { name: "m_de100_00001e", index: 0 }], // dream eater seahorse
+    ["m_de241", { name: "m_de240_00002e", index: 0 }], // dream eater flower
+    ["m_de521", { name: "m_de520_00001e", index: 0 }], // dream eater spikey rhino
+    ["m_de261", { name: "m_de260_00001e", index: 0 }], // dream eater elephant
+    ["m_de111", { name: "m_de110_00001e", index: 0 }], // dream eater cat
+    ["b_de140", { name: "b_de140_00001e", index: 0 }], // hunchback world boss (sora)
+    ["m_de081", { name: "m_de080_00001e", index: 0 }], // dream eater salamander
+    ["m_de481", { name: "m_de480_00001e", index: 0 }], // dream eater thorny flower
+    ["m_tl120", { name: "m_tl120_00001e", index: 0 }], // tron enemy
+    ["m_de391", { name: "m_de390_00001e", index: 0 }], // dream eater tron goat
+    ["m_de221", { name: "m_de220_00001e", index: 0 }], // dream eater snail
+    ["m_de501", { name: "m_de500_00001e", index: 0 }], // dream eater tron eagle
+    ["m_de231", { name: "m_de230_00001e", index: 0 }], // dream eater crab
+    ["m_de211", { name: "m_de210_00001e", index: 0 }], // dream eater owl
+    ["p_ex030", { name: "p_ex03_000", index: 4 }], // kh1 sora
+    ["m_de291", { name: "m_de290_00001e", index: 0 }], // dream eater sea otter
+    ["m_de071", { name: "m_de070_00001e", index: 0 }], // dream eater frog knight
+    ["m_de201", { name: "m_de200_00001e", index: 0 }], // dream eater penguin
+    ["m_de491", { name: "m_de490_00003e", index: 0 }], // dream eater jester (?)
+    ["n_de831", { name: "n_de83_001", index: 2 }], // npc dream eater frog knight
+    ["b_de060", { name: "b_de06_001", index: 2 }], // lobster boss
+    // ["d_pi020", { name: "d_pi02_010", index: 0 }], // roller costers
+    // ["d_pi030", { name: "d_pi03_010", index: 0 }], // roller coster
+    // ["d_pi040", { name: "d_pi04_010", index: 0 }], // roller coster
+    ["d_pi230", { name: "d_pi23_001", index: 0 }], // hands with string
+    ["m_de401", { name: "m_de400_00001e", index: 0 }], // dream eater frog chef
+    ["m_de301", { name: "m_de301_00002e", index: 0 }], // dream eater eagle
+    ["m_de581", { name: "m_de580_00002e", index: 0 }], // dream eater bird
+    ["m_de511", { name: "m_de51_001", index: 8 }], // dream eater rabbit
+    ["m_de131", { name: "m_de130_00001e", index: 0 }], // dream eater giraffe
+    ["m_de531", { name: "m_de530_00001e", index: 0 }], // dream eater t-rex
+    ["m_de311", { name: "m_de310_00001e", index: 0 }], // dream eater crab
+    ["m_de591", { name: "m_de590_00001e", index: 0 }], // dream eater lion
+    ["m_de551", { name: "m_de550_00001e", index: 0 }], // dream eater horned rhino
+    ["m_de431", { name: "m_de430_00001e", index: 0 }], // dream eater horned seahorse
+    ["m_de341", { name: "m_de340_00001e", index: 0 }], // dream eater bone fish
+    // ["d_tm010", { name: "d_tm01_010", index: 0 }], // comic book pages
+    // ["d_tm020", { name: "d_tm02_010", index: 0 }], // comic book pages
+    // ["d_tm030", { name: "d_tm03_010", index: 0 }], // comic book pages
+    // ["d_tm110", { name: "d_tm11_010", index: 0 }], // comic book pages (colored)
+    // ["d_tm120", { name: "d_tm12_010", index: 0 }], // comic book pages (colored)
+    // ["d_tm130", { name: "d_tm13_010", index: 0 }], // comic book pages (colored)
+    ["m_de621", { name: "m_de620_00001e", index: 0 }], // dream eater wyvern
+    ["m_de161", { name: "m_de160_00001e", index: 0 }], // dream eater pegasus
+    ["m_de251", { name: "m_de250_00001e", index: 0 }], // dream eater hungry jester
+    ["m_de451", { name: "m_de450_00001e", index: 0 }], // dream eater electric pegasus
+    ["m_de411", { name: "m_de410_00001e", index: 0 }], // dream eater frog fencer
+    ["m_de641", { name: "m_de640_00001e", index: 0 }], // dream eater horned bird
+    ["m_de541", { name: "m_de540_00001e", index: 0 }], // dream eater party hat rabbit
+    ["m_de651", { name: "m_de650_00001e", index: 0 }], // dream eater saber tooth tiger
+    ["m_de561", { name: "m_de560_00001e", index: 0 }], // dream eater skeleton t-rex
+    // ["g_fa640", { name: "g_fa64_001", index: 0 }], // mickey (fantasia) ----------NEW FORMAT----------
 ]);
 
 /**
@@ -52,7 +112,7 @@ export const DREAMDROP_TXA = ["g_fa100", "g_tw390", "g_tw520"];
 /**
  * List of rooms that don't have data sets for _Kingdom Hearts 3D: Dream Drop Distance_
  */
-export const DREAMDROP_INVALID_SETDATA = ["de01", "de02", "de03", "de10", "fa04",, "fa08", "fa12", "fa17", "fa18", "nd20", "pi15", "rg04", "rg06", "rg07",
+export const DREAMDROP_INVALID_SETDATA = ["de01", "de02", "de03", "de10", "fa04", "fa08", "fa12", "fa17", "fa18", "nd20", "pi15", "rg04", "rg06", "rg07",
     "tl03", "tp01", "tp02", "tp03", "tp04", "tp05", "tp06", "tp07", "tp08", "tp09", "tp10", "tp11", "rg08", "wm01", "yt03", "yt07"];
 
 /**

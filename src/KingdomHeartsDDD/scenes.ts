@@ -221,19 +221,7 @@ class Room implements SceneDesc {
                     instances.push(...olo.objects);
                 }
                 if (instances.length > 0) {
-                    // this filtering is left over from debugging and might not be needed... keeping it just in case
-                    const uniqueInstances = instances.filter((instance, index, self) =>
-                        index === self.findIndex((t) => (
-                            t.name === instance.name &&
-                            t.position[0] === instance.position[0] &&
-                            t.position[1] === instance.position[1] &&
-                            t.position[2] === instance.position[2] &&
-                            t.rotation[0] === instance.rotation[0] &&
-                            t.rotation[1] === instance.rotation[1] &&
-                            t.rotation[2] === instance.rotation[2]
-                        ))
-                    );
-                    sets.push({ name: set.name, instances: uniqueInstances });
+                    sets.push({ name: set.name, instances });
                 }
             }
         }
@@ -260,9 +248,10 @@ class Room implements SceneDesc {
                 const pmo = new DreamDropParser(pmoFile).parsePMO(undefined, true, instance.name);
                 models.set(instance.name, pmo);
                 if (DREAMDROP_PAM.has(instance.name) && !animations.has(instance.name)) {
-                    const pamFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${DREAMDROP_PAM.get(instance.name)}.pam`);
+                    const a = DREAMDROP_PAM.get(instance.name)!;
+                    const pamFile = await context.dataFetcher.fetchData(`${pathBase}/chara/${subdir}/${a.name}.pam`);
                     const pam = new DreamDropParser(pamFile).parsePAM();
-                    animations.set(instance.name, pam.animations[0]);
+                    animations.set(instance.name, pam.animations[a.index]);
                 }
             }
         }
@@ -281,26 +270,52 @@ class Room implements SceneDesc {
 TODO
 
 g_ex010 has a weird PMO format with no shapes or materials, fails at reading shape offsets
-g_nd300 also can't be read
+    g_nd300 also can't be read
 Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
 TXAs need cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
     Will probably need an altered shader that takes two texture inputs, idk how else to do it
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
-Figure out the shape attribute flag for back culling (it's different than BBS)
+Figure out the shape attribute flag for back culling (it's different than BBS, which even that might not be right)
 Figure out the proper interpretation of LuxModelFlagRenderMode, it's probably not meant to be nibbles but works nonetheless
 Figure out how world map objects are loaded
     The models exist in chara/gim/g_wm*
     There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)
-    The Lua scripts could reference them, and those are easy to decompile, but no luck there either
 Clean up class/interface names
 Invesigate PMO model issue from BBS. Very rare here in DDD, but see Mickey in Musketeers for an example
     It seems like a problem with the UVs. Parts of the same model can have wrong UVs, while others are correct
-Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect) skybox geometry
+    Several dream eater models also have the problem
+Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect?) skybox geometry
 Investigate other file types such as GPL, SEB, EAD, ABC, and PVD
     MCV is camera/cutscene related and BCD is collision data. Neither of those are needed for noclip
     Likewise, the particle effect files like FEP and ESE would be neat, but probably not worth the effort
     See note in bin.ts for list of known or already used types
+Investigate di60 some more to see if the text of the credits can be loaded (in English)
+Figure out how shapes' "diffuse color" should be used (completely different than BBS)
+Investigate PAM animations with flag of 16720 and framerates of 77 with no channel data or bone count, usually name of "" or "PAM"
+    These are valid animations, just a different format than regular skeletal animations. These are typically
+    ones that are very simple, like something swaying back and forth. Lots of the g objs in Traverse Town, for
+    example, use these. See the balloons in the fourth district or the top hat in the second district.
+    Animations with flags of either 0 or 256 are (almost) always valid skeletal animations, with a framerate of 30
+Shadows in the second district are the wrong color, they appear as black in game (they're correct in the first district though?)
+Fix some objects culling when in view (bbox problem)
+Fix bad z-fighting on the ground path in the Traverse Town garden
+Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)"
+Debug d_pi020/d_pi030/d_pi040 weight/joint data
+    The animations are actually fine, it's something to do with the weights or joint indices
+    Even when doing just decomposed transform x inverse transform w/out any animation, the entire model disappears
+    Other dive objects, like d_pi230, work perfectly, so it's not something to do with only dive objects
+    The hunchback boss for sora also has its chains disappear when applying an animation to it, could be the same issue there
+Dream eater model fixes
+    Spellican's broomstick is stretched
+    Skeleton t-rex is missing its head
+    Both rhino variants have the spike ball visibles
+
+Nice to have
+
+Particle effects
+Save points (could just be glorified particles?)
+More accurate "lighting," like the neon signs in Traverse Town
 
 May your heart be your guiding key
 */
@@ -314,11 +329,12 @@ const sceneDescs = [
     new Room("di02", "Beach (Evening)"),
     new Room("di03", "Beach (Night)"),
     new Room("di05", "Combat Tutorial"),
+    new Room("di60", "Dive (End Credits)"),
     "Traverse Town", // tw = the world ends with you
     new Room("tw01", "First District"),
     new Room("tw02", "Second District"),
     new Room("tw03", "Third District"),
-    new Room("tw14", "Third District"),
+    new Room("tw14", "Third District (No Power)"),
     new Room("tw04", "Fourth District"),
     new Room("tw05", "Fifth District"),
     new Room("tw10", "Fifth District"),
@@ -368,7 +384,7 @@ const sceneDescs = [
     new Room("tl10", "Bridge"),
     new Room("tl11", "Light Cycle Arena"),
     new Room("tl16", "Light Cycle Arena"),
-    new Room("tl12", "Stadium (Boss)"),
+    new Room("tl12", "Stadium"),
     new Room("tl14", "Flynn's Hideout"),
     new Room("tl60", "Dive (Sora)"),
     new Room("tl61", "Dive (Riku)"),
@@ -474,7 +490,6 @@ const sceneDescs = [
     "Treasure Planet (Unfinished)",
     new Room("tp01", "The Legacy's Deck"),
     "Unfinished Rooms",
-    new Room("di60", "di60 Ocean"),
     new Room("nd20", "nd20 Court of Miracles"),
     new Room("pi15", "pi15 Amusement Park"),
     new Room("tw13", "tw13 Fountain Plaza"),

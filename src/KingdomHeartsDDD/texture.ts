@@ -188,7 +188,7 @@ export function decodeBBSTIM2(data: ArrayBufferSlice): { rgba: Uint8Array, width
         clut = clutBuffer.createTypedArray(Uint8Array);
     }
     let rgba: Uint8Array;
-    switch(tim2.pixelFormat) {
+    switch (tim2.pixelFormat) {
         case BBSPixelFormat.INDEXED_4:
             rgba = fromIndexed4(image, clut);
             break;

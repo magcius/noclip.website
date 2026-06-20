@@ -17,6 +17,7 @@ import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelper
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
+// See notes in scenes.ts for todo items
 
 export enum LuxModelFlagRenderMode {
     UNK,
@@ -34,7 +35,7 @@ export enum LuxShapeAttribute {
     NO_BLEND,
     NO_MATERIAL,
     GLARE,
-    CULL_BACK = 4, // only seems right for bbs. rarely used anyway...
+    CULL_BACK = 4, // may not be right, can hide some stuff that should be normally visible
     HAS_ALPHA = 16,
     BLEND_SEMITRANSPARENT = 32,
     BLEND_ADDITIVE = 64,
@@ -284,7 +285,9 @@ export class LuxShapeRenderer implements Destroyable {
         const additiveBlend = (shape.attribute & LuxShapeAttribute.BLEND_ADDITIVE) !== 0;
         const transparent = isTranslucent || additiveBlend;
 
-        this.megaStateFlags = { cullMode: (shape.attribute & LuxShapeAttribute.CULL_BACK) !== 0 ? GfxCullMode.Back : GfxCullMode.None };
+        this.megaStateFlags = {};
+        // the cull back flag makes some level geometry invisible from normal viewing points, disabled for now
+        // this.megaStateFlags = { cullMode: (shape.attribute & LuxShapeAttribute.CULL_BACK) !== 0 ? GfxCullMode.Back : GfxCullMode.None };
         this.setMegaStateFlags(shape, transparent);
 
         if (transparent) {
@@ -305,7 +308,6 @@ export class LuxShapeRenderer implements Destroyable {
         if (txa) {
             if (txa.frames.length === 1) {
                 // treat the txa as flipping between two textures for an equal time (give or take 1 frame)
-                // in the actual game, it smoothly animates opacity between frames, this way is just easier for now
                 const f = txa.frames[0].displayFrames === 0 ? 5 : txa.frames[0].displayFrames;
                 this.txaIndices.push(...Array(f).fill(-1));
                 this.txaIndices.push(...Array(f).fill(0));
@@ -378,9 +380,6 @@ export class LuxShapeRenderer implements Destroyable {
     }
 }
 
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-
 export class LuxModelRenderer implements Destroyable, Layer {
     public name: string;
     public visible: boolean = true;
@@ -396,7 +395,6 @@ export class LuxModelRenderer implements Destroyable, Layer {
     protected boneMatrices: mat4[][] = [];
 
     constructor(cache: GfxRenderCache, name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], protected animation?: LuxSkeletalAnimation) {
-        // console.log(model.name, model.pmpFlags.toString(16).padStart(4, "0"), "-", model.shapes.map(s => s.attribute.toString(16).padStart(4, "0")).join(" "));
         this.name = name;
         const modeNibble = getLuxShortNibble(model.pmpFlags, 3);
         this.isSkybox = model.pmpFlags !== -1 && (modeNibble === LuxModelFlagRenderMode.SKYBOX || modeNibble === LuxModelFlagRenderMode.SKYBOX2);

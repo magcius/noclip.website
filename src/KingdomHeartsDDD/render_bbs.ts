@@ -167,7 +167,7 @@ class ShapeRenderer extends LuxShapeRenderer {
                 inVertexBufferDescriptors.push({ byteStride: weight2Bytes, frequency: GfxVertexBufferFrequency.PerVertex });
                 inVertexBufferDescriptors.push({ byteStride: joint2Bytes, frequency: GfxVertexBufferFrequency.PerVertex });
             }
-            
+
             const weights1 = [];
             const joints1 = [];
             const weights2 = [];

@@ -681,7 +681,7 @@ export class DreamDropParser {
         for (let i = 0; i < boneIndices.length; i++) {
             boneIndices[i] = this.getByte();
         }
-        const unkColor = this.getInt32(); // openkh says diffuse, not sure about that
+        const unkNum = this.getInt32(); // openkh says diffuse color, not sure about that
 
         return new DreamDropShape(vertexCount, textureId, attribute, boneIndices, vertexSizeBytes, vertexFlags);
     }
@@ -721,7 +721,7 @@ export class DreamDropParser {
                 shape.joints[(i * 4) + 2] = Math.trunc(this.getByte() / JOINT_SCALE);
                 shape.joints[(i * 4) + 3] = Math.trunc(this.getByte() / JOINT_SCALE);
                 if (shape.vertexSizeBytes === 26) {
-                    this.offset += 4;
+                    this.offset += 4; // not sure what this is skipping
                 }
             }
         }
@@ -742,7 +742,7 @@ export class DreamDropParser {
         const rotation = vec3.create();
         const translation = vec3.create();
         mat4.getScaling(scale, transform);
-        calcEulerAngleRotationFromSRTMatrix(rotation,transform);
+        calcEulerAngleRotationFromSRTMatrix(rotation, transform);
         mat4.getTranslation(translation, transform);
         return { scale, rotation, translation };
     }
