@@ -125,12 +125,8 @@ export class TextureArray extends TextureMapping {
             this.subimages.set(texture.name, i);
         }
 
-        let bpp = 0;
-        if (pixelFormat === GfxFormat.U8_RGBA_NORM) {
-            bpp = 4;
-        } else if (pixelFormat === GfxFormat.U8_RGB_NORM) {
-            bpp = 3;
-        }
+        assert(pixelFormat === GfxFormat.U8_RGBA_NORM);
+        const bpp = 4;
 
         const mipmaps = [];
         for (let i = 0; i < levels; i++) {

@@ -479,9 +479,9 @@ export interface GfxDevice {
     queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null;
 
     // Information queries.
-    queryLimits(): GfxDeviceLimits;
+    queryLimits(): Readonly<GfxDeviceLimits>;
     queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean;
-    queryVendorInfo(): GfxVendorInfo;
+    queryVendorInfo(): Readonly<GfxVendorInfo>;
     queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;
     queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor>;
 

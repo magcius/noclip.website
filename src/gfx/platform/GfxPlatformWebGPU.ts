@@ -417,8 +417,6 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'uint8x2';
     else if (format === GfxFormat.U8_RG)
         return 'uint8x2';
-    else if (format === GfxFormat.U8_RGB)
-        return 'uint8x4';
     else if (format === GfxFormat.U8_RGBA)
         return 'uint8x4';
     else if (format === GfxFormat.U8_RG_NORM)
@@ -1837,7 +1835,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return queryPool.results[dstOffs] !== BigInt(0);
     }
 
-    public queryLimits(): GfxDeviceLimits {
+    public queryLimits(): Readonly<GfxDeviceLimits> {
         return {
             uniformBufferMaxPageByteSize: this.device.limits.maxUniformBufferBindingSize,
             uniformBufferByteAlignment: this.device.limits.minUniformBufferOffsetAlignment,
@@ -1869,7 +1867,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return true;
     }
 
-    public queryVendorInfo(): GfxVendorInfo {
+    public queryVendorInfo(): Readonly<GfxVendorInfo> {
         return this;
     }
 
