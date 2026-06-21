@@ -245,8 +245,7 @@ export class FPSCameraController implements CameraController {
     private keyAngleChangeVelSlow = 0.02;
 
     private mouseLookSpeed = 500;
-    private mouseLookDragFast = 0;
-    private mouseLookDragSlow = 0;
+    private isMoving = false;
 
     public sceneMoveSpeedMult = 1;
 
@@ -269,7 +268,6 @@ export class FPSCameraController implements CameraController {
     public update(inputManager: InputManager, dt: number): CameraUpdateResult {
         const camera = this.camera;
         let updated = false;
-        let important = false;
 
         if (inputManager.isKeyDown('KeyB')) {
             mat4.identity(camera.worldMatrix);
@@ -298,8 +296,7 @@ export class FPSCameraController implements CameraController {
             linearMoveDir[2] = clampRange(linearMoveDir[2] + linearMoveVelocity, keyMoveSpeedCap);
         } else if (Math.abs(linearMoveDir[2]) >= keyMoveThreshold) {
             linearMoveDir[2] *= this.keyMoveDrag;
-            // Detect when we've stopped moving.
-            if (Math.abs(linearMoveDir[2]) < keyMoveThreshold) { important = true; linearMoveDir[2] = 0.0; }
+            if (Math.abs(linearMoveDir[2]) < keyMoveThreshold) { linearMoveDir[2] = 0.0; }
         }
 
         linearMoveDir[2] += -inputManager.getPinchDeltaDist() * linearMoveVelocity;
@@ -310,7 +307,7 @@ export class FPSCameraController implements CameraController {
             linearMoveDir[0] = clampRange(linearMoveDir[0] + linearMoveVelocity, keyMoveSpeedCap);
         } else if (Math.abs(linearMoveDir[0]) >= keyMoveThreshold) {
             linearMoveDir[0] *= this.keyMoveDrag;
-            if (Math.abs(linearMoveDir[0]) < keyMoveThreshold) { important = true; linearMoveDir[0] = 0.0; }
+            if (Math.abs(linearMoveDir[0]) < keyMoveThreshold) linearMoveDir[0] = 0.0;
         }
 
         linearMoveDir[0] += -inputManager.getTouchDeltaX() * linearMoveVelocity;
@@ -325,7 +322,7 @@ export class FPSCameraController implements CameraController {
             linearMoveDir[1] = clampRange(linearMoveDir[1] + linearMoveVelocity, keyMoveSpeedCap);
         } else if (Math.abs(linearMoveDir[1]) >= keyMoveThreshold) {
             linearMoveDir[1] *= this.keyMoveDrag;
-            if (Math.abs(linearMoveDir[1]) < keyMoveThreshold) { important = true; linearMoveDir[1] = 0.0; }
+            if (Math.abs(linearMoveDir[1]) < keyMoveThreshold) linearMoveDir[1] = 0.0;
         }
 
         linearMoveDir[1] += inputManager.getTouchDeltaY() * linearMoveVelocity;
@@ -340,21 +337,20 @@ export class FPSCameraController implements CameraController {
             vec3.copy(upAxis, Vec3UnitY);
         }
 
+        const linearVelocity = camera.linearVelocity;
         if (!vec3.exactEquals(linearMoveDir, Vec3Zero)) {
-            const linearMovement = camera.linearVelocity;
+            vec3.scale(linearVelocity, viewRight, linearMoveDir[0]);
+            vec3.scaleAndAdd(linearVelocity, linearVelocity, viewForward, linearMoveDir[2]);
+            vec3.scaleAndAdd(linearVelocity, linearVelocity, upAxis, linearMoveDir[1]);
 
-            vec3.scale(linearMovement, viewRight, linearMoveDir[0]);
-            vec3.scaleAndAdd(linearMovement, linearMovement, viewForward, linearMoveDir[2]);
-            vec3.scaleAndAdd(linearMovement, linearMovement, upAxis, linearMoveDir[1]);
+            vec3.scale(linearVelocity, linearVelocity, this.sceneMoveSpeedMult * (dt / FPS));
 
-            vec3.scale(linearMovement, linearMovement, this.sceneMoveSpeedMult * (dt / FPS));
-
-            camera.worldMatrix[12] += linearMovement[0];
-            camera.worldMatrix[13] += linearMovement[1];
-            camera.worldMatrix[14] += linearMovement[2];
+            camera.worldMatrix[12] += linearVelocity[0];
+            camera.worldMatrix[13] += linearVelocity[1];
+            camera.worldMatrix[14] += linearVelocity[2];
             updated = true;
         } else {
-            vec3.copy(camera.linearVelocity, Vec3Zero);
+            vec3.copy(linearVelocity, Vec3Zero);
         }
 
         const invertXMult = inputManager.invertX ? -1 : 1;
@@ -363,6 +359,7 @@ export class FPSCameraController implements CameraController {
         const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed) * invertYMult;
 
         const rotateAngles = this.rotateAngles;
+        vec3.zero(rotateAngles);
 
         // Rotation around up axis (yaw)
         rotateAngles[0] += dx;
@@ -386,22 +383,28 @@ export class FPSCameraController implements CameraController {
         else if (inputManager.isKeyDown('KeyO'))
             rotateAngles[2] += keyAngleChangeVel;
 
-        if (!vec3.exactEquals(this.rotateAngles, Vec3Zero)) {
+        if (!vec3.exactEquals(rotateAngles, Vec3Zero)) {
             // Construct our rotation matrix from our angle changes.
-            mat4.rotate(scratchMat4, Mat4Identity, this.rotateAngles[0], upAxis);
-            mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[1], viewRight);
-            mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[2], viewForward);
+            mat4.rotate(scratchMat4, Mat4Identity, rotateAngles[0], upAxis);
+            mat4.rotate(scratchMat4, scratchMat4, rotateAngles[1], viewRight);
+            mat4.rotate(scratchMat4, scratchMat4, rotateAngles[2], viewForward);
 
             // Rotate the upper 3x3 without touching translation.
             mat33mul(camera.worldMatrix, scratchMat4, camera.worldMatrix);
 
             updated = true;
 
-            const mouseLookDrag = inputManager.isDragging() ? this.mouseLookDragFast : this.mouseLookDragSlow;
-            vec3.scale(this.rotateAngles, this.rotateAngles, mouseLookDrag);
+            if (Math.abs(rotateAngles[0]) < 0.0001) rotateAngles[0] = 0.0;
+            if (Math.abs(rotateAngles[1]) < 0.0001) rotateAngles[1] = 0.0;
+        }
 
-            if (Math.abs(this.rotateAngles[0]) < 0.0001) this.rotateAngles[0] = 0.0;
-            if (Math.abs(this.rotateAngles[1]) < 0.0001) this.rotateAngles[1] = 0.0;
+        if (updated)
+            this.isMoving = true;
+
+        let important = false;
+        if (this.isMoving && vec3.exactEquals(rotateAngles, Vec3Zero) && vec3.exactEquals(camera.linearVelocity, Vec3Zero)) {
+            important = true;
+            this.isMoving = false;
         }
 
         this.camera.isOrthographic = false;
