@@ -1,15 +1,15 @@
 
-import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
-import InputManager from './InputManager.js';
-import { Frustum, AABB } from './Geometry.js';
-import { clampRange, projectionMatrixForFrustum, calcUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, calcEulerAngleRotationFromSRTMatrix } from './MathHelpers.js';
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec3, vec4 } from 'gl-matrix';
+import { AABB, Frustum } from './Geometry.js';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers.js';
-import { WebXRContext, WebXRInputManager } from './WebXR.js';
-import { assert } from './util.js';
 import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers.js';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform.js';
-import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio.js';
+import InputManager from './InputManager.js';
+import { calcUnitSphericalCoordinates, clampRange, computeModelMatrixR, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, lerpAngle, Mat4Identity, MathConstants, projectionMatrixForCuboid, projectionMatrixForFrustum, Vec3UnitY, Vec3Zero } from './MathHelpers.js';
 import { GlobalSaveManager } from './SaveManager.js';
+import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio.js';
+import { assert } from './util.js';
+import { WebXRContext, WebXRInputManager } from './WebXR.js';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -206,25 +206,35 @@ export interface CameraControllerClass {
 // Movement speeds have been designed for a 60fps experience.
 const FPS = 1000/60;
 
-function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
-    // Quantize to nearest world axis.
-    const x = m[0], y = m[1], z = m[2], speed = vec3.length(m);
-    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > Math.abs(z))
-        vec3.set(dst, speed * Math.sign(x), 0, 0);
-    else if (Math.abs(y) > Math.abs(x) && Math.abs(y) > Math.abs(z))
-        vec3.set(dst, 0, speed * Math.sign(y), 0);
-    else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
-        vec3.set(dst, 0, 0, speed * Math.sign(z));
+function mat33mul(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
+    const b00 = b[0] , b10 = b[1] , b20 = b[2],
+          b01 = b[4] , b11 = b[5] , b21 = b[6],
+          b02 = b[8] , b12 = b[9] , b22 = b[10];
+
+    const a00 = a[0], a01 = a[4], a02 = a[8];
+    dst[0]  = a00*b00 + a01*b10 + a02*b20;
+    dst[4]  = a00*b01 + a01*b11 + a02*b21;
+    dst[8]  = a00*b02 + a01*b12 + a02*b22;
+
+    const a10 = a[1], a11 = a[5], a12 = a[9];
+    dst[1]  = a10*b00 + a11*b10 + a12*b20;
+    dst[5]  = a10*b01 + a11*b11 + a12*b21;
+    dst[9]  = a10*b02 + a11*b12 + a12*b22;
+
+    const a20 = a[2], a21 = a[6], a22 = a[10];
+    dst[2]  = a20*b00 + a21*b10 + a22*b20;
+    dst[6]  = a20*b01 + a21*b11 + a22*b21;
+    dst[10] = a20*b02 + a21*b12 + a22*b22;
 }
 
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
-    public useViewUp: boolean = true;
+    public useWorldUp: boolean = true;
     public onkeymovespeed: () => void = () => {};
 
     private keyMovement = vec3.create();
-    private mouseMovement = vec3.create();
+    private rotateAngles = vec3.create();
 
     private keyMoveSpeed = 60;
     private keyMoveFastMult = 5;
@@ -321,16 +331,15 @@ export class FPSCameraController implements CameraController {
 
         keyMovement[1] += inputManager.getTouchDeltaY() * keyMoveVelocity;
 
-        const viewUp = scratchVec3b;
+        // Construct our basis
+        const viewRight = scratchVec3b;
+        const upAxis = scratchVec3c;
+        const viewForward = scratchVec3d;
+        getMatrixAxis(viewRight, upAxis, viewForward, camera.worldMatrix);
 
-        if (this.useViewUp) {
-            getMatrixAxisY(viewUp, camera.viewMatrix);
-        } else {
-            vec3.copy(viewUp, Vec3UnitY);
+        if (this.useWorldUp) {
+            vec3.copy(upAxis, Vec3UnitY);
         }
-
-        const viewRight = Vec3UnitX;
-        const viewForward = Vec3UnitZ;
 
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {
             const finalMovement = scratchVec3a;
@@ -338,12 +347,14 @@ export class FPSCameraController implements CameraController {
 
             vec3.scaleAndAdd(finalMovement, finalMovement, viewRight, keyMovement[0]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewForward, keyMovement[2]);
-            vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, upAxis, keyMovement[1]);
 
             vec3.scale(finalMovement, finalMovement, this.sceneMoveSpeedMult * (dt / FPS));
 
             vec3.copy(camera.linearVelocity, finalMovement);
-            mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
+            camera.worldMatrix[12] += finalMovement[0];
+            camera.worldMatrix[13] += finalMovement[1];
+            camera.worldMatrix[14] += finalMovement[2];
             updated = true;
         } else {
             vec3.copy(camera.linearVelocity, Vec3Zero);
@@ -356,35 +367,47 @@ export class FPSCameraController implements CameraController {
         const dx = inputManager.getMouseDeltaX() * (-1 / this.mouseLookSpeed) * invertXMult;
         const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed) * invertYMult;
 
-        const mouseMovement = this.mouseMovement;
-        mouseMovement[0] += dx;
-        mouseMovement[1] += dy;
+        const rotateAngles = this.rotateAngles;
+
+        // Rotation around up axis (yaw)
+        rotateAngles[0] += dx;
+
+        // Rotation around view right (pitch)
+        rotateAngles[1] += dy;
+
+        // rotateAngles[2] is rotation around view forward (roll)
 
         const keyAngleChangeVel = isShiftPressed ? this.keyAngleChangeVelFast : this.keyAngleChangeVelSlow;
         if (inputManager.isKeyDown('KeyJ'))
-            mouseMovement[0] += keyAngleChangeVel * invertXMult;
+            rotateAngles[0] += keyAngleChangeVel * invertXMult;
         else if (inputManager.isKeyDown('KeyL'))
-            mouseMovement[0] -= keyAngleChangeVel * invertXMult;
+            rotateAngles[0] -= keyAngleChangeVel * invertXMult;
         if (inputManager.isKeyDown('KeyI'))
-            mouseMovement[1] += keyAngleChangeVel * invertYMult;
+            rotateAngles[1] += keyAngleChangeVel * invertYMult;
         else if (inputManager.isKeyDown('KeyK'))
-            mouseMovement[1] -= keyAngleChangeVel * invertYMult;
+            rotateAngles[1] -= keyAngleChangeVel * invertYMult;
         if (inputManager.isKeyDown('KeyU'))
-            mouseMovement[2] -= keyAngleChangeVel;
+            rotateAngles[2] -= keyAngleChangeVel;
         else if (inputManager.isKeyDown('KeyO'))
-            mouseMovement[2] += keyAngleChangeVel;
+            rotateAngles[2] += keyAngleChangeVel;
 
-        if (!vec3.exactEquals(this.mouseMovement, Vec3Zero)) {
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], viewUp);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], Vec3UnitX);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[2], Vec3UnitZ);
+        if (!vec3.exactEquals(this.rotateAngles, Vec3Zero)) {
+            // Construct our rotation matrix from our angle changes.
+
+            mat4.rotate(scratchMat4, Mat4Identity, this.rotateAngles[2], viewForward);
+            mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[1], viewRight);
+            mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[0], upAxis);
+
+            // Rotate the upper 3x3 without touching translation.
+            mat33mul(camera.worldMatrix, scratchMat4, camera.worldMatrix);
+
             updated = true;
 
             const mouseLookDrag = inputManager.isDragging() ? this.mouseLookDragFast : this.mouseLookDragSlow;
-            vec3.scale(this.mouseMovement, this.mouseMovement, mouseLookDrag);
+            vec3.scale(this.rotateAngles, this.rotateAngles, mouseLookDrag);
 
-            if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
-            if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
+            if (Math.abs(this.rotateAngles[0]) < mouseMoveLowSpeedCap) this.rotateAngles[0] = 0.0;
+            if (Math.abs(this.rotateAngles[1]) < mouseMoveLowSpeedCap) this.rotateAngles[1] = 0.0;
         }
 
         this.camera.isOrthographic = false;
