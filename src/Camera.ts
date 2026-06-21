@@ -388,9 +388,9 @@ export class FPSCameraController implements CameraController {
 
         if (!vec3.exactEquals(this.rotateAngles, Vec3Zero)) {
             // Construct our rotation matrix from our angle changes.
-            mat4.rotate(scratchMat4, Mat4Identity, this.rotateAngles[2], viewForward);
+            mat4.rotate(scratchMat4, Mat4Identity, this.rotateAngles[0], upAxis);
             mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[1], viewRight);
-            mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[0], upAxis);
+            mat4.rotate(scratchMat4, scratchMat4, this.rotateAngles[2], viewForward);
 
             // Rotate the upper 3x3 without touching translation.
             mat33mul(camera.worldMatrix, scratchMat4, camera.worldMatrix);
