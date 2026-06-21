@@ -476,9 +476,13 @@ export class BBSParser extends DreamDropParser {
             for (let i = 0; i < vertexCount; i++) {
                 const ret2 = this.offset;
 
-                if (hasSkeleton && flags.weightFormat !== CoordinateFormat.NO_VERTEX) {
+                if (hasSkeleton) {
                     for (let j = 0; j < w; j++) {
                         switch (flags.weightFormat) {
+                            case CoordinateFormat.NO_VERTEX:
+                                // if there's no weight data, then default to weights of 1.0
+                                shape.weights[(i * w) + j] = 1.0;
+                                break;
                             case CoordinateFormat.NORMALIZED_8_BITS:
                                 shape.weights[(i * w) + j] = this.getByte() / NORMALIZED_8_SCALE;
                                 break;

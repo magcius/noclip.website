@@ -9,7 +9,7 @@ import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel }
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
-import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_VALID_PRESET_ARC } from "./config/data";
+import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_PMO_ARC_OVERRIDE, BBS_VALID_PRESET_ARC } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
@@ -70,6 +70,132 @@ function getPrettyDataSetName(name: string) {
     } else {
         return name;
     }
+}
+
+async function getRoomObjects(roomId: string, context: SceneContext): Promise<LuxRoomObjects> {
+    // this function is a mess right now. Will be rewritten at some point...
+
+    const sets: LuxObjectSet[] = [];
+    for (const presetArcName of BBS_VALID_PRESET_ARC.filter(a => a.startsWith(roomId.toUpperCase()))) {
+        const presetFile = await context.dataFetcher.fetchData(`${pathBase}/arc/preset/${presetArcName}.arc`);
+        const olos = new BBSParser(presetFile).parseOLOFromARC();
+        const instances: LuxOLOInstance[] = [];
+        for (const olo of olos) {
+            instances.push(...olo.objects);
+        }
+        if (instances.length > 0) {
+            sets.push({ name: presetArcName, instances });
+        }
+    }
+
+    const models: Map<string, BBSModel> = new Map();
+    const animations: Map<string, LuxSkeletalAnimation> = new Map();
+    const validModels = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
+    for (const set of sets) {
+        for (const instance of set.instances) {
+            if (models.has(instance.name)) {
+                continue;
+            }
+            let invalid = true;
+            let check2 = false;
+            let arcName = "";
+            for (const v of validModels) {
+                if (instance.name.toLowerCase() === v.toLowerCase()) {
+                    invalid = false;
+                    arcName = v;
+                    break;
+                }
+            }
+            if (invalid) {
+                // strict search failed, use first n characters of model name
+                for (const v of validModels) {
+                    let n = instance.name.toLowerCase().startsWith("p") ? 3 : 5;
+                    if (instance.name.substring(0, n).toLowerCase() === v.substring(0, n).toLowerCase()) {
+                        invalid = false;
+                        arcName = v;
+                        break;
+                    }
+                }
+            }
+            if (invalid) {
+                for (const [k, v] of BBS_PMO_ARC_OVERRIDE) {
+                    if (v.indexOf(instance.name) !== -1) {
+                        arcName = k;
+                        console.log("Overrode", instance.name, "to arc", arcName);
+                        invalid = false;
+                        break;
+                    }
+                }
+            }
+            if (invalid) {
+                check2 = true;
+            } else {
+                const subdir = getArcSubDirectory(instance.name);
+                let modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
+                let p = new BBSParser(modelArcFile);
+                let pmoName = instance.name;
+                let remapped = false;
+                if (BBS_MODEL_REMAP.indexOf(instance.name) !== -1) {
+                    // check if model variant (different .epd, .esd files, etc but same geometry & animations)
+                    // since there is more of a heuristic and doesn't work all the time, it's on a whitelist of BBS_MODEL_REMAP
+                    const arcEntries = p.parseARC();
+                    // if dir pointer is "BOSS" or "ENEM". It can be other values like "EFFE" and "PC" which can be ignored
+                    // sometimes there's more than one with the same pointer, don't know how to handle that case... for now just the first
+                    const remapEntry = arcEntries.find(e => e.dirPointer === 1397968706 || e.dirPointer === 1296387653);
+                    if (remapEntry !== undefined) {
+                        // not exactly sure how this works, but the name of this entry corresponds to a "base" ARC file (as if the instance name was it)
+                        pmoName = remapEntry.name;
+                        // need to loop through arc names again to get the correct file name since the list doesn't contain variants
+                        for (const v of validModels) {
+                            if (pmoName.toLowerCase().substring(0, 7) === v.toLowerCase().substring(0, 7)) {
+                                arcName = v;
+                                break;
+                            }
+                        }
+                        if (pmoName.endsWith("d")) {
+                            pmoName = pmoName.substring(0, pmoName.length - 1);
+                        }
+                        console.log("Remapped", instance.name, "to", pmoName, "in arc", arcName);
+                        remapped = true;
+                        modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
+                        p = new BBSParser(modelArcFile);
+                    }
+                }
+                if (BBS_ARC_PMO_OVERRIDE.has(pmoName)) {
+                    pmoName = BBS_ARC_PMO_OVERRIDE.get(pmoName)!;
+                }
+                const pmo = p.parsePMOFromARC(pmoName);
+                if (!pmo) {
+                    console.log("Could not find PMO of name", pmoName, "in", p.parseARC(), arcName);
+                    check2 = true;
+                } else {
+                    console.log("Loaded", instance.name, "from arc", arcName);
+                    models.set(instance.name, pmo);
+                    const ac = remapped ? pmoName : instance.name;
+                    if (BBS_PAM.has(ac) && !animations.has(instance.name)) {
+                        const mapping = BBS_PAM.get(ac)!;
+                        const pam = p.parsePAMFromARC(mapping.name)!;
+                        console.log(pam);
+                        animations.set(instance.name, pam.animations[mapping.index]);
+                    }
+                }
+            }
+            // ideally, nothing is loaded from chara, but use as fallback until this logic is rewritten
+            if (check2) {
+                const subdir = getCharaSubDirectory(instance.name);
+                const u = instance.name.toUpperCase();
+                const modelFile = await context.dataFetcher.fetchData(`${pathBase}/CHARA/${subdir}/${u.substring(0, 5)}/${u.substring(5).substring(0, 2)}/${u}.pmo`, { allow404: true });
+                if (modelFile.byteLength === 0) {
+                    continue;
+                }
+                const pmo = new BBSParser(modelFile).parseModel(instance.name);
+                console.log("Loaded", instance.name, "from CHARA", u);
+                models.set(instance.name, pmo);
+            }
+        }
+    }
+
+    return { sets, models, animations };
 }
 
 class Renderer implements SceneGfx {
@@ -176,114 +302,9 @@ class Room implements SceneDesc {
         const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${this.id.toUpperCase()}.arc`);
         const pmp = new BBSParser(arcFile).parsePMPFromARC()!;
 
-        const sets: LuxObjectSet[] = [];
-        for (const presetArcName of BBS_VALID_PRESET_ARC.filter(a => a.startsWith(this.id.toUpperCase()))) {
-            const presetFile = await context.dataFetcher.fetchData(`${pathBase}/arc/preset/${presetArcName}.arc`);
-            const olos = new BBSParser(presetFile).parseOLOFromARC();
-            const instances: LuxOLOInstance[] = [];
-            for (const olo of olos) {
-                instances.push(...olo.objects);
-            }
-            if (instances.length > 0) {
-                sets.push({ name: presetArcName, instances });
-            }
-        }
+        const objects = await getRoomObjects(this.id, context);
 
-        // try to locate model files from the sets (they don't give a location, only a name...)
-        const models: Map<string, BBSModel> = new Map();
-        const animations: Map<string, LuxSkeletalAnimation> = new Map();
-        const validModels = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
-        for (const set of sets) {
-            for (const instance of set.instances) {
-                if (models.has(instance.name)) {
-                    continue;
-                }
-                let invalid = true;
-                let check2 = false;
-                let arcName = "";
-                for (const v of validModels) {
-                    if (instance.name.toLowerCase() === v.toLowerCase()) {
-                        invalid = false;
-                        arcName = v;
-                        break;
-                    }
-                }
-                if (invalid) {
-                    // strict search failed, use first n characters of model name
-                    for (const v of validModels) {
-                        let n = instance.name.toLowerCase().startsWith("p") ? 3 : 5;
-                        if (instance.name.substring(0, n).toLowerCase() === v.substring(0, n).toLowerCase()) {
-                            invalid = false;
-                            arcName = v;
-                            break;
-                        }
-                    }
-                }
-                if (invalid) {
-                    check2 = true;
-                } else {
-                    const subdir = getArcSubDirectory(instance.name);
-                    let modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
-                    let p = new BBSParser(modelArcFile);
-                    let pmoName = instance.name;
-                    if (BBS_MODEL_REMAP.indexOf(instance.name) !== -1) {
-                        // check if model variant (different .epd, .esd files, etc but same geometry & animations)
-                        // since there is more of a heuristic and doesn't work all the time, it's on a whitelist of BBS_MODEL_REMAP
-                        const arcEntries = p.parseARC();
-                        // if dir pointer is "BOSS" or "ENEM". It can be other values like "EFFE" and "PC" which can be ignored
-                        // sometimes there's more than one with the same pointer, don't know how to handle that case... for now just the first
-                        const remapEntry = arcEntries.find(e => e.dirPointer === 1397968706 || e.dirPointer === 1296387653);
-                        if (remapEntry !== undefined) {
-                            // not exactly sure how this works, but the name of this entry corresponds to a "base" ARC file (as if the instance name was it)
-                            pmoName = remapEntry.name;
-                            // need to loop through arc names again to get the correct file name since the list doesn't contain variants
-                            for (const v of validModels) {
-                                if (pmoName.toLowerCase() === v.toLowerCase()) {
-                                    arcName = v;
-                                    break;
-                                }
-                            }
-                            if (pmoName.endsWith("d")) {
-                                pmoName = pmoName.substring(0, pmoName.length - 1);
-                            }
-                            console.log("Remapped", instance.name, "to", pmoName, "in arc", arcName);
-                            modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
-                            p = new BBSParser(modelArcFile);
-                        }
-                    }
-                    if (BBS_ARC_PMO_OVERRIDE.has(pmoName)) {
-                        pmoName = BBS_ARC_PMO_OVERRIDE.get(pmoName)!;
-                    }
-                    const pmo = p.parsePMOFromARC(pmoName);
-                    if (!pmo) {
-                        console.log("Could not find PMO of name", pmoName, "in", p.parseARC(), arcName);
-                        check2 = true;
-                    } else {
-                        console.log("Loaded", instance.name, "from arc", arcName);
-                        models.set(instance.name, pmo);
-                        if (BBS_PAM.has(instance.name) && !animations.has(instance.name)) {
-                            const mapping = BBS_PAM.get(instance.name)!;
-                            const pam = p.parsePAMFromARC(mapping.name)!;
-                            console.log(pam);
-                            animations.set(instance.name, pam.animations[mapping.index]);
-                        }
-                    }
-                }
-                if (check2) {
-                    const subdir = getCharaSubDirectory(instance.name);
-                    const u = instance.name.toUpperCase();
-                    const modelFile = await context.dataFetcher.fetchData(`${pathBase}/CHARA/${subdir}/${u.substring(0, 5)}/${u.substring(5).substring(0, 2)}/${u}.pmo`, { allow404: true });
-                    if (modelFile.byteLength === 0) {
-                        continue;
-                    }
-                    const pmo = new BBSParser(modelFile).parseModel(instance.name);
-                    console.log("Loaded", instance.name, "from CHARA", u);
-                    models.set(instance.name, pmo);
-                }
-            }
-        }
-
-        return new Renderer(device, pmp, { sets, models, animations });
+        return new Renderer(device, pmp, objects);
     }
 }
 
@@ -310,8 +331,11 @@ Take another pass at the ordering of room names to be more chronological. Mostly
     Worlds are roughly chronological, though, with extra/cutscene-only/misc worlds at the end
 Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
     Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup
+    m32ex04 has too complex of a model -> animation pipeline for current logic
+    After looking some more, it seems like the OLO name can refer to multiple models, it's not always 1:1 (but usually is anyway), see b50vs00 for an example
 Figure out why the shop moogle has its balloon upside down
     It's consistent with how the skeleton actually is, uncomment the debug rendering to see
+Add TXAs
 
 May your heart be your guiding key
 */

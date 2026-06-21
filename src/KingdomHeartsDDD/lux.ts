@@ -380,6 +380,9 @@ export class LuxShapeRenderer implements Destroyable {
     }
 }
 
+// const scratchVec3a = vec3.create();
+// const scratchVec3b = vec3.create();
+
 export class LuxModelRenderer implements Destroyable, Layer {
     public name: string;
     public visible: boolean = true;
