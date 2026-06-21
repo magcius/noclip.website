@@ -1,8 +1,9 @@
 
-import { mat4, quat, ReadonlyMat4 } from "gl-matrix";
+import { mat4, quat, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { atob, btoa } from "./Ascii85";
 import { assert } from "./util";
+import { getMatrixAxisX, setMatrixAxis } from "./MathHelpers";
 
 export interface SaveState {
     cameraWorldMatrix: mat4;
@@ -57,6 +58,27 @@ function compressFrame_V1(view: DataView, byteOffs: number, m: ReadonlyMat4): nu
     return 4*4;
 }
 
+function removeSmallAmountsOfRoll(m: mat4): void {
+    // Compression can add unwanted camera roll, which we're very sensitive to.
+    // Check the right vector to make sure it's perfectly horizontal.
+
+    // dot(camera.right, Vec3UnitY) !== 0
+    // dot(camera[0,1,2], Vec3UnitY) !== 0
+    // camera[1] !== 0
+    if (Math.abs(m[1]) >= 0.005) {
+        // Oops, we have some roll. Correct the right vector.
+        m[1] = 0.0;
+        const len = Math.hypot(m[0], m[2]);
+        m[0] /= len;
+        m[2] /= len;
+
+        // Now recompute the up vector with fwd x right. Inline cross product assuming m[1] = 0.
+        m[4] = m[9] * m[2];
+        m[5] = m[10] * m[0] - m[8] * m[2];
+        m[6] = -m[9] * m[0];
+    }
+}
+
 function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
     const qn = view.getUint32(byteOffs + 0x0C, true);
 
@@ -70,6 +92,7 @@ function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
     const q = scratchQuat;
     quat.set(q, x*s, y*s, z*s, 1.0 - d);
     mat4.fromQuat(m, q);
+    removeSmallAmountsOfRoll(m);
 
     m[12] = view.getFloat32(byteOffs + 0x00, true);
     m[13] = view.getFloat32(byteOffs + 0x04, true);
