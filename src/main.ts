@@ -938,10 +938,12 @@ class Main {
             this.saveManager.deleteState(key);
         } else if (action === SaveStatesAction.Load) {
             const state = this.saveManager.loadState(key);
-            this._loadSaveStateString(state);
+            if (this._loadSaveStateString(state))
+                this._saveStateAndUpdateURL();
         } else if (action === SaveStatesAction.LoadDefault) {
             const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
-            this._loadSaveStateString(state);
+            if (this._loadSaveStateString(state))
+                this._saveStateAndUpdateURL();
         }
     }
 
