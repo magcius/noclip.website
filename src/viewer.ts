@@ -12,7 +12,7 @@ import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
 import { WebXRContext, WebXRInputManager } from './WebXR.js';
 import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GlobalSaveManager } from './SaveManager.js';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from './ArrayBufferSlice.js';
 
 export interface ViewerUpdateInfo {
@@ -253,6 +253,7 @@ export class Viewer {
         const worldMatrix = this.camera.worldMatrix;
         const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
         statistics.lines.push(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
+        statistics.lines.push(`Camera Speed: ${vec3.length(this.camera.linearVelocity).toFixed(2)}`)
 
         const vendorInfo = this.gfxDevice.queryVendorInfo();
         const platformString = GfxPlatform[vendorInfo.platform];
