@@ -227,13 +227,12 @@ export class FPSCameraController implements CameraController {
     private mouseMovement = vec3.create();
 
     private keyMoveSpeed = 60;
-    private keyMoveShiftMult = 5;
-    private keyMoveSlashMult = 0.1;
+    private keyMoveFastMult = 5;
+    private keyMoveSlowMult = 0.1;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
     private keyAngleChangeVelSlow = 0.02;
-    private worldForward: vec3 | null = null;
 
     private mouseLookSpeed = 500;
     private mouseLookDragFast = 0;
@@ -253,7 +252,7 @@ export class FPSCameraController implements CameraController {
         this.keyMoveSpeed = speed;
     }
 
-    public getKeyMoveSpeed(): number | null {
+    public getKeyMoveSpeed(): number {
         return this.keyMoveSpeed;
     }
 
@@ -274,24 +273,10 @@ export class FPSCameraController implements CameraController {
 
         let keyMoveMult = 1;
         if (isShiftPressed)
-            keyMoveMult = this.keyMoveShiftMult;
+            keyMoveMult = this.keyMoveFastMult;
 
         if (isSlashPressed)
-            keyMoveMult = this.keyMoveSlashMult;
-
-        if (inputManager.isKeyDownEventTriggered('Numpad4') || inputManager.isKeyDownEventTriggered('Numpad1')) {
-            // Save world forward vector from current position.
-            if (this.worldForward === null) {
-                this.worldForward = vec3.create();
-                getMatrixAxisZ(this.worldForward, camera.worldMatrix);
-
-                if (inputManager.isKeyDownEventTriggered('Numpad4'))
-                    vec3QuantizeMajorAxis(this.worldForward, this.worldForward);
-            } else {
-                // Toggle.
-                this.worldForward = null;
-            }
-        }
+            keyMoveMult = this.keyMoveSlowMult;
 
         const keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
@@ -337,23 +322,15 @@ export class FPSCameraController implements CameraController {
         keyMovement[1] += inputManager.getTouchDeltaY() * keyMoveVelocity;
 
         const viewUp = scratchVec3b;
-        // Instead of getting the camera up, instead use view up. Feels more natural.
+
         if (this.useViewUp) {
             getMatrixAxisY(viewUp, camera.viewMatrix);
         } else {
             vec3.copy(viewUp, Vec3UnitY);
         }
 
-        const viewRight = scratchVec3c;
-        const viewForward = scratchVec3d;
-
-        if (this.worldForward !== null) {
-            transformVec3Mat4w0(viewForward, camera.viewMatrix, this.worldForward);
-            vec3.cross(viewRight, viewUp, viewForward);
-        } else {
-            vec3.copy(viewRight, Vec3UnitX);
-            vec3.copy(viewForward, Vec3UnitZ);
-        }
+        const viewRight = Vec3UnitX;
+        const viewForward = Vec3UnitZ;
 
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {
             const finalMovement = scratchVec3a;
