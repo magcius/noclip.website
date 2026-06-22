@@ -1,8 +1,8 @@
-export const BBS_ARC_BOSS = ["B01CD00D", "B01DC00", "B01EX00D", "B01HE00D", "B01LS00D", "B01PP00D", "B01RG00D", "B01SB00D", "B01SW00D", "B01VS00D", "B01VS00D2", "B02CD00D", "B02DC00", "B02LS00D", "B02PP00D", "B02RG00D", "B02SW00", "B02VS00", "B03CD00D", "B03DC00", "B03RG00D", "B03SB00D", "B03SW00", "B03VS00", "B04CD00D", "B04RG00D", "B05CD00D", "B05RG00D", "B06RG00D", "B07RG00D", "B08RG00D", "B10CD00D", "B10DC00", "B10EX00D", "B10EX01", "B10EX02", "B10HE00D", "B10LS00D", "B10SB00D", "B10SW00D", "B10VS", "B10VS00D", "B10VS00D2", "B11EX00D", "B11SB00D", "B11SW00", "B11SW00D", "B11VS00D", "B11VS00D2", "B12EX00D", "B12EX01", "B12SB00D", "B12VS00D", "B12VS00D2", "B13VS00D", "B13VS00D2", "B14VS00", "B20CD00D", "B20DC00", "B20EX00D", "B20HE00", "B20LS00D", "B20PP00D", "B21HE00", "B21LS00", "B22LS00", "B23LS00", "B30EX00", "B30HE00D", "B31EX00", "B32EX00", "B40EX00D", "B40HE00D", "B40VS00", "B41EX00D", "B41VS00", "B50EX00D", "B50VS00", "B50_00", "B50_04", "B51EX", "B51EX00D", "B51VS00", "B52EX00D", "B52VS00", "B53EX00D", "B54EX00", "B55EX00D", "B56EX00D", "B60EX00D", "B60EX_C00", "B60EX_FACE", "B60VS00", "B61EX00D", "B61VS00", "B62EX00", "B62EX00D", "B62VS00", "B63EX00D", "B63VS00", "B64EX00D", "B64VS00", "B65VS00", "B66VS00", "B67VS00", "B68EX00D", "B68VS00", "B69EX00D", "B70EX00D", "B70EX_FACE", "B71EX00D", "B71VS00", "B72EX00", "B72EX00D", "B73EX00D", "B74VS00", "B75VS00", "B76VS00", "B77VS00", "B78EX00D", "B78VS00", "B79EX00D", "B80EX00D", "B80EX_FACE", "B80VS00", "B81EX00D", "B82EX00", "B82EX00D", "B83EX00D", "B88EX00D", "B89EX00D", "B90EX", "B90EX00", "B90VS00", "B91EX00", "B92EX00", "B93EX00", "B94EX00", "B95EX00", "B96EX00", "B97EX00", "B98EX00", "B99EX00", "BWAQ_SB", "BWTE_SW", "BWVE_CD"];
+export const BBS_ARC_BOSS = ["B01CD00D", "B01DC00", "B01EX00D", "B01HE00D", "B01LS00D", "B01PP00D", "B01RG00D", "B01SB00D", "B01SW00D", "B01VS00D", "B01VS00D2", "B02CD00D", "B02DC00", "B02LS00D", "B02PP00D", "B02RG00D", "B02SW00", "B02VS00", "B03CD00D", "B03DC00", "B03RG00D", "B03SB00D", "B03SW00", "B03VS00", "B04CD00D", "B04RG00D", "B05CD00D", "B05RG00D", "B06RG00D", "B07RG00D", "B08RG00D", "B10CD00D", "B10DC00", "B10EX00D", "B10EX01", "B10EX02", "B10HE00D", "B10LS00D", "B10SB00D", "B10SW00D", "B10VS", "B10VS00D", "B10VS00D2", "B11EX00D", "B11SB00D", "B11SW00", "B11SW00D", "B11VS00D", "B11VS00D2", "B12EX00D", "B12EX01", "B12SB00D", "B12VS00D", "B12VS00D2", "B13VS00D", "B13VS00D2", "B14VS00", "B20CD00D", "B20DC00", "B20EX00D", "B20HE00", "B20LS00D", "B20PP00D", "B21HE00", "B21LS00", "B22LS00", "B23LS00", "B30EX00", "B30HE00D", "B31EX00", "B32EX00", "B40EX00D", "B40HE00D", "B40VS00", "B41EX00D", "B41VS00", "B50EX00D", "B50VS00", "B50_00", "B50_04", "B51EX00D", "B51VS00", "B52EX00D", "B52VS00", "B53EX00D", "B54EX00", "B55EX00D", "B56EX00D", "B60EX00D", "B60EX_C00", "B60EX_FACE", "B60VS00", "B61EX00D", "B61VS00", "B62EX00", "B62EX00D", "B62VS00", "B63EX00D", "B63VS00", "B64EX00D", "B64VS00", "B65VS00", "B66VS00", "B67VS00", "B68EX00D", "B68VS00", "B69EX00D", "B70EX00D", "B70EX_FACE", "B71EX00D", "B71VS00", "B72EX00", "B72EX00D", "B73EX00D", "B74VS00", "B75VS00", "B76VS00", "B77VS00", "B78EX00D", "B78VS00", "B79EX00D", "B80EX00D", "B80EX_FACE", "B80VS00", "B81EX00D", "B82EX00", "B82EX00D", "B83EX00D", "B88EX00D", "B89EX00D", "B90EX", "B90EX00", "B90VS00", "B91EX00", "B92EX00", "B93EX00", "B94EX00", "B95EX00", "B96EX00", "B97EX00", "B98EX00", "B99EX00", "BWAQ_SB", "BWTE_SW", "BWVE_CD"];
 
 export const BBS_ARC_ENEMY = ["M01EX00D", "M01LS00", "M01SB00D", "M01SW00", "M01VS00", "M02EX00D", "M02SB00D", "M02SW00", "M02VS00", "M03DC00", "M03EX00D", "M03SB00D", "M03SW00", "M03VS00", "M04EX00", "M04SW00", "M04VS00", "M05EX00D", "M05SW00", "M05VS00", "M06EX00", "M06SW00", "M06VS00", "M07DC00", "M07EX00D", "M07SW00", "M07VS00", "M08EX00", "M08VS00", "M09EX00D", "M09VS00", "M10EX00", "M10VS00", "M11EX00", "M12EX00", "M12VS00", "M13EX00", "M13VS00", "M14EX00D", "M14VS00", "M15EX00", "M15VS00", "M16EX00", "M16VS00", "M17EX00", "M17VS00", "M18EX00", "M18VS00", "M19EX00", "M19VS00", "M20EX00D", "M20VS00", "M21EX00", "M21VS00", "M22EX00D", "M22VS00", "M23EX00", "M23VS00", "M24EX", "M24EX00", "M24EX01", "M24EX02", "M25EX00D", "M25VS00", "M26EX00", "M27EX00", "M28EX00", "M30EX00D", "M32EX", "M32EX00D", "M32EX01D", "M32EX02D", "M32EX03D", "M32EX04", "M32VS00", "M32VS01", "M32VS02", "M51VS00", "M52VS00"];
 
-export const BBS_ARC_GIMMICK = ["G01CD00", "G01DC00", "G01DP00", "G01EX00", "G01HE00", "G01JB00", "G01KG00", "G01LS00", "G01LUA", "G01PP00", "G01RG00", "G01SB00", "G01SW00", "G01VS00", "G01WM00", "G01YT00", "G02CD00", "G02DC00", "G02DP00", "G02EX00", "G02HE00", "G02JB00", "G02JF00", "G02KG00", "G02LS00", "G02LUA", "G02PP00", "G02RG00", "G02SB00", "G02SW00", "G02YT00", "G03CD00", "G03DC00", "G03DP00", "G03EX00", "G03HE00", "G03JB00", "G03KG00", "G03LS00", "G03LUA", "G03PP00", "G03RG00", "G03SB00", "G03SW00", "G03YT00", "G05JF00", "G06JF00", "G07JF00", "G08JF00", "G09JF00", "G10CD00", "G10DC00", "G10DI00", "G10HE00", "G10KG00", "G10LS00", "G10PP00", "G10RG00", "G10SB00", "G10SW00", "G10VS00", "G11CD00", "G11DC00", "G11DI00", "G11DP00", "G11HE00", "G11KG00", "G11LS00", "G11PP00", "G11SB00", "G11SW00", "G12CD00", "G12DC00", "G12DI00", "G12DP00", "G12HE00", "G12KG00", "G12LS00", "G12PP00", "G12RG00", "G12SB00", "G12SW00", "G13CD00", "G13DC00", "G13DI00", "G13DP00", "G13HE00", "G13KG00", "G13LS00", "G13PP00", "G13RG00", "G13SB00", "G13SW00", "G13_14CD", "G14CD00", "G14DC00", "G14DI00", "G14DP00", "G14LS00", "G14PP00", "G14RG00", "G14SB00", "G14SW00", "G15CD00", "G15DC00", "G15DI00", "G15DP00", "G15HE00", "G15LS00", "G15PP00", "G15RG00", "G15SB00", "G15SW00", "G15VS00", "G16CD00", "G16DC00", "G16DI00", "G16HE00", "G16LS00", "G16PP00", "G16RG00", "G16SB00", "G16SW00", "G16VS00", "G17CD00", "G17DC00", "G17DI00", "G17HE00", "G17LS00", "G17PP00", "G17RG00", "G17SW00", "G17VS00", "G18CD00", "G18DC00", "G18DI00", "G18HE00", "G18LS00", "G18PP00", "G18RG00", "G18SB00", "G18SW00", "G18VS00", "G19CD00", "G19DC00", "G19LS00", "G19PP00", "G19SB00", "G19SW00", "G19VS00", "G20CD00", "G20DC00", "G20PP00", "G20SB00", "G20SW00", "G20VS00", "G21CD00", "G21DC00", "G21LS00", "G21PP00", "G21SB00", "G21SW00", "G22DC00", "G22LS00", "G22PP00", "G22SB00", "G22SW00", "G22VS00", "G23CD00", "G23DC", "G23DC00", "G23LS00", "G23PP00", "G23SB00", "G23SW00", "G23VS00", "G24CD00", "G24DC00", "G24LS00", "G24PP00", "G24SB00", "G24SW00", "G24VS00", "G25CD00", "G25DC00", "G25LS00", "G25SB00", "G25SW00", "G25VS00", "G26CD00", "G26DC00", "G26LS00", "G26SB00", "G26SW00", "G26VS00", "G27CD00", "G27DC00", "G27LS00", "G27SB00", "G28DC00", "G28LS00", "G28SB00", "G29DC00", "G29LS00", "G29SB00", "G30DC00", "G31DC00", "G31LS00", "G32DC00", "G32LS00", "G32SB00", "G33DC00", "G33LS00", "G33SB00", "G34LS00", "G35DC00", "G35LS00", "G35SB00", "G36LS00", "G36SB00", "G37DC00", "G38SB00", "G39SB00", "G40SB00", "G41DC00", "G41SB00", "G42DC00", "G42SB00", "G43DC00", "G44DC00", "G46DC00", "G47DC00", "G48DC00", "G50CD00", "G50DP00", "G50HE00", "G50KG00", "G50LS00", "G50RG00", "G50SB00", "G50SW00", "G51CD00", "G51DP00", "G51KG00", "G51LS00", "G51RG00", "G51SB00", "G51SW00", "G51WM00", "G52CD00", "G52DP00", "G52KG00", "G52LS00", "G52RG00", "G52SW00", "G52VS00", "G53CD00", "G53DP00", "G53KG00", "G53SW00", "G53VS00", "G54DP00", "G54SB00", "G55DP00", "G55LS00", "G55SB00", "G56DC00", "G56DP00", "G56LS00", "G57DP00", "G58SB00", "G59DC00", "G59SB00", "G60DC00", "G60LS00", "G61DC00", "G61LS00", "G62DC00", "G63DC00", "G90DC00", "G91DC00", "G92DC00", "G93DC00", "G94DC00", "G95DC00", "G99HE00", "G99LS00"];
+export const BBS_ARC_GIMMICK = ["G01CD00", "G01DC00", "G01DP00", "G01EX00", "G01HE00", "G01JB00", "G01KG00", "G01LS00", "G01LUA", "G01PP00", "G01RG00", "G01SB00", "G01SW00", "G01VS00", "G01WM00", "G01YT00", "G02CD00", "G02DC00", "G02DP00", "G02EX00", "G02HE00", "G02JB00", "G02JF00", "G02KG00", "G02LS00", "G02LUA", "G02PP00", "G02RG00", "G02SB00", "G02SW00", "G02YT00", "G03CD00", "G03DC00", "G03DP00", "G03EX00", "G03HE00", "G03JB00", "G03KG00", "G03LS00", "G03LUA", "G03PP00", "G03RG00", "G03SB00", "G03SW00", "G03YT00", "G05JF00", "G06JF00", "G07JF00", "G08JF00", "G09JF00", "G10CD00", "G10DC00", "G10DI00", "G10HE00", "G10KG00", "G10LS00", "G10PP00", "G10RG00", "G10SB00", "G10SW00", "G10VS00", "G11CD00", "G11DC00", "G11DI00", "G11DP00", "G11HE00", "G11KG00", "G11LS00", "G11PP00", "G11SB00", "G11SW00", "G12CD00", "G12DC00", "G12DI00", "G12DP00", "G12HE00", "G12KG00", "G12LS00", "G12PP00", "G12RG00", "G12SB00", "G12SW00", "G13CD00", "G13DC00", "G13DI00", "G13DP00", "G13HE00", "G13KG00", "G13LS00", "G13PP00", "G13RG00", "G13SB00", "G13SW00", "G13_14CD", "G14CD00", "G14DC00", "G14DI00", "G14DP00", "G14LS00", "G14PP00", "G14RG00", "G14SB00", "G14SW00", "G15CD00", "G15DC00", "G15DI00", "G15DP00", "G15HE00", "G15LS00", "G15PP00", "G15RG00", "G15SB00", "G15SW00", "G15VS00", "G16CD00", "G16DC00", "G16DI00", "G16HE00", "G16LS00", "G16PP00", "G16RG00", "G16SB00", "G16SW00", "G16VS00", "G17CD00", "G17DC00", "G17DI00", "G17HE00", "G17LS00", "G17PP00", "G17RG00", "G17SW00", "G17VS00", "G18CD00", "G18DC00", "G18DI00", "G18HE00", "G18LS00", "G18PP00", "G18RG00", "G18SB00", "G18SW00", "G18VS00", "G19CD00", "G19DC00", "G19LS00", "G19PP00", "G19SB00", "G19SW00", "G19VS00", "G20CD00", "G20DC00", "G20PP00", "G20SB00", "G20SW00", "G20VS00", "G21CD00", "G21DC00", "G21LS00", "G21PP00", "G21SB00", "G21SW00", "G22DC00", "G22LS00", "G22PP00", "G22SB00", "G22SW00", "G22VS00", "G23CD00", "G23DC00", "G23LS00", "G23PP00", "G23SB00", "G23SW00", "G23VS00", "G24CD00", "G24DC00", "G24LS00", "G24PP00", "G24SB00", "G24SW00", "G24VS00", "G25CD00", "G25DC00", "G25LS00", "G25SB00", "G25SW00", "G25VS00", "G26CD00", "G26DC00", "G26LS00", "G26SB00", "G26SW00", "G26VS00", "G27CD00", "G27DC00", "G27LS00", "G27SB00", "G28DC00", "G28LS00", "G28SB00", "G29DC00", "G29LS00", "G29SB00", "G30DC00", "G31DC00", "G31LS00", "G32DC00", "G32LS00", "G32SB00", "G33DC00", "G33LS00", "G33SB00", "G34LS00", "G35DC00", "G35LS00", "G35SB00", "G36LS00", "G36SB00", "G37DC00", "G38SB00", "G39SB00", "G40SB00", "G41DC00", "G41SB00", "G42DC00", "G42SB00", "G43DC00", "G44DC00", "G46DC00", "G47DC00", "G48DC00", "G50CD00", "G50DP00", "G50HE00", "G50KG00", "G50LS00", "G50RG00", "G50SB00", "G50SW00", "G51CD00", "G51DP00", "G51KG00", "G51LS00", "G51RG00", "G51SB00", "G51SW00", "G51WM00", "G52CD00", "G52DP00", "G52KG00", "G52LS00", "G52RG00", "G52SW00", "G52VS00", "G53CD00", "G53DP00", "G53KG00", "G53SW00", "G53VS00", "G54DP00", "G54SB00", "G55DP00", "G55LS00", "G55SB00", "G56DC00", "G56DP00", "G56LS00", "G57DP00", "G58SB00", "G59DC00", "G59SB00", "G60DC00", "G60LS00", "G61DC00", "G61LS00", "G62DC00", "G63DC00", "G90DC00", "G91DC00", "G92DC00", "G93DC00", "G94DC00", "G95DC00", "G99HE00", "G99LS00"];
 
 export const BBS_ARC_NPC = ["N01BD00", "N01EX00", "N01HE00", "N01LS00", "N01PP00", "N01SB01", "N01SW00", "N01SW01", "N01YT00", "N02CD00", "N02CD01", "N02HE00", "N02LS00", "N02PP00", "N02SW00", "N02YT00", "N03HE00", "N03PP00", "N03SB00", "N03SW00", "N03YT00", "N04CD00", "N04DC00", "N04PP00", "N04SW00", "N04YT00", "N05BD00", "N05CD00", "N05DC00", "N05LS00", "N05SB00", "N05SW00", "N06BD00", "N06DC00", "N06DC10", "N06SB00", "N06SW00", "N06SW01", "N07DC00", "N07DC01", "N07DC02", "N07SB00", "N07SW00", "N08DC00", "N08SB00", "N08SW00", "N09CD00", "N09RG00", "N09SW00", "N10BD00", "N10EX00", "N10SW00", "N11CD00", "N11EX00", "N11RG00", "N12EX00", "N13BD00", "N13CD00", "N13EX00", "N15DC00", "N15DCDT", "N16DC00", "N17BD00", "N17DC00", "N18BD00", "N19BD00", "N20BD00", "N20DC00", "N21BD00", "N22BD00", "N22DC00", "N23BD00", "N24BD00", "N25BD00", "N26BD00", "N27BD00", "N28BD00", "N29BD00", "N29BD01", "N30DC00", "N30HE00", "N32EX00"];
 
@@ -243,11 +243,14 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["n10ex00", { name: "n10ex_001", index: 0 }], // shop moogle
     ["b64ex00", { name: "b64ex_000", index: 1 }], // ventus
     ["b68ex00", { name: "b68ex_000", index: 1 }], // ventus
+    ["b69ex00", { name: "b69ex_000", index: 1 }], // ventus
     ["b60ex00", { name: "b60ex_000", index: 1 }], // ventus
     ["p01ex00", { name: "p01ex_001", index: 1 }], // ventus
     ["b78ex00", { name: "b78ex_000", index: 1 }], // terra
+    ["b79ex00", { name: "b79ex_000", index: 1 }], // terra
     ["b70ex00", { name: "b70ex_000", index: 1 }], // terra
     ["b88ex00", { name: "b88ex_000", index: 1 }], // aqua
+    ["b89ex00", { name: "b89ex_000", index: 1 }], // aqua
     ["b80ex00", { name: "b80ex_000", index: 1 }], // aqua
     ["b01ex00", { name: "b01ex_000", index: 1 }], // the unknown
     ["p02ex00", { name: "p02ex_001", index: 1 }], // aqua
@@ -267,6 +270,7 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["m03ex00", { name: "m03ex_000", index: 2 }], // unversed
     ["m06ex00", { name: "m06ex_000", index: 2 }], // unversed
     ["m10ex00", { name: "m10ex_000", index: 2 }], // unversed
+    ["m11ex00", { name: "m11ex_000", index: 2 }], // unversed
     ["m09ex00", { name: "m09ex_000", index: 2 }], // unversed
     ["m07ex00", { name: "m07ex_000", index: 2 }], // unversed
     ["m05sw00", { name: "m05sw_000", index: 0 }], // dwarf in minecart
@@ -281,6 +285,7 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["b50ex00", { name: "b50ex_000", index: 1 }], // terra nort
     ["b63ex00", { name: "b63ex_000", index: 1 }], // ventus-vanitas
     ["b30ex00", { name: "b30ex_000", index: 1 }], // him name braig
+    ["b32ex00", { name: "b32ex_000", index: 1 }], // him name braig
     ["n09cd00", { name: "n09cd_000", index: 0 }], // jaq
     ["n05cd00", { name: "n05cd_000", index: 0 }], // fairy godmother
     ["n11cd00", { name: "n11cd_000", index: 0 }], // grand duke
@@ -296,10 +301,10 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["g03wm00", { name: "g03wm_000", index: 0 }], // world map icon
     ["g09wm00", { name: "g09wm_000", index: 0 }], // world map icon
     ["g05wm00", { name: "g05wm_000", index: 0 }], // world map icon
-    ["b01rg00", { name: "b01rg_000", index: 5 }], // unversed boss part
-    ["b06rg00", { name: "b06rg_000", index: 2 }], // unversed boss part
-    ["b07rg00", { name: "b07rg_000", index: 2 }], // unversed boss part
-    ["b08rg00", { name: "b08rg_000", index: 2 }], // unversed boss part
+    ["b01rg00", { name: "b01rg_000", index: 5 }], // discount guard armor
+    ["b06rg00", { name: "b06rg_000", index: 2 }], // discount guard armor
+    ["b07rg00", { name: "b07rg_000", index: 2 }], // discount guard armor
+    ["b08rg00", { name: "b08rg_000", index: 2 }], // discount guard armor
     ["b04rg00", { name: "b04rg_000", index: 1 }], // unversed boss
     ["b05rg00", { name: "b05rg_000", index: 1 }], // unversed boss
     ["m12ex00", { name: "m12ex_000", index: 2 }], // unversed
@@ -310,12 +315,14 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["m18ex00", { name: "m18ex_000", index: 2 }], // unversed
     ["m21ex00", { name: "m21ex_000", index: 2 }], // unversed
     ["m22ex00", { name: "m22ex_000", index: 2 }], // unversed
+    ["m25ex00", { name: "m25ex_000", index: 1 }], // unversed
     ["m16ex00", { name: "m16ex_000", index: 1 }], // unversed
     ["m32ex00", { name: "m32ex_000", index: 1 }], // unversed
     ["m17ex00", { name: "m17ex_000", index: 1 }], // unversed
     ["m20ex00", { name: "m20ex_000", index: 1 }], // unversed
     ["m08ex00", { name: "m08ex_000", index: 2 }], // unversed
     ["m15ex00", { name: "m15ex_000", index: 4 }], // unversed
+    ["m23ex00", { name: "m23ex_000", index: 3 }], // unversed
     ["b01vs00", { name: "b01vs_000", index: 1 }], // unversed boss
     ["b01vs00", { name: "b01vs_000", index: 1 }], // unversed boss
     ["b10he00", { name: "b10he_000", index: 1 }], // ice titan
@@ -327,11 +334,54 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["n13ex00", { name: "n13ex_001", index: 0 }], // moogle
     ["g10kg00", { name: "g10kg_000", index: 0 }], // tornado
     ["b12ex00", { name: "b12ex_000", index: 1 }], // vanitas remnant
+    ["m01sb00", { name: "m01sb_000", index: 2 }], // pig enemy with spear
+    ["m02sb00", { name: "m02sb_000", index: 2 }], // bird archer enemy
+    ["b01sb00", { name: "b01sb_000", index: 2 }], // maleficent
+    ["n06sb00", { name: "n06sb_000", index: 0 }], // green fairy
+    ["n07sb00", { name: "n07sb_000", index: 0 }], // blue fairy
+    ["n05sb00", { name: "n05sb_000", index: 0 }], // red fairy
+    ["b03sb00", { name: "b03sb_000", index: 1 }], // dragon maleficent
+    ["b10sb00", { name: "b10sb_000", index: 1 }], // unversed boss
+    ["n01sb01", { name: "n01sb_000", index: 0 }], // aurora
+    ["n01yt00", { name: "n01yt_000", index: 0 }], // yensid
+    ["n02yt00", { name: "n02yt_000", index: 0 }], // donald (mage)
+    ["n03yt00", { name: "n03yt_000", index: 0 }], // goofy (knight)
+    ["b51ex00", { name: "b51ex_000", index: 1 }], // terra nort
+    ["b52ex00", { name: "b52ex_000", index: 1 }], // terra nort
+    ["b56ex00", { name: "b56ex_000", index: 5 }], // dark figure
+    ["n09rg00", { name: "n09rg_000", index: 0 }], // scrooge mcduck
+    ["n11ex00", { name: "n11ex_001", index: 0 }], // moogle
+    ["n11rg00", { name: "n11rg_000", index: 0 }], // merlin
+    ["n01he00", { name: "n01he_000", index: 0 }], // young hercules
+    ["n02he00", { name: "n02he_000", index: 0 }], // phill
+    ["n03he00", { name: "n03he_000", index: 0 }], // hades
+    ["b40he00", { name: "b40he_000", index: 1 }], // zack
+    ["n02ls00", { name: "n02ls_000", index: 0 }], // jumba jookiba
+    ["n05ls00", { name: "n05ls_000", index: 0 }], // grand councilwoman
+    ["b20ls00", { name: "b20ls_000", index: 1 }], // sparky
+    ["b01ls00", { name: "b01ls_000", index: 1 }], // unversed boss
+    ["b02ls00", { name: "b02ls_000", index: 1 }], // unversed boss
+    ["b10ls00", { name: "b10ls_000", index: 1 }], // capitan gantu
+    ["m01ls00", { name: "m01ls_000", index: 1 }], // laser shooter
+    ["b01pp00", { name: "b01pp_000", index: 1 }], // capitan hook
+    ["b02pp00", { name: "b02pp_000", index: 1 }], // crocodile
+    ["n01pp00", { name: "n01pp_000", index: 0 }], // peter pan
+    ["b20pp00", { name: "b20pp_000", index: 1 }], // crocodile
+    ["n03pp00", { name: "n03pp_000", index: 0 }], // kid
+    ["n04pp00", { name: "n04pp_000", index: 0 }], // kid
+    ["n07dc01", { name: "n07dc_000", index: 0 }], // huey
+    ["n30dc00", { name: "n30dc_001", index: 0 }], // dewey
+    ["n08dc00", { name: "n08dc_000", index: 0 }], // horace
+    ["n20dc00", { name: "n20dc_000", index: 0 }], // pete
+    ["n04dc00", { name: "n04dc_000", index: 0 }], // minnie
+    ["n06dc00", { name: "n06dc_000", index: 0 }], // chip & dale
+    ["n06dc10", { name: "n06dc_000", index: 0 }], // chip & dale
 ]);
 
 export const BBS_MODEL_REMAP = ["b10ex01", "b10ex02", "m02vs00", "m12vs00", "m14vs00", "m04vs00", "m03vs00", "m13vs00", "m01vs00",
     "m21vs00", "m17vs00", "m07vs00", "m18vs00", "m05vs00", "m19vs00", "b75vs00", "b74vs00", "b78vs00", "b77vs00", "b76vs00", "b71vs00",
-    "m06vs00", "m20vs00", "m09vs00", "m16vs00", "m10vs00", "m15vs00", "m08vs00", "m22vs00", "b40vs00", "b90vs00", "b60vs00", "b80vs00"
+    "m06vs00", "m20vs00", "m09vs00", "m16vs00", "m10vs00", "m15vs00", "m08vs00", "m22vs00", "b40vs00", "b90vs00", "b60vs00", "b80vs00",
+    "g46dc00"
 ];
 
 export const BBS_ARC_PMO_OVERRIDE: Map<string, string> = new Map([

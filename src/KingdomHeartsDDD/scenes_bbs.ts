@@ -90,7 +90,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
 
     const models: Map<string, BBSModel> = new Map();
     const animations: Map<string, LuxSkeletalAnimation> = new Map();
-    const validModels = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
+    const validArcs = [...BBS_ARC_BOSS, ...BBS_ARC_ENEMY, ...BBS_ARC_GIMMICK, ...BBS_ARC_NPC, ...BBS_ARC_PC, ...BBS_ARC_WEAPON];
     for (const set of sets) {
         for (const instance of set.instances) {
             if (models.has(instance.name)) {
@@ -99,7 +99,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
             let invalid = true;
             let check2 = false;
             let arcName = "";
-            for (const v of validModels) {
+            for (const v of validArcs) {
                 if (instance.name.toLowerCase() === v.toLowerCase()) {
                     invalid = false;
                     arcName = v;
@@ -108,7 +108,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
             }
             if (invalid) {
                 // strict search failed, use first n characters of model name
-                for (const v of validModels) {
+                for (const v of validArcs) {
                     let n = instance.name.toLowerCase().startsWith("p") ? 3 : 5;
                     if (instance.name.substring(0, n).toLowerCase() === v.substring(0, n).toLowerCase()) {
                         invalid = false;
@@ -139,15 +139,16 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
                     // check if model variant (different .epd, .esd files, etc but same geometry & animations)
                     // since there is more of a heuristic and doesn't work all the time, it's on a whitelist of BBS_MODEL_REMAP
                     const arcEntries = p.parseARC();
-                    // if dir pointer is "BOSS" or "ENEM". It can be other values like "EFFE" and "PC" which can be ignored
+                    // if dir pointer is "BOSS" or "ENEM" or "GIMM". It can be other values like "EFFE" which can be ignored
                     // sometimes there's more than one with the same pointer, don't know how to handle that case... for now just the first
-                    const remapEntry = arcEntries.find(e => e.dirPointer === 1397968706 || e.dirPointer === 1296387653);
+                    // this should also change subdir, but for now it's assumed to be in the same directory (hence the whitelist)
+                    const remapEntry = arcEntries.find(e => e.dirPointer === 1397968706 || e.dirPointer === 1296387653 || e.dirPointer === 1296910663);
                     if (remapEntry !== undefined) {
                         // not exactly sure how this works, but the name of this entry corresponds to a "base" ARC file (as if the instance name was it)
                         pmoName = remapEntry.name;
                         // need to loop through arc names again to get the correct file name since the list doesn't contain variants
-                        for (const v of validModels) {
-                            if (pmoName.toLowerCase().substring(0, 7) === v.toLowerCase().substring(0, 7)) {
+                        for (const v of validArcs) {
+                            if (pmoName.toLowerCase().substring(0, 5) === v.toLowerCase().substring(0, 5)) {
                                 arcName = v;
                                 break;
                             }
@@ -326,16 +327,21 @@ Investigate webgl texture error in JB10 (probably a mismatched texture header?)
 Add default OLOs
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Debug ls14, can't get textures?
-Some unversed will disappear completely when applying animations, need to debug that
 Take another pass at the ordering of room names to be more chronological. Mostly ok for now but needs work
     Worlds are roughly chronological, though, with extra/cutscene-only/misc worlds at the end
 Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
     Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup
     m32ex04 has too complex of a model -> animation pipeline for current logic
     After looking some more, it seems like the OLO name can refer to multiple models, it's not always 1:1 (but usually is anyway), see b50vs00 for an example
-Figure out why the shop moogle has its balloon upside down
-    It's consistent with how the skeleton actually is, uncomment the debug rendering to see
+    Probably best to make a map of all the chara arc files, then use that to pull models from olo names.
+    Also need to filter some olo objects that don't have PMOs at all, and only collision data
+    Handle models that have PMOs and PAMs in seperate arcs (for whatever reason...) like m24ex00
+Figure out why the shop moogle has its balloon upside down and aurora's crown is sideways (???)
+    b01ls00 is also very messed up, has extra geometry not attached to skeleton
+    g27dc00 has stray geometry as well
 Add TXAs
+Filter out objects that are meant for collision but still have visible geometry, usually in boss rooms
+Check for texture scorlling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
 
 May your heart be your guiding key
 */
