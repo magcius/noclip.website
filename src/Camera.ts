@@ -345,8 +345,9 @@ export class FPSCameraController implements CameraController {
                 this.isInHoverMode = !this.isInHoverMode;
             }
             if (this.isInHoverMode) {
-                viewForward[1] = 0;
+                viewForward[1] = viewRight[1] = 0;
                 vec3.normalize(viewForward, viewForward);
+                vec3.normalize(viewRight, viewRight);
             }
         }
 
