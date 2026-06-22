@@ -243,6 +243,8 @@ export class FPSCameraController implements CameraController {
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
     private keyAngleChangeVelSlow = 0.02;
+    public isHoverModeAvailable = true;
+    private isInHoverMode = false;
 
     private mouseLookSpeed = 500;
     private isMoving = false;
@@ -337,6 +339,17 @@ export class FPSCameraController implements CameraController {
             vec3.copy(upAxis, Vec3UnitY);
         }
 
+        // Hover Mode
+        if (this.isHoverModeAvailable){
+            if (inputManager.isKeyDownEventTriggered("KeyX")) {
+                this.isInHoverMode = !this.isInHoverMode;
+            }
+            if (this.isInHoverMode) {
+                viewForward[1] = 0;
+                vec3.normalize(viewForward, viewForward);
+            }
+        }
+
         const linearVelocity = camera.linearVelocity;
         if (!vec3.exactEquals(linearMoveDir, Vec3Zero)) {
             vec3.scale(linearVelocity, viewRight, linearMoveDir[0]);
@@ -419,6 +432,7 @@ export class FPSCameraController implements CameraController {
 export class StudioCameraController extends FPSCameraController {
     public isAnimationPlaying: boolean = false;
     private interpStep: InterpolationStep = new InterpolationStep();
+    public override isHoverModeAvailable: boolean = false;
 
     constructor(private animationManager: CameraAnimationManager, private studioPanel: StudioPanel) {
         super();
