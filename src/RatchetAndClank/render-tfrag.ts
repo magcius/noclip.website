@@ -1,16 +1,16 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxSamplerFormatKind, GfxTextureDimension, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxSamplerFormatKind, GfxTextureDimension, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
 import { RatchetShaderLib } from "./shader-lib";
 import { Tfrag, TfragLight, TfragVertexInfo } from "./bin-core";
-import { PaletteTexture } from "./textures";
+import { packRemap, PaletteTexture, TextureAtlases } from "./textures";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { noclipSpaceFromRatchetSpace } from "./utils";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 
 export class TfragProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -34,6 +34,7 @@ ${RatchetShaderLib.SceneParams}
 
 layout(std140) uniform ub_TfragParams {
     Mat3x4 u_WorldFromLocal;
+    vec4 u_AlphaTest; // x = alpha test
 };
 
 layout(location = 0) uniform sampler2DArray u_Texture_16;
@@ -91,9 +92,9 @@ flat in int v_Clamp;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    ivec2 texRemap = getTexRemap(u_TextureRemaps.tfrags, v_TextureIndex);
+    ivec2 texRemap = getTexRemap(v_TextureIndex);
     vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
-    gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor);
+    gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor, u_AlphaTest.x);
 }
 `;
 
@@ -104,11 +105,13 @@ export class TfragGeometry {
 
     // array of 3 vertex buffers, one per lod
     private lods: ({
-        vertexBuffer: GfxBuffer,
-        vertexCount: number,
+        vertexBufferOpaque: GfxBuffer,
+        vertexCountOpaque: number,
+        vertexBufferTransparent: GfxBuffer,
+        vertexCountTransparent: number,
     } | null)[] = [null, null, null];
 
-    constructor(private cache: GfxRenderCache, private tfrags: Tfrag[], private tfragTextures: PaletteTexture[]) {
+    constructor(private cache: GfxRenderCache, private tfrags: Tfrag[], private textureAssets: PaletteTexture[], private textureAtlases: TextureAtlases) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: TfragProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
@@ -128,12 +131,17 @@ export class TfragGeometry {
     public getOrCreateVertexBuffer(lod: number) {
         if (!this.lods[lod]) {
             const device = this.cache.device;
-            const vertexData = this.assemble(lod);
-            const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.vertexArrayBuffer.buffer);
-            device.setResourceName(vertexBuffer, `Tfrag LOD ${lod} (VB)`);
+            const vertexDataOpaque = this.assemble(lod, false);
+            const vertexBufferOpaque = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexDataOpaque.vertexArrayBuffer.buffer);
+            device.setResourceName(vertexBufferOpaque, `Tfrag LOD ${lod} Opaque VB`);
+            const vertexDataTransparent = this.assemble(lod, true);
+            const vertexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexDataTransparent.vertexArrayBuffer.buffer);
+            device.setResourceName(vertexBufferTransparent, `Tfrag LOD ${lod} Transparent VB`);
             this.lods[lod] = {
-                vertexBuffer,
-                vertexCount: vertexData.vertexCount,
+                vertexBufferOpaque,
+                vertexCountOpaque: vertexDataOpaque.vertexCount,
+                vertexBufferTransparent,
+                vertexCountTransparent: vertexDataTransparent.vertexCount,
             };
         }
 
@@ -142,35 +150,72 @@ export class TfragGeometry {
         return lodData;
     }
 
-    private assemble(lod: number) {
+    private count(lod: number, transparentMode: boolean, trace: number[]) {
         const tfrags = this.tfrags;
-        const tfragTextures = this.tfragTextures;
-
-        const positionScale = 1 / 1024;
-        const texcoordScale = 1 / 4096;
-        const colorScale = 1 / 0x80;
+        const textureAssets = this.textureAssets;
 
         let vertexCount = 0;
 
         for (let i = 0; i < tfrags.length; i++) {
             const tfrag = tfrags[i];
             const tfragStrips = [tfrag.dataGroup5.lod0.strips, tfrag.dataGroup3.lod1.strips, tfrag.dataGroup1.lod2.strips];
+            const tfragTextures = tfrag.dataGroup2.textures;
+
             const strips = tfragStrips[lod];
             let stripPtr = 0;
+
+            let activeMaterialIsTransparent = false;
+
             stripLoop: while (true) {
                 const strip = strips[stripPtr];
                 assert(strip !== undefined);
+
                 switch (strip.endOfPacketFlag) {
                     case 0: break; // normal strip
                     case 0x80: break; // end of packet but not end of this tfrag
                     case 0xFF: break stripLoop; // end
                     default: throw new Error(`Unknown strip flag`);
                 }
-                vertexCount += 3 * (strip.vertexCount - 2);
+
+                let stripVertexCount = strip.vertexCount;
+                if (strip.hasAdGifFlag) {
+                    if (strip.adGifOffset === -1) {
+                        // do nothing
+                    } else if (strip.adGifOffset >= 0) {
+                        const localAdGifIndex = strip.adGifOffset / 0x5;
+                        assert(tfragTextures[localAdGifIndex] !== undefined);
+                        let activeMaterial = tfragTextures[localAdGifIndex].tex0.low;
+                        activeMaterialIsTransparent = textureAssets[activeMaterial].hasAlpha;
+                    } else {
+                        throw new Error(`invalid adGifOffset`);
+                    }
+                }
+
+                if (activeMaterialIsTransparent !== transparentMode) {
+                    // do not count
+                    stripPtr++;
+                    continue;
+                }
+
+                vertexCount += stripVertexCount * 3 - (2 * 3);
                 stripPtr++;
             }
+
         }
 
+        return vertexCount;
+    }
+
+    private assemble(lod: number, transparentMode: boolean) {
+        const tfrags = this.tfrags;
+        const textureAssets = this.textureAssets;
+
+        const positionScale = 1 / 1024;
+        const texcoordScale = 1 / 4096;
+        const colorScale = 1 / 0x80;
+
+        const trace :number[]= []
+        const vertexCount = this.count(lod, transparentMode,trace);
         const vertexArrayBuffer = new Float32Array(vertexCount * TfragProgram.elementsPerVertex);
         let vertexPtr = 0;
 
@@ -198,6 +243,7 @@ export class TfragGeometry {
             let stripIndicesPtr = 0;
 
             let activeMaterial = 0;
+            let activeMaterialIsTransparent = false;
             let activeClamp = 0;
 
             stripLoop: while (true) {
@@ -211,7 +257,7 @@ export class TfragGeometry {
                     default: throw new Error(`Unknown strip flag`);
                 }
 
-                let vertexCount = strip.vertexCount;
+                let stripVertexCount = strip.vertexCount;
                 if (strip.hasAdGifFlag) {
                     if (strip.adGifOffset === -1) {
                         // do nothing
@@ -219,13 +265,20 @@ export class TfragGeometry {
                         const localAdGifIndex = strip.adGifOffset / 0x5;
                         assert(tfragTextures[localAdGifIndex] !== undefined);
                         activeMaterial = tfragTextures[localAdGifIndex].tex0.low;
+                        activeMaterialIsTransparent = textureAssets[activeMaterial].hasAlpha;
                         activeClamp = tfragTextures[localAdGifIndex].clamp.low + (tfragTextures[localAdGifIndex].clamp.high << 2);
                     } else {
                         throw new Error(`invalid adGifOffset`);
                     }
                 }
 
-                for (let i = 0; i < vertexCount - 2; i++) {
+                if (activeMaterialIsTransparent !== transparentMode) {
+                    stripIndicesPtr += stripVertexCount;
+                    stripPtr++;
+                    continue;
+                }
+
+                for (let i = 0; i < stripVertexCount - 2; i++) {
                     const triangleIndices = [indices[stripIndicesPtr], indices[stripIndicesPtr + 1], indices[stripIndicesPtr + 2]];
                     for (let tri = 0; tri < 3; tri++) {
                         const vertexIndex = triangleIndices[tri];
@@ -245,7 +298,7 @@ export class TfragGeometry {
                         vertexArrayBuffer[vertexPtr++] = colorScale * rgba.g;
                         vertexArrayBuffer[vertexPtr++] = colorScale * rgba.b;
                         vertexArrayBuffer[vertexPtr++] = colorScale * rgba.a;
-                        vertexArrayBuffer[vertexPtr++] = activeMaterial;
+                        vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.tfragTextureRemap[activeMaterial]);
                         vertexArrayBuffer[vertexPtr++] = activeClamp;
                         vertexArrayBuffer[vertexPtr++] = texcoordScale * this.fixTexcoord(vertInfo.s);
                         vertexArrayBuffer[vertexPtr++] = texcoordScale * this.fixTexcoord(vertInfo.t);
@@ -298,7 +351,8 @@ export class TfragGeometry {
     public destroy(device: GfxDevice): void {
         for (const lod of this.lods) {
             if (lod) {
-                device.destroyBuffer(lod.vertexBuffer);
+                device.destroyBuffer(lod.vertexBufferOpaque);
+                device.destroyBuffer(lod.vertexBufferTransparent);
             }
         }
     }
@@ -335,23 +389,40 @@ export class TfragRenderer {
 
         const vertexData = tfragGeometry.getOrCreateVertexBuffer(lodLevel);
 
-        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-        renderInst.setBindingLayouts(bindingLayouts);
-        renderInst.setGfxProgram(this.tfragProgram);
+        // to emulate TEST_1.AFAIL=FB_ONLY, render transparent parts twice, once with depth write and alpha test, and again with neither
+        const draws = [
+            { transparentGeometry: false, depthWrite: true, alphaTest: 0 },
+            { transparentGeometry: true, depthWrite: true, alphaTest: 0.75 },
+            { transparentGeometry: true, depthWrite: false, alphaTest: 0 },
+        ]
 
-        const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 12);
-        let offs = 0;
-        offs += fillMatrix4x3(tfragParams, offs, objectMatrix);
+        for (let i = 0; i < draws.length; i++) {
+            const draw = draws[i];
 
-        renderInst.setVertexInput(
-            tfragGeometry.inputLayout,
-            [
-                { buffer: vertexData.vertexBuffer, byteOffset: 0 },
-            ],
-            null,
-        );
-        renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
-        renderInst.setDrawCount(vertexData.vertexCount, 0);
-        renderInstList.submitRenderInst(renderInst);
+            const vertexCount = draw.transparentGeometry ? vertexData.vertexCountTransparent : vertexData.vertexCountOpaque;
+            if (!vertexCount) continue;
+            const vertexBuffer = draw.transparentGeometry ? vertexData.vertexBufferTransparent : vertexData.vertexBufferOpaque;
+
+            const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+            renderInst.setMegaStateFlags({ depthWrite: draw.depthWrite, depthCompare: GfxCompareMode.Greater });
+            renderInst.setBindingLayouts(bindingLayouts);
+            renderInst.setGfxProgram(this.tfragProgram);
+
+            const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 16);
+            let offs = 0;
+            offs += fillMatrix4x3(tfragParams, offs, objectMatrix);
+            offs += fillVec4(tfragParams, offs, draw.alphaTest, 0, 0, 0);
+
+            renderInst.setVertexInput(
+                tfragGeometry.inputLayout,
+                [
+                    { buffer: vertexBuffer, byteOffset: 0 },
+                ],
+                null,
+            );
+            renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
+            renderInst.setDrawCount(vertexCount, 0);
+            renderInstList.submitRenderInst(renderInst);
+        }
     }
 }

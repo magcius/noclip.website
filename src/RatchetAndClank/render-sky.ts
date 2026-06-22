@@ -66,10 +66,10 @@ void main() {
     float isTextured = u_ExtraData.x;
     if (isTextured == 1.0) {
         if (u_RenderSettings.x == 0.0) discard;
-        gl_FragColor = commonFragmentShader(v_Rgba, texture(SAMPLER_2D(u_Texture), v_ST), 0.0);
+        gl_FragColor = commonFragmentShader(v_Rgba, texture(SAMPLER_2D(u_Texture), v_ST), 0.0, 0.0);
     } else {
         if (u_RenderSettings.x == 0.0) { gl_FragColor = v_Rgba; return; }
-        gl_FragColor = commonFragmentShader(v_Rgba, vec4(1.0, 1.0, 1.0, 1.0), 0.0);
+        gl_FragColor = commonFragmentShader(v_Rgba, vec4(1.0, 1.0, 1.0, 1.0), 0.0, 0.0);
     }
 }
 `;
