@@ -419,7 +419,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
             }
             this.shapes[i] = this.getShapeRenderer(cache, model, shape, materials, txa);
         }
-        this.bboxPoints = new Float32Array(model.bbox.map(p => p * model.scale));
+        this.bboxPoints = new Float32Array(model.bbox);
         this.isBillboard = this.getIsBillboard(model.flags);
 
         this.currentPAMFrame = 0;

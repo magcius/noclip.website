@@ -269,8 +269,6 @@ class Room implements SceneDesc {
 /*
 TODO
 
-g_ex010 has a weird PMO format with no shapes or materials, fails at reading shape offsets
-    g_nd300 also can't be read
 Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
 TXAs need cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
@@ -281,7 +279,6 @@ Figure out the proper interpretation of LuxModelFlagRenderMode, it's probably no
 Figure out how world map objects are loaded
     The models exist in chara/gim/g_wm*
     There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)
-Clean up class/interface names
 Invesigate PMO model issue from BBS. Very rare here in DDD, but see Mickey in Musketeers for an example
     It seems like a problem with the UVs. Parts of the same model can have wrong UVs, while others are correct
     Several dream eater models also have the problem
@@ -296,26 +293,26 @@ Investigate PAM animations with flag of 16720 and framerates of 77 with no chann
     These are valid animations, just a different format than regular skeletal animations. These are typically
     ones that are very simple, like something swaying back and forth. Lots of the g objs in Traverse Town, for
     example, use these. See the balloons in the fourth district or the top hat in the second district.
-    Animations with flags of either 0 or 256 are (almost) always valid skeletal animations, with a framerate of 30
-Shadows in the second district are the wrong color, they appear as black in game (they're correct in the first district though?)
+    Animations with flags of either 0 or 256 are (almost) always valid skeletal animations, with a framerate of 30.
+    Need to actually look at the raw data again, these could be normal animations just with a slightly different format
+    that's throwing off the parsing
+Shadows in the second district are the wrong color, they appear as black in game (they're correct everywhere else though?)
 Fix some objects culling when in view (bbox problem)
 Fix bad z-fighting on the ground path in the Traverse Town garden
-Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)"
-Debug d_pi020/d_pi030/d_pi040 weight/joint data
-    The animations are actually fine, it's something to do with the weights or joint indices
-    Even when doing just decomposed transform x inverse transform w/out any animation, the entire model disappears
-    Other dive objects, like d_pi230, work perfectly, so it's not something to do with only dive objects
-    The hunchback boss for sora also has its chains disappear when applying an animation to it, could be the same issue there
+Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron and pinocchio
 Dream eater model fixes
     Spellican's broomstick is stretched
     Skeleton t-rex is missing its head
     Both rhino variants have the spike ball visibles
+    Hunchback boss has its chains missing when animated
+Find a better workaround for when models have all-zero weights (which makes them invisibile when applying an animation)
+    This is solved on the parsing level for BBS since there's a weight format. DDD could have something similar?
 
 Nice to have
 
-Particle effects
-Save points (could just be glorified particles?)
-More accurate "lighting," like the neon signs in Traverse Town
+Particle effects (if used on more stuff than just weapons and attacks)
+Save points (could just be glorified particles?) and other interactable world elements that aren't just level objects
+More accurate "lighting," like the neon signs and windows in Traverse Town
 
 May your heart be your guiding key
 */

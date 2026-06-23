@@ -121,7 +121,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
                 for (const [k, v] of BBS_PMO_ARC_OVERRIDE) {
                     if (v.indexOf(instance.name) !== -1) {
                         arcName = k;
-                        console.log("Overrode", instance.name, "to arc", arcName);
+                        // console.log("Overrode", instance.name, "to arc", arcName);
                         invalid = false;
                         break;
                     }
@@ -156,7 +156,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
                         if (pmoName.endsWith("d")) {
                             pmoName = pmoName.substring(0, pmoName.length - 1);
                         }
-                        console.log("Remapped", instance.name, "to", pmoName, "in arc", arcName);
+                        // console.log("Remapped", instance.name, "to", pmoName, "in arc", arcName);
                         remapped = true;
                         modelArcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/${subdir}/${arcName}.arc`);
                         p = new BBSParser(modelArcFile);
@@ -167,16 +167,15 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
                 }
                 const pmo = p.parsePMOFromARC(pmoName);
                 if (!pmo) {
-                    console.log("Could not find PMO of name", pmoName, "in", p.parseARC(), arcName);
+                    // console.log("Could not find PMO of name", pmoName, "in", p.parseARC(), arcName);
                     check2 = true;
                 } else {
-                    console.log("Loaded", instance.name, "from arc", arcName);
+                    // console.log("Loaded", instance.name, "from arc", arcName);
                     models.set(instance.name, pmo);
                     const ac = remapped ? pmoName : instance.name;
                     if (BBS_PAM.has(ac) && !animations.has(instance.name)) {
                         const mapping = BBS_PAM.get(ac)!;
                         const pam = p.parsePAMFromARC(mapping.name)!;
-                        console.log(pam);
                         animations.set(instance.name, pam.animations[mapping.index]);
                     }
                 }
@@ -190,7 +189,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
                     continue;
                 }
                 const pmo = new BBSParser(modelFile).parseModel(instance.name);
-                console.log("Loaded", instance.name, "from CHARA", u);
+                // console.log("Loaded", instance.name, "from CHARA", u);
                 models.set(instance.name, pmo);
             }
         }

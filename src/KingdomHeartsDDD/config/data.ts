@@ -71,9 +71,9 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
     ["m_de491", { name: "m_de490_00003e", index: 0 }], // dream eater jester (?)
     ["n_de831", { name: "n_de83_001", index: 2 }], // npc dream eater frog knight
     ["b_de060", { name: "b_de06_001", index: 2 }], // lobster boss
-    // ["d_pi020", { name: "d_pi02_010", index: 0 }], // roller costers
-    // ["d_pi030", { name: "d_pi03_010", index: 0 }], // roller coster
-    // ["d_pi040", { name: "d_pi04_010", index: 0 }], // roller coster
+    ["d_pi020", { name: "d_pi02_010", index: 0 }], // roller coster
+    ["d_pi030", { name: "d_pi03_010", index: 0 }], // roller coster
+    ["d_pi040", { name: "d_pi04_010", index: 0 }], // roller coster
     ["d_pi230", { name: "d_pi23_001", index: 0 }], // hands with string
     ["m_de401", { name: "m_de400_00001e", index: 0 }], // dream eater frog chef
     ["m_de301", { name: "m_de301_00002e", index: 0 }], // dream eater eagle
@@ -86,12 +86,12 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
     ["m_de551", { name: "m_de550_00001e", index: 0 }], // dream eater horned rhino
     ["m_de431", { name: "m_de430_00001e", index: 0 }], // dream eater horned seahorse
     ["m_de341", { name: "m_de340_00001e", index: 0 }], // dream eater bone fish
-    // ["d_tm010", { name: "d_tm01_010", index: 0 }], // comic book pages
-    // ["d_tm020", { name: "d_tm02_010", index: 0 }], // comic book pages
-    // ["d_tm030", { name: "d_tm03_010", index: 0 }], // comic book pages
-    // ["d_tm110", { name: "d_tm11_010", index: 0 }], // comic book pages (colored)
-    // ["d_tm120", { name: "d_tm12_010", index: 0 }], // comic book pages (colored)
-    // ["d_tm130", { name: "d_tm13_010", index: 0 }], // comic book pages (colored)
+    ["d_tm010", { name: "d_tm01_010", index: 0 }], // comic book pages
+    ["d_tm020", { name: "d_tm02_010", index: 0 }], // comic book pages
+    ["d_tm030", { name: "d_tm03_010", index: 0 }], // comic book pages
+    ["d_tm110", { name: "d_tm11_010", index: 0 }], // comic book pages (colored)
+    ["d_tm120", { name: "d_tm12_010", index: 0 }], // comic book pages (colored)
+    ["d_tm130", { name: "d_tm13_010", index: 0 }], // comic book pages (colored)
     ["m_de621", { name: "m_de620_00001e", index: 0 }], // dream eater wyvern
     ["m_de161", { name: "m_de160_00001e", index: 0 }], // dream eater pegasus
     ["m_de251", { name: "m_de250_00001e", index: 0 }], // dream eater hungry jester
@@ -101,6 +101,7 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
     ["m_de541", { name: "m_de540_00001e", index: 0 }], // dream eater party hat rabbit
     ["m_de651", { name: "m_de650_00001e", index: 0 }], // dream eater saber tooth tiger
     ["m_de561", { name: "m_de560_00001e", index: 0 }], // dream eater skeleton t-rex
+    ["b_de300", { name: "b_de30_001", index: 2 }],
     // ["g_fa640", { name: "g_fa64_001", index: 0 }], // mickey (fantasia) ----------NEW FORMAT----------
 ]);
 
