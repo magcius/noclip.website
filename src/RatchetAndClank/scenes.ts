@@ -23,6 +23,7 @@ import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
 import { MobyGeometry, MobyRenderer } from "./render-moby";
+import { bitsAsFloat32 } from "../MathHelpers";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
@@ -394,16 +395,21 @@ class RatchetAndClankScene implements SceneGfx {
             }
         }
 
-        // texture remaps (4 * 256 * 3 floats)
+        // texture remaps (4 * 32 * 4 floats) (two entries packed into each float)
         const { textureAtlases } = this.textures;
         const remapArrays = textureAtlases ? [textureAtlases.tfragTextureRemap, textureAtlases.tieTextureRemap, textureAtlases.mobyTextureRemap, textureAtlases.shrubTextureRemap] : [[], [], [], []];
+
+        const packRemap = (remap: typeof remapArrays[0][0]) => {
+            const bucket = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
+            const slice = remap ? remap.index : 0;
+            return (slice << 3) | (bucket & 0x07);
+        };
+
         for (const remapArray of remapArrays) {
-            for (let i = 0; i < 256; i++) {
-                const remap = remapArray[i];
-                data[offs++] = remap ? remap.sizeBucket : 0;
-                data[offs++] = remap ? remap.index : 0;
-                data[offs++] = 0;
-                data[offs++] = 0;
+            for (let i = 0; i < 256; i += 2) {
+                const packed0 = packRemap(remapArray[i + 0]);
+                const packed1 = packRemap(remapArray[i + 1]);
+                data[offs++] = bitsAsFloat32(packed1 << 16 | packed0);
             }
         }
     }

@@ -9,7 +9,7 @@ import { MegaBuffer, noclipSpaceFromRatchetSpace } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, vec3 } from "gl-matrix";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { MobyInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
 import { assert } from "../util";
@@ -25,12 +25,11 @@ export class MobyProgram extends DeviceProgram {
     public static a_InstanceTransform0 = 4;
     public static a_InstanceTransform1 = 5;
     public static a_InstanceTransform2 = 6;
-    public static a_InstanceTransform3 = 7;
-    public static a_InstanceAmbientRgba = 8;
-    public static a_InstanceDirectionLights = 9;
-    public static a_InstanceLodAlpha = 10; // x = lod alpha
+    public static a_InstanceAmbientRgba = 7;
+    public static a_InstanceDirectionLights = 8;
+    public static a_InstanceLodAlpha = 9; // x = lod alpha
 
-    public static elementsPerInstance = 28; // transform (16), direction lights (4), ambient rgba (4), lod alpha (4)
+    public static elementsPerInstance = 24; // transform (12), direction lights (4), ambient rgba (4), lod alpha (4)
 
     public static ub_SceneParams = 0;
     public static ub_MobyParams = 1;
@@ -60,12 +59,12 @@ layout(location = ${MobyProgram.a_TextureParams}) in vec2 a_TextureParams; // x 
 layout(location = ${MobyProgram.a_InstanceTransform0}) in vec4 a_InstanceTransform0;
 layout(location = ${MobyProgram.a_InstanceTransform1}) in vec4 a_InstanceTransform1;
 layout(location = ${MobyProgram.a_InstanceTransform2}) in vec4 a_InstanceTransform2;
-layout(location = ${MobyProgram.a_InstanceTransform3}) in vec4 a_InstanceTransform3;
 layout(location = ${MobyProgram.a_InstanceAmbientRgba}) in vec4 a_InstanceAmbientRgba;
 layout(location = ${MobyProgram.a_InstanceDirectionLights}) in vec4 a_InstanceDirectionLights;
 layout(location = ${MobyProgram.a_InstanceLodAlpha}) in vec4 a_InstanceLodAlpha; // x = lod alpha
 
 ${RatchetShaderLib.LightingFunctions}
+${GfxShaderLibrary.MulNormalMatrix}
 
 out vec3 v_PositionWorld;
 out vec4 v_Rgba;
@@ -76,18 +75,17 @@ flat out int v_TextureIndex;
 flat out int v_Clamp;
 
 void main() {
-    Mat4x4 _instanceTransform = Mat4x4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, a_InstanceTransform3);
-    mat4 instanceTransform = UnpackMatrix(_instanceTransform);
-    vec4 positionWorld = instanceTransform * vec4(a_Position.xyz, 1.0f);
+    mat4x3 instanceTransform = mat4x3(transpose(mat4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, vec4(0, 0, 0, 1))));
+    vec3 positionWorld = instanceTransform * vec4(a_Position.xyz, 1.0f);
 
     vec3 normal = normalFromAzumithElevation(a_NormalAzimuthElevationRad.x, a_NormalAzimuthElevationRad.y);
-    normal = normalize(inverse(transpose(mat3(instanceTransform))) * normal);
+    normal = MulNormalMatrix(instanceTransform, normal);
 
     float lodAlpha = a_InstanceLodAlpha.x;
     vec4 rgba = commonVertexLighting(a_InstanceAmbientRgba, normal, a_InstanceDirectionLights);
     rgba.a *= lodAlpha;
 
-    gl_Position = UnpackMatrix(u_ClipFromWorld) * positionWorld;
+    gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(positionWorld, 1.0f);
     v_PositionWorld = positionWorld.xyz;
     v_Rgba = rgba;
     v_Normal = normal;
@@ -119,8 +117,8 @@ void main() {
     }
 
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    vec2 texRemap = u_TextureRemaps.mobys[v_TextureIndex].xy;
-    vec4 textureSample = ratchetSampler(texRemap.x, texRemap.y, v_Clamp, v_ST);
+    ivec2 texRemap = getTexRemap(u_TextureRemaps.mobys, v_TextureIndex);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
     gl_FragColor = commonFragmentShader(vec4(v_Rgba.rgb / 2.0, v_Rgba.a), textureSample, v_FogFactor);
 }
 
@@ -146,10 +144,9 @@ export class MobyGeometry {
                 { location: MobyProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 4, bufferIndex: 1, },
                 { location: MobyProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
                 { location: MobyProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
-                { location: MobyProgram.a_InstanceTransform3, format: GfxFormat.F32_RGBA, bufferByteOffset: 12 * 4, bufferIndex: 1, },
-                { location: MobyProgram.a_InstanceAmbientRgba, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: 1, },
-                { location: MobyProgram.a_InstanceDirectionLights, format: GfxFormat.F32_RGBA, bufferByteOffset: 20 * 4, bufferIndex: 1, },
-                { location: MobyProgram.a_InstanceLodAlpha, format: GfxFormat.F32_RGBA, bufferByteOffset: 24 * 4, bufferIndex: 1, },
+                { location: MobyProgram.a_InstanceAmbientRgba, format: GfxFormat.F32_RGBA, bufferByteOffset: 12 * 4, bufferIndex: 1, },
+                { location: MobyProgram.a_InstanceDirectionLights, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: 1, },
+                { location: MobyProgram.a_InstanceLodAlpha, format: GfxFormat.F32_RGBA, bufferByteOffset: 20 * 4, bufferIndex: 1, },
             ],
             vertexBufferDescriptors: [
                 { byteStride: MobyProgram.elementsPerVertex * 0x4, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -450,7 +447,7 @@ export class MobyRenderer {
             for (let i = 0; i < mobyInstancesToDraw.length; i++) {
                 const inst = mobyInstancesToDraw[i];
                 const color = inst.rgb;
-                instanceDataBuffer.ptr += fillMatrix4x4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.objectMatrix);
+                instanceDataBuffer.ptr += fillMatrix4x3(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.objectMatrix);
                 instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, color[0], color[1], color[2], 1.0);
                 instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.directionalLights[0], inst.directionalLights[1], inst.directionalLights[2], inst.directionalLights[3]);
                 instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.lodAlpha, 0, 0, 0);

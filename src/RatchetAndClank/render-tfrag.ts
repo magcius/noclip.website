@@ -10,7 +10,7 @@ import { PaletteTexture } from "./textures";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { noclipSpaceFromRatchetSpace } from "./utils";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 
 export class TfragProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -33,7 +33,7 @@ ${GfxShaderLibrary.MatrixLibrary}
 ${RatchetShaderLib.SceneParams}
 
 layout(std140) uniform ub_TfragParams {
-    Mat4x4 u_WorldFromLocal;
+    Mat3x4 u_WorldFromLocal;
 };
 
 layout(location = 0) uniform sampler2DArray u_Texture_16;
@@ -56,24 +56,25 @@ layout(location = ${TfragProgram.a_DirLightIndices}) in vec4 a_DirLightIndices;
 out vec4 v_Rgba;
 out vec2 v_ST;
 out float v_FogFactor;
-flat out int v_TextureLayer;
+flat out int v_TextureIndex;
 flat out int v_Clamp;
 
 ${RatchetShaderLib.LightingFunctions}
+${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    mat4 worldTransform = UnpackMatrix(u_WorldFromLocal);
-    vec4 t_PositionWorld = worldTransform * vec4(a_Position.xyz, 1.0f);
-    gl_Position = UnpackMatrix(u_ClipFromWorld) * t_PositionWorld;
+    mat4x3 worldTransform = UnpackMatrix(u_WorldFromLocal);
+    vec3 t_PositionWorld = worldTransform * vec4(a_Position.xyz, 1.0f);
+    gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0f);
 
-    vec3 normal = normalize(inverse(transpose(mat3(worldTransform))) * normalize(a_Normal));
+    vec3 normal = MulNormalMatrix(worldTransform, a_Normal);
     vec4 lights = a_DirLightIndices;
 
     v_Rgba = commonVertexLighting(a_Rgba, normal, lights);
 
     v_ST = a_ST.xy;
     v_FogFactor = fogFactor(t_PositionWorld.xyz);
-    v_TextureLayer = int(a_TextureParams.x);
+    v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
 }
 `;
@@ -85,13 +86,13 @@ ${RatchetShaderLib.Sampler}
 in vec4 v_Rgba;
 in vec2 v_ST;
 in float v_FogFactor;
-flat in int v_TextureLayer;
+flat in int v_TextureIndex;
 flat in int v_Clamp;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    vec2 texRemap = u_TextureRemaps.tfrags[v_TextureLayer].xy;
-    vec4 textureSample = ratchetSampler(texRemap.x, texRemap.y, v_Clamp, v_ST);
+    ivec2 texRemap = getTexRemap(u_TextureRemaps.tfrags, v_TextureIndex);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
     gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor);
 }
 `;
@@ -338,9 +339,9 @@ export class TfragRenderer {
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setGfxProgram(this.tfragProgram);
 
-        const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 16);
+        const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 12);
         let offs = 0;
-        offs += fillMatrix4x4(tfragParams, offs, objectMatrix);
+        offs += fillMatrix4x3(tfragParams, offs, objectMatrix);
 
         renderInst.setVertexInput(
             tfragGeometry.inputLayout,

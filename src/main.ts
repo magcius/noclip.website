@@ -856,8 +856,6 @@ class Main {
 
         if (saveState.fovY !== undefined)
             this.viewer.camera.fovY = saveState.fovY;
-
-        this.ui.sceneChanged();
     }
 
     private _deserializeSaveState(str: string | null): SaveState | null {
@@ -906,9 +904,6 @@ class Main {
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 
-        if (timeState !== null)
-            this._applyTimeState(timeState);
-
         if (saveState !== null) {
             this._applySaveState(saveState);
         } else {
@@ -925,8 +920,12 @@ class Main {
             }
         }
 
+        if (timeState !== null)
+            this._applyTimeState(timeState);
+
         mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
 
+        this.ui.sceneChanged();
         this._saveStateAndUpdateURL();
     }
 
@@ -941,10 +940,12 @@ class Main {
             this.saveManager.deleteState(key);
         } else if (action === SaveStatesAction.Load) {
             const state = this.saveManager.loadState(key);
-            this._loadSaveStateString(state);
+            if (this._loadSaveStateString(state))
+                this._saveStateAndUpdateURL();
         } else if (action === SaveStatesAction.LoadDefault) {
             const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
-            this._loadSaveStateString(state);
+            if (this._loadSaveStateString(state))
+                this._saveStateAndUpdateURL();
         }
     }
 
@@ -970,6 +971,8 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
+
+        this.ui.sceneChanged();
     }
 
     private _loadSceneDesc(sceneDesc: SceneDesc, saveState: SaveState | null = null, force: boolean = false): void {

@@ -107,7 +107,6 @@ export class LevelGlobals {
                 vec3.scale(throwScratch[0], throwScratch[0], -1);
                 if (viewerInput.deltaTime > 0) {
                     vec3.scale(throwScratch[1], viewerInput.camera.linearVelocity, 1000 / viewerInput.deltaTime);
-                    transformVec3Mat4w0(throwScratch[1], viewerInput.camera.worldMatrix, throwScratch[1]);
                 } else {
                     vec3.copy(throwScratch[1], Vec3Zero);
                 }

@@ -705,11 +705,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.R8;
         case GfxFormat.U8_RG_NORM:
             return WebGL2RenderingContext.RG8;
-        case GfxFormat.U8_RGB_NORM:
         case GfxFormat.U8_RGB_RT:
             return WebGL2RenderingContext.RGB8;
-        case GfxFormat.U8_RGB_SRGB:
-            return WebGL2RenderingContext.SRGB8;
         case GfxFormat.U8_RGBA_NORM:
         case GfxFormat.U8_RGBA_RT:
             return WebGL2RenderingContext.RGBA8;
@@ -1565,7 +1562,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return !!gl.getQueryParameter(gl_query, gl.QUERY_RESULT);
     }
 
-    public queryLimits(): GfxDeviceLimits {
+    public queryLimits(): Readonly<GfxDeviceLimits> {
         return this;
     }
 
@@ -1641,7 +1638,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return program.compileState === GfxProgramCompileStateP_GL.NeedsBind || program.compileState === GfxProgramCompileStateP_GL.ReadyToUse;
     }
 
-    public queryVendorInfo(): GfxVendorInfo {
+    public queryVendorInfo(): Readonly<GfxVendorInfo> {
         return this;
     }
 
