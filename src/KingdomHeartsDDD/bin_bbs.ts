@@ -1,7 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
 import { DreamDropParser } from "./bin";
-import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPAM, LuxPMP, LuxShape } from "./lux";
+import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPAM, LuxPMP, LuxShape, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { decodeBBSTIM2 } from "./texture";
 
 // Credit: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
 
@@ -9,6 +10,7 @@ const MAGIC_ARC = 4411969;
 const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_TIM2 = 843925844;
+const MAGIC_TXA = 4282452;
 
 const NORMALIZED_8_SCALE = 128.0;
 const NORMALIZED_16_SCALE = 32768.0;
@@ -104,7 +106,7 @@ export enum BBSPixelFormat {
     RGBA_1555,
     RGB_888,
     RGBX_8888,
-    RGBA_888
+    RGBA_8888
 }
 
 function getBitsRange32(value: number, start: number = 0, length: number = 1): number {
@@ -214,7 +216,22 @@ export class BBSParser extends DreamDropParser {
             return undefined;
         } else {
             this.view = this.buffer.createDataView(pamEntry.offset, pamEntry.size);
-            return this.parsePAM();
+            const r = this.parsePAM();
+            this.view = this.buffer.createDataView();
+            return r;
+        }
+    }
+
+    public parseTXAFromARC(tims: TIM2[]): LuxTXA[] | undefined {
+        const entries = this.parseARC();
+        const txaEntry = entries.find(e => e.name.toLowerCase().includes(".txa") && e.dirPointer === 0);
+        if (!txaEntry) {
+            return undefined;
+        } else {
+            this.view = this.buffer.createDataView(txaEntry.offset, txaEntry.size);
+            const r = this.getTXA(tims, txaEntry.offset);
+            this.view = this.buffer.createDataView();
+            return r;
         }
     }
 
@@ -417,6 +434,84 @@ export class BBSParser extends DreamDropParser {
         }
 
         return { name, scale, flags, pmpFlags, bbox, shapes, skeleton, textureNames, tims };
+    }
+
+    private getTXA(tims: TIM2[], startOffset: number) {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_TXA) {
+            console.warn("Unknown TXA magic", magic);
+        }
+        this.offset += 2;
+        const count = this.getUshort();
+        this.offset += 8;
+
+        const txas: LuxTXA[] = Array(count);
+        for (let i = 0; i < count; i++) {
+            const name = this.getString(16);
+            const textureName = this.getString(24);
+            this.offset += 8;
+            const animationCount = this.getShort();
+            const defaultAnimationIndex = this.getShort();
+            const animationOffset = this.getUint32();
+
+            const ret1 = this.offset;
+            const animations: LuxTextureAnimation[] = Array(animationCount);
+            this.offset = animationOffset;
+            for (let j = 0; j < animationCount; j++) {
+                const animationName = this.getString(16);
+                this.offset += 2;
+                const frameCount = this.getShort();
+                const frameOffset = this.getUint32();
+
+                const ret2 = this.offset;
+                const frames: LuxTXAFrame[] = [];
+                this.offset = frameOffset;
+                for (let k = 0; k < frameCount; k++) {
+                    // it breaks here for non-PMO TXAs. the number at data offset is always outside the range of the txa file itself
+                    const dataOffset = this.getUint32();
+                    const displayFrames = this.getShort();
+                    this.offset += 6;
+                    if (dataOffset === 0) {
+                        continue;
+                    }
+                    const tim = tims.find(t => t.name === textureName);
+                    if (!tim) {
+                        continue;
+                    }
+                    const { format, width, height } = decodeBBSTIM2(tim.data);
+                    let bytesPerPixel;
+                    switch (format) {
+                        case BBSPixelFormat.INDEXED_4:
+                        case BBSPixelFormat.INDEXED_8:
+                            bytesPerPixel = 1;
+                            break;
+                        case BBSPixelFormat.RGBA_1555:
+                            bytesPerPixel = 2;
+                            break;
+                        case BBSPixelFormat.RGB_888:
+                        case BBSPixelFormat.RGBA_8888:
+                        case BBSPixelFormat.RGBX_8888:
+                            bytesPerPixel = 4;
+                            break;
+                        default:
+                            console.warn("Unrecognized pixel format for TXA", format);
+                            bytesPerPixel = 0;
+                            break;
+                    }
+                    const data = this.buffer.subarray(startOffset + dataOffset, bytesPerPixel * width * height);
+                    frames.push({ displayFrames, data });
+                }
+
+                this.offset = ret2;
+                animations[j] = { name: animationName, frames };
+            }
+
+            this.offset = ret1;
+            txas[i] = { name, textureName, defaultAnimationIndex, animations };
+        }
+
+        return txas;
     }
 
     private getShapes(hasSkeleton: boolean): BBSShape[] {
@@ -627,7 +722,7 @@ export class BBSParser extends DreamDropParser {
             case 2:
                 return BBSPixelFormat.RGB_888;
             case 3:
-                return BBSPixelFormat.RGBA_888;
+                return BBSPixelFormat.RGBA_8888;
             case 4:
                 return BBSPixelFormat.INDEXED_4;
             case 5:

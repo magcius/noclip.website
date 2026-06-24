@@ -1,11 +1,7 @@
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
+import { FakeTextureHolder } from "../TextureHolder";
+import { SceneGfx } from "../viewer";
 import { DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropCTRTexture, CTRTFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
@@ -13,7 +9,7 @@ import { DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_DROP_OLO, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_OLO, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/data";
-import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture, LuxTXA } from "./lux";
+import { LuxObjectSet, LuxOLOInstance, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation, LuxTXA } from "./lux";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -61,14 +57,10 @@ function getPrettyDataSetName(name: string) {
     }
 }
 
-class Renderer implements SceneGfx {
-    public textureHolder: TextureHolder;
-    private roomRenderer: DreamDropRoomRenderer;
-    private textures: LuxTexture[];
-    private renderHelper: GfxRenderHelper;
-    private renderInstListMain = new GfxRenderInstList();
-
+class Renderer extends LuxRenderer {
     constructor(device: GfxDevice, pmp: DreamDropPMP, objects: LuxRoomObjects, txas: LuxTXA[], private config?: DreamDropRoomConfig) {
+        super(device);
+
         const ctrts = [...pmp.ctrts];
         for (const model of objects.models.values()) {
             ctrts.push(...(model as DreamDropPMO).ctrts);
@@ -105,23 +97,22 @@ class Renderer implements SceneGfx {
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
-        this.renderHelper = new GfxRenderHelper(device);
         this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, txas, this.config);
     }
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer.parts, ...this.roomRenderer.objects]);
+        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
         layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
 
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         setPanel.setTitle(EYE_ICON, "Object Sets");
-        const setNames = this.roomRenderer.sets.map(s => getPrettyDataSetName(s.name));
+        const setNames = this.roomRenderer!.sets.map(s => getPrettyDataSetName(s.name));
         const select = new MultiSelect();
         select.setStrings(setNames);
         select.onitemchanged = (index: number, v: boolean) => {
-            this.roomRenderer.onSetChanged(index, v);
+            this.roomRenderer!.onSetChanged(index, v);
         };
         if (setNames.length > 0) {
             if (!this.config || !this.config.defaultSets) {
@@ -137,44 +128,6 @@ class Renderer implements SceneGfx {
         setPanel.contents.appendChild(select.elem);
 
         return [setPanel, layersPanel];
-    }
-
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-        const mainColorTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Color");
-        const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Depth");
-        builder.pushPass((pass) => {
-            pass.setDebugName("Main");
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-            });
-        });
-        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        this.prepareToRender(device, viewerInput);
-        builder.execute();
-        this.renderInstListMain.reset();
-    }
-
-    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        this.renderHelper.pushTemplateRenderInst();
-
-        this.roomRenderer.prepareToRender(device, this.renderHelper, viewerInput);
-
-        this.renderHelper.renderInstManager.popTemplate();
-        this.renderHelper.prepareToRender();
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.roomRenderer.destroy(device);
-        this.renderHelper.renderCache.destroy();
-        this.renderHelper.destroy();
-        for (const t of this.textures) {
-            device.destroyTexture(t.gfxTexture);
-        }
     }
 }
 
@@ -270,6 +223,7 @@ class Room implements SceneDesc {
 TODO
 
 Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
+    I've tried different render inst lists, depth and material based sort keys. These all introduce more problems than they fix
 TXAs need cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
     Will probably need an altered shader that takes two texture inputs, idk how else to do it
@@ -297,7 +251,6 @@ Investigate PAM animations with flag of 16720 and framerates of 77 with no chann
     Need to actually look at the raw data again, these could be normal animations just with a slightly different format
     that's throwing off the parsing
 Shadows in the second district are the wrong color, they appear as black in game (they're correct everywhere else though?)
-Fix some objects culling when in view (bbox problem)
 Fix bad z-fighting on the ground path in the Traverse Town garden
 Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron and pinocchio
 Dream eater model fixes
@@ -307,6 +260,7 @@ Dream eater model fixes
     Hunchback boss has its chains missing when animated
 Find a better workaround for when models have all-zero weights (which makes them invisibile when applying an animation)
     This is solved on the parsing level for BBS since there's a weight format. DDD could have something similar?
+Use animationcontroller instead of custom implementation based on origami king
 
 Nice to have
 

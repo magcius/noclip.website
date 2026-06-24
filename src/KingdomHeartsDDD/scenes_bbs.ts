@@ -1,16 +1,13 @@
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { FakeTextureHolder, TextureHolder } from "../TextureHolder";
+import { FakeTextureHolder } from "../TextureHolder";
 import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
+import { SceneGfx } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_PMO_ARC_OVERRIDE, BBS_VALID_PRESET_ARC } from "./config/data";
-import { LuxObjectSet, LuxOLOInstance, LuxRoomObjects, LuxSkeletalAnimation, LuxTexture } from "./lux";
+import { LuxObjectSet, LuxOLOInstance, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
 
@@ -119,7 +116,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
             }
             if (invalid) {
                 for (const [k, v] of BBS_PMO_ARC_OVERRIDE) {
-                    if (v.indexOf(instance.name) !== -1) {
+                    if (v.includes(instance.name)) {
                         arcName = k;
                         // console.log("Overrode", instance.name, "to arc", arcName);
                         invalid = false;
@@ -135,13 +132,13 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
                 let p = new BBSParser(modelArcFile);
                 let pmoName = instance.name;
                 let remapped = false;
-                if (BBS_MODEL_REMAP.indexOf(instance.name) !== -1) {
+                if (BBS_MODEL_REMAP.includes(instance.name)) {
                     // check if model variant (different .epd, .esd files, etc but same geometry & animations)
                     // since there is more of a heuristic and doesn't work all the time, it's on a whitelist of BBS_MODEL_REMAP
                     const arcEntries = p.parseARC();
                     // if dir pointer is "BOSS" or "ENEM" or "GIMM". It can be other values like "EFFE" which can be ignored
                     // sometimes there's more than one with the same pointer, don't know how to handle that case... for now just the first
-                    // this should also change subdir, but for now it's assumed to be in the same directory (hence the whitelist)
+                    // this should also change subdir, but it's assumed to be in the same directory (hence the whitelist)
                     const remapEntry = arcEntries.find(e => e.dirPointer === 1397968706 || e.dirPointer === 1296387653 || e.dirPointer === 1296910663);
                     if (remapEntry !== undefined) {
                         // not exactly sure how this works, but the name of this entry corresponds to a "base" ARC file (as if the instance name was it)
@@ -198,14 +195,10 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
     return { sets, models, animations };
 }
 
-class Renderer implements SceneGfx {
-    public textureHolder: TextureHolder;
-    private textures: LuxTexture[];
-    private roomRenderer: BBSRoomRenderer;
-    private renderHelper: GfxRenderHelper;
-    private renderInstListMain = new GfxRenderInstList();
-
+class Renderer extends LuxRenderer {
     constructor(device: GfxDevice, pmp: BBSPMP, objects: LuxRoomObjects) {
+        super(device);
+
         const tims = [...pmp.tims];
         for (const model of objects.models.values()) {
             tims.push(...(model as BBSModel).tims);
@@ -224,69 +217,31 @@ class Renderer implements SceneGfx {
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects);
+        this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, []);
     }
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer.parts, ...this.roomRenderer.objects]);
+        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
         layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
 
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         setPanel.setTitle(EYE_ICON, "Object Sets");
-        const setNames = this.roomRenderer.sets.map(s => getPrettyDataSetName(s.name));
+        const setNames = this.roomRenderer!.sets.map(s => getPrettyDataSetName(s.name));
         const select = new MultiSelect();
         select.setStrings(setNames);
         select.onitemchanged = (index: number, v: boolean) => {
-            this.roomRenderer.onSetChanged(index, v);
+            this.roomRenderer!.onSetChanged(index, v);
         };
         if (setNames.length > 0) {
-            select.setItemSelected(0, true);
+            select.setItemSelected(0, false);
         } else {
             setPanel.setVisible(false);
         }
         setPanel.contents.appendChild(select.elem);
 
         return [setPanel, layersPanel];
-    }
-
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-        const mainColorTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Color");
-        const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Depth");
-        builder.pushPass((pass) => {
-            pass.setDebugName("Main");
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-            });
-        });
-        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        this.prepareToRender(device, viewerInput);
-        builder.execute();
-        this.renderInstListMain.reset();
-    }
-
-    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        this.renderHelper.pushTemplateRenderInst();
-
-        this.roomRenderer.prepareToRender(device, this.renderHelper, viewerInput);
-
-        this.renderHelper.renderInstManager.popTemplate();
-        this.renderHelper.prepareToRender();
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.roomRenderer.destroy(device);
-        this.renderHelper.renderCache.destroy();
-        this.renderHelper.destroy();
-        for (const t of this.textures) {
-            device.destroyTexture(t.gfxTexture);
-        }
     }
 }
 
@@ -311,8 +266,6 @@ class Room implements SceneDesc {
 /*
 TODO
 
-Fix occasional 404 errors when fetching models from OLOs (already two checks for location, need a third?)
-    Occurs most often in enchanted dominion, disney town and mirage arena
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
     It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderella castle (possibly the skybox of jb01 too)
@@ -320,10 +273,8 @@ Most models' eye textures have wrong UVs for some reason. They're either almost 
     Perhaps the scaling is different for UVs sometimes, even in the same geometry, for some reason? The texture is usually just a tiny bit too big
 Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
     Maybe they're supposed to be applied differently. Not sure why there'd be data but not use it?
-Clean up TIM2 decoding and structures (possibly integrate with existing PS2 decoding? Couldn't get it to work but the data structures are very similar if not the same)
 Check for billboard textures, move DDD's code for it to Lux if there's any
-Investigate webgl texture error in JB10 (probably a mismatched texture header?)
-Add default OLOs
+Investigate webgl texture error in jb10 (probably a mismatched texture header?)
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Debug ls14, can't get textures?
 Take another pass at the ordering of room names to be more chronological. Mostly ok for now but needs work
@@ -338,9 +289,22 @@ Redo the pipeline of OLO object model names to actual model files (since their l
 Figure out why the shop moogle has its balloon upside down and aurora's crown is sideways (???)
     b01ls00 is also very messed up, has extra geometry not attached to skeleton
     g27dc00 has stray geometry as well
-Add TXAs
 Filter out objects that are meant for collision but still have visible geometry, usually in boss rooms
 Check for texture scorlling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
+
+Nice to have
+
+Clean up TIM2 decoding and data structures
+    Possibly integrate with existing PS2 decoding? Couldn't get it to work but the data structures are very similar if not the same
+Add TXAs
+    PMP-level TXAs have data offsets that are out of range, I can't figure out how to handle those. PMO-level TXAs are almost
+    the same as DDD, except their data is just the pixel/image portion of a TIM2, rather than the entire texture. This will
+    require a lot of tweaking to how textures are loaded and re-parsed, since the pixels need to be overridden from the base
+    texture. Might be best to re-write the entire TIM2 code with TXAs in mind, instead of trying to jerry-rig the existing stuff.
+    Honestly, this is a lot of effort with little pay off, since TXAs are less common in BBS than in DDD (other than eye blinking/mouth moving while talking).
+    The basic parsing is already present in bin_bbs.ts, just not used right now.
+Particle effects (if used widely outside of weapons/attacks)
+Save points and other interactables that aren't proper objects but still visible in game
 
 May your heart be your guiding key
 */

@@ -1,17 +1,12 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxBufferFrequencyHint, GfxBufferUsage, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomRenderer, LuxShape, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 import { BBSModel, BBSPMP, BBSShape } from "./bin_bbs";
 import { BBSShader } from "./shader";
 
 export class BBSRoomRenderer extends LuxRoomRenderer {
-    constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects) {
-        super(cache, pmp, textures, objects, []);
-        this.onSetChanged(0, true);
-    }
-
-    protected override setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]): void {
+    protected override setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler): void {
         const bbsPMP = pmp as BBSPMP;
         const model = info.pmo as BBSModel;
         const materials: LuxMaterialInstance[] = [];
@@ -57,10 +52,6 @@ class ModelRenderer extends LuxModelRenderer {
 class ShapeRenderer extends LuxShapeRenderer {
     constructor(cache: GfxRenderCache, shape: BBSShape, scale: number, material: LuxMaterialInstance, isSkybox: boolean, boneCount: number = 0) {
         super(cache, shape, scale, material, undefined, isSkybox, boneCount);
-    }
-
-    protected override setMegaStateFlags(shape: LuxShape, transparent: boolean): void {
-        this.megaStateFlags.depthWrite = !transparent;
     }
 
     protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {

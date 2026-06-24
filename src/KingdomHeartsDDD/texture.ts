@@ -134,7 +134,7 @@ function sortClut(clut: Uint8Array, format: BBSPixelFormat): Uint8Array {
                 index += 16;
             }
             break;
-        case BBSPixelFormat.RGBA_888:
+        case BBSPixelFormat.RGBA_8888:
             for (let i = 0; i < 8; i++) {
                 for (let j = 0; j < 8; j++) {
                     const tmp = dst[index + 8 + j];
@@ -157,7 +157,7 @@ function invertRedBlue(data: Uint8Array, format: BBSPixelFormat, length: number)
                 data[i * 3 + 2] = tmp;
             }
             break;
-        case BBSPixelFormat.RGBA_888:
+        case BBSPixelFormat.RGBA_8888:
             for (let i = 0; i < length; i++) {
                 let tmp = data[i * 4 + 0];
                 data[i * 4 + 0] = data[i * 4 + 2];

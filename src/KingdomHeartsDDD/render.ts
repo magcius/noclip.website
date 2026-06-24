@@ -90,8 +90,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         super(cache, shape, scale, material, txa, isSkybox, boneCount);
     }
 
-    protected override setMegaStateFlags(shape: LuxShape, transparent: boolean): void {
-        this.megaStateFlags.depthWrite = !transparent;
+    protected override setMegaStateFlags(shape: LuxShape): void {
         this.megaStateFlags.polygonOffset = (shape.attribute & LuxShapeAttribute.DROP_SHADOW) === 0;
         this.megaStateFlags.cullMode = GfxCullMode.None; // different than bbs, unsure what it is in ddd, so default to none
     }

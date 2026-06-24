@@ -1,19 +1,21 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { TextureMapping } from "../TextureHolder";
+import { FakeTextureHolder, TextureHolder, TextureMapping } from "../TextureHolder";
 import { Destroyable } from "../SceneBase";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { makeSortKeyOpaque, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
+import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
+import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
 import { Layer } from "../ui";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
@@ -285,10 +287,10 @@ export class LuxShapeRenderer implements Destroyable {
         const additiveBlend = (shape.attribute & LuxShapeAttribute.BLEND_ADDITIVE) !== 0;
         const transparent = isTranslucent || additiveBlend;
 
-        this.megaStateFlags = {};
+        this.megaStateFlags = { depthWrite: !transparent };
         // the cull back flag makes some level geometry invisible from normal viewing points, disabled for now
         // this.megaStateFlags = { cullMode: (shape.attribute & LuxShapeAttribute.CULL_BACK) !== 0 ? GfxCullMode.Back : GfxCullMode.None };
-        this.setMegaStateFlags(shape, transparent);
+        this.setMegaStateFlags(shape);
 
         if (transparent) {
             setAttachmentStateSimple(this.megaStateFlags, {
@@ -367,7 +369,7 @@ export class LuxShapeRenderer implements Destroyable {
         }
     }
 
-    protected setMegaStateFlags(shape: LuxShape, transparent: boolean) {
+    protected setMegaStateFlags(shape: LuxShape) {
 
     }
 
@@ -658,5 +660,55 @@ export class LuxRoomRenderer implements Destroyable {
 
     protected setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
 
+    }
+}
+
+export class LuxRenderer implements SceneGfx {
+    public textureHolder: TextureHolder;
+    protected roomRenderer?: LuxRoomRenderer;
+    protected textures: LuxTexture[];
+    protected renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
+
+    constructor(device: GfxDevice) {
+        this.textureHolder = new FakeTextureHolder([]);
+        this.renderHelper = new GfxRenderHelper(device);
+        this.textures = [];
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const mainColorTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Color");
+        const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Depth");
+        builder.pushPass((pass) => {
+            pass.setDebugName("Main");
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+        this.prepareToRender(device, viewerInput);
+        builder.execute();
+        this.renderInstListMain.reset();
+    }
+
+    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+        this.renderHelper.pushTemplateRenderInst();
+        this.roomRenderer!.prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.renderInstManager.popTemplate();
+        this.renderHelper.prepareToRender();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.roomRenderer!.destroy(device);
+        this.renderHelper.renderCache.destroy();
+        this.renderHelper.destroy();
+        for (const t of this.textures) {
+            device.destroyTexture(t.gfxTexture);
+        }
     }
 }
