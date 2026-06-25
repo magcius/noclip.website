@@ -23,7 +23,6 @@ import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
 import { MobyGeometry, MobyRenderer } from "./render-moby";
-import { bitsAsFloat32 } from "../MathHelpers";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
@@ -417,7 +416,7 @@ class RatchetAndClankScene implements SceneGfx {
         // setup
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({
-            cullMode: GfxCullMode.None, // ps2 don't do backface culling
+            cullMode: GfxCullMode.None, // the game has backface culling only on objects within a specific per-object distance from the camera
             attachmentsState: [{
                 channelWriteMask: GfxChannelWriteMask.AllChannels,
                 rgbBlendState: {

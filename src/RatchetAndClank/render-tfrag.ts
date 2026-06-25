@@ -105,9 +105,8 @@ export class TfragGeometry {
 
     // array of 3 vertex buffers, one per lod
     private lods: ({
-        vertexBufferOpaque: GfxBuffer,
+        vertexBuffer: GfxBuffer,
         vertexCountOpaque: number,
-        vertexBufferTransparent: GfxBuffer,
         vertexCountTransparent: number,
     } | null)[] = [null, null, null];
 
@@ -131,17 +130,19 @@ export class TfragGeometry {
     public getOrCreateVertexBuffer(lod: number) {
         if (!this.lods[lod]) {
             const device = this.cache.device;
-            const vertexDataOpaque = this.assemble(lod, false);
-            const vertexBufferOpaque = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexDataOpaque.vertexArrayBuffer.buffer);
-            device.setResourceName(vertexBufferOpaque, `Tfrag LOD ${lod} Opaque VB`);
-            const vertexDataTransparent = this.assemble(lod, true);
-            const vertexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexDataTransparent.vertexArrayBuffer.buffer);
-            device.setResourceName(vertexBufferTransparent, `Tfrag LOD ${lod} Transparent VB`);
+            const vertexCountOpaque = this.count(lod, false);
+            const vertexCountTransparent = this.count(lod, true);
+            const vertexArrayBuffer = new Float32Array((vertexCountOpaque + vertexCountTransparent) * TfragProgram.elementsPerVertex);
+            this.assemble(lod, vertexArrayBuffer, 0, vertexCountOpaque, false);
+            this.assemble(lod, vertexArrayBuffer, vertexCountOpaque, vertexCountTransparent, true);
+
+            const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexArrayBuffer.buffer);
+            device.setResourceName(vertexBuffer, `Tfrag LOD ${lod} VB`);
+
             this.lods[lod] = {
-                vertexBufferOpaque,
-                vertexCountOpaque: vertexDataOpaque.vertexCount,
-                vertexBufferTransparent,
-                vertexCountTransparent: vertexDataTransparent.vertexCount,
+                vertexBuffer,
+                vertexCountOpaque,
+                vertexCountTransparent,
             };
         }
 
@@ -150,7 +151,7 @@ export class TfragGeometry {
         return lodData;
     }
 
-    private count(lod: number, transparentMode: boolean, trace: number[]) {
+    private count(lod: number, transparentMode: boolean) {
         const tfrags = this.tfrags;
         const textureAssets = this.textureAssets;
 
@@ -206,7 +207,7 @@ export class TfragGeometry {
         return vertexCount;
     }
 
-    private assemble(lod: number, transparentMode: boolean) {
+    private assemble(lod: number, vertexArrayBuffer: Float32Array, baseVertex: number, expectedCount: number, transparentMode: boolean) {
         const tfrags = this.tfrags;
         const textureAssets = this.textureAssets;
 
@@ -214,10 +215,7 @@ export class TfragGeometry {
         const texcoordScale = 1 / 4096;
         const colorScale = 1 / 0x80;
 
-        const trace :number[]= []
-        const vertexCount = this.count(lod, transparentMode,trace);
-        const vertexArrayBuffer = new Float32Array(vertexCount * TfragProgram.elementsPerVertex);
-        let vertexPtr = 0;
+        let vertexPtr = baseVertex * TfragProgram.elementsPerVertex;
 
         for (let i = 0; i < tfrags.length; i++) {
             const tfrag = tfrags[i];
@@ -316,13 +314,7 @@ export class TfragGeometry {
 
         }
 
-        assert(vertexPtr === vertexCount * TfragProgram.elementsPerVertex);
-        assert(vertexPtr === vertexArrayBuffer.length);
-
-        return {
-            vertexArrayBuffer,
-            vertexCount,
-        };
+        assert(vertexPtr === (baseVertex + expectedCount) * TfragProgram.elementsPerVertex);
     }
 
     private fixTexcoord(n: number) {
@@ -351,8 +343,7 @@ export class TfragGeometry {
     public destroy(device: GfxDevice): void {
         for (const lod of this.lods) {
             if (lod) {
-                device.destroyBuffer(lod.vertexBufferOpaque);
-                device.destroyBuffer(lod.vertexBufferTransparent);
+                device.destroyBuffer(lod.vertexBuffer);
             }
         }
     }
@@ -391,24 +382,23 @@ export class TfragRenderer {
 
         // to emulate TEST_1.AFAIL=FB_ONLY, render transparent parts twice, once with depth write and alpha test, and again with neither
         const draws = [
-            { transparentGeometry: false, depthWrite: true, alphaTest: 0 },
-            { transparentGeometry: true, depthWrite: true, alphaTest: 0.75 },
-            { transparentGeometry: true, depthWrite: false, alphaTest: 0 },
+            { transparentOnly: false, depthWrite: true, alphaTest: 0.75 },
+            { transparentOnly: true, depthWrite: false, alphaTest: 0 },
         ]
 
         for (let i = 0; i < draws.length; i++) {
             const draw = draws[i];
 
-            const vertexCount = draw.transparentGeometry ? vertexData.vertexCountTransparent : vertexData.vertexCountOpaque;
+            const vertexCount = draw.transparentOnly ? vertexData.vertexCountTransparent : (vertexData.vertexCountOpaque + vertexData.vertexCountTransparent);
             if (!vertexCount) continue;
-            const vertexBuffer = draw.transparentGeometry ? vertexData.vertexBufferTransparent : vertexData.vertexBufferOpaque;
+            const startVertex = draw.transparentOnly ? vertexData.vertexCountOpaque : 0;
 
             const renderInst = this.renderHelper.renderInstManager.newRenderInst();
             renderInst.setMegaStateFlags({ depthWrite: draw.depthWrite, depthCompare: GfxCompareMode.Greater });
             renderInst.setBindingLayouts(bindingLayouts);
             renderInst.setGfxProgram(this.tfragProgram);
 
-            const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 16);
+            const tfragParams = renderInst.allocateUniformBufferF32(TfragProgram.ub_TfragParams, 0x16);
             let offs = 0;
             offs += fillMatrix4x3(tfragParams, offs, objectMatrix);
             offs += fillVec4(tfragParams, offs, draw.alphaTest, 0, 0, 0);
@@ -416,7 +406,7 @@ export class TfragRenderer {
             renderInst.setVertexInput(
                 tfragGeometry.inputLayout,
                 [
-                    { buffer: vertexBuffer, byteOffset: 0 },
+                    { buffer: vertexData.vertexBuffer, byteOffset: startVertex * TfragProgram.elementsPerVertex * 0x4 },
                 ],
                 null,
             );
