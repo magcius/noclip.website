@@ -285,6 +285,13 @@ function assignTexturesToSizeBucket(buckets: TexturesBySize, textures: PaletteTe
     return remap;
 }
 
+
+export function packRemap(remap: { sizeBucket: number, index: number }) {
+    const bucket = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
+    const slice = remap ? remap.index : 0;
+    return (slice << 3) | (bucket & 0x07);
+};
+
 export interface TextureAtlases {
     gfxTextures: { [size in 16 | 32 | 64 | 128 | 256]: GfxTexture },
     tfragTextureRemap: { sizeBucket: number, index: number }[],
