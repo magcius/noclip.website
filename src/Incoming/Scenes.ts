@@ -18,6 +18,7 @@ import { buildSphereMesh, buildHemisphereMesh } from "./ProcGeom.js";
 import { parseIAN } from "./IAN.js";
 import { parseHeightfield, buildTerrainMeshes, buildWaterMesh, sampleGroundHeight, Heightfield, TERRAIN_MAX_TEXTURES } from "./Terrain.js";
 import { IncomingMeshData, IncomingRenderer, IncomingAnimFrame, IncomingSceneParams, IncomingMover, SPIN_TICKS_PER_MS, indexFormatFor } from "./Render.js";
+import subversionOverridePaths from "./SubversionOverrides.json";
 
 
 const SPRITE_ATLAS_SIZE = 256;
@@ -27,21 +28,28 @@ const SHADOW_OPACITY = 0.5;
 const SHADOW_SIZE_FACTOR = 0.9;
 const SHADOW_LIFT = 4;
 const pathBase = "Incoming";
+const subversionBase = "IncomingSubversion";
+const SUBVERSION_OVERRIDES = new Set<string>(subversionOverridePaths);
+let overrideSet = new Set<string>();
 
 function normalizePath(p: string): string {
     return p.replace(/\\/g, "/").toLowerCase().trim();
 }
 
+function baseFor(rel: string): string {
+    return overrideSet.has(rel) ? subversionBase : pathBase;
+}
 function resolveDataPath(p: string): string {
-    return `${pathBase}/${normalizePath(p)}`;
+    const rel = normalizePath(p);
+    return `${baseFor(rel)}/${rel}`;
 }
-
 function resolveTexturePath(p: string): string {
-    return `${pathBase}/ppm/${normalizePath(p).replace(/\.ppm$/, ".png")}`;
+    const rel = `ppm/${normalizePath(p).replace(/\.ppm$/, ".png")}`;
+    return `${baseFor(rel)}/${rel}`;
 }
-
 function resolveModelPath(p: string): string {
-    return `${pathBase}/pcobject/${normalizePath(p)}`;
+    const rel = `pcobject/${normalizePath(p)}`;
+    return `${baseFor(rel)}/${rel}`;
 }
 
 async function loadODLRecursive(dataFetcher: DataFetcher, odlPath: string): Promise<IncomingODL> {
@@ -361,10 +369,11 @@ function effectiveSpin(type: IncomingObjectType, index: number): [number, number
 }
 
 class IncomingSceneDesc implements SceneDesc {
-    constructor(public id: string, public name: string, private odlPath: string, private wdlPath: string) {}
+    constructor(public id: string, public name: string, private odlPath: string, private wdlPath: string, private subversion = false, private mdlPathOverride?: string) {}
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
+        overrideSet = this.subversion ? SUBVERSION_OVERRIDES : new Set();
 
         const odl = await loadODLRecursive(dataFetcher, resolveDataPath(this.odlPath));
         const globalParts = buildGlobalPartRegistry(odl.types);
@@ -698,7 +707,7 @@ class IncomingSceneDesc implements SceneDesc {
             await instancePlacement(type, placementMatrix);
         }
         // Mission actors.
-        const mdlPath = this.wdlPath.replace(/\.wdl$/i, "_action.mdl");
+        const mdlPath = this.mdlPathOverride ?? this.wdlPath.replace(/\.wdl$/i, "_action.mdl");
         let mdlPlacements: IncomingMDLPlacement[] = [];
         try {
             const mdlBuffer = await dataFetcher.fetchData(resolveDataPath(mdlPath));
@@ -759,5 +768,14 @@ export const sceneGroup: SceneGroup = {
         new IncomingSceneDesc("canaveral", "U.S.A.", "asc/canaveral/canaveral.odl", "asc/canaveral/canaveral.wdl"),
         new IncomingSceneDesc("moon", "The Moon", "asc/moon/moon.odl", "asc/moon/moon.wdl"),
         new IncomingSceneDesc("egypt", "Alien World", "asc/egypt/egypt.odl", "asc/egypt/egypt.wdl"),
+        "Subversion",
+        new IncomingSceneDesc("intro", "Intro", "asc/intro/intro.odl", "asc/intro/intro.wdl", true, "asc/intro/intro.mdl"),
+        new IncomingSceneDesc("border", "Border Defence", "asc/border/border.odl", "asc/border/border.wdl", true),
+        new IncomingSceneDesc("spheres", "Spheres of Influence", "asc/spheres/spheres.odl", "asc/spheres/spheres.wdl", true),
+        new IncomingSceneDesc("hostage", "The Hostage Situation", "asc/hostage/hostage.odl", "asc/hostage/hostage.wdl", true),
+        new IncomingSceneDesc("covert", "A Covert Hope", "asc/covert/covert.odl", "asc/covert/covert.wdl", true),
+        new IncomingSceneDesc("toxin", "The Toxin Threat", "asc/toxin/toxin.odl", "asc/toxin/toxin.wdl", true),
+        new IncomingSceneDesc("final", "The Final Assault", "asc/final/final.odl", "asc/final/final.wdl", true),
+        new IncomingSceneDesc("end", "The Last Battle", "asc/end/end.odl", "asc/end/end.wdl", true, "asc/end/end.mdl"),
     ],
 };
