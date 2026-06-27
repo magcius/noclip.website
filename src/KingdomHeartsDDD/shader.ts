@@ -11,7 +11,7 @@ export class DreamDropShader extends DeviceProgram {
     public static ub_ModelParams = 1;
     public static ub_ShapeParams = 2;
 
-    constructor(attributeCount: number, boneSRTCount: number,) {
+    constructor(protected attributeCount: number, protected boneSRTCount: number, protected weightCount = 0) {
         super();
         this.both = `
 precision highp float;
@@ -21,6 +21,8 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     float u_Time;
+    float u_ApplyTextures;
+    float u_DoScrolling;
 };
 
 layout(std140) uniform ub_ModelParams {
@@ -44,109 +46,73 @@ layout(location = ${DreamDropShader.a_Color}) in vec4 a_Color;
 layout(location = ${DreamDropShader.a_UV}) in vec2 a_UV;
 ${attributeCount >= 4 ? `layout(location = ${DreamDropShader.a_Weight}) in vec4 a_Weight;` : ''}
 ${attributeCount >= 5 ? `layout(location = ${DreamDropShader.a_Joint}) in uvec4 a_Joint;` : ''}
+${this.getAdditionalAttributes()}
 
 void main() {
     v_Color = a_Color;
-    v_UV = a_UV + (u_Time * u_Scroll);
-    ${boneSRTCount > 0 ?
-        `mat4x3 t_BoneMatrix = mat4x3(0.0);
+    if (u_DoScrolling > 0.1) {
+        v_UV = a_UV + (u_Time * u_Scroll);
+    } else {
+        v_UV = a_UV;
+    }
+    ${this.getVertPosition()}
+}
+#endif
+
+#ifdef FRAG
+void main() {
+    if (u_HasTexture > 0.1 && u_ApplyTextures > 0.1) {
+        vec4 texColor = texture(SAMPLER_2D(u_Texture), v_UV);
+        if (texColor.a < 0.1) {
+            discard;
+        }
+        gl_FragColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
+    } else {
+        gl_FragColor = v_Color;
+    }
+}
+#endif
+    `;
+    }
+
+    protected getVertPosition(): string {
+        if (this.boneSRTCount > 0) {
+            return `mat4x3 t_BoneMatrix = mat4x3(0.0);
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.x]) * a_Weight.x;
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.y]) * a_Weight.y;
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.z]) * a_Weight.z;
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.w]) * a_Weight.w;
     vec3 t_ViewPosition = UnpackMatrix(u_View) * vec4(t_BoneMatrix * vec4(a_Position, 1.0), 1.0);
-    gl_Position = UnpackMatrix(u_Projection) * vec4(t_ViewPosition, 1.0);`
-    : 'gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_View) * vec4(a_Position, 1.0), 1.0);'}
-}
-#endif
-
-#ifdef FRAG
-void main() {
-    if (u_HasTexture > 0.1) {
-        vec4 texColor = texture(SAMPLER_2D(u_Texture), v_UV);
-        if (texColor.a < 0.1) {
-            discard;
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_ViewPosition, 1.0);`;
+        } else {
+            return "gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_View) * vec4(a_Position, 1.0), 1.0);";
         }
-        gl_FragColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
-    } else {
-        gl_FragColor = v_Color;
     }
-}
-#endif
-    `;
+
+    protected getAdditionalAttributes(): string {
+        return "";
     }
 }
 
-export class BBSShader extends DeviceProgram {
-    public static a_Position = 0;
-    public static a_Color = 1;
-    public static a_UV = 2;
-    public static a_Weight = 3;
-    public static a_Joint = 4;
+export class BBSShader extends DreamDropShader {
     public static a_Weight2 = 5;
     public static a_Joint2 = 6;
-    public static ub_SceneParams = 0;
-    public static ub_ModelParams = 1;
-    public static ub_ShapeParams = 2;
 
     constructor(attributeCount: number, boneSRTCount: number, weightCount: number) {
-        super();
-        this.both = `
-precision highp float;
-
-${GfxShaderLibrary.MatrixLibrary}
-
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    float u_Time;
-};
-
-layout(std140) uniform ub_ModelParams {
-    Mat3x4 u_View;
-    ${boneSRTCount > 0 ? `Mat3x4 u_BoneSRT[${boneSRTCount}];` : ''}
-};
-
-layout(std140) uniform ub_ShapeParams {
-    vec2 u_Scroll;
-    float u_HasTexture;
-};
-
-uniform sampler2D u_Texture;
-
-varying vec4 v_Color;
-varying vec2 v_UV;
-
-#ifdef VERT
-layout(location = ${BBSShader.a_Position}) in vec3 a_Position;
-layout(location = ${BBSShader.a_Color}) in vec4 a_Color;
-layout(location = ${BBSShader.a_UV}) in vec2 a_UV;
-${attributeCount >= 4 ? `layout(location = ${BBSShader.a_Weight}) in vec4 a_Weight;` : ''}
-${attributeCount >= 5 ? `layout(location = ${BBSShader.a_Joint}) in uvec4 a_Joint;` : ''}
-${attributeCount >= 6 ? `layout(location = ${BBSShader.a_Weight2}) in vec4 a_Weight2;` : ''}
-${attributeCount >= 7 ? `layout(location = ${BBSShader.a_Joint2}) in uvec4 a_Joint2;` : ''}
-
-void main() {
-    v_Color = a_Color;
-    v_UV = a_UV + (u_Time * u_Scroll);
-    ${boneSRTCount > 0 && weightCount > 0 ? this.getBoneMatrixTransform(weightCount)
-    : 'gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_View) * vec4(a_Position, 1.0), 1.0);'}
-}
-#endif
-
-#ifdef FRAG
-void main() {
-    if (u_HasTexture > 0.1) {
-        vec4 texColor = texture(SAMPLER_2D(u_Texture), v_UV);
-        if (texColor.a < 0.1) {
-            discard;
-        }
-        gl_FragColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
-    } else {
-        gl_FragColor = v_Color;
+        super(attributeCount, boneSRTCount, weightCount);
     }
-}
-#endif
-    `;
+
+    protected override getVertPosition(): string {
+        if (this.boneSRTCount > 0 && this.weightCount > 0) {
+            return this.getBoneMatrixTransform(this.weightCount);
+        } else {
+            return "gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_View) * vec4(a_Position, 1.0), 1.0);";
+        }
+    }
+
+    protected override getAdditionalAttributes(): string {
+        return `${this.attributeCount >= 6 ? `layout(location = ${BBSShader.a_Weight2}) in vec4 a_Weight2;` : ''}
+    ${this.attributeCount >= 7 ? `layout(location = ${BBSShader.a_Joint2}) in uvec4 a_Joint2;` : ''}`;
     }
 
     private getBoneMatrixTransform(weightCount: number) {

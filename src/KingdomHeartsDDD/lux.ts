@@ -1,6 +1,6 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder, TextureHolder, TextureMapping } from "../TextureHolder";
 import { Destroyable } from "../SceneBase";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
@@ -10,8 +10,8 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
-import { Layer } from "../ui";
-import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers";
+import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -194,8 +194,7 @@ function getChannelValue(keyframes: LuxKeyframe[], frame: number, defaultValue: 
     }
     const index0 = index1 - 1;
 
-    // linear interpolation
-    return keyframes[index0].value + (keyframes[index1].value - keyframes[index0].value) * ((frame - keyframes[index0].frame) / (keyframes[index1].frame - keyframes[index0].frame));
+    return lerp(keyframes[index0].value, keyframes[index1].value, (frame - keyframes[index0].frame) / (keyframes[index1].frame - keyframes[index0].frame));
 }
 
 export function computeLuxShiftMatrix(scale: vec3, rotation: vec3, position: vec3) {
@@ -386,7 +385,6 @@ export class LuxShapeRenderer implements Destroyable {
 // const scratchVec3b = vec3.create();
 
 export class LuxModelRenderer implements Destroyable, Layer {
-    public name: string;
     public visible: boolean = true;
     public instances: LuxModelInstance[] = [];
     protected bboxPoints: Float32Array;
@@ -399,7 +397,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
     protected bones: LuxBone[];
     protected boneMatrices: mat4[][] = [];
 
-    constructor(cache: GfxRenderCache, name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], protected animation?: LuxSkeletalAnimation) {
+    constructor(cache: GfxRenderCache, public name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], protected animation?: LuxSkeletalAnimation) {
         this.name = name;
         const modeNibble = getLuxShortNibble(model.pmpFlags, 3);
         this.isSkybox = model.pmpFlags !== -1 && (modeNibble === LuxModelFlagRenderMode.SKYBOX || modeNibble === LuxModelFlagRenderMode.SKYBOX2);
@@ -577,6 +575,8 @@ export class LuxRoomRenderer implements Destroyable {
     public objects: LuxModelRenderer[];
     public sets: LuxObjectSet[];
     public selectedSetIndices: number[];
+    public applyTextures: boolean = true;
+    public scrollingTextures: boolean = true;
     private allSetIndices: number[][];
 
     constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[]) {
@@ -626,12 +626,16 @@ export class LuxRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 17);
+        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 19);
         const uniformBuffer = template.mapUniformBufferF32(DreamDropShader.ub_SceneParams);
         // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.projectionMatrix);
         // u_Time (1)
         uniformBuffer[offset++] = viewerInput.time * FRAME_TIME;
+        // u_ApplyTextures (1)
+        uniformBuffer[offset++] = this.applyTextures ? 1.0 : 0.0;
+        // u_DoScrolling (1)
+        uniformBuffer[offset++] = this.scrollingTextures ? 1.0 : 0.0;
 
         for (let i = 0; i < this.parts.length; i++) {
             if (this.parts[i].visible) {
@@ -710,5 +714,47 @@ export class LuxRenderer implements SceneGfx {
         for (const t of this.textures) {
             device.destroyTexture(t.gfxTexture);
         }
+    }
+
+    public createPanels(): Panel[] {
+        const layersPanel = new LayerPanel();
+        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
+        layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
+
+        const setPanel = this.getSetPanel();
+
+        const renderOptions = new Panel();
+        renderOptions.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        renderOptions.setTitle(RENDER_HACKS_ICON, "Render Hacks");
+        const showPC = new Checkbox("Show player characters", false);
+        showPC.onchanged = () => {
+            for (const o of this.roomRenderer!.objects) {
+                if (this.isPlayerCharacterModel(o.name)) {
+                    o.visible = showPC.checked;
+                }
+            }
+            layersPanel.syncLayerVisibility();
+        };
+        renderOptions.contents.appendChild(showPC.elem);
+        const applyTextures = new Checkbox("Enable textures", true);
+        applyTextures.onchanged = () => {
+            this.roomRenderer!.applyTextures = applyTextures.checked;
+        };
+        renderOptions.contents.appendChild(applyTextures.elem);
+        const scrollTextures = new Checkbox("Enable texture scrolling", true);
+        scrollTextures.onchanged = () => {
+            this.roomRenderer!.scrollingTextures = scrollTextures.checked;
+        };
+        renderOptions.contents.appendChild(scrollTextures.elem);
+
+        return [setPanel, layersPanel, renderOptions];
+    }
+
+    protected isPlayerCharacterModel(name: string): boolean {
+        return false;
+    }
+
+    protected getSetPanel(): Panel {
+        return new Panel();
     }
 }

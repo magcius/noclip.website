@@ -60,12 +60,12 @@ interface ShapeFlags {
 }
 
 export interface BBSPMP extends LuxPMP {
-    tims: TIM2[];
+    tims: BBSTIM2[];
 }
 
 export interface BBSModel extends LuxModel {
     textureNames: string[];
-    tims: TIM2[];
+    tims: BBSTIM2[];
 }
 
 interface TIM2Info {
@@ -75,17 +75,17 @@ interface TIM2Info {
     scrollY: number;
 }
 
-export interface TIM2 {
+export interface BBSTIM2 {
     name: string;
     scrollX: number;
     scrollY: number;
     data: ArrayBufferSlice;
 }
 
-export interface ParsedTIM2 {
+export interface BBSTIM2Parsed {
     dataOffset: number;
-    pixelFormat: BBSPixelFormat;
-    clutFormat: BBSPixelFormat;
+    pixelFormat: BBSTIM2Format;
+    clutFormat: BBSTIM2Format;
     totalSize: number;
     clutSize: number;
     imageSize: number;
@@ -99,7 +99,7 @@ export interface ParsedTIM2 {
     height: number;
 }
 
-export enum BBSPixelFormat {
+export enum BBSTIM2Format {
     UNKNOWN,
     INDEXED_4,
     INDEXED_8,
@@ -222,7 +222,7 @@ export class BBSParser extends DreamDropParser {
         }
     }
 
-    public parseTXAFromARC(tims: TIM2[]): LuxTXA[] | undefined {
+    public parseTXAFromARC(tims: BBSTIM2[]): LuxTXA[] | undefined {
         const entries = this.parseARC();
         const txaEntry = entries.find(e => e.name.toLowerCase().includes(".txa") && e.dirPointer === 0);
         if (!txaEntry) {
@@ -235,7 +235,7 @@ export class BBSParser extends DreamDropParser {
         }
     }
 
-    public parseTIM2(): ParsedTIM2 {
+    public parseTIM2(): BBSTIM2Parsed {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_TIM2) {
@@ -265,7 +265,7 @@ export class BBSParser extends DreamDropParser {
 
         return {
             totalSize, clutSize, imageSize, headerSize, clutColorCount, pictureFormat, mipCount, clutType, imageType, width, height,
-            dataOffset: this.offset, pixelFormat: this.convertPixelFormat(imageType), clutFormat: this.convertPixelFormat(clutType & 7)
+            dataOffset: this.offset, pixelFormat: this.translateTIM2Format(imageType), clutFormat: this.translateTIM2Format(clutType & 7)
         };
     }
 
@@ -325,7 +325,7 @@ export class BBSParser extends DreamDropParser {
             timInfos[i] = { name, offset: dataOffset, scrollX, scrollY };
         }
 
-        const tims: TIM2[] = Array(textureCount);
+        const tims: BBSTIM2[] = Array(textureCount);
         for (let i = 0; i < textureCount; i++) {
             if (timInfos[i].offset === 0) {
                 continue;
@@ -378,7 +378,7 @@ export class BBSParser extends DreamDropParser {
             shapes.push(...this.getShapes(skeletonOffset !== 0));
         }
 
-        const tims: TIM2[] = [];
+        const tims: BBSTIM2[] = [];
         if (readTextures) {
             for (let i = 0; i < textureCount; i++) {
                 if (textureOffsets[i] === 0) {
@@ -436,7 +436,7 @@ export class BBSParser extends DreamDropParser {
         return { name, scale, flags, pmpFlags, bbox, shapes, skeleton, textureNames, tims };
     }
 
-    private getTXA(tims: TIM2[], startOffset: number) {
+    private getTXA(tims: BBSTIM2[], startOffset: number) {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_TXA) {
@@ -482,16 +482,16 @@ export class BBSParser extends DreamDropParser {
                     const { format, width, height } = decodeBBSTIM2(tim.data);
                     let bytesPerPixel;
                     switch (format) {
-                        case BBSPixelFormat.INDEXED_4:
-                        case BBSPixelFormat.INDEXED_8:
+                        case BBSTIM2Format.INDEXED_4:
+                        case BBSTIM2Format.INDEXED_8:
                             bytesPerPixel = 1;
                             break;
-                        case BBSPixelFormat.RGBA_1555:
+                        case BBSTIM2Format.RGBA_1555:
                             bytesPerPixel = 2;
                             break;
-                        case BBSPixelFormat.RGB_888:
-                        case BBSPixelFormat.RGBA_8888:
-                        case BBSPixelFormat.RGBX_8888:
+                        case BBSTIM2Format.RGB_888:
+                        case BBSTIM2Format.RGBA_8888:
+                        case BBSTIM2Format.RGBX_8888:
                             bytesPerPixel = 4;
                             break;
                         default:
@@ -666,6 +666,7 @@ export class BBSParser extends DreamDropParser {
                     }
                 }
                 if (hasSkeleton) {
+                    // temp hardcode to white
                     shape.colors[i * 4] = 1.0;
                     shape.colors[(i * 4) + 1] = 1.0;
                     shape.colors[(i * 4) + 2] = 1.0;
@@ -715,21 +716,21 @@ export class BBSParser extends DreamDropParser {
         return shapes;
     }
 
-    private convertPixelFormat(value: number): BBSPixelFormat {
+    private translateTIM2Format(value: number): BBSTIM2Format {
         switch (value) {
             case 1:
-                return BBSPixelFormat.RGBA_1555;
+                return BBSTIM2Format.RGBA_1555;
             case 2:
-                return BBSPixelFormat.RGB_888;
+                return BBSTIM2Format.RGB_888;
             case 3:
-                return BBSPixelFormat.RGBA_8888;
+                return BBSTIM2Format.RGBA_8888;
             case 4:
-                return BBSPixelFormat.INDEXED_4;
+                return BBSTIM2Format.INDEXED_4;
             case 5:
-                return BBSPixelFormat.INDEXED_8;
+                return BBSTIM2Format.INDEXED_8;
             case 0:
             default:
-                return BBSPixelFormat.UNKNOWN;
+                return BBSTIM2Format.UNKNOWN;
         }
     }
 }

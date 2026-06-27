@@ -2,7 +2,7 @@ import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 import { LuxBone, LuxBoneChannel, LuxDataSet, LuxKeyframe, LuxMaterial, LuxModel, LuxModelInfo, LuxOLO, LuxOLOInstance, LuxPAM, LuxPMP, LuxShape, LuxSkeletalAnimation, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
-import { CTRTFormat } from "./texture";
+import { DreamDropCTRTFormat } from "./texture";
 
 // Credit for most of the parsing:
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
@@ -43,7 +43,7 @@ export interface DreamDropCTRT {
     name: string;
     width: number;
     height: number;
-    format: CTRTFormat;
+    format: DreamDropCTRTFormat;
     data: ArrayBufferSlice;
 }
 
@@ -244,7 +244,7 @@ export class DreamDropParser {
                 this.offset += 4;
                 const dataSize = this.getUint32();
                 this.offset += 4;
-                const format = this.getUint32() as CTRTFormat;
+                const format = this.getUint32() as DreamDropCTRTFormat;
                 const width = this.getUshort();
                 const height = this.getUshort();
                 const data = this.buffer.slice(offset + dataOffset, offset + dataOffset + dataSize);

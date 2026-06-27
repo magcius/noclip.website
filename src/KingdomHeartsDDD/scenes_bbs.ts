@@ -2,10 +2,10 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder } from "../TextureHolder";
-import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
+import { COOL_BLUE_COLOR, EYE_ICON, MultiSelect, Panel } from "../ui";
 import { SceneGfx } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
-import { BBSModel, BBSParser, BBSPixelFormat, BBSPMP } from "./bin_bbs";
+import { BBSModel, BBSParser, BBSTIM2Format, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_PMO_ARC_OVERRIDE, BBS_VALID_PRESET_ARC } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
@@ -212,7 +212,7 @@ class Renderer extends LuxRenderer {
 
         const viewerTextures: ViewerTexture[] = Array(this.textures.length);
         for (let i = 0; i < this.textures.length; i++) {
-            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture, extraInfo: new Map([["Format", `${BBSPixelFormat[(this.textures[i] as BBSTIM2Texture).format]}`]]) };
+            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture, extraInfo: new Map([["Format", `${BBSTIM2Format[(this.textures[i] as BBSTIM2Texture).format]}`]]) };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
@@ -220,11 +220,7 @@ class Renderer extends LuxRenderer {
         this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, []);
     }
 
-    public createPanels(): Panel[] {
-        const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
-        layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
-
+    protected override getSetPanel(): Panel {
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         setPanel.setTitle(EYE_ICON, "Object Sets");
@@ -240,8 +236,11 @@ class Renderer extends LuxRenderer {
             setPanel.setVisible(false);
         }
         setPanel.contents.appendChild(select.elem);
+        return setPanel;
+    }
 
-        return [setPanel, layersPanel];
+    protected override isPlayerCharacterModel(name: string) {
+        return name.toLowerCase().startsWith("p") && name.substring(3, 5).toLowerCase() === "ex";
     }
 }
 
@@ -302,7 +301,7 @@ Add TXAs
     require a lot of tweaking to how textures are loaded and re-parsed, since the pixels need to be overridden from the base
     texture. Might be best to re-write the entire TIM2 code with TXAs in mind, instead of trying to jerry-rig the existing stuff.
     Honestly, this is a lot of effort with little pay off, since TXAs are less common in BBS than in DDD (other than eye blinking/mouth moving while talking).
-    The basic parsing is already present in bin_bbs.ts, just not used right now.
+    The parsing is already present in bin_bbs.ts, just not used right now.
 Particle effects (if used widely outside of weapons/attacks)
 Save points and other interactables that aren't proper objects but still visible in game
 

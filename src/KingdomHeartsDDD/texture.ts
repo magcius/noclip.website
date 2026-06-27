@@ -2,10 +2,10 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { decodeTexture, TextureFormat } from "../Common/CTR/pica_texture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DreamDropCTRT } from "./bin";
-import { BBSParser, BBSPixelFormat } from "./bin_bbs";
+import { BBSParser, BBSTIM2Format } from "./bin_bbs";
 import { LuxTexture } from "./lux";
 
-export enum CTRTFormat {
+export enum DreamDropCTRTFormat {
     RGBA_8888,
     RGB_888,
     RGBA_5551,
@@ -23,7 +23,7 @@ export enum CTRTFormat {
 }
 
 export class DreamDropCTRTexture extends LuxTexture {
-    constructor(device: GfxDevice, name: string, width: number, height: number, data: Uint8Array, public format: CTRTFormat) {
+    constructor(device: GfxDevice, name: string, width: number, height: number, data: Uint8Array, public format: DreamDropCTRTFormat) {
         super(device, name, width, height, data);
     }
 }
@@ -33,25 +33,25 @@ export class DreamDropCTRTexture extends LuxTexture {
  */
 export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     switch (ctrt.format) {
-        case CTRTFormat.RGBA_8888:
+        case DreamDropCTRTFormat.RGBA_8888:
             return decodeTexture(TextureFormat.RGBA8, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.RGB_888:
+        case DreamDropCTRTFormat.RGB_888:
             return decodeTexture(TextureFormat.RGB8, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.RGBA_5551:
+        case DreamDropCTRTFormat.RGBA_5551:
             return decodeTexture(TextureFormat.RGBA5551, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.RGB_565:
+        case DreamDropCTRTFormat.RGB_565:
             return decodeTexture(TextureFormat.RGB565, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.RGBA_4444:
+        case DreamDropCTRTFormat.RGBA_4444:
             return decodeTexture(TextureFormat.RGBA4444, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.LA8:
+        case DreamDropCTRTFormat.LA8:
             return decodeTexture(TextureFormat.LA8, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.L8:
+        case DreamDropCTRTFormat.L8:
             return decodeTexture(TextureFormat.L8, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.A8:
+        case DreamDropCTRTFormat.A8:
             return decodeTexture(TextureFormat.A8, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.ETC1:
+        case DreamDropCTRTFormat.ETC1:
             return decodeTexture(TextureFormat.ETC1, ctrt.width, ctrt.height, ctrt.data);
-        case CTRTFormat.ETC1A4:
+        case DreamDropCTRTFormat.ETC1A4:
             return decodeTexture(TextureFormat.ETC1A4, ctrt.width, ctrt.height, ctrt.data);
         default:
             console.warn("Unimplemented texture format", ctrt.format);
@@ -120,11 +120,11 @@ function toByteArray(src: number[]): Uint8Array {
     return dst;
 }
 
-function sortClut(clut: Uint8Array, format: BBSPixelFormat): Uint8Array {
+function sortClut(clut: Uint8Array, format: BBSTIM2Format): Uint8Array {
     let index = 0;
     const dst = toNumberArray(clut);
     switch (format) {
-        case BBSPixelFormat.RGBA_1555:
+        case BBSTIM2Format.RGBA_1555:
             for (let i = 0; i < 8; i++) {
                 for (let j = 0; j < 4; j++) {
                     const tmp = dst[index + 4 + j];
@@ -134,7 +134,7 @@ function sortClut(clut: Uint8Array, format: BBSPixelFormat): Uint8Array {
                 index += 16;
             }
             break;
-        case BBSPixelFormat.RGBA_8888:
+        case BBSTIM2Format.RGBA_8888:
             for (let i = 0; i < 8; i++) {
                 for (let j = 0; j < 8; j++) {
                     const tmp = dst[index + 8 + j];
@@ -148,16 +148,16 @@ function sortClut(clut: Uint8Array, format: BBSPixelFormat): Uint8Array {
     return toByteArray(dst);
 }
 
-function invertRedBlue(data: Uint8Array, format: BBSPixelFormat, length: number) {
+function invertRedBlue(data: Uint8Array, format: BBSTIM2Format, length: number) {
     switch (format) {
-        case BBSPixelFormat.RGB_888:
+        case BBSTIM2Format.RGB_888:
             for (var i = 0; i < length; i++) {
                 let tmp = data[i * 3 + 0];
                 data[i * 3 + 0] = data[i * 3 + 2];
                 data[i * 3 + 2] = tmp;
             }
             break;
-        case BBSPixelFormat.RGBA_8888:
+        case BBSTIM2Format.RGBA_8888:
             for (let i = 0; i < length; i++) {
                 let tmp = data[i * 4 + 0];
                 data[i * 4 + 0] = data[i * 4 + 2];
@@ -168,12 +168,12 @@ function invertRedBlue(data: Uint8Array, format: BBSPixelFormat, length: number)
 }
 
 export class BBSTIM2Texture extends LuxTexture {
-    constructor(device: GfxDevice, name: string, width: number, height: number, data: Uint8Array, public format: BBSPixelFormat) {
+    constructor(device: GfxDevice, name: string, width: number, height: number, data: Uint8Array, public format: BBSTIM2Format) {
         super(device, name, width, height, data);
     }
 }
 
-export function decodeBBSTIM2(data: ArrayBufferSlice): { rgba: Uint8Array, width: number, height: number, format: BBSPixelFormat } {
+export function decodeBBSTIM2(data: ArrayBufferSlice): { rgba: Uint8Array, width: number, height: number, format: BBSTIM2Format } {
     const tim2 = new BBSParser(data).parseTIM2();
     const imageOffset = tim2.dataOffset;
     const clutOffset = imageOffset + tim2.imageSize;
@@ -189,13 +189,13 @@ export function decodeBBSTIM2(data: ArrayBufferSlice): { rgba: Uint8Array, width
     }
     let rgba: Uint8Array;
     switch (tim2.pixelFormat) {
-        case BBSPixelFormat.INDEXED_4:
+        case BBSTIM2Format.INDEXED_4:
             rgba = fromIndexed4(image, clut);
             break;
-        case BBSPixelFormat.INDEXED_8:
+        case BBSTIM2Format.INDEXED_8:
             rgba = fromIndexed8(image, clut);
             break;
-        case BBSPixelFormat.RGB_888:
+        case BBSTIM2Format.RGB_888:
             rgba = fromRGB888(image);
             break;
         default:

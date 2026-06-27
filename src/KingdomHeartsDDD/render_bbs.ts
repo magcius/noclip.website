@@ -37,6 +37,10 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
                 }
             }
             const renderer = new ModelRenderer(cache, instance.name, model, materials, [], animation);
+            if (instance.name.toLowerCase().startsWith("p") && instance.name.substring(3, 5).toLowerCase() === "ex") {
+                // hide player spawn locations by default to sync with ui panel
+                renderer.visible = false;
+            }
             renderer.instances = [modelInstance];
             this.objects.push(renderer);
         }

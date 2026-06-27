@@ -3,11 +3,11 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { FakeTextureHolder } from "../TextureHolder";
 import { SceneGfx } from "../viewer";
 import { DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
-import { DreamDropCTRTexture, CTRTFormat, decodeDreamDropCTRT } from "./texture";
+import { DreamDropCTRTexture, DreamDropCTRTFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
-import { COOL_BLUE_COLOR, EYE_ICON, LAYER_ICON, LayerPanel, MultiSelect, Panel } from "../ui";
+import { COOL_BLUE_COLOR, EYE_ICON, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_DROP_OLO, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_OLO, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation, LuxTXA } from "./lux";
 
@@ -91,7 +91,7 @@ class Renderer extends LuxRenderer {
         for (let i = 0; i < this.textures.length; i++) {
             viewerTextures[i] = {
                 gfxTexture: this.textures[i].gfxTexture,
-                extraInfo: new Map([["Format", `${CTRTFormat[(this.textures[i] as DreamDropCTRTexture).format]}`]])
+                extraInfo: new Map([["Format", `${DreamDropCTRTFormat[(this.textures[i] as DreamDropCTRTexture).format]}`]])
             };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
@@ -100,11 +100,7 @@ class Renderer extends LuxRenderer {
         this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, txas, this.config);
     }
 
-    public createPanels(): Panel[] {
-        const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
-        layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
-
+    protected override getSetPanel() {
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         setPanel.setTitle(EYE_ICON, "Object Sets");
@@ -126,8 +122,11 @@ class Renderer extends LuxRenderer {
             setPanel.setVisible(false);
         }
         setPanel.contents.appendChild(select.elem);
+        return setPanel;
+    }
 
-        return [setPanel, layersPanel];
+    protected override isPlayerCharacterModel(name: string) {
+        return name.toLowerCase().startsWith("p_");
     }
 }
 
@@ -179,7 +178,7 @@ class Room implements SceneDesc {
             }
         }
 
-        if (DREAMDROP_VALID_DROP_OLO.indexOf(this.id) !== -1) {
+        if (DREAMDROP_VALID_DROP_OLO.includes(this.id)) {
             for (const [setName, oloName] of new Map<string, string>([["Dive Objects", this.id], ["Dive Ring Prizes", "d_ring_prize"]])) {
                 const oloFile = await context.dataFetcher.fetchData(`${pathBase}/minigame/${oloName}.olo`);
                 const olo = new DreamDropParser(oloFile).parseOLO();
@@ -224,43 +223,44 @@ TODO
 
 Proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
     I've tried different render inst lists, depth and material based sort keys. These all introduce more problems than they fix
-TXAs need cleanup and the functionality to animate opacity between frames like in the game
+TXAs need lots of cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
-    Will probably need an altered shader that takes two texture inputs, idk how else to do it
+    Will probably need an alternative shader that takes two texture inputs, idk how else to do it
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
 Figure out the shape attribute flag for back culling (it's different than BBS, which even that might not be right)
 Figure out the proper interpretation of LuxModelFlagRenderMode, it's probably not meant to be nibbles but works nonetheless
+    Most likely this should be derived from the vertex flags?
 Figure out how world map objects are loaded
     The models exist in chara/gim/g_wm*
     There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)
-Invesigate PMO model issue from BBS. Very rare here in DDD, but see Mickey in Musketeers for an example
-    It seems like a problem with the UVs. Parts of the same model can have wrong UVs, while others are correct
-    Several dream eater models also have the problem
+Invesigate PMO model issue from BBS. Very rare in DDD, but see the mickey model in musketeers for an example
 Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect?) skybox geometry
 Investigate other file types such as GPL, SEB, EAD, ABC, and PVD
     MCV is camera/cutscene related and BCD is collision data. Neither of those are needed for noclip
     Likewise, the particle effect files like FEP and ESE would be neat, but probably not worth the effort
     See note in bin.ts for list of known or already used types
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
-Figure out how shapes' "diffuse color" should be used (completely different than BBS)
+Figure out how shapes' supposed "diffuse color" should be used (completely different than BBS)
 Investigate PAM animations with flag of 16720 and framerates of 77 with no channel data or bone count, usually name of "" or "PAM"
     These are valid animations, just a different format than regular skeletal animations. These are typically
     ones that are very simple, like something swaying back and forth. Lots of the g objs in Traverse Town, for
     example, use these. See the balloons in the fourth district or the top hat in the second district.
     Animations with flags of either 0 or 256 are (almost) always valid skeletal animations, with a framerate of 30.
-    Need to actually look at the raw data again, these could be normal animations just with a slightly different format
-    that's throwing off the parsing
-Shadows in the second district are the wrong color, they appear as black in game (they're correct everywhere else though?)
+    They have plently of data in the same place as regular animations, it's just not being parsed correctly...
+Shadows in the second district are the wrong color, they appear as black in game (they're just fine everywhere else though???)
 Fix bad z-fighting on the ground path in the Traverse Town garden
-Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron and pinocchio
+Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron, pinocchio and twtnw
 Dream eater model fixes
     Spellican's broomstick is stretched
-    Skeleton t-rex is missing its head
+    Skeleton t-rex is missing its head (could be a separate model for some reason?)
     Both rhino variants have the spike ball visibles
     Hunchback boss has its chains missing when animated
 Find a better workaround for when models have all-zero weights (which makes them invisibile when applying an animation)
     This is solved on the parsing level for BBS since there's a weight format. DDD could have something similar?
 Use animationcontroller instead of custom implementation based on origami king
+Still some weird bbox issue in third district even after the fixes
+    Every other instance of visible culling was fixed, don't know what's going on here
+Clean up unused data leftover from parsing (numbers, flags, etc not used for rendering or anything else)
 
 Nice to have
 
