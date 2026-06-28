@@ -13,6 +13,7 @@ import { TieClass, TieVertexWithNormalAndRgba } from "./bin-core";
 import { TieInstance } from "./bin-gameplay";
 import { RatchetShaderLib } from "./shader-lib";
 import { GN, ImaginaryGsCommandType, MegaBuffer } from "./utils";
+import { packRemap, TextureAtlases } from "./textures";
 
 export class TieProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -112,9 +113,9 @@ flat in int v_Clamp;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    ivec2 texRemap = getTexRemap(u_TextureRemaps.ties, v_TextureIndex);
+    ivec2 texRemap = getTexRemap(v_TextureIndex);
     vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
-    gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor);
+    gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor, 0.01);
 }
 `;
 
@@ -126,7 +127,7 @@ export class TieGeometry {
     private vertexBuffer: GfxBuffer;
     private vertexCount: number;
 
-    constructor(private cache: GfxRenderCache, private tieOClass: number, private tie: TieClass, private lodLevel: number, private textureIndices: number[]) {
+    constructor(private cache: GfxRenderCache, private tieOClass: number, private tie: TieClass, private lodLevel: number, private textureIndices: number[], private textureAtlases: TextureAtlases) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 // per vertex
@@ -250,7 +251,7 @@ export class TieGeometry {
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.x;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.y;
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.z;
-                                vertexArrayBuffer[vertexPtr++] = textureIndices[currentMaterial.texture];
+                                vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.tieTextureRemap[textureIndices[currentMaterial.texture]]);
                                 vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
                                 vertexArrayBuffer[vertexPtr++] = rgbaIndex;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.s;

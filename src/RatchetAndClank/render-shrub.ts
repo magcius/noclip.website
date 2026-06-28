@@ -14,6 +14,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ShrubInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
+import { packRemap, TextureAtlases } from "./textures";
 
 export class ShrubProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -106,9 +107,9 @@ ${RatchetShaderLib.Sampler}
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    ivec2 texRemap = getTexRemap(u_TextureRemaps.shrubs, v_TextureIndex);
+    ivec2 texRemap = getTexRemap(v_TextureIndex);
     vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
-    gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor);
+    gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor, 0.01);
 }
 
 `;
@@ -121,7 +122,7 @@ export class ShrubGeometry {
     private vertexBuffer: GfxBuffer;
     private vertexCount: number;
 
-    constructor(private cache: GfxRenderCache, public shrub: ShrubClass, private textureIndices: number[]) {
+    constructor(private cache: GfxRenderCache, public shrub: ShrubClass, private textureIndices: number[], private textureAtlases: TextureAtlases) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 // per vertex
@@ -258,7 +259,7 @@ export class ShrubGeometry {
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.x;
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.y;
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.z;
-                                vertexArrayBuffer[vertexPtr++] = textureIndices[currentMaterial.texture];
+                                vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.shrubTextureRemap[textureIndices[currentMaterial.texture]]);
                                 vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * vertex.s;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * vertex.t;

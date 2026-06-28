@@ -23,7 +23,6 @@ import { CollisionGeometry, CollisionRenderer } from "./render-collision";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GfxDynamicBufferCache } from "../gfx/render/GfxRenderCache";
 import { MobyGeometry, MobyRenderer } from "./render-moby";
-import { bitsAsFloat32 } from "../MathHelpers";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
@@ -180,16 +179,20 @@ class RatchetAndClankScene implements SceneGfx {
         const existing = this.geometries.tfrag;
         if (existing) return existing;
 
+        if (!this.textures.textureAtlases) return null;
+
         const { tfrags, tfragTextures } = this.levelResources;
         if (!tfrags || !tfragTextures) return null;
 
-        this.geometries.tfrag = new TfragGeometry(this.renderHelper.renderCache, tfrags, tfragTextures);
+        this.geometries.tfrag = new TfragGeometry(this.renderHelper.renderCache, tfrags, tfragTextures, this.textures.textureAtlases);
         return this.geometries.tfrag;
     }
 
     getOrCreateTieGeometry(oClass: number): (TieGeometry | null)[] | null {
         const existing = this.geometries.ties.get(oClass);
         if (existing) return existing;
+
+        if (!this.textures.textureAtlases) return null;
 
         const tieClass = this.levelResources.tieClasses?.get(oClass);
         if (!tieClass) return null;
@@ -199,7 +202,7 @@ class RatchetAndClankScene implements SceneGfx {
         const tieGeometry: (TieGeometry | null)[] = [null, null, null];
         for (let i = 0; i < 3; i++) {
             if (tieClass.packets[i].length === 0) continue; // no mesh for this lod
-            tieGeometry[i] = new TieGeometry(this.renderHelper.renderCache, oClass, tieClass, i, tieTextureIndices);
+            tieGeometry[i] = new TieGeometry(this.renderHelper.renderCache, oClass, tieClass, i, tieTextureIndices, this.textures.textureAtlases);
         }
         this.geometries.ties.set(oClass, tieGeometry);
         return tieGeometry;
@@ -208,6 +211,8 @@ class RatchetAndClankScene implements SceneGfx {
     getOrCreateMobyGeometry(oClass: number): (MobyGeometry | null)[] | null {
         const existing = this.geometries.mobys.get(oClass);
         if (existing) return existing;
+
+        if (!this.textures.textureAtlases) return null;
 
         const mobyClass = this.levelResources.mobyClasses?.get(oClass);
         if (!mobyClass) return null;
@@ -218,7 +223,7 @@ class RatchetAndClankScene implements SceneGfx {
         const mobyGeometry: (MobyGeometry | null)[] = [null, null];
         for (let i = 0; i < 2; i++) {
             if (!mobyClass.mesh.packetsByLod[i].length) continue;
-            mobyGeometry[i] = new MobyGeometry(this.renderHelper.renderCache, oClass, mobyClass, i, mobyTextureIndices);
+            mobyGeometry[i] = new MobyGeometry(this.renderHelper.renderCache, oClass, mobyClass, i, mobyTextureIndices, this.textures.textureAtlases);
         }
 
         this.geometries.mobys.set(oClass, mobyGeometry);
@@ -229,12 +234,14 @@ class RatchetAndClankScene implements SceneGfx {
         const existing = this.geometries.shrubs.get(oClass);
         if (existing) return existing;
 
+        if (!this.textures.textureAtlases) return null;
+
         const shrubClass = this.levelResources.shrubClasses?.get(oClass);
         if (!shrubClass) return null;
         const shrubTextureIndices = this.levelResources.shrubClassTextureIndices?.get(oClass);
         if (!shrubTextureIndices) return null;
 
-        const shrubGeometry = new ShrubGeometry(this.renderHelper.renderCache, shrubClass, shrubTextureIndices);
+        const shrubGeometry = new ShrubGeometry(this.renderHelper.renderCache, shrubClass, shrubTextureIndices, this.textures.textureAtlases);
         this.geometries.shrubs.set(oClass, shrubGeometry);
         return shrubGeometry;
     }
@@ -394,24 +401,6 @@ class RatchetAndClankScene implements SceneGfx {
                 offs += fillVec4(data, offs, 0, 0, 0, 0);
             }
         }
-
-        // texture remaps (4 * 32 * 4 floats) (two entries packed into each float)
-        const { textureAtlases } = this.textures;
-        const remapArrays = textureAtlases ? [textureAtlases.tfragTextureRemap, textureAtlases.tieTextureRemap, textureAtlases.mobyTextureRemap, textureAtlases.shrubTextureRemap] : [[], [], [], []];
-
-        const packRemap = (remap: typeof remapArrays[0][0]) => {
-            const bucket = remap ? Math.log2(remap.sizeBucket) - 4 : 0;
-            const slice = remap ? remap.index : 0;
-            return (slice << 3) | (bucket & 0x07);
-        };
-
-        for (const remapArray of remapArrays) {
-            for (let i = 0; i < 256; i += 2) {
-                const packed0 = packRemap(remapArray[i + 0]);
-                const packed1 = packRemap(remapArray[i + 1]);
-                data[offs++] = bitsAsFloat32(packed1 << 16 | packed0);
-            }
-        }
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -427,7 +416,7 @@ class RatchetAndClankScene implements SceneGfx {
         // setup
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({
-            cullMode: GfxCullMode.None, // ps2 don't do backface culling
+            cullMode: GfxCullMode.None, // the game has backface culling only on objects within a specific per-object distance from the camera
             attachmentsState: [{
                 channelWriteMask: GfxChannelWriteMask.AllChannels,
                 rgbBlendState: {
