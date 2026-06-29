@@ -4,6 +4,7 @@
 import { Viewer, SceneGfx, InitErrorCode, makeErrorUI, resizeCanvas, ViewerUpdateInfo, initializeViewerWebGL2, initializeViewerWebGPU } from './viewer.js';
 
 import * as Scenes_Example from './Example/Scenes.js';
+import * as Scenes_Incoming from './Incoming/Scenes.js';
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes.js';
 import * as Scenes_ZeldaTwilightPrincess from './ZeldaTwilightPrincess/Main.js';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes.js';
@@ -268,6 +269,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
+    Scenes_Incoming.sceneGroup,
     Scenes_TopGearRally.sceneGroup,
 ];
 
