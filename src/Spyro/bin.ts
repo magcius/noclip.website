@@ -676,7 +676,7 @@ export function parseSpyroLevelData(data: ArrayBufferSlice): SpyroLevelData {
     return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
 }
 
-export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number = 2): SpyroLevelData {
+export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number, isFlyover: boolean = false): SpyroLevelData {
     let pointer = 0;
     function getUint32() {
         pointer += 4;
@@ -711,35 +711,44 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number 
     offset = getUint32();
     pointer += offset - 4;
     const skyStart = pointer;
-    const pattern = new Uint8Array(data.arrayBuffer, pointer, 12);
-    pointer += 12;
+    if (!isFlyover) {
+        const p = new Uint8Array(data.arrayBuffer, pointer, 12);
+        pointer += 12;
 
-    function isValidPattern(p: Uint8Array) {
-        return (((p[0] & 15) === 0) && ((p[1] >> 4) === 0) && (p[2] === 0) &&
-            (p[3] === 0) && ((p[4] & 15) === 0) && ((p[5] >> 4) === 0) &&
-            (p[6] === 0) && (p[7] === 0) && ((p[8] & 15) === 0) &&
-            ((p[9] >> 4) === 0) && (p[10] === 0) && (p[11] === 0));
-    }
+        const isValidPattern =
+            ((p[0] & 15) === 0) &&
+            ((p[1] >> 4) === 0) &&
+            (p[2] === 0) &&
+            (p[3] === 0) &&
+            ((p[4] & 15) === 0) &&
+            ((p[5] >> 4) === 0) &&
+            (p[6] === 0) &&
+            (p[7] === 0) &&
+            ((p[8] & 15) === 0) &&
+            ((p[9] >> 4) === 0) &&
+            (p[10] === 0) &&
+            (p[11] === 0);
 
-    if (!isValidPattern(pattern)) {
-        pointer = skyStart;
-        offset = getUint32();
-        pointer += offset - 4;
-        offset = getUint32();
-        if (offset === 0) {
-            pointer = skyStart + 4;
-        } else {
+        if (!isValidPattern) {
+            pointer = skyStart;
+            offset = getUint32();
             pointer += offset - 4;
             offset = getUint32();
             if (offset === 0) {
                 pointer = skyStart + 4;
             } else {
-                pointer += 8;
+                pointer += offset - 4;
+                offset = getUint32();
+                if (offset === 0) {
+                    pointer = skyStart + 4;
+                } else {
+                    pointer += 8;
+                }
             }
         }
+        offset = getUint32();
+        pointer += offset - 4;
     }
-    offset = getUint32();
-    pointer += offset - 4;
     offset = getUint32();
     const sky = data.subarray(pointer, offset - 4);
 
