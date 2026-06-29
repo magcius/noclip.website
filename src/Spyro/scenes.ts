@@ -14,33 +14,36 @@ import { CameraController } from "../Camera.js";
 /*
 TODO
 
-    Re-write rendering setup, clean up bin.ts
-    Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
-        There's a problem with extracting their skyboxes so they're not included
-    Some moby instances aren't detected for regular levels when they should be
-    More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
+Re-write rendering setup and binary parsing
+Add back "starring" levels (credits flyover versions of regular levels) to S2/S3
+    There's a problem with extracting their skyboxes so they're not included
+Some moby instances aren't detected for regular levels when they should be
+More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
+Debug rare corruption of COR textures. See tile 65 in S3 Super Bonus Round for an example (happens in SWV too)
+    It's possible that these tiles just don't have higher res versions? The headers seem valid, though...
+Fix or redo water detection. There's some false positives, see the ice in S3 Icy Peak for an example
 
-    Spyro 1
-        Figure out edges of "water" in Gnasty's Loot, Icy Flight or Twilight Harbor
-        
-    Spyro 2
-        Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
-            These levels also don't have LOD versions for some reason (may be related)
+Spyro 1
+    Figure out edges of "water" in Gnasty's Loot, Icy Flight or Twilight Harbor
+    
+Spyro 2
+    Mystic Marsh and Shady Oasis have annoying z-scaling that requires special handling in buildLevel
+        These levels also don't have LOD versions for some reason (may be related)
 
-    Spyro 3
-        Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent
-        Sublevels should extract their own skybox, not default to the parent level
+Spyro 3
+    Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent
 
 Nice to have
 
-    Mobys (gems, NPCs, enemies, etc.)
-        Only their per-level instances are implemented (position and type)
-    Remove hardcoded tile scrolling and read dynamically from level data (tile indices and speed)
-    Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
-    Back-face culling toggle. Winding order is not consistent in the game, so this would require a lot of work
-        There might be a cull mode per ground part, need to check (why though?). But it's definitely not always one mode
-    Figure out a way to correctly render LOD and MDL polys at the same time without overlap
-        This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
+Mobys (gems, NPCs, enemies, etc.)
+    Only their per-level instances are implemented (position and type)
+Remove hardcoded tile scrolling and read from level data (tile indices and speed)
+Look into removing the hardcoded water animation and read from level data (if it's even there, it might not be)
+Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
+Back-face culling. Winding order is not consistent so this may not be feasilble
+Figure out a way to correctly render LOD and MDL polys at the same time without overlap
+    This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
+Have an option to visualize the collision data, since that's (supposedly) separate from the visible geometry
 */
 
 class Renderer implements SceneGfx {
@@ -140,17 +143,17 @@ class SpyroScene implements SceneDesc {
     public id: string;
     private gameNumber: number;
 
-    constructor(public subFileID: number, public name: string) {
-        this.id = subFileID.toString();
+    constructor(public subfileID: number, public name: string) {
+        this.id = subfileID.toString();
         this.gameNumber = 1;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subfileID}.bin`);
         const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData(levelFile);
         const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
         const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
+        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subfileID);
         const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
         return new Renderer(device, level, skybox, mobys);
     }
@@ -161,18 +164,18 @@ class SpyroScene2 implements SceneDesc {
     public id: string;
     private gameNumber: number;
 
-    constructor(public subFileID: number, public name: string) {
-        this.id = subFileID.toString();
+    constructor(public subfileID: number, public name: string) {
+        this.id = subfileID.toString();
         this.gameNumber = 2;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subfileID}.bin`);
         const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData2(levelFile);
         vram.applyFontStripFix();
         const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
         const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
+        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subfileID);
         const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
         return new Renderer(device, level, skybox, mobys);
     }
@@ -183,24 +186,28 @@ class SpyroScene3 implements SceneDesc {
     public id: string;
     private gameNumber: number;
 
-    constructor(public subFileID: number, public name: string, private subLevelID?: number) {
-        this.id = subFileID.toString();
-        if (this.subLevelID !== undefined) {
-            this.id = `${subFileID}_${subLevelID}`;
+    constructor(public subfileID: number, public name: string, private sublevelID?: number) {
+        this.id = subfileID.toString();
+        if (this.sublevelID !== undefined) {
+            this.id = `${subfileID}_${sublevelID}`;
         }
         this.gameNumber = 3;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}.bin`);
-        const { vram, textureList, ground: g, grounds, sky, subfile4 } = parseSpyroLevelData2(levelFile, this.gameNumber);
-        const mobys = (this.subLevelID === undefined && subfile4) ? parseMobyInstances(subfile4.createDataView()) : [];
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subfileID}.bin`);
+        const { vram, textureList, ground: g, grounds, sky: s, skys, subfile4 } = parseSpyroLevelData2(levelFile, this.gameNumber);
+        const mobys = (this.sublevelID === undefined && subfile4) ? parseMobyInstances(subfile4.createDataView()) : [];
         let ground = g;
-        if (this.subLevelID && grounds && grounds.length > 0) {
-            ground = grounds[this.subLevelID - 1];
+        if (this.sublevelID && grounds && grounds.length > 0) {
+            ground = grounds[this.sublevelID - 1];
+        }
+        let sky = s;
+        if (this.sublevelID && skys && skys.length > 0) {
+            sky = skys[this.sublevelID - 1];
         }
         const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
-        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subFileID);
+        const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subfileID);
         const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
         return new Renderer(device, level, skybox, mobys);
     }

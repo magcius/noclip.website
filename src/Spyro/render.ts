@@ -121,6 +121,7 @@ export class SpyroLevelRenderer {
     private tileCount: number;
     private gameNumber: number;
     private scrollFlags: number[];
+    private scrollSpeed: number;
 
     constructor(cache: GfxRenderCache, level: SpyroLevel, private mobyInstances: SpyroMobyInstance[]) {
         const device = cache.device;
@@ -150,6 +151,8 @@ export class SpyroLevelRenderer {
                 }
             }
         }
+        // speed is hardcoded for now to roughly match appearance in game
+        this.scrollSpeed = 0.001 * (this.gameNumber === 1 ? 2.6 : 2);
 
         this.gfxProgram = cache.createProgram(new Shader());
         this.gfxSampler = cache.createSampler({
@@ -203,9 +206,9 @@ export class SpyroLevelRenderer {
         mat4.mul(SCRATCH_CLIP, viewerInput.camera.clipFromWorldMatrix, NOCLIP_SPACE_CORRECTION);
         offs += fillMatrix4x4(d, offs, SCRATCH_CLIP);
         // u_Time (1)
-        d[offs++] = viewerInput.time * 0.001 * (this.gameNumber === 1 ? 2.6 : 2); // lazy way to hardcode speed for now
+        d[offs++] = viewerInput.time * this.scrollSpeed;
         // u_LOD (1)
-        d[offs++] = (this.useLOD) || !this.showTextures ? 1.0 : 0.0;
+        d[offs++] = this.useLOD || !this.showTextures ? 1.0 : 0.0;
 
         if (this.useLOD) {
             this.drawBatches(renderInstManager, this.batchesLOD, this.indexBufferDescriptors[2], false);

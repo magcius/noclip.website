@@ -56,6 +56,7 @@ export interface SpyroLevelData {
     ground: ArrayBufferSlice;
     grounds?: ArrayBufferSlice[];
     sky: ArrayBufferSlice;
+    skys?: ArrayBufferSlice[];
     subfile4?: ArrayBufferSlice;
 }
 
@@ -549,7 +550,6 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
 export function parseSpyroTextures(vram: VRAM, textureList: DataView, gameNumber: number): SpyroTextureStore {
     const headers = parseTextureHeaders(textureList, gameNumber);
     const colors: Uint8Array[][] = Array(headers.length);
-    const tiles: TileDefinition[] = Array(headers.length);
     for (let i = 0; i < headers.length; i++) {
         const corners: Uint8Array[] = Array(4);
         for (let j = 0; j < 4; j++) {
@@ -562,9 +562,6 @@ export function parseSpyroTextures(vram: VRAM, textureList: DataView, gameNumber
         colors[i].push(applyTileRotationRGBA(
             decodeTileToRGBA(vram, headers[i].mid), headers[i].mid, headers[i].mid.size, gameNumber)
         );
-        const tile = headers[i].cor[0];
-        tile.size = 64;
-        tiles[i] = tile;
     }
     return { colors, headers };
 }
@@ -686,13 +683,10 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number 
         return new Uint32Array(data.arrayBuffer, pointer - 4, 4)[0];
     }
 
-    const levelFileSize = data.byteLength;
-    const subSize = levelFileSize;
-
     // VRAM
     pointer += getUint32();
     let vramSize = VRAM_SIZE;
-    const remainingVram = subSize - (pointer);
+    const remainingVram = data.byteLength - (pointer);
     if (remainingVram < vramSize) {
         vramSize = remainingVram;
     }
@@ -721,13 +715,13 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number 
     pointer += 12;
 
     function isValidPattern(p: Uint8Array) {
-        return !(((p[0] & 15) === 0) && ((p[1] >> 4) === 0) && (p[2] === 0) &&
+        return (((p[0] & 15) === 0) && ((p[1] >> 4) === 0) && (p[2] === 0) &&
             (p[3] === 0) && ((p[4] & 15) === 0) && ((p[5] >> 4) === 0) &&
             (p[6] === 0) && (p[7] === 0) && ((p[8] & 15) === 0) &&
-            ((p[9] >> 4) === 0) && (p[10] === 0) && (p[11] === 0))
+            ((p[9] >> 4) === 0) && (p[10] === 0) && (p[11] === 0));
     }
 
-    if (isValidPattern(pattern)) {
+    if (!isValidPattern(pattern)) {
         pointer = skyStart;
         offset = getUint32();
         pointer += offset - 4;
@@ -748,6 +742,28 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number 
     pointer += offset - 4;
     offset = getUint32();
     const sky = data.subarray(pointer, offset - 4);
+
+    // Sublevels' sky
+    const skys: ArrayBufferSlice[] = [];
+    if (gameNumber === 3) {
+        pointer = 0x28;
+        const subfile6Offset = getUint32();
+        pointer += 12;
+        const subfile8Offset = getUint32();
+        pointer += 12;
+        const subfile10Offset = getUint32();
+
+        for (const p of [subfile6Offset, subfile8Offset, subfile10Offset]) {
+            if (p !== 0) {
+                pointer = p + 48;
+                const size = getUint32();
+                // section is "empty" if the size is 4 (it's just the size itself as the entire section)
+                if (size > 4) {
+                    skys.push(data.subarray(pointer, size - 4));
+                }
+            }
+        }
+    }
 
     // Ground
     pointer = subfile2Offset;
@@ -826,7 +842,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number 
         subfile4 = data.subarray(pointer, subfile4Size);
     }
 
-    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, grounds, sky, subfile4 };
+    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, grounds, sky, skys, subfile4 };
 }
 
 function turn(src: Uint8Array, size: number): Uint8Array {
