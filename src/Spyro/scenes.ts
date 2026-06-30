@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { parseSpyroTextures, buildSpyroLevel, buildSpyroSkybox, SpyroSkybox, SpyroLevel, parseMobyInstances, SpyroMobyInstance, parseSpyroLevelData, parseSpyroLevelData2 } from "./bin.js"
+import { parseSpyroTextures, buildSpyroLevel, buildSpyroSkybox, SpyroSkybox, SpyroLevel, parseSpyroMobyInstances, SpyroMobyInstance, parseSpyroLevelData, parseSpyroLevelData2 } from "./bin.js"
 import { SpyroLevelRenderer, SpyroSkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -18,8 +18,6 @@ Re-write rendering setup and binary parsing
     Parsing will be re-done (it's a mess right now) after I make a comprehensive doc of the subfile sections
 Some moby instances aren't detected for regular levels when they should be
 More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
-Debug rare corruption of COR textures. See tile 65 in S3 Super Bonus Round for an example (happens in SWV too)
-    It's possible that these tiles just don't have higher res versions? The headers seem valid, though...
 Fix or redo water detection. There's some false positives, see the ice in S3 Icy Peak for an example
 
 Spyro 1
@@ -27,6 +25,15 @@ Spyro 1
 
 Spyro 3
     Mushroom Speedway's mushrooms should have transparent parts but they aren't marked as transparent
+    Figure out how some sublevels' textures have their COR versions loaded into VRAM
+        Apparently COR textures that only appear in sublevels (as opposed to both itself and the parent level)
+        won't have their data loaded into VRAM until you actually go into the sublevel itself. The tile headers
+        are correctly parsed, so it's not an issue with parsing or other texture logic. For now, the workaround
+        is to just use only their lower-resolution versions. I can only assume that somewhere in either of the
+        sublevel's sub-subfiles, there's additional VRAM data. It's loaded in the lower left section of the right half
+        when viewing the VRAM in an emulator (enter/leave the manta ray sublevel in desert ruins for an obvious example with
+        the water surface texture). The level files aren't big enough to have multiple copies of the entire image VRAM,
+        so it's not a complete overwrite.
 
 Nice to have
 
@@ -35,6 +42,7 @@ Mobys (gems, NPCs, enemies, etc.)
 Remove hardcoded tile scrolling and read from level data (tile indices and speed)
 Look into removing the hardcoded water animation and read from level data (if it's even there, it might not be)
 Misc level effects, such as vertex color "shimmering" under water sections in S2/S3 and lava movement
+Optional weather effects, such as the snow falling in S3 Super Bonus Round
 Back-face culling. Winding order is not consistent so this may not be feasilble
 Figure out a way to correctly render LOD and MDL polys at the same time without overlap
     This is not easy since parts will contain both types of polys. Parts with only LOD polys don't connect to the rest of the geometry
@@ -146,7 +154,7 @@ class S1Level implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subfileID}.bin`);
         const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData(levelFile);
-        const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
+        const mobys = subfile4 ? parseSpyroMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
         const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subfileID);
         const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
@@ -166,9 +174,9 @@ class S2Level implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subfileID}.bin`);
-        const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData2(levelFile, 2, this.subfileID >= 188);
+        const { vram, textureList, ground, sky, subfile4 } = parseSpyroLevelData2(levelFile, this.gameNumber, this.subfileID >= 188);
         vram.applyFontStripFix();
-        const mobys = subfile4 ? parseMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
+        const mobys = subfile4 ? parseSpyroMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
         const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
         const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subfileID);
         const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
@@ -192,7 +200,7 @@ class S3Level implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const levelFile = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subfileID}.bin`);
         const { vram, textureList, ground: g, grounds, sky: s, skys, subfile4 } = parseSpyroLevelData2(levelFile, this.gameNumber, this.subfileID >= 184);
-        const mobys = (this.sublevelID === undefined && subfile4) ? parseMobyInstances(subfile4.createDataView()) : [];
+        const mobys = (this.sublevelID === undefined && subfile4) ? parseSpyroMobyInstances(subfile4.createDataView(), this.gameNumber) : [];
         let ground = g;
         if (this.sublevelID && grounds && grounds.length > 0) {
             ground = grounds[this.sublevelID - 1];
@@ -201,7 +209,7 @@ class S3Level implements SceneDesc {
         if (this.sublevelID && skys && skys.length > 0) {
             sky = skys[this.sublevelID - 1];
         }
-        const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber);
+        const textures = parseSpyroTextures(vram, textureList.createDataView(), this.gameNumber, this.subfileID);
         const level = buildSpyroLevel(ground.createDataView(), textures, this.gameNumber, this.subfileID);
         const skybox = buildSpyroSkybox(sky.createDataView(), this.gameNumber);
         return new Renderer(device, level, skybox, mobys);

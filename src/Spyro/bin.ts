@@ -20,7 +20,7 @@ interface LevelStream {
 
 interface TextureHeader {
     mid: TileDefinition,
-    cor: TileDefinition[]
+    cor?: TileDefinition[]
 }
 
 export interface SpyroTextureStore {
@@ -39,19 +39,17 @@ export interface SpyroLevel {
     textures: SpyroTextureStore;
     game: number;
     id: number;
-    vertices?: Float32Array;
-    colors?: Float32Array;
-    uvs?: Float32Array;
-    indicesGround?: Uint32Array;
-    indicesTransparent?: Uint32Array;
-    indicesLOD?: Uint32Array;
-    batchesGround: SpyroDrawCall[];
-    batchesTransparent: SpyroDrawCall[];
-    batchesLOD: SpyroDrawCall[];
+    vertices: Float32Array;
+    colors: Float32Array;
+    uvs: Float32Array;
+    indicesGround: number[][];
+    indicesTransparent: number[][];
+    indicesLOD: number[][];
+    waterIndices: number[];
 };
 
 export interface SpyroLevelData {
-    vram: VRAM;
+    vram: SpyroVRAM;
     textureList: ArrayBufferSlice;
     ground: ArrayBufferSlice;
     grounds?: ArrayBufferSlice[];
@@ -83,15 +81,14 @@ class TileDefinition {
     yy: number;
     ss: number;
     ff: number;
-    px: number = 0;
-    py: number = 0;
-    m: 4 | 8 | 15 = 4;
+    pageX: number = 0;
+    pageY: number = 0;
+    bitDepth: 4 | 8 | 15 = 4;
     size: number = 32;
     x: vec4 = vec4.create();
     y: vec4 = vec4.create();
     rotation: number = 0;
-    s: number = 0;
-    f: boolean = false;
+    shift: number = 0;
     transparent: number = 0;
 
     constructor(data: DataView, offset: number) {
@@ -184,52 +181,44 @@ class Polygon {
     }
 }
 
-const VRAM_SIZE = 524288; // 512 KB and some change
-export class VRAM {
+// 512 KB and some change
+const VRAM_SIZE = 524288;
+// temp manual workaround for cor tiles in s3 sublevels with "missing" vram data
+const S3_SUBLEVEL_INVALID_COR_TILES: Map<number, number[]> = new Map([
+    [122, [3, 4, 5, 6, 77, 78]],
+    [124, [10, 15, 16, 67]],
+    [140, [60, 71, 78]],
+    [156, [0]],
+    [170, [1, 21, 22, 65]]
+]);
+
+export class SpyroVRAM {
     private data: Uint16Array;
 
     constructor(buffer: ArrayBuffer) {
         this.data = new Uint16Array(buffer);
     }
 
-    getWord(wordX: number, wordY: number): number {
+    public getWord(wordX: number, wordY: number): number {
         if (wordX < 0 || wordX >= 512 || wordY < 0 || wordY >= 512) {
             return 0;
         }
         return this.data[wordY * 512 + wordX];
     }
 
-    getWordByIndex(index: number): number {
+    public getWordByIndex(index: number): number {
         if (index < 0 || index >= this.data.length) {
             return 0;
         }
         return this.data[index];
     }
 
-    applyFontStripFix() { // S2 only fix
-        const width = 512;
-        const y = 255;
-        for (let x = width; x <= 575; x++) {
-            this.data[y * width + x] = this.data[(y - 1) * width + (x - width)];
+    public applyFontStripFix() {
+        for (let x = 512; x <= 575; x++) {
+            this.data[130560 + x] = this.data[130048 + x - 512];
         }
     }
 }
-
-export const SPYRO_TILE_SCROLL_MAP: Record<number, Record<number, number[]>> = {
-    1: {
-        11: [23], 13: [31], 17: [1], 27: [31], 35: [51], 37: [35],
-        49: [54], 55: [66], 59: [12], 63: [77], 67: [55], 69: [29],
-        75: [5], 79: [24]
-    },
-    2: {
-        16: [72], 20: [44], 36: [44], 38: [48], 44: [35], 48: [0],
-        50: [2], 58: [0, 1, 2], 72: [12, 13]
-    },
-    3: {
-        98: [93], 100: [97], 110: [2], 112: [6], 116: [80], 120: [1],
-        124: [77], 138: [72], 152: [27], 156: [7], 158: [80], 170: [29]
-    }
-};
 
 export function buildSpyroSkybox(data: DataView, gameNumber: number): SpyroSkybox {
     const backgroundColor = [data.getUint8(0), data.getUint8(1), data.getUint8(2)];
@@ -248,9 +237,9 @@ export function buildSpyroSkybox(data: DataView, gameNumber: number): SpyroSkybo
     const faces: SkyFace[] = [];
     for (const offset of Array.from(new Set(partOffsets)).sort((a, b) => a - b)) {
         if (gameNumber == 1) {
-            parseSkyboxPart(data, data.byteLength, offset, vertices, colors, faces);
+            parseSkyboxPart(data, offset, vertices, colors, faces);
         } else {
-            parseSkyboxPart2(data, data.byteLength, offset, vertices, colors, faces);
+            parseSkyboxPart2(data, offset, vertices, colors, faces);
         }
     }
     return { backgroundColor, vertices, colors, faces };
@@ -533,32 +522,38 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
         }
     }
 
-    const groundIB = buildBatches(stream.indicesGround);
-    const transparentIB = buildBatches(stream.indicesTransparent, waterIndices);
-    const lodIB = buildBatches(stream.indicesLOD);
-
     return {
         textures, game: gameNumber, id,
         vertices: new Float32Array(stream.vertices),
         colors: new Float32Array(stream.colors),
         uvs: new Float32Array(stream.uvs),
-        indicesGround: groundIB.indices, indicesTransparent: transparentIB.indices, indicesLOD: lodIB.indices,
-        batchesGround: groundIB.batches, batchesTransparent: transparentIB.batches, batchesLOD: lodIB.batches
+        indicesGround: stream.indicesGround,
+        indicesTransparent: stream.indicesTransparent,
+        indicesLOD: stream.indicesLOD, waterIndices
     };
 }
 
-export function parseSpyroTextures(vram: VRAM, textureList: DataView, gameNumber: number): SpyroTextureStore {
+export function parseSpyroTextures(vram: SpyroVRAM, textureList: DataView, gameNumber: number, levelId: number = -1): SpyroTextureStore {
     const headers = parseTextureHeaders(textureList, gameNumber);
     const colors: Uint8Array[][] = Array(headers.length);
     for (let i = 0; i < headers.length; i++) {
-        const corners: Uint8Array[] = Array(4);
-        for (let j = 0; j < 4; j++) {
-            corners[j] = applyTileRotationRGBA(
-                decodeTileToRGBA(vram, headers[i].cor[j]), headers[i].cor[j], headers[i].cor[j].size, gameNumber
-            );
+        let doCOR = true;
+        if (gameNumber === 3 && S3_SUBLEVEL_INVALID_COR_TILES.has(levelId)) {
+            // temp manual workaround for cor tiles with "missing" vram data
+            doCOR = !S3_SUBLEVEL_INVALID_COR_TILES.get(levelId)!.includes(i);
         }
         colors[i] = [];
-        colors[i].push(combineCorners(corners[0], corners[1], corners[2], corners[3], 32));
+        if (doCOR) {
+            const corners: Uint8Array[] = Array(4);
+            for (let j = 0; j < 4; j++) {
+                corners[j] = applyTileRotationRGBA(
+                    decodeTileToRGBA(vram, headers[i].cor![j]), headers[i].cor![j], headers[i].cor![j].size, gameNumber
+                );
+            }
+            colors[i].push(combineCorners(corners[0], corners[1], corners[2], corners[3], 32));
+        } else {
+            headers[i].cor = undefined;
+        }
         colors[i].push(applyTileRotationRGBA(
             decodeTileToRGBA(vram, headers[i].mid), headers[i].mid, headers[i].mid.size, gameNumber)
         );
@@ -566,7 +561,7 @@ export function parseSpyroTextures(vram: VRAM, textureList: DataView, gameNumber
     return { colors, headers };
 }
 
-export function parseMobyInstances(subfile4: DataView, gameNumber: number = 3): SpyroMobyInstance[] {
+export function parseSpyroMobyInstances(subfile4: DataView, gameNumber: number): SpyroMobyInstance[] {
     const size = subfile4.byteLength;
     const mobyInstancesIndex = [7, 8, 12][gameNumber - 1];
     let pointer = [136, 44, 48][gameNumber - 1];
@@ -673,7 +668,7 @@ export function parseSpyroLevelData(data: ArrayBufferSlice): SpyroLevelData {
         subfile4 = data.subarray(pointer, subfile4Size);
     }
 
-    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
+    return { vram: new SpyroVRAM(vram.copyToBuffer()), textureList, ground, sky, subfile4 };
 }
 
 export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number, isFlyover: boolean = false): SpyroLevelData {
@@ -686,7 +681,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
     // VRAM
     pointer += getUint32();
     let vramSize = VRAM_SIZE;
-    const remainingVram = data.byteLength - (pointer);
+    const remainingVram = data.byteLength - pointer;
     if (remainingVram < vramSize) {
         vramSize = remainingVram;
     }
@@ -851,7 +846,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
         subfile4 = data.subarray(pointer, subfile4Size);
     }
 
-    return { vram: new VRAM(vram.copyToBuffer()), textureList, ground, grounds, sky, skys, subfile4 };
+    return { vram: new SpyroVRAM(vram.copyToBuffer()), textureList, ground, grounds, sky, skys, subfile4 };
 }
 
 function turn(src: Uint8Array, size: number): Uint8Array {
@@ -948,7 +943,7 @@ function colorBitsToRGBA(word: number): [number, number, number, number] {
     ];
 }
 
-function readColorLookupTable(vram: VRAM, px: number, py: number, n: number): [number, number, number, number][] {
+function readColorLookupTable(vram: SpyroVRAM, px: number, py: number, n: number): [number, number, number, number][] {
     const clut: [number, number, number, number][] = [];
     for (let i = 0; i < n; i++) {
         clut.push(colorBitsToRGBA(vram.getWordByIndex((py * 512 + px) + i)));
@@ -956,83 +951,68 @@ function readColorLookupTable(vram: VRAM, px: number, py: number, n: number): [n
     return clut;
 }
 
-function decodeTileToRGBA(vram: VRAM, tile: TileDefinition, width: number = tile.size, height: number = tile.size): Uint8Array {
-    let x4 = tile.x[3];
-    const y4 = tile.y[3];
-    if (tile.m === 4) {
-        x4 = x4 >> 2;
-        const palette = readColorLookupTable(vram, tile.px, tile.py, 16);
-        const out = new Uint8Array(width * height * 4);
+function decodeTileToRGBA(vram: SpyroVRAM, tile: TileDefinition, width: number = tile.size, height: number = tile.size): Uint8Array {
+    let startX = tile.x[3];
+    const startY = tile.y[3];
+    if (tile.bitDepth === 4) {
+        startX = startX >> 2;
+        const clut = readColorLookupTable(vram, tile.pageX, tile.pageY, 16);
+        const rgba = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width / 4; x++) {
-                const word = vram.getWord(x4 + x, y4 + y);
+                const word = vram.getWord(startX + x, startY + y);
                 for (let nib = 0; nib < 4; nib++) {
                     const dst = (y * width + (x * 4 + nib)) * 4;
-                    const [r, g, b, a] = palette[(word >> (nib * 4)) & 15];
-                    out[dst + 0] = r;
-                    out[dst + 1] = g;
-                    out[dst + 2] = b;
-                    out[dst + 3] = a;
+                    const [r, g, b, a] = clut[(word >> (nib * 4)) & 15];
+                    rgba[dst + 0] = r;
+                    rgba[dst + 1] = g;
+                    rgba[dst + 2] = b;
+                    rgba[dst + 3] = a;
                 }
             }
         }
-        return out;
-    } else if (tile.m === 8) {
-        x4 = x4 >> 1;
-        const palette = readColorLookupTable(vram, tile.px, tile.py, 256);
-        const out = new Uint8Array(width * height * 4);
+        return rgba;
+    } else if (tile.bitDepth === 8) {
+        startX = startX >> 1;
+        const clut = readColorLookupTable(vram, tile.pageX, tile.pageY, 256);
+        const rgba = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width / 2; x++) {
-                const word = vram.getWord(x4 + x, y4 + y);
+                const word = vram.getWord(startX + x, startY + y);
                 {
                     const dst = (y * width + (x * 2)) * 4;
-                    const [r, g, b, a] = palette[word & 255];
-                    out[dst + 0] = r;
-                    out[dst + 1] = g;
-                    out[dst + 2] = b;
-                    out[dst + 3] = a;
+                    const [r, g, b, a] = clut[word & 255];
+                    rgba[dst + 0] = r;
+                    rgba[dst + 1] = g;
+                    rgba[dst + 2] = b;
+                    rgba[dst + 3] = a;
                 }
                 {
                     const dst = (y * width + (x * 2 + 1)) * 4;
-                    const [r, g, b, a] = palette[(word >> 8) & 255];
-                    out[dst + 0] = r;
-                    out[dst + 1] = g;
-                    out[dst + 2] = b;
-                    out[dst + 3] = a;
+                    const [r, g, b, a] = clut[(word >> 8) & 255];
+                    rgba[dst + 0] = r;
+                    rgba[dst + 1] = g;
+                    rgba[dst + 2] = b;
+                    rgba[dst + 3] = a;
                 }
             }
         }
-        return out;
+        return rgba;
     } else {
-        const out = new Uint8Array(width * height * 4);
+        const rgba = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const word = vram.getWord(tile.x[3] + x, y4 + y);
+                const word = vram.getWord(tile.x[3] + x, startY + y);
                 const [r, g, b, a] = colorBitsToRGBA(word);
                 const dst = (y * width + x) * 4;
-                out[dst + 0] = r;
-                out[dst + 1] = g;
-                out[dst + 2] = b;
-                out[dst + 3] = a;
+                rgba[dst + 0] = r;
+                rgba[dst + 1] = g;
+                rgba[dst + 2] = b;
+                rgba[dst + 3] = a;
             }
         }
-        return out;
+        return rgba;
     }
-}
-
-function buildBatches(tileGroups: number[][], waterIndices?: number[]): { batches: SpyroDrawCall[], indices: Uint32Array } {
-    const batches: SpyroDrawCall[] = [];
-    const indices: number[] = [];
-    for (let i = 0; i < tileGroups.length; i++) {
-        const group = tileGroups[i];
-        if (group.length === 0) {
-            continue;
-        }
-        const isWater = waterIndices !== undefined && waterIndices.includes(i);
-        batches.push({ tileIndex: i, indexOffset: indices.length, indexCount: group.length, isWater });
-        indices.push(...group);
-    }
-    return { batches, indices: new Uint32Array(indices) };
 }
 
 function combineCorners(topLeft: Uint8Array, topRight: Uint8Array, bottomLeft: Uint8Array, bottomRight: Uint8Array, size: number): Uint8Array {
@@ -1094,9 +1074,9 @@ function parseTextureHeaders(data: DataView, gameNumber: number): TextureHeader[
     return headers;
 }
 
-function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
+function parseSkyboxPart(data: DataView, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
     let pointer = partOffset;
-    if (pointer + 24 > size) {
+    if (pointer + 24 > data.byteLength) {
         return;
     }
     const baseVertexIndex = vertices.length;
@@ -1104,23 +1084,23 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
 
     // Header (24)
     pointer += 8;
-    const globalY = view.getInt16(pointer, true);
-    const globalZ = view.getInt16(pointer + 2, true);
-    const vertexCount = view.getUint16(pointer + 4, true);
-    const globalX = view.getInt16(pointer + 6, true);
-    const polyCount = view.getUint16(pointer + 8, true);
-    const colorCount = view.getUint16(pointer + 10, true);
+    const globalY = data.getInt16(pointer, true);
+    const globalZ = data.getInt16(pointer + 2, true);
+    const vertexCount = data.getUint16(pointer + 4, true);
+    const globalX = data.getInt16(pointer + 6, true);
+    const polyCount = data.getUint16(pointer + 8, true);
+    const colorCount = data.getUint16(pointer + 10, true);
     pointer += 16;
 
     // Vertices (4)
     for (let i = 0; i < vertexCount; i++) {
-        if (pointer + 4 > size) {
+        if (pointer + 4 > data.byteLength) {
             break;
         }
-        const b1 = view.getUint8(pointer);
-        const b2 = view.getUint8(pointer + 1);
-        const b3 = view.getUint8(pointer + 2);
-        const b4 = view.getUint8(pointer + 3);
+        const b1 = data.getUint8(pointer);
+        const b2 = data.getUint8(pointer + 1);
+        const b3 = data.getUint8(pointer + 2);
+        const b4 = data.getUint8(pointer + 3);
         vertices.push([
             ((b3 >> 5) | (b4 << 3)) + globalX,
             ((b2 >> 2) | ((b3 & 31) << 6)) - globalY,
@@ -1131,10 +1111,10 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
 
     // Colors (4)
     for (let i = 0; i < colorCount; i++) {
-        if (pointer + 4 > size) {
+        if (pointer + 4 > data.byteLength) {
             break;
         }
-        colors.push([view.getUint8(pointer), view.getUint8(pointer + 1), view.getUint8(pointer + 2)]);
+        colors.push([data.getUint8(pointer), data.getUint8(pointer + 1), data.getUint8(pointer + 2)]);
         pointer += 4;
     }
 
@@ -1144,11 +1124,11 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
 
     // Polygons (8)
     for (let i = 0; i < polyCount; i++) {
-        if (pointer + 8 > size) {
+        if (pointer + 8 > data.byteLength) {
             break;
         }
-        const [vi1, vi2, vi3] = unpackSkyIndex(view.getUint8(pointer), view.getUint8(pointer + 1), view.getUint8(pointer + 2), view.getUint8(pointer + 3));
-        const [ci1, ci2, ci3] = unpackSkyIndex(view.getUint8(pointer + 4), view.getUint8(pointer + 5), view.getUint8(pointer + 6), view.getUint8(pointer + 7));
+        const [vi1, vi2, vi3] = unpackSkyIndex(data.getUint8(pointer), data.getUint8(pointer + 1), data.getUint8(pointer + 2), data.getUint8(pointer + 3));
+        const [ci1, ci2, ci3] = unpackSkyIndex(data.getUint8(pointer + 4), data.getUint8(pointer + 5), data.getUint8(pointer + 6), data.getUint8(pointer + 7));
         if (vi1 < vertexCount && vi2 < vertexCount && vi3 < vertexCount && ci1 < colorCount && ci2 < colorCount && ci3 < colorCount) {
             faces.push({
                 indices: [baseVertexIndex + vi1, baseVertexIndex + vi2, baseVertexIndex + vi3],
@@ -1159,13 +1139,13 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
     }
 }
 
-function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
+function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[][], colors: number[][], faces: SkyFace[]): void {
     let pointer = partOffset;
     const baseVertexIndex = vertices.length;
     const baseColorIndex = colors.length;
 
     // Header (20)
-    if (pointer + 20 > partSize) {
+    if (pointer + 20 > data.byteLength) {
         return;
     }
     pointer += 8;
@@ -1206,7 +1186,7 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
     // Polys
     let seeker = pointer + polyCount;
     for (let i = polyCount; i > 3; i -= 4) {
-        if (pointer + 4 > partSize) {
+        if (pointer + 4 > data.byteLength) {
             return;
         }
         const b1 = data.getUint8(pointer);
@@ -1218,7 +1198,7 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
         let v0 = data.getUint8(pointer + 3);
         pointer += 4;
 
-        if (seeker + 2 > partSize) {
+        if (seeker + 2 > data.byteLength) {
             return;
         }
         let v1 = data.getUint8(seeker);
@@ -1236,7 +1216,7 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
         }
 
         for (let i = 0; i < (b1 & 7); i++) {
-            if (seeker + 2 > partSize) {
+            if (seeker + 2 > data.byteLength) {
                 return;
             }
             const v2New = data.getUint8(seeker);
@@ -1263,47 +1243,34 @@ function parseSkyboxPart2(data: DataView, partSize: number, partOffset: number, 
 
 function parseTile(data: DataView, offset: number, gameNumber: number): TileDefinition {
     const tile = new TileDefinition(data, offset);
-    if ((tile.ff & 14) > 0 || (tile.ss & 8) === 0) {
-        tile.f = true;
-    }
     if (gameNumber === 1) {
-        if ((tile.ss & 96) > 0 || tile.mainY !== tile.yy) {
-            tile.f = true;
-        }
         if ((tile.ff & 128) > 0) {
             tile.size = 32;
         } else {
             tile.size = 16;
         }
-    } else if ((tile.mainY + tile.size - 1) !== tile.yy) {
-        tile.f = true;
-    }
-    if ((tile.mainX + tile.size - 1) !== tile.xx
-        || tile.mainX > (256 - tile.size)
-        || tile.mainY > (256 - tile.size)) {
-        tile.f = true;
     }
     if ((tile.ff & 1) > 0) {
-        tile.m = 15;
+        tile.bitDepth = 15;
     } else if ((tile.ss & 128) > 0) {
-        tile.m = 8;
+        tile.bitDepth = 8;
     } else {
-        tile.m = 4;
+        tile.bitDepth = 4;
     }
-    tile.s = tile.ss & 7;
-    switch (tile.m) {
+    tile.shift = tile.ss & 7;
+    switch (tile.bitDepth) {
         case 4:
-            tile.s *= 256;
+            tile.shift *= 256;
             break;
         case 8:
-            tile.s *= 128;
+            tile.shift *= 128;
             break;
         case 15:
-            tile.s *= 64;
+            tile.shift *= 64;
             break;
     }
-    tile.x[3] = tile.mainX + tile.s;
-    tile.x[2] = tile.xx + tile.s;
+    tile.x[3] = tile.mainX + tile.shift;
+    tile.x[2] = tile.xx + tile.shift;
     tile.x[0] = tile.x[3];
     tile.x[1] = tile.x[3] + tile.size;
     tile.y[3] = tile.mainY;
@@ -1313,8 +1280,8 @@ function parseTile(data: DataView, offset: number, gameNumber: number): TileDefi
     tile.y[2] = tile.y[3];
     tile.y[0] = tile.y[3] + tile.size;
     tile.y[1] = tile.y[3] + tile.size;
-    tile.px = (tile.p[0] & 31) * 16;
-    tile.py = (tile.p[0] >> 6) | (tile.p[1] << 2);
+    tile.pageX = (tile.p[0] & 31) * 16;
+    tile.pageY = (tile.p[0] >> 6) | (tile.p[1] << 2);
     tile.rotation = ((tile.ff & 127) >> 4) & 7;
     if (gameNumber > 1) {
         if ((tile.ff & 128) > 0) {

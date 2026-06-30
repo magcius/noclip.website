@@ -7,7 +7,7 @@ import { GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platf
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { SpyroSkybox, SpyroLevel, SpyroMobyInstance, SPYRO_TILE_SCROLL_MAP, SpyroDrawCall } from "./bin";
+import { SpyroSkybox, SpyroLevel, SpyroMobyInstance, SpyroDrawCall } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { colorNewFromRGBA, White } from "../Color";
@@ -104,6 +104,36 @@ const SCRATCH_CLIP = mat4.create();
 const SCRATCH_SKY_VIEW = mat4.create();
 const SCRATCH_MOBY_POS = vec3.create();
 const SCRATCH_MOBY_ROT = vec3.create();
+const TILE_SCROLL_MAP: Record<number, Record<number, number[]>> = {
+    1: {
+        11: [23], 13: [31], 17: [1], 27: [31], 35: [51], 37: [35],
+        49: [54], 55: [66], 59: [12], 63: [77], 67: [55], 69: [29],
+        75: [5], 79: [24]
+    },
+    2: {
+        16: [72], 20: [44], 36: [44], 38: [48], 44: [35], 48: [0],
+        50: [2], 58: [0, 1, 2], 72: [12, 13]
+    },
+    3: {
+        98: [93], 100: [97], 110: [2], 112: [6], 116: [80], 120: [1],
+        124: [77], 138: [72], 152: [27], 156: [7], 158: [80], 170: [29]
+    }
+};
+
+function buildBatches(tileGroups: number[][], waterIndices?: number[]): { drawCalls: SpyroDrawCall[], indices: Uint32Array } {
+    const drawCalls: SpyroDrawCall[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i < tileGroups.length; i++) {
+        const group = tileGroups[i];
+        if (group.length === 0) {
+            continue;
+        }
+        const isWater = waterIndices !== undefined && waterIndices.includes(i);
+        drawCalls.push({ tileIndex: i, indexOffset: indices.length, indexCount: group.length, isWater });
+        indices.push(...group);
+    }
+    return { drawCalls, indices: new Uint32Array(indices) };
+}
 
 export class SpyroLevelRenderer {
     public showMobys: boolean = false;
@@ -114,9 +144,9 @@ export class SpyroLevelRenderer {
     private gfxSampler: GfxSampler;
     private indexBufferDescriptors: GfxIndexBufferDescriptor[];
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    private batchesGround: SpyroDrawCall[] = [];
-    private batchesTransparent: SpyroDrawCall[] = [];
-    private batchesLOD: SpyroDrawCall[] = [];
+    private drawCallsGround: SpyroDrawCall[] = [];
+    private drawCallsTransparent: SpyroDrawCall[] = [];
+    private drawCallsLOD: SpyroDrawCall[] = [];
     private inputLayout: GfxInputLayout;
     private tileCount: number;
     private gameNumber: number;
@@ -130,9 +160,10 @@ export class SpyroLevelRenderer {
         this.gfxTextures = new Array(this.tileCount);
         for (let i = 0; i < this.tileCount; i++) {
             const rgba = level.textures.colors[i];
+            const s = level.textures.headers[i].cor === undefined ? 32 : 64;
             const texture = device.createTexture({
-                width: 64, height: 64,
-                numLevels: 2,
+                width: s, height: s,
+                numLevels: s / 32,
                 pixelFormat: GfxFormat.U8_RGBA_NORM,
                 usage: GfxTextureUsage.Sampled,
                 dimension: GfxTextureDimension.n2D,
@@ -144,8 +175,8 @@ export class SpyroLevelRenderer {
         }
 
         this.scrollFlags = Array(this.tileCount).fill(0.0);
-        if (level.id in SPYRO_TILE_SCROLL_MAP[level.game]) {
-            for (const ti of SPYRO_TILE_SCROLL_MAP[level.game][level.id]) {
+        if (level.id in TILE_SCROLL_MAP[level.game]) {
+            for (const ti of TILE_SCROLL_MAP[level.game][level.id]) {
                 if (ti != null && ti >= 0 && ti < this.tileCount) {
                     this.scrollFlags[ti] = 1.0;
                 }
@@ -163,20 +194,24 @@ export class SpyroLevelRenderer {
             wrapT: GfxWrapMode.Clamp
         });
 
+        const groundBatches = buildBatches(level.indicesGround);
+        const transparentBatches = buildBatches(level.indicesTransparent, level.waterIndices);
+        const lodBatches = buildBatches(level.indicesLOD);
+
         this.vertexBufferDescriptors = [
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.vertices!.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.colors!.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.uvs!.buffer), byteOffset: 0 }
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.vertices.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.colors.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, level.uvs.buffer), byteOffset: 0 }
         ];
         this.indexBufferDescriptors = [
-            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesGround!.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesTransparent!.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, level.indicesLOD!.buffer), byteOffset: 0 }
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, groundBatches.indices.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, transparentBatches.indices.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, lodBatches.indices.buffer), byteOffset: 0 }
         ];
 
-        this.batchesGround = level.batchesGround;
-        this.batchesTransparent = level.batchesTransparent;
-        this.batchesLOD = level.batchesLOD;
+        this.drawCallsGround = groundBatches.drawCalls;
+        this.drawCallsTransparent = transparentBatches.drawCalls;
+        this.drawCallsLOD = lodBatches.drawCalls;
 
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
@@ -211,10 +246,10 @@ export class SpyroLevelRenderer {
         d[offs++] = this.useLOD || !this.showTextures ? 1.0 : 0.0;
 
         if (this.useLOD) {
-            this.drawBatches(renderInstManager, this.batchesLOD, this.indexBufferDescriptors[2], false);
+            this.renderDrawCalls(renderInstManager, this.drawCallsLOD, this.indexBufferDescriptors[2], false);
         } else {
-            this.drawBatches(renderInstManager, this.batchesGround, this.indexBufferDescriptors[0], false);
-            this.drawBatches(renderInstManager, this.batchesTransparent, this.indexBufferDescriptors[1], true);
+            this.renderDrawCalls(renderInstManager, this.drawCallsGround, this.indexBufferDescriptors[0], false);
+            this.renderDrawCalls(renderInstManager, this.drawCallsTransparent, this.indexBufferDescriptors[1], true);
         }
 
         if (this.showMobys) {
@@ -224,8 +259,8 @@ export class SpyroLevelRenderer {
         renderInstManager.popTemplate();
     }
 
-    private drawBatches(renderInstManager: GfxRenderInstManager, batches: SpyroDrawCall[], indexBuffer: GfxIndexBufferDescriptor, additiveBlend: boolean) {
-        for (const batch of batches) {
+    private renderDrawCalls(renderInstManager: GfxRenderInstManager, drawCalls: SpyroDrawCall[], indexBuffer: GfxIndexBufferDescriptor, additiveBlend: boolean) {
+        for (const drawCall of drawCalls) {
             const renderInst = renderInstManager.newRenderInst();
 
             let offs = renderInst.allocateUniformBuffer(Shader.ub_BatchParams, 3);
@@ -233,9 +268,9 @@ export class SpyroLevelRenderer {
             // u_Brightness (1)
             d[offs++] = additiveBlend ? BRIGHTNESS_TRANSPARENT : BRIGHTNESS_OPAQUE;
             // u_IsWater (1)
-            d[offs++] = batch.isWater ? 1.0 : 0.0;
+            d[offs++] = drawCall.isWater ? 1.0 : 0.0;
             // u_Scroll (1)
-            d[offs++] = this.scrollFlags[batch.tileIndex];
+            d[offs++] = this.scrollFlags[drawCall.tileIndex];
 
             const megaState = renderInst.getMegaStateFlags();
             if (additiveBlend) {
@@ -247,9 +282,9 @@ export class SpyroLevelRenderer {
                 });
             }
             renderInst.setMegaStateFlags(megaState);
-            renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.gfxTextures[batch.tileIndex], gfxSampler: this.gfxSampler }]);
+            renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.gfxTextures[drawCall.tileIndex], gfxSampler: this.gfxSampler }]);
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, indexBuffer);
-            renderInst.setDrawCount(batch.indexCount, batch.indexOffset);
+            renderInst.setDrawCount(drawCall.indexCount, drawCall.indexOffset);
 
             renderInstManager.submitRenderInst(renderInst);
         }
