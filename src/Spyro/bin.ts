@@ -74,44 +74,42 @@ export interface SpyroMobyInstance {
 }
 
 class TileDefinition {
-    mainX: number;
-    mainY: number;
-    p: vec2;
+    baseX: number;
+    baseY: number;
+    packedPageCoords: vec2;
     xx: number;
     yy: number;
-    ss: number;
-    ff: number;
+    flags1: number;
+    flags2: number;
     pageX: number = 0;
     pageY: number = 0;
     bitDepth: 4 | 8 | 15 = 4;
     size: number = 32;
-    x: vec4 = vec4.create();
-    y: vec4 = vec4.create();
     rotation: number = 0;
     shift: number = 0;
     transparent: number = 0;
+    x: vec4 = vec4.create();
+    y: vec4 = vec4.create();
 
     constructor(data: DataView, offset: number) {
-        this.mainX = data.getUint8(offset);
-        this.mainY = data.getUint8(offset + 1);
-        this.p = vec2.fromValues(data.getUint8(offset + 2), data.getUint8(offset + 3));
+        this.baseX = data.getUint8(offset);
+        this.baseY = data.getUint8(offset + 1);
+        this.packedPageCoords = vec2.fromValues(data.getUint8(offset + 2), data.getUint8(offset + 3));
         this.xx = data.getUint8(offset + 4);
         this.yy = data.getUint8(offset + 5);
-        this.ss = data.getUint8(offset + 6);
-        this.ff = data.getUint8(offset + 7);
+        this.flags1 = data.getUint8(offset + 6);
+        this.flags2 = data.getUint8(offset + 7);
     }
 }
 
 class PartHeader {
-    y: number;
     x: number;
-    i0: number;
+    y: number;
     z: number;
-    flag: number;
+    flags: number; // presumably flags, usually is just the max u32 value
     lodVertexCount: number;
     lodColorCount: number;
     lodPolyCount: number;
-    i1: number;
     mdlVertexCount: number;
     mdlColorCount: number;
     mdlPolyCount: number;
@@ -120,62 +118,55 @@ class PartHeader {
     constructor(data: DataView, offs: number) {
         this.y = data.getInt16(offs, true);
         this.x = data.getInt16(offs + 2, true);
-        this.i0 = data.getUint16(offs + 4, true);
         this.z = data.getInt16(offs + 6, true);
         this.lodVertexCount = data.getUint8(offs + 8);
         this.lodColorCount = data.getUint8(offs + 9);
         this.lodPolyCount = data.getUint8(offs + 10);
-        this.i1 = data.getUint8(offs + 11);
         this.mdlVertexCount = data.getUint8(offs + 12);
         this.mdlColorCount = data.getUint8(offs + 13);
         this.mdlPolyCount = data.getUint8(offs + 14);
         this.water = data.getUint8(offs + 15);
-        this.flag = data.getUint32(offs + 16, true);
+        this.flags = data.getUint32(offs + 16, true);
     }
 }
 
 class LODPoly {
-    n: number;
-    v: vec3;
-    f: number;
-    c: vec3;
+    vertexIndices: vec3;
+    colorIndices: vec3;
 
     constructor(view: DataView, offset: number) {
-        this.n = view.getUint8(offset);
-        this.v = vec3.fromValues(view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
-        this.f = view.getUint8(offset + 4);
-        this.c = vec3.fromValues(view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
+        this.vertexIndices = vec3.fromValues(view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+        this.colorIndices = vec3.fromValues(view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
     }
 }
 
 class LODPoly2 {
-    v: vec4;
-    c: vec4;
+    vertexIndices: vec4;
+    colorIndices: vec4;
 
     constructor(view: DataView, offset: number) {
-        this.v = vec4.fromValues(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
-        this.c = vec4.fromValues(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
+        this.vertexIndices = vec4.fromValues(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+        this.colorIndices = vec4.fromValues(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
     }
 }
 
 class Polygon {
-    v: vec4;
-    c: vec4;
-    t: number = 0; // S1 only
-    r: number = 0; // S1 only
-    s: vec4 = vec4.create(); // S2 only
-    tt: number = 0; // S2 only
-    ii: number = 0; // S2 only
+    vertexIndices: vec4;
+    colorIndices: vec4;
+    packedTileIndex: number = 0;
+    uvPermuatation: number = 0; // S1 only
+    s: vec4 = vec4.create(); // S2/3 only
+    ii: number = 0; // S2/3 only
 
     constructor(view: DataView, offset: number, gameNumber: number) {
-        this.v = vec4.fromValues(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
-        this.c = vec4.fromValues(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
+        this.vertexIndices = vec4.fromValues(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+        this.colorIndices = vec4.fromValues(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
         if (gameNumber == 1) {
-            this.t = view.getUint8(offset + 8);
-            this.r = view.getUint8(offset + 9);
+            this.packedTileIndex = view.getUint8(offset + 8);
+            this.uvPermuatation = view.getUint8(offset + 9);
         } else {
             this.s = vec4.fromValues(view.getUint8(offset + 8), view.getUint8(offset + 9), view.getUint8(offset + 10), view.getUint8(offset + 11));
-            this.tt = view.getUint8(offset + 12) & 127;
+            this.packedTileIndex = view.getUint8(offset + 12) & 127;
             this.ii = view.getUint8(offset + 13);
         }
     }
@@ -183,6 +174,7 @@ class Polygon {
 
 // 512 KB and some change
 const VRAM_SIZE = 524288;
+const MOBY_INSTANCE_SIZE = 88;
 // temp manual workaround for cor tiles in s3 sublevels with "missing" vram data
 const S3_SUBLEVEL_INVALID_COR_TILES: Map<number, number[]> = new Map([
     [122, [3, 4, 5, 6, 77, 78]],
@@ -222,9 +214,10 @@ export class SpyroVRAM {
 
 export function buildSpyroSkybox(data: DataView, gameNumber: number): SpyroSkybox {
     const backgroundColor = [data.getUint8(0), data.getUint8(1), data.getUint8(2)];
-    let pointer = 4;
+    const partCount = data.getUint32(4, true);
+    let pointer = 8;
     const partOffsets: number[] = [];
-    while (pointer + 4 <= data.byteLength) {
+    for (let i = 0; i < partCount; i++) {
         const offset = data.getUint32(pointer, true);
         pointer += 4;
         if (offset === 0 || offset >= data.byteLength) {
@@ -235,7 +228,7 @@ export function buildSpyroSkybox(data: DataView, gameNumber: number): SpyroSkybo
     const vertices: number[][] = [];
     const colors: number[][] = [];
     const faces: SkyFace[] = [];
-    for (const offset of Array.from(new Set(partOffsets)).sort((a, b) => a - b)) {
+    for (const offset of partOffsets) {
         if (gameNumber == 1) {
             parseSkyboxPart(data, offset, vertices, colors, faces);
         } else {
@@ -263,6 +256,9 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
         stream.indicesTransparent[i] = [];
         stream.indicesLOD[i] = [];
     }
+    // band-aid solution to hide polygons that shouldn't (???) be visible if the entire texture is black
+    // comment this out and then see tile 43 in the waterfall in idol springs for an example
+    // these polygons are probably supposed to be invisible (e.g. zero alpha)
     for (let i = 0; i < textures.headers.length; i++) {
         let b = true;
         const rgba = textures.colors[i];
@@ -294,26 +290,26 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
     function decodeLODPoly(poly: LODPoly | LODPoly2) {
         if (gameNumber === 1) {
             return {
-                v1: (poly.v[0] & 63),
-                v2: (poly.v[0] >> 6) | ((poly.v[1] & 15) << 2),
-                v3: (poly.v[1] >> 4) | ((poly.v[2] & 3) << 4),
-                v4: (poly.v[2] >> 2),
-                c1: (poly.c[0] & 63),
-                c2: (poly.c[0] >> 6) | ((poly.c[1] & 15) << 2),
-                c3: (poly.c[1] >> 4) | ((poly.c[2] & 3) << 4),
-                c4: (poly.c[2] >> 2),
+                v1: (poly.vertexIndices[0] & 63),
+                v2: (poly.vertexIndices[0] >> 6) | ((poly.vertexIndices[1] & 15) << 2),
+                v3: (poly.vertexIndices[1] >> 4) | ((poly.vertexIndices[2] & 3) << 4),
+                v4: (poly.vertexIndices[2] >> 2),
+                c1: (poly.colorIndices[0] & 63),
+                c2: (poly.colorIndices[0] >> 6) | ((poly.colorIndices[1] & 15) << 2),
+                c3: (poly.colorIndices[1] >> 4) | ((poly.colorIndices[2] & 3) << 4),
+                c4: (poly.colorIndices[2] >> 2),
             };
         } else {
             assert(poly instanceof LODPoly2);
             return {
-                v1: (poly.v[0] >> 3) | ((poly.v[1] & 3) << 5),
-                v2: (poly.v[1] >> 2) | ((poly.v[2] & 1) << 6),
-                v3: (poly.v[2] >> 1),
-                v4: (poly.v[3] & 127),
-                c1: (poly.c[0] >> 4) | ((poly.c[1] & 7) << 4),
-                c2: (poly.c[1] >> 3) | ((poly.c[2] & 3) << 5),
-                c3: (poly.c[2] >> 2) | ((poly.c[3] & 1) << 6),
-                c4: (poly.c[3] >> 1),
+                v1: (poly.vertexIndices[0] >> 3) | ((poly.vertexIndices[1] & 3) << 5),
+                v2: (poly.vertexIndices[1] >> 2) | ((poly.vertexIndices[2] & 1) << 6),
+                v3: (poly.vertexIndices[2] >> 1),
+                v4: (poly.vertexIndices[3] & 127),
+                c1: (poly.colorIndices[0] >> 4) | ((poly.colorIndices[1] & 7) << 4),
+                c2: (poly.colorIndices[1] >> 3) | ((poly.colorIndices[2] & 3) << 5),
+                c3: (poly.colorIndices[2] >> 2) | ((poly.colorIndices[3] & 1) << 6),
+                c4: (poly.colorIndices[3] >> 1),
             };
         }
     }
@@ -328,22 +324,22 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
         const uvs = [uv1, uv2, uv3];
         for (let i = 0; i < 3; i++) {
             const vi = v[i] * 3;
-            const ci = color[i] * 4;
+            const ci = color[i] * 3;
             const uv = uvs[i];
             const r = colors[ci];
             const g = colors[ci + 1];
             const b = colors[ci + 2];
-            const a = colors[ci + 3];
             stream.vertices.push(vertices[vi], vertices[vi + 1], vertices[vi + 2]);
-            stream.colors.push(r / 255, g / 255, b / 255, a / 255);
+            stream.colors.push(r / 255, g / 255, b / 255);
             stream.uvs.push(uv[0], uv[1]);
             group[tileIndex].push(runningIndex++);
         }
     }
 
     function pushPoly(poly: Polygon, vertexOffset: number, colorOffset: number, waterFlag: number) {
-        const tileIndex = (gameNumber === 1) ? (poly.t & 127) : (poly.tt & 127);
+        const tileIndex = poly.packedTileIndex & 127;
         if (tileIndex < 0 || tileIndex >= tileCount) {
+            // console.warn("Out of bounds tile index for", poly, waterFlag);
             return;
         }
         const tile = textures.headers[tileIndex].mid;
@@ -351,17 +347,17 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
         const isWater = (gameNumber > 1) ? (waterFlag === 0 && poly.s[0] === 0 && poly.s[1] === 0 && poly.s[2] === 0 && poly.s[3] === 0) : false;
         const isLOD = false;
         const opts = { isLOD, isTransparent, isWater };
-        const v1 = vertexOffset + poly.v[0];
-        const v2 = vertexOffset + poly.v[1];
-        const v3 = vertexOffset + poly.v[2];
-        const v4 = vertexOffset + poly.v[3];
-        const c1 = colorOffset + poly.c[0];
-        const c2 = colorOffset + poly.c[1];
-        const c3 = colorOffset + poly.c[2];
-        const c4 = colorOffset + poly.c[3];
+        const v1 = vertexOffset + poly.vertexIndices[0];
+        const v2 = vertexOffset + poly.vertexIndices[1];
+        const v3 = vertexOffset + poly.vertexIndices[2];
+        const v4 = vertexOffset + poly.vertexIndices[3];
+        const c1 = colorOffset + poly.colorIndices[0];
+        const c2 = colorOffset + poly.colorIndices[1];
+        const c3 = colorOffset + poly.colorIndices[2];
+        const c4 = colorOffset + poly.colorIndices[3];
         let A = UV.TL, B = UV.TR, C = UV.BR, D = UV.BL;
 
-        const isTri = poly.v[0] === poly.v[1];
+        const isTri = poly.vertexIndices[0] === poly.vertexIndices[1];
         if (gameNumber > 1) {
             if (isTri) {
                 const rr = (poly.ii >> 4) & 3;
@@ -371,10 +367,10 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
                 [A, B, C, D] = rotated;
             }
         } else {
-            if (poly.v[0] === poly.v[1]) {
+            if (poly.vertexIndices[0] === poly.vertexIndices[1]) {
                 const base = [UV.TL, UV.TR, UV.BR, UV.BL];
                 const perms = [[0, 1, 2, 3], [3, 0, 1, 2], [2, 3, 0, 1], [1, 2, 3, 0]];
-                const p = perms[poly.r & 3];
+                const p = perms[poly.uvPermuatation & 3];
                 A = base[p[0]];
                 B = base[p[1]];
                 C = base[p[2]];
@@ -429,14 +425,13 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
             vertices.push(x, y, z);
         }
 
-        const lodColorOffset = colors.length / 4;
+        const lodColorOffset = colors.length / 3;
         for (let i = 0; i < header.lodColorCount; i++) {
             const r = ground.getUint8(pointer);
             const g = ground.getUint8(pointer + 1);
             const b = ground.getUint8(pointer + 2);
-            const a = ground.getUint8(pointer + 3);
             pointer += 4;
-            colors.push(r, g, b, a);
+            colors.push(r, g, b);
         }
 
         for (let i = 0; i < header.lodPolyCount; i++) {
@@ -491,7 +486,7 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
             const zraw = (byte1 | ((byte2 & 3) << 8));
             let z = zraw + header.z;
             if (gameNumber > 1) {
-                const far = header.lodVertexCount === 0 && header.flag === 0xFFFFFFFF;
+                const far = header.lodVertexCount === 0 && header.flags === 0xFFFFFFFF;
                 if ((far && !isWaterNonGround) || (far && isWaterNonGround && header.water > 0) || (!far && header.water > 0)) {
                     z = (zraw << 1) + header.z;
                 } else {
@@ -503,16 +498,18 @@ export function buildSpyroLevel(ground: DataView, textures: SpyroTextureStore, g
             vertices.push(x, y, z);
         }
 
-        const mdlColorOffset = colors.length / 4;
+        const mdlColorOffset = colors.length / 3;
         for (let i = 0; i < header.mdlColorCount; i++) {
             const r = ground.getUint8(pointer);
             const g = ground.getUint8(pointer + 1);
             const b = ground.getUint8(pointer + 2);
-            const a = ground.getUint8(pointer + 3);
             pointer += 4;
-            colors.push(r, g, b, a);
+            colors.push(r, g, b);
         }
 
+        // these are valid colors, but appear out of order when used in place of the above colors
+        // they could be colors used in place of textures for mdl parts that are a certain distance from the camera maybe?
+        // (too close for lod but not close enough for textures to show)
         pointer += header.mdlColorCount * 4;
 
         for (let i = 0; i < header.mdlPolyCount; i++) {
@@ -563,27 +560,27 @@ export function parseSpyroTextures(vram: SpyroVRAM, textureList: DataView, gameN
 
 export function parseSpyroMobyInstances(subfile4: DataView, gameNumber: number): SpyroMobyInstance[] {
     const size = subfile4.byteLength;
-    const mobyInstancesIndex = [7, 8, 12][gameNumber - 1];
+    const sectionIndex = [7, 8, 12][gameNumber - 1];
     let pointer = [136, 44, 48][gameNumber - 1];
     let index = 0;
     // jump sections until reaching the right one
-    while (pointer < size - 8 && index < mobyInstancesIndex) {
+    while (pointer < size - 8 && index < sectionIndex) {
         const sectionSize = subfile4.getUint32(pointer, true);
         pointer += sectionSize;
         index += 1;
     }
     pointer += 4; // skip the instances section's size/next pointer
 
-    if (pointer + 88 > size) {
-        // temp fix for S2 title screen, other cutscenes in S2 don't have this problem (???)
+    if (pointer + MOBY_INSTANCE_SIZE > size) {
+        // section is empty, therefore no mobys
         return [];
     }
 
-    // Moby instances (88)
+    // moby instances (88)
     const mobys: SpyroMobyInstance[] = [];
     for (let i = 0; i < subfile4.getUint32(pointer, true); i++) {
-        const pos = pointer + 4 + (i * 88);
-        if (pos + 88 > size) {
+        const pos = pointer + 4 + (i * MOBY_INSTANCE_SIZE);
+        if (pos + MOBY_INSTANCE_SIZE > size) {
             break;
         }
         // offset: name (size)
@@ -620,43 +617,44 @@ export function parseSpyroLevelData(data: ArrayBufferSlice): SpyroLevelData {
         return new Uint32Array(data.arrayBuffer, pointer, 4)[0];
     }
 
-    // VRAM
+    // vram (subfile 1 also includes sound data after the vram but that's ignored)
     const subFile1Offset = getUint32();
     const vram = data.subarray(subFile1Offset, VRAM_SIZE < data.byteLength ? VRAM_SIZE : 512000); // temp fix for tiny flyover levels
 
-    // Texture list
+    // texture list
     pointer = 8;
     const subFile2Offset = getUint32();
     pointer = subFile2Offset;
     const textureListSize = getUint32();
     const textureList = data.subarray(pointer, textureListSize + 16);
 
-    // Ground
+    // ground
     pointer = subFile2Offset;
     pointer += textureListSize;
     const groundSize = getUint32() - 4;
     pointer += 4;
     const ground = data.subarray(pointer, groundSize);
 
-    // Sky
+    // sky
     pointer += groundSize;
-    let skyVar = getUint32();
+    let skySize = getUint32();
     pointer += 4;
-    const pos = pointer;
-    const skyCount = skyVar;
-    pointer += skyVar - 4;
-    skyVar = getUint32();
-    if (skyVar > 3) {
-        pointer += skyVar;
-        skyVar = getUint32();
-        pointer += skyVar;
-        skyVar = getUint32();
+    const ret = pointer;
+    const firstSkyCount = skySize;
+    pointer += skySize - 4;
+    skySize = getUint32();
+    if (skySize > 3) {
+        pointer += skySize;
+        skySize = getUint32();
+        pointer += skySize;
+        skySize = getUint32();
         pointer += 4;
     } else {
-        pointer = pos;
-        skyVar = skyCount;
+        // cutscenes & flyover levels get here
+        pointer = ret;
+        skySize = firstSkyCount;
     }
-    const sky = data.subarray(pointer, skyVar);
+    const sky = data.subarray(pointer, skySize);
 
     let subfile4;
     pointer = 24;
@@ -678,7 +676,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
         return new Uint32Array(data.arrayBuffer, pointer - 4, 4)[0];
     }
 
-    // VRAM
+    // vram (subfile 1 also includes sound data after the vram but that's ignored)
     pointer += getUint32();
     let vramSize = VRAM_SIZE;
     const remainingVram = data.byteLength - pointer;
@@ -687,7 +685,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
     }
     const vram = data.subarray(pointer, vramSize);
 
-    // Texture list
+    // texture list
     pointer = 8;
     const subfile2Offset = getUint32();
     pointer = subfile2Offset;
@@ -695,7 +693,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
     pointer -= 4;
     const textureList = data.subarray(pointer, listSize + 16);
 
-    // Sky
+    // sky
     pointer = subfile2Offset;
     let offset = getUint32();
     pointer += offset - 4;
@@ -747,7 +745,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
     offset = getUint32();
     const sky = data.subarray(pointer, offset - 4);
 
-    // Sublevels' sky
+    // sublevels' sky
     const skys: ArrayBufferSlice[] = [];
     if (gameNumber === 3) {
         pointer = 0x28;
@@ -769,7 +767,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
         }
     }
 
-    // Ground
+    // ground
     pointer = subfile2Offset;
     offset = getUint32();
     pointer += offset - 4;
@@ -777,7 +775,7 @@ export function parseSpyroLevelData2(data: ArrayBufferSlice, gameNumber: number,
     const ground = data.subarray(pointer, offset - 4);
     pointer += offset - 4;
 
-    // Sublevels' ground
+    // sublevels' ground
     const grounds: ArrayBufferSlice[] = [];
     if (gameNumber === 3) {
         let i = 1;
@@ -943,7 +941,7 @@ function colorBitsToRGBA(word: number): [number, number, number, number] {
     ];
 }
 
-function readColorLookupTable(vram: SpyroVRAM, px: number, py: number, n: number): [number, number, number, number][] {
+function getCLUT(vram: SpyroVRAM, px: number, py: number, n: number): [number, number, number, number][] {
     const clut: [number, number, number, number][] = [];
     for (let i = 0; i < n; i++) {
         clut.push(colorBitsToRGBA(vram.getWordByIndex((py * 512 + px) + i)));
@@ -956,7 +954,7 @@ function decodeTileToRGBA(vram: SpyroVRAM, tile: TileDefinition, width: number =
     const startY = tile.y[3];
     if (tile.bitDepth === 4) {
         startX = startX >> 2;
-        const clut = readColorLookupTable(vram, tile.pageX, tile.pageY, 16);
+        const clut = getCLUT(vram, tile.pageX, tile.pageY, 16);
         const rgba = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width / 4; x++) {
@@ -974,7 +972,7 @@ function decodeTileToRGBA(vram: SpyroVRAM, tile: TileDefinition, width: number =
         return rgba;
     } else if (tile.bitDepth === 8) {
         startX = startX >> 1;
-        const clut = readColorLookupTable(vram, tile.pageX, tile.pageY, 256);
+        const clut = getCLUT(vram, tile.pageX, tile.pageY, 256);
         const rgba = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width / 2; x++) {
@@ -1082,7 +1080,7 @@ function parseSkyboxPart(data: DataView, partOffset: number, vertices: number[][
     const baseVertexIndex = vertices.length;
     const baseColorIndex = colors.length;
 
-    // Header (24)
+    // header (24)
     pointer += 8;
     const globalY = data.getInt16(pointer, true);
     const globalZ = data.getInt16(pointer + 2, true);
@@ -1092,7 +1090,7 @@ function parseSkyboxPart(data: DataView, partOffset: number, vertices: number[][
     const colorCount = data.getUint16(pointer + 10, true);
     pointer += 16;
 
-    // Vertices (4)
+    // vertices (4)
     for (let i = 0; i < vertexCount; i++) {
         if (pointer + 4 > data.byteLength) {
             break;
@@ -1109,7 +1107,7 @@ function parseSkyboxPart(data: DataView, partOffset: number, vertices: number[][
         pointer += 4;
     }
 
-    // Colors (4)
+    // colors (4)
     for (let i = 0; i < colorCount; i++) {
         if (pointer + 4 > data.byteLength) {
             break;
@@ -1122,7 +1120,7 @@ function parseSkyboxPart(data: DataView, partOffset: number, vertices: number[][
         return [(b1 >> 2) | ((b2 & 15) << 6), (b2 >> 4) | ((b3 & 63) << 4), (b3 >> 6) | (b4 << 2)];
     }
 
-    // Polygons (8)
+    // polygons (8)
     for (let i = 0; i < polyCount; i++) {
         if (pointer + 8 > data.byteLength) {
             break;
@@ -1144,7 +1142,7 @@ function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[]
     const baseVertexIndex = vertices.length;
     const baseColorIndex = colors.length;
 
-    // Header (20)
+    // header (20)
     if (pointer + 20 > data.byteLength) {
         return;
     }
@@ -1157,7 +1155,7 @@ function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[]
     const polyCount = data.getUint16(pointer + 10, true);
     pointer += 12;
 
-    // Vertices (4)
+    // vertices (4)
     for (let i = 0; i < vertexCount; i++) {
         const b1 = data.getUint8(pointer);
         const b2 = data.getUint8(pointer + 1);
@@ -1171,19 +1169,13 @@ function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[]
         pointer += 4;
     }
 
-    // Colors (4)
+    // colors (4)
     for (let i = 0; i < colorCount; i++) {
         colors.push([data.getUint8(pointer), data.getUint8(pointer + 1), data.getUint8(pointer + 2)]);
         pointer += 4;
     }
 
-    function isSkyFaceInBounds(v: [number, number, number], c: [number, number, number], vc: number, cc: number) {
-        // this check wouldn't be needed if the parsing was 100% correct
-        // without it, over x2 amount of faces get pushed for skys that look wrong
-        return v[0] < vc && v[1] < vc && v[2] < vc && c[0] < cc && c[1] < cc && c[2] < cc;
-    }
-
-    // Polys
+    // polys
     let seeker = pointer + polyCount;
     for (let i = polyCount; i > 3; i -= 4) {
         if (pointer + 4 > data.byteLength) {
@@ -1208,12 +1200,10 @@ function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[]
         let v3Base = v0;
         let c3Base = c0;
 
-        if (isSkyFaceInBounds([v0, v1, v2], [c0, c1, c2], vertexCount, colorCount)) {
-            faces.push({
-                indices: [baseVertexIndex + v0, baseVertexIndex + v1, baseVertexIndex + v2],
-                colors: [baseColorIndex + c0, baseColorIndex + c1, baseColorIndex + c2]
-            });
-        }
+        faces.push({
+            indices: [baseVertexIndex + v0, baseVertexIndex + v1, baseVertexIndex + v2],
+            colors: [baseColorIndex + c0, baseColorIndex + c1, baseColorIndex + c2]
+        });
 
         for (let i = 0; i < (b1 & 7); i++) {
             if (seeker + 2 > data.byteLength) {
@@ -1222,12 +1212,10 @@ function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[]
             const v2New = data.getUint8(seeker);
             const cm = data.getUint8(seeker + 1);
             const c2New = cm & 127;
-            if (isSkyFaceInBounds([v0, v1, v2New], [c0, c1, c2New], vertexCount, colorCount)) {
-                faces.push({
-                    indices: [baseVertexIndex + v0, baseVertexIndex + v1, baseVertexIndex + v2New],
-                    colors: [baseColorIndex + c0, baseColorIndex + c1, baseColorIndex + c2New]
-                });
-            }
+            faces.push({
+                indices: [baseVertexIndex + v0, baseVertexIndex + v1, baseVertexIndex + v2New],
+                colors: [baseColorIndex + c0, baseColorIndex + c1, baseColorIndex + c2New]
+            });
             if ((cm & 128) > 0) {
                 v1 = v3Base;
                 c1 = c3Base;
@@ -1244,20 +1232,20 @@ function parseSkyboxPart2(data: DataView, partOffset: number, vertices: number[]
 function parseTile(data: DataView, offset: number, gameNumber: number): TileDefinition {
     const tile = new TileDefinition(data, offset);
     if (gameNumber === 1) {
-        if ((tile.ff & 128) > 0) {
+        if ((tile.flags2 & 128) > 0) {
             tile.size = 32;
         } else {
             tile.size = 16;
         }
     }
-    if ((tile.ff & 1) > 0) {
+    if ((tile.flags2 & 1) > 0) {
         tile.bitDepth = 15;
-    } else if ((tile.ss & 128) > 0) {
+    } else if ((tile.flags1 & 128) > 0) {
         tile.bitDepth = 8;
     } else {
         tile.bitDepth = 4;
     }
-    tile.shift = tile.ss & 7;
+    tile.shift = tile.flags1 & 7;
     switch (tile.bitDepth) {
         case 4:
             tile.shift *= 256;
@@ -1269,23 +1257,23 @@ function parseTile(data: DataView, offset: number, gameNumber: number): TileDefi
             tile.shift *= 64;
             break;
     }
-    tile.x[3] = tile.mainX + tile.shift;
+    tile.x[3] = tile.baseX + tile.shift;
     tile.x[2] = tile.xx + tile.shift;
     tile.x[0] = tile.x[3];
     tile.x[1] = tile.x[3] + tile.size;
-    tile.y[3] = tile.mainY;
-    if ((tile.ss & 16) > 0) {
+    tile.y[3] = tile.baseY;
+    if ((tile.flags1 & 16) > 0) {
         tile.y[3] += 256;
     }
     tile.y[2] = tile.y[3];
     tile.y[0] = tile.y[3] + tile.size;
     tile.y[1] = tile.y[3] + tile.size;
-    tile.pageX = (tile.p[0] & 31) * 16;
-    tile.pageY = (tile.p[0] >> 6) | (tile.p[1] << 2);
-    tile.rotation = ((tile.ff & 127) >> 4) & 7;
+    tile.pageX = (tile.packedPageCoords[0] & 31) * 16;
+    tile.pageY = (tile.packedPageCoords[0] >> 6) | (tile.packedPageCoords[1] << 2);
+    tile.rotation = ((tile.flags2 & 127) >> 4) & 7;
     if (gameNumber > 1) {
-        if ((tile.ff & 128) > 0) {
-            tile.transparent = 1 + ((tile.ss & 127) >> 5);
+        if ((tile.flags2 & 128) > 0) {
+            tile.transparent = 1 + ((tile.flags1 & 127) >> 5);
         } else {
             tile.transparent = 0;
         }

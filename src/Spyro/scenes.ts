@@ -19,6 +19,7 @@ Re-write rendering setup and binary parsing
 Some moby instances aren't detected for regular levels when they should be
 More thoroughly check texture rotation permutations, SWV has some of them wrong. Annoying to check since they're so rare
 Fix or redo water detection. There's some false positives, see the ice in S3 Icy Peak for an example
+    Also a few other small issues with water rendering, but it's close enough for now
 
 Spyro 1
     Figure out edges of "water" in Gnasty's Loot, Icy Flight or Twilight Harbor
@@ -33,7 +34,7 @@ Spyro 3
         sublevel's sub-subfiles, there's additional VRAM data. It's loaded in the lower left section of the right half
         when viewing the VRAM in an emulator (enter/leave the manta ray sublevel in desert ruins for an obvious example with
         the water surface texture). The level files aren't big enough to have multiple copies of the entire image VRAM,
-        so it's not a complete overwrite.
+        so it's not a complete overwrite
 
 Nice to have
 
@@ -218,10 +219,10 @@ class S3Level implements SceneDesc {
 
 // all subfile/level ids are 1-based from the NSTC versions and v1.1 of Spyro 3
 const id = "Spyro1";
-const name = "Spyro the Dragon";
 const id2 = "Spyro2";
-const name2 = "Spyro 2: Ripto's Rage!";
 const id3 = "Spyro3";
+const name = "Spyro the Dragon";
+const name2 = "Spyro 2: Ripto's Rage!";
 const name3 = "Spyro: Year of the Dragon";
 const sceneDescs = [
     "Artisans",

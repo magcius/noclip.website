@@ -39,12 +39,12 @@ layout(std140) uniform ub_BatchParams {
 
 uniform sampler2D u_Texture;
 
-varying vec4 v_Color;
+varying vec3 v_Color;
 varying vec2 v_UV;
 
 #ifdef VERT
 layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec4 a_Color;
+layout(location = 1) in vec3 a_Color;
 layout(location = 2) in vec2 a_UV;
 
 void main() {
@@ -67,7 +67,7 @@ void main() {
 #ifdef FRAG
 void main() {
     if (u_LOD == 1.0) {
-        gl_FragColor = v_Color;
+        gl_FragColor = vec4(v_Color, 1.0);
         return;
     }
 
@@ -77,7 +77,7 @@ void main() {
     }
     vec4 texColor = texture(SAMPLER_2D(u_Texture), uv);
 
-    gl_FragColor = vec4(texColor.rgb * v_Color.rgb * u_Brightness, 1.0);
+    gl_FragColor = vec4(texColor.rgb * v_Color * u_Brightness, 1.0);
 }
 #endif
     `;
@@ -216,12 +216,12 @@ export class SpyroLevelRenderer {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
+                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
                 { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 }
             ],
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
                 { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex }
             ],
             indexBufferFormat: GfxFormat.U32_R
