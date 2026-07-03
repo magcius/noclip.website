@@ -32,13 +32,14 @@ export const DREAMDROP_VALID_PC = ["p_ex010", "p_ex01s", "p_ex020", "p_ex02s", "
 export const DREAMDROP_VALID_WEP = ["w_ex180", "w_ex18s", "w_ex200", "w_ex20s", "w_ex210", "w_ri010", "w_ri011", "w_ri01s", "w_ri020", "w_ri021", "w_ri02s", "w_ri030", "w_ri031", "w_ri03s", "w_ri040", "w_ri041", "w_ri04s", "w_ri050", "w_ri051", "w_ri05s", "w_ri070", "w_ri071", "w_ri07s", "w_ri080", "w_ri081", "w_ri08s", "w_ri090", "w_ri091", "w_ri09s", "w_ri100", "w_ri101", "w_ri10s", "w_ri110", "w_ri111", "w_ri11s", "w_ri120", "w_ri12s", "w_ri130", "w_ri131", "w_ri13s", "w_ri140", "w_ri141", "w_ri14s", "w_ri150", "w_ri151", "w_ri15s", "w_ri160", "w_ri161", "w_ri16s", "w_ri170", "w_ri17s", "w_so010", "w_so011", "w_so01s", "w_so020", "w_so021", "w_so02s", "w_so030", "w_so031", "w_so03s", "w_so040", "w_so041", "w_so04s", "w_so050", "w_so051", "w_so05s", "w_so070", "w_so071", "w_so07s", "w_so080", "w_so081", "w_so08s", "w_so090", "w_so091", "w_so09s", "w_so100", "w_so101", "w_so10s", "w_so110", "w_so111", "w_so11s", "w_so130", "w_so131", "w_so13s", "w_so150", "w_so151", "w_so15s", "w_so160", "w_so161", "w_so16s", "w_so170", "w_so17s"];
 
 /**
- * Default PMO to PAM mapping for _Kingdom Hearts 3D: Dream Drop Distance_
+ * Default PMO to PAM mapping (idle animations)
  */
 export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new Map([
     ["p_ex010", { name: "p_ex010_00001w", index: 0 }], // sora
     ["p_ex020", { name: "p_ex020_00001w", index: 0 }], // riku
     ["b_yt100", { name: "b_yt100_00001e", index: 0 }], // armored ventus
     ["n_ex010", { name: "n_ex010_00001e", index: 0 }], // moogle
+    ["n_ex020", { name: "n_ex02_001", index: 0 }], // shop moogle
     ["b_di120", { name: "b_di120_30210e", index: 0 }], // phantom ursula tentacle
     ["n_tm010", { name: "n_tm010_00001a", index: 0 }], // mickey (three musketeers)
     ["b_de020", { name: "b_de020_00001e", index: 0 }], // spellican
@@ -64,13 +65,13 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
     ["m_de501", { name: "m_de500_00001e", index: 0 }], // dream eater tron eagle
     ["m_de231", { name: "m_de230_00001e", index: 0 }], // dream eater crab
     ["m_de211", { name: "m_de210_00001e", index: 0 }], // dream eater owl
-    ["p_ex030", { name: "p_ex03_000", index: 4 }], // kh1 sora
+    ["p_ex030", { name: "p_ex03_000", index: 1 }], // kh1 sora
     ["m_de291", { name: "m_de290_00001e", index: 0 }], // dream eater sea otter
     ["m_de071", { name: "m_de070_00001e", index: 0 }], // dream eater frog knight
     ["m_de201", { name: "m_de200_00001e", index: 0 }], // dream eater penguin
     ["m_de491", { name: "m_de490_00003e", index: 0 }], // dream eater jester (?)
-    ["n_de831", { name: "n_de83_001", index: 2 }], // npc dream eater frog knight
-    ["b_de060", { name: "b_de06_001", index: 2 }], // lobster boss
+    ["n_de831", { name: "n_de83_001", index: 0 }], // npc dream eater frog knight
+    ["b_de060", { name: "b_de06_001", index: 0 }], // lobster boss
     ["d_pi020", { name: "d_pi02_010", index: 0 }], // roller coster
     ["d_pi030", { name: "d_pi03_010", index: 0 }], // roller coster
     ["d_pi040", { name: "d_pi04_010", index: 0 }], // roller coster
@@ -78,7 +79,7 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
     ["m_de401", { name: "m_de400_00001e", index: 0 }], // dream eater frog chef
     ["m_de301", { name: "m_de301_00002e", index: 0 }], // dream eater eagle
     ["m_de581", { name: "m_de580_00002e", index: 0 }], // dream eater bird
-    ["m_de511", { name: "m_de51_001", index: 8 }], // dream eater rabbit
+    ["m_de511", { name: "m_de51_020", index: 0 }], // dream eater rabbit
     ["m_de131", { name: "m_de130_00001e", index: 0 }], // dream eater giraffe
     ["m_de531", { name: "m_de530_00001e", index: 0 }], // dream eater t-rex
     ["m_de311", { name: "m_de310_00001e", index: 0 }], // dream eater crab
@@ -101,23 +102,39 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
     ["m_de541", { name: "m_de540_00001e", index: 0 }], // dream eater party hat rabbit
     ["m_de651", { name: "m_de650_00001e", index: 0 }], // dream eater saber tooth tiger
     ["m_de561", { name: "m_de560_00001e", index: 0 }], // dream eater skeleton t-rex
-    ["b_de300", { name: "b_de30_001", index: 2 }],
-    // ["g_fa640", { name: "g_fa64_001", index: 0 }], // mickey (fantasia) ----------NEW FORMAT----------
+    ["b_de300", { name: "b_de30_001", index: 0 }], // squid
+    ["g_fa640", { name: "g_fa64_001", index: 0 }], // mickey (fantasia)
+    ["g_tw570", { name: "g_tw57_001", index: 0 }], // second district top hat
+    ["g_tw380", { name: "g_tw38_001", index: 0 }], // fourth district balloons
+    ["g_nd510", { name: "g_nd51_001", index: 0 }], // windmill
+    ["g_pi560", { name: "g_pi56_001", index: 0 }], // clown face
+    ["g_pi580", { name: "g_pi58_001", index: 0 }], // ferris wheel
+    ["g_pi570", { name: "g_pi57_001", index: 0 }], // merry go round
+    ["g_pi510", { name: "g_pi51_001", index: 0 }], // puppet show
+    ["g_pi520", { name: "g_pi52_001", index: 0 }], // puppet show
+    ["g_pi500", { name: "g_pi50_001", index: 0 }], // clown face
+    ["g_pi100", { name: "g_pi10_001", index: 0 }], // manta ray
+    ["b_de310", { name: "b_de31_001", index: 0 }], // queen bee
+    ["g_tm740", { name: "g_tm74_001", index: 0 }], // horse
+    ["g_eh710", { name: "g_eh71_001", index: 0 }], // ring
+    ["g_eh720", { name: "g_eh72_001", index: 0 }], // ring
+    ["g_eh750", { name: "g_eh75_001", index: 0 }], // ring
+    ["g_eh760", { name: "g_eh76_001", index: 0 }], // ring
 ]);
 
 /**
- * List of PMOs with TXAs of the same name from _Kingdom Hearts 3D: Dream Drop Distance_
+ * List of PMOs with TXAs of the same name
  */
 export const DREAMDROP_TXA = ["g_fa100", "g_tw390", "g_tw520"];
 
 /**
- * List of rooms that don't have data sets for _Kingdom Hearts 3D: Dream Drop Distance_
+ * List of rooms that don't have data sets
  */
 export const DREAMDROP_INVALID_SETDATA = ["de01", "de02", "de03", "de10", "fa04", "fa08", "fa12", "fa17", "fa18", "nd20", "pi15", "rg04", "rg06", "rg07",
     "tl03", "tp01", "tp02", "tp03", "tp04", "tp05", "tp06", "tp07", "tp08", "tp09", "tp10", "tp11", "rg08", "wm01", "yt03", "yt07"];
 
 /**
- * List of existent OLO file names by room ID for _Kingdom Hearts 3D: Dream Drop Distance_. Some OLOs referenced in data sets were not included in the final release
+ * List of existent OLO file names by room ID. Some OLOs referenced in data sets were not included in the final release
  */
 export const DREAMDROP_VALID_OLO = new Map<string, string[]>([
     ["de01", ["m20_"]],
@@ -239,23 +256,23 @@ export const DREAMDROP_VALID_DROP_OLO = ["di60", "di61", "eh60", "eh61", "fa60",
 export const BBS_VALID_PRESET_ARC = ["CD01AQ", "CD01EX", "CD01VE", "CD02AQ", "CD02EX", "CD02VE", "CD03AQ", "CD03EX", "CD03VE", "CD04AQ", "CD05AQ", "CD05EX", "CD05TE", "CD06AQ", "CD06EX", "CD06TE", "CD07AQ", "CD07EX", "CD07TE", "CD08AQ", "CD08EX", "CD08TE", "CD09AQ", "CD09EX", "CD09TE", "CD10AQ", "CD10EX", "CD10TE", "CD11AQ", "CD11EX", "CD11TE", "CD12AQ", "CD12EX", "CD12TE", "CD13AQ", "CD13VE", "DC02AQ", "DC02EX", "DC02TE", "DC02VE", "DC03AQ", "DC03EX", "DC03TE", "DC03VE", "DC04AQ", "DC04EX", "DC04TE", "DC04VE", "DC05AQ", "DC05EX", "DC05TE", "DC05VE", "DC06AQ", "DC06EX", "DC06TE", "DC06VE", "DC07AQ", "DC07EX", "DC07TE", "DC07VE", "DC08AQ", "DC08EX", "DC08TE", "DC08VE", "DC09AQ", "DC09EX", "DC09TE", "DC09VE", "DC10AQ", "DC10EX", "DC10TE", "DC10VE", "DC11AQ", "DC11TE", "DC11VE", "DC12AQ", "DC12EX", "DC12TE", "DC12VE", "DC13AQ", "DC13EX", "DC13TE", "DC13VE", "DC14AQ", "DC14EX", "DC14TE", "DC14VE", "DC15AQ", "DC15TE", "DC15VE", "DI01EX", "DI01VE", "DI02AQ", "DI02EX", "DI02TE", "DI02VE", "DI03EX", "DI03VE", "DI04AQ", "DI04EX", "DP01AQ", "DP01TE", "DP01VE", "DP02AQ", "DP02TE", "DP02VE", "DP03AQ", "DP03VE", "DP04VE", "DP05AQ", "DP05EX", "DP05TE", "DP05VE", "DP06AQ", "DP06EX", "DP06TE", "DP06VE", "DP07AQ", "DP07EX", "DP07TE", "DP07VE", "DP08AQ", "DP08TE", "DP09AQ", "DP11AQ", "DP12AQ", "DP13VE", "DP14EX", "DP15AQ", "DP15EX", "DP15TE", "DP15VE", "DP16AQ", "DP16EX", "DP16TE", "DP16VE", "HE01AQ", "HE01EX", "HE01TE", "HE01VE", "HE02AQ", "HE02EX", "HE02TE", "HE02VE", "HE03AQ", "HE03TE", "HE03VE", "HE04AQ", "HE04TE", "HE05AQ", "HE05EX", "HE05TE", "HE05VE", "HE06AQ", "JB01EX", "JB09EX", "JB11EX", "JB50AQ", "JB50TE", "JB50VE", "JB51AQ", "JB51VE", "JB52AQ", "JB52VE", "JB53VE", "KG01AQ", "KG01EX", "KG01TE", "KG01VE", "KG02AQ", "KG02EX", "KG02TE", "KG02VE", "KG03AQ", "KG03EX", "KG03TE", "KG03VE", "KG04AQ", "KG04TE", "KG04VE", "KG05AQ", "KG05TE", "KG05VE", "KG06AQ", "KG06TE", "KG06VE", "KG07AQ", "KG07EX", "KG07TE", "KG07VE", "KG08AQ", "KG08TE", "KG08VE", "KG09AQ", "KG09TE", "KG09VE", "KG10TE", "KG11TE", "KG12AQ", "KG12VE", "KG50VE", "KG51VE", "KG52VE", "KG53AQ", "KG55TE", "KG56AQ", "KG56TE", "KG56VE", "LS01AQ", "LS01EX", "LS01TE", "LS01VE", "LS02AQ", "LS02EX", "LS02TE", "LS02VE", "LS03AQ", "LS03EX", "LS03TE", "LS03VE", "LS04AQ", "LS04EX", "LS04TE", "LS04VE", "LS05AQ", "LS05EX", "LS05TE", "LS05VE", "LS06AQ", "LS06EX", "LS06TE", "LS06VE", "LS07AQ", "LS07EX", "LS07TE", "LS07VE", "LS08EX", "LS08VE", "LS09AQ", "LS09EX", "LS09TE", "LS09VE", "LS10AQ", "LS10EX", "LS10TE", "LS10VE", "LS11TE", "LS11VE", "LS12VE", "LS13TE", "LS13VE", "LS14AQ", "LS14EX", "LS14TE", "LS14VE", "PP01EX", "PP01TE", "PP01VE", "PP02EX", "PP02TE", "PP02VE", "PP03AQ", "PP03EX", "PP03TE", "PP03VE", "PP04AQ", "PP04EX", "PP04TE", "PP04VE", "PP05AQ", "PP05EX", "PP05TE", "PP05VE", "PP06AQ", "PP06EX", "PP06TE", "PP06VE", "PP07AQ", "PP07EX", "PP07TE", "PP07VE", "PP08AQ", "PP08EX", "PP08TE", "PP08VE", "PP09AQ", "PP09EX", "PP09TE", "PP09VE", "PP10AQ", "PP10EX", "PP11AQ", "PP11EX", "PP11TE", "PP12EX", "PP12TE", "PP13EX", "PP13TE", "PP14VE", "RG01EX", "RG01TE", "RG01VE", "RG02EX", "RG02TE", "RG02VE", "RG03AQ", "RG03EX", "RG03TE", "RG03VE", "RG04AQ", "RG04EX", "RG04TE", "RG04VE", "RG05AQ", "RG05EX", "RG05TE", "RG05VE", "RG06AQ", "RG06EX", "RG06TE", "RG06VE", "RG07AQ", "RG07EX", "RG07TE", "RG07VE", "RG08AQ", "RG08EX", "RG08TE", "RG08VE", "RG09AQ", "RG09EX", "RG09TE", "RG09VE", "RG10AQ", "RG10EX", "RG10TE", "RG10VE", "RG11AQ", "RG11EX", "RG11TE", "RG11VE", "RG12EX", "RG12TE", "RG12VE", "RG13AQ", "RG14AQ", "SB01AQ", "SB01TE", "SB01VE", "SB02AQ", "SB02TE", "SB02VE", "SB03AQ", "SB03TE", "SB03VE", "SB04AQ", "SB04TE", "SB04VE", "SB05AQ", "SB05TE", "SB05VE", "SB06AQ", "SB06TE", "SB06VE", "SB07AQ", "SB07TE", "SB07VE", "SB08AQ", "SB08TE", "SB08VE", "SB09AQ", "SB09TE", "SB09VE", "SB10AQ", "SB11AQ", "SB11TE", "SB11VE", "SB12TE", "SB14AQ", "SB14TE", "SB14VE", "SB15AQ", "SB15TE", "SB15VE", "SB16AQ", "SB16TE", "SB16VE", "SB17AQ", "SB17TE", "SB18TE", "SB18VE", "SB19VE", "SB20TE", "SB20VE", "SB21TE", "SB21VE", "SB22TE", "SB22VE", "SB23TE", "SB23VE", "SB24TE", "SB24VE", "SB25TE", "SB25VE", "SB26TE", "SB26VE", "SB27TE", "SB27VE", "SB28TE", "SB28VE", "SB29TE", "SB29VE", "SB30TE", "SB30VE", "SB31TE", "SB31VE", "SB32TE", "SB32VE", "SB33TE", "SB33VE", "SB34TE", "SB34VE", "SB35TE", "SB35VE", "SB36TE", "SB36VE", "SB37TE", "SB37VE", "SB39AQ", "SB39TE", "SB39VE", "SW01EX", "SW01VE", "SW02EX", "SW02VE", "SW03AQ", "SW03EX", "SW03TE", "SW04AQ", "SW04EX", "SW04TE", "SW05AQ", "SW05EX", "SW05TE", "SW06AQ", "SW06EX", "SW06TE", "SW07AQ", "SW07EX", "SW07TE", "SW07VE", "SW08AQ", "SW08EX", "SW08VE", "SW09AQ", "SW09TE", "SW10AQ", "SW10EX", "SW10VE", "SW11AQ", "SW11EX", "SW11VE", "SW12EX", "SW12VE", "VS01AQ", "VS01EX", "VS01TE", "VS01VE", "VS02EX", "VS03EX", "VS04EX", "VS05EX", "VS06EX", "VS07EX", "VS08EX", "VS09EX", "VS10EX", "VS11EX", "VS12EX", "VS13EX", "VS14EX", "VS15EX", "WM01AQ", "WM01EX", "WM01TE", "WM01VE", "YT01AQ", "YT01EX", "YT01VE", "YT02AQ", "YT02EX", "YT02TE", "YT02VE", "YT03AQ", "YT03EX", "YT03TE", "YT03VE", "YT04AQ", "YT04EX", "YT04TE", "YT04VE"];
 
 export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
-    ["p13ex00", { name: "p13ex_001", index: 1 }], // terra armor/lingering will
-    ["b20ex00", { name: "b20ex_000", index: 1 }], // eraqus
+    ["p13ex00", { name: "p13ex_001", index: 0 }], // terra armor/lingering will
+    ["b20ex00", { name: "b20ex_000", index: 0 }], // eraqus
     ["n10ex00", { name: "n10ex_001", index: 0 }], // shop moogle
-    ["b64ex00", { name: "b64ex_000", index: 1 }], // ventus
-    ["b68ex00", { name: "b68ex_000", index: 1 }], // ventus
-    ["b69ex00", { name: "b69ex_000", index: 1 }], // ventus
-    ["b60ex00", { name: "b60ex_000", index: 1 }], // ventus
-    ["p01ex00", { name: "p01ex_001", index: 1 }], // ventus
-    ["b78ex00", { name: "b78ex_000", index: 1 }], // terra
-    ["b79ex00", { name: "b79ex_000", index: 1 }], // terra
-    ["b70ex00", { name: "b70ex_000", index: 1 }], // terra
-    ["b88ex00", { name: "b88ex_000", index: 1 }], // aqua
-    ["b89ex00", { name: "b89ex_000", index: 1 }], // aqua
-    ["b80ex00", { name: "b80ex_000", index: 1 }], // aqua
-    ["b01ex00", { name: "b01ex_000", index: 1 }], // the unknown
-    ["p02ex00", { name: "p02ex_001", index: 1 }], // aqua
-    ["p03ex00", { name: "p03ex_001", index: 1 }], // terra
+    ["b64ex00", { name: "b64ex_000", index: 0 }], // ventus
+    ["b68ex00", { name: "b68ex_000", index: 0 }], // ventus
+    ["b69ex00", { name: "b69ex_000", index: 0 }], // ventus
+    ["b60ex00", { name: "b60ex_000", index: 0 }], // ventus
+    ["p01ex00", { name: "p01ex_001", index: 0 }], // ventus
+    ["b78ex00", { name: "b78ex_000", index: 0 }], // terra
+    ["b79ex00", { name: "b79ex_000", index: 0 }], // terra
+    ["b70ex00", { name: "b70ex_000", index: 0 }], // terra
+    ["b88ex00", { name: "b88ex_000", index: 0 }], // aqua
+    ["b89ex00", { name: "b89ex_000", index: 0 }], // aqua
+    ["b80ex00", { name: "b80ex_000", index: 0 }], // aqua
+    ["b01ex00", { name: "b01ex_000", index: 0 }], // the unknown
+    ["p02ex00", { name: "p02ex_001", index: 0 }], // aqua
+    ["p03ex00", { name: "p03ex_001", index: 0 }], // terra
     ["g50dp00", { name: "g50dp_000", index: 0 }], // purple flag
     ["g51dp00", { name: "g51dp_000", index: 0 }], // green flag
     ["n10sw00", { name: "n10sw_000", index: 0 }], // dopey
@@ -265,33 +282,33 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["n06sw00", { name: "n06sw_000", index: 0 }], // happy
     ["n09sw00", { name: "n09sw_000", index: 0 }], // sneezy
     ["n07sw00", { name: "n07sw_000", index: 0 }], // sleepy
-    ["m01ex00", { name: "m01ex_000", index: 2 }], // flood
+    ["m01ex00", { name: "m01ex_000", index: 1 }], // flood
     ["m05ex00", { name: "m05ex_000", index: 1 }], // unversed
-    ["m02ex00", { name: "m02ex_000", index: 2 }], // unversed
-    ["m03ex00", { name: "m03ex_000", index: 2 }], // unversed
-    ["m06ex00", { name: "m06ex_000", index: 2 }], // unversed
-    ["m10ex00", { name: "m10ex_000", index: 2 }], // unversed
-    ["m11ex00", { name: "m11ex_000", index: 2 }], // unversed
-    ["m09ex00", { name: "m09ex_000", index: 2 }], // unversed
-    ["m07ex00", { name: "m07ex_000", index: 2 }], // unversed
+    ["m02ex00", { name: "m02ex_000", index: 1 }], // unversed
+    ["m03ex00", { name: "m03ex_000", index: 1 }], // unversed
+    ["m06ex00", { name: "m06ex_000", index: 1 }], // unversed
+    ["m10ex00", { name: "m10ex_000", index: 1 }], // unversed
+    ["m11ex00", { name: "m11ex_000", index: 1 }], // unversed
+    ["m09ex00", { name: "m09ex_000", index: 1 }], // unversed
+    ["m07ex00", { name: "m07ex_000", index: 1 }], // unversed
     ["m05sw00", { name: "m05sw_000", index: 0 }], // dwarf in minecart
     ["n01sw00", { name: "n01sw_000", index: 0 }], // snow white
     ["n02sw00", { name: "n02sw_000", index: 0 }], // the prince
     ["n03sw00", { name: "n03sw_000", index: 0 }], // evil queen
-    ["b01sw00", { name: "b01sw_000", index: 1 }], // mad treant
+    ["b01sw00", { name: "b01sw_000", index: 0 }], // mad treant
     ["b10sw00", { name: "b10sw_000", index: 1 }], // magic mirror
-    ["b40ex00", { name: "b40ex_000", index: 1 }], // xehanort
-    ["b10ex00", { name: "b10ex_000", index: 1 }], // vanitas
+    ["b40ex00", { name: "b40ex_000", index: 0 }], // xehanort
+    ["b10ex00", { name: "b10ex_000", index: 0 }], // vanitas
     ["b11ex00", { name: "b11ex_000", index: 1 }], // vanitas
-    ["b50ex00", { name: "b50ex_000", index: 1 }], // terra nort
-    ["b63ex00", { name: "b63ex_000", index: 1 }], // ventus-vanitas
-    ["b30ex00", { name: "b30ex_000", index: 1 }], // him name braig
-    ["b32ex00", { name: "b32ex_000", index: 1 }], // him name braig
+    ["b50ex00", { name: "b50ex_000", index: 0 }], // terra nort
+    ["b63ex00", { name: "b63ex_000", index: 0 }], // ventus-vanitas
+    ["b30ex00", { name: "b30ex_000", index: 0 }], // him name braig
+    ["b32ex00", { name: "b32ex_000", index: 0 }], // him name braig
     ["n09cd00", { name: "n09cd_000", index: 0 }], // jaq
     ["n05cd00", { name: "n05cd_000", index: 0 }], // fairy godmother
     ["n11cd00", { name: "n11cd_000", index: 0 }], // grand duke
-    ["b20cd00", { name: "b20cd_000", index: 2 }], // lucifer
-    ["b10cd00", { name: "b10cd_000", index: 1 }], // unversed pumpkin carrage
+    ["b20cd00", { name: "b20cd_000", index: 1 }], // lucifer
+    ["b10cd00", { name: "b10cd_000", index: 0 }], // unversed pumpkin carrage
     ["n02cd01", { name: "n02cd_001", index: 0 }], // cinderella with dress
     ["n01ex00", { name: "n01ex_000", index: 0 }], // flood (cutscene)
     ["b01cd00", { name: "b01cd_000", index: 1 }], // unversed ballroom boss
@@ -307,67 +324,67 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["b07rg00", { name: "b07rg_000", index: 2 }], // discount guard armor
     ["b08rg00", { name: "b08rg_000", index: 2 }], // discount guard armor
     ["b04rg00", { name: "b04rg_000", index: 1 }], // unversed boss
-    ["b05rg00", { name: "b05rg_000", index: 1 }], // unversed boss
-    ["m12ex00", { name: "m12ex_000", index: 2 }], // unversed
+    ["b05rg00", { name: "b05rg_000", index: 0 }], // unversed boss
+    ["m12ex00", { name: "m12ex_000", index: 1 }], // unversed
     ["m14ex00", { name: "m14ex_000", index: 2 }], // unversed
-    ["m04ex00", { name: "m04ex_000", index: 4 }], // unversed
-    ["m13ex00", { name: "m13ex_000", index: 3 }], // unversed
-    ["m19ex00", { name: "m19ex_000", index: 3 }], // unversed
+    ["m04ex00", { name: "m04ex_000", index: 1 }], // unversed
+    ["m13ex00", { name: "m13ex_000", index: 1 }], // unversed
+    ["m19ex00", { name: "m19ex_000", index: 2 }], // unversed
     ["m18ex00", { name: "m18ex_000", index: 2 }], // unversed
-    ["m21ex00", { name: "m21ex_000", index: 2 }], // unversed
+    ["m21ex00", { name: "m21ex_000", index: 1 }], // unversed
     ["m22ex00", { name: "m22ex_000", index: 2 }], // unversed
-    ["m25ex00", { name: "m25ex_000", index: 1 }], // unversed
-    ["m16ex00", { name: "m16ex_000", index: 1 }], // unversed
+    ["m25ex00", { name: "m25ex_000", index: 0 }], // unversed
+    ["m16ex00", { name: "m16ex_000", index: 0 }], // unversed
     ["m32ex00", { name: "m32ex_000", index: 1 }], // unversed
     ["m17ex00", { name: "m17ex_000", index: 1 }], // unversed
-    ["m20ex00", { name: "m20ex_000", index: 1 }], // unversed
-    ["m08ex00", { name: "m08ex_000", index: 2 }], // unversed
+    ["m20ex00", { name: "m20ex_000", index: 0 }], // unversed
+    ["m08ex00", { name: "m08ex_000", index: 8 }], // unversed
     ["m15ex00", { name: "m15ex_000", index: 4 }], // unversed
-    ["m23ex00", { name: "m23ex_000", index: 3 }], // unversed
+    ["m23ex00", { name: "m23ex_000", index: 1 }], // unversed
     ["b01vs00", { name: "b01vs_000", index: 1 }], // unversed boss
     ["b01vs00", { name: "b01vs_000", index: 1 }], // unversed boss
-    ["b10he00", { name: "b10he_000", index: 1 }], // ice titan
+    ["b10he00", { name: "b10he_000", index: 0 }], // ice titan
     ["b13vs00", { name: "b13vs_000", index: 3 }], // unversed boss
     ["b12vs00", { name: "b12vs_000", index: 3 }], // unversed boss
     ["b11vs00", { name: "b11vs_000", index: 3 }], // unversed boss
-    ["b30he00", { name: "b30he_000", index: 1 }], // zack
-    ["b01he00", { name: "b01he_000", index: 1 }], // hades (red)
+    ["b30he00", { name: "b30he_000", index: 0 }], // zack
+    ["b01he00", { name: "b01he_000", index: 0 }], // hades (red)
     ["n13ex00", { name: "n13ex_001", index: 0 }], // moogle
     ["g10kg00", { name: "g10kg_000", index: 0 }], // tornado
-    ["b12ex00", { name: "b12ex_000", index: 1 }], // vanitas remnant
-    ["m01sb00", { name: "m01sb_000", index: 2 }], // pig enemy with spear
-    ["m02sb00", { name: "m02sb_000", index: 2 }], // bird archer enemy
-    ["b01sb00", { name: "b01sb_000", index: 2 }], // maleficent
+    ["b12ex00", { name: "b12ex_000", index: 0 }], // vanitas remnant
+    ["m01sb00", { name: "m01sb_000", index: 1 }], // pig enemy with spear
+    ["m02sb00", { name: "m02sb_000", index: 1 }], // bird archer enemy
+    ["b01sb00", { name: "b01sb_000", index: 1 }], // maleficent
     ["n06sb00", { name: "n06sb_000", index: 0 }], // green fairy
     ["n07sb00", { name: "n07sb_000", index: 0 }], // blue fairy
     ["n05sb00", { name: "n05sb_000", index: 0 }], // red fairy
-    ["b03sb00", { name: "b03sb_000", index: 1 }], // dragon maleficent
-    ["b10sb00", { name: "b10sb_000", index: 1 }], // unversed boss
+    ["b03sb00", { name: "b03sb_000", index: 0 }], // dragon maleficent
+    ["b10sb00", { name: "b10sb_000", index: 0 }], // unversed boss
     ["n01sb01", { name: "n01sb_000", index: 0 }], // aurora
     ["n01yt00", { name: "n01yt_000", index: 0 }], // yensid
     ["n02yt00", { name: "n02yt_000", index: 0 }], // donald (mage)
     ["n03yt00", { name: "n03yt_000", index: 0 }], // goofy (knight)
-    ["b51ex00", { name: "b51ex_000", index: 1 }], // terra nort
-    ["b52ex00", { name: "b52ex_000", index: 1 }], // terra nort
-    ["b56ex00", { name: "b56ex_000", index: 5 }], // dark figure
+    ["b51ex00", { name: "b51ex_000", index: 0 }], // terra nort
+    ["b52ex00", { name: "b52ex_000", index: 0 }], // terra nort
+    ["b56ex00", { name: "b56ex_000", index: 3 }], // dark figure
     ["n09rg00", { name: "n09rg_000", index: 0 }], // scrooge mcduck
     ["n11ex00", { name: "n11ex_001", index: 0 }], // moogle
     ["n11rg00", { name: "n11rg_000", index: 0 }], // merlin
     ["n01he00", { name: "n01he_000", index: 0 }], // young hercules
     ["n02he00", { name: "n02he_000", index: 0 }], // phill
     ["n03he00", { name: "n03he_000", index: 0 }], // hades
-    ["b40he00", { name: "b40he_000", index: 1 }], // zack
+    ["b40he00", { name: "b40he_000", index: 0 }], // zack
     ["n02ls00", { name: "n02ls_000", index: 0 }], // jumba jookiba
     ["n05ls00", { name: "n05ls_000", index: 0 }], // grand councilwoman
-    ["b20ls00", { name: "b20ls_000", index: 1 }], // sparky
+    ["b20ls00", { name: "b20ls_000", index: 0 }], // sparky
     ["b01ls00", { name: "b01ls_000", index: 1 }], // unversed boss
     ["b02ls00", { name: "b02ls_000", index: 1 }], // unversed boss
-    ["b10ls00", { name: "b10ls_000", index: 1 }], // capitan gantu
-    ["m01ls00", { name: "m01ls_000", index: 1 }], // laser shooter
-    ["b01pp00", { name: "b01pp_000", index: 1 }], // capitan hook
-    ["b02pp00", { name: "b02pp_000", index: 1 }], // crocodile
+    ["b10ls00", { name: "b10ls_000", index: 0 }], // capitan gantu
+    ["m01ls00", { name: "m01ls_000", index: 0 }], // laser shooter
+    ["b01pp00", { name: "b01pp_000", index: 0 }], // capitan hook
+    ["b02pp00", { name: "b02pp_000", index: 0 }], // crocodile
     ["n01pp00", { name: "n01pp_000", index: 0 }], // peter pan
-    ["b20pp00", { name: "b20pp_000", index: 1 }], // crocodile
+    ["b20pp00", { name: "b20pp_000", index: 0 }], // peter pan (put him in his place!)
     ["n03pp00", { name: "n03pp_000", index: 0 }], // kid
     ["n04pp00", { name: "n04pp_000", index: 0 }], // kid
     ["n07dc01", { name: "n07dc_000", index: 0 }], // huey

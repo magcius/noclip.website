@@ -11,7 +11,7 @@ export class DreamDropShader extends DeviceProgram {
     public static ub_ModelParams = 1;
     public static ub_ShapeParams = 2;
 
-    constructor(protected attributeCount: number, protected boneSRTCount: number, protected weightCount = 0) {
+    constructor(protected attributeCount: number, protected boneSRTCount: number, protected weightCount = 0, protected doRigidSkinning = false) {
         super();
         this.both = `
 precision highp float;
@@ -77,11 +77,17 @@ void main() {
 
     protected getVertPosition(): string {
         if (this.boneSRTCount > 0) {
-            return `mat4x3 t_BoneMatrix = mat4x3(0.0);
+            let s = "";
+            if (this.doRigidSkinning) {
+                s = "mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneSRT[a_Joint.x]);";
+            } else {
+                s = `mat4x3 t_BoneMatrix = mat4x3(0.0);
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.x]) * a_Weight.x;
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.y]) * a_Weight.y;
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.z]) * a_Weight.z;
-    t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.w]) * a_Weight.w;
+    t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.w]) * a_Weight.w;`;
+            }
+            return `${s}
     vec3 t_ViewPosition = UnpackMatrix(u_View) * vec4(t_BoneMatrix * vec4(a_Position, 1.0), 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_ViewPosition, 1.0);`;
         } else {
@@ -94,13 +100,10 @@ void main() {
     }
 }
 
+// same as dream drop's shader, except there can be up to 8 weights per vertex, instead of either 0 or 4
 export class BBSShader extends DreamDropShader {
     public static a_Weight2 = 5;
     public static a_Joint2 = 6;
-
-    constructor(attributeCount: number, boneSRTCount: number, weightCount: number) {
-        super(attributeCount, boneSRTCount, weightCount);
-    }
 
     protected override getVertPosition(): string {
         if (this.boneSRTCount > 0 && this.weightCount > 0) {
@@ -116,37 +119,41 @@ export class BBSShader extends DreamDropShader {
     }
 
     private getBoneMatrixTransform(weightCount: number) {
-        let s = `mat4x3 t_BoneMatrix = mat4x3(0.0);
+        let s = "mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneSRT[a_Joint.x]);";
+        if (!this.doRigidSkinning) {
+            s = `mat4x3 t_BoneMatrix = mat4x3(0.0);
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.x]) * a_Weight.x;`;
-        if (weightCount > 1) {
-            s += `
+            if (weightCount > 1) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.y]) * a_Weight.y;`;
-        }
-        if (weightCount > 2) {
-            s += `
+            }
+            if (weightCount > 2) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.z]) * a_Weight.z;`;
-        }
-        if (weightCount > 3) {
-            s += `
+            }
+            if (weightCount > 3) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint.w]) * a_Weight.w;`;
-        }
-        if (weightCount > 4) {
-            s += `
+            }
+            if (weightCount > 4) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint2.x]) * a_Weight2.x;`;
-        }
-        if (weightCount > 5) {
-            s += `
+            }
+            if (weightCount > 5) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint2.y]) * a_Weight2.y;`;
-        }
-        if (weightCount > 6) {
-            s += `
+            }
+            if (weightCount > 6) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint2.z]) * a_Weight2.z;`;
-        }
-        if (weightCount > 7) {
-            s += `
+            }
+            if (weightCount > 7) {
+                s += `
     t_BoneMatrix += UnpackMatrix(u_BoneSRT[a_Joint2.w]) * a_Weight2.w;`;
+            }
         }
-        return s + `vec3 t_ViewPosition = UnpackMatrix(u_View) * vec4(t_BoneMatrix * vec4(a_Position, 1.0), 1.0);
+        return `${s}
+    vec3 t_ViewPosition = UnpackMatrix(u_View) * vec4(t_BoneMatrix * vec4(a_Position, 1.0), 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_ViewPosition, 1.0);`;
     }
 }

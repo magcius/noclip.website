@@ -192,7 +192,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         });
     }
 
-    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number): void {
-        this.gfxProgram = cache.createProgram(new BBSShader(this.vertexBufferDescriptors.length, boneCount, weightCount));
+    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
+        this.gfxProgram = cache.createProgram(new BBSShader(this.vertexBufferDescriptors.length, boneCount, weightCount, doRigidSkinning));
     }
 }

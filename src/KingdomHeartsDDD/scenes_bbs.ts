@@ -267,8 +267,6 @@ TODO
 
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
-    It can also occur on level geometry, but I've only ever seen it once in the interior of the cinderella castle (possibly the skybox of jb01 too)
-        This might actually just be some z-fighting, need to look at it more
     Perhaps the scaling is different for UVs sometimes, even in the same geometry, for some reason? The texture is usually just a tiny bit too big
 Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
     Maybe they're supposed to be applied differently. Not sure why there'd be data but not use it?
@@ -408,6 +406,7 @@ const sceneDescs = [
     new Room("LS02", "Turo Transporter"),
     new Room("LS03", "Durgon Transporter"),
     new Room("LS04", "Ship Corridor"),
+    new Room("LS12", "Ship Corridor"),
     new Room("LS05", "Control Room"),
     new Room("LS06", "Containment Pod"),
     new Room("LS07", "Ship Hub"),
@@ -415,7 +414,6 @@ const sceneDescs = [
     new Room("LS09", "Launch Deck"),
     new Room("LS10", "Ship Exterior"),
     new Room("LS11", "Outer Space"),
-    new Room("LS12", "Ship Corridor"),
     new Room("LS13", "Lanes Between"),
     // new Room("LS14", "Bay Access"),
     "Destiny Islands",

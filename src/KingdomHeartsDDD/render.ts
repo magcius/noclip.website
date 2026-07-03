@@ -6,9 +6,6 @@ import { DreamDropRoomConfig } from "./config/room";
 import { DreamDropShader } from "./shader";
 import { computeLuxShiftMatrix, getLuxShortNibble, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 
-/**
- * Renderer for a room from _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export class DreamDropRoomRenderer extends LuxRoomRenderer {
     constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], config: DreamDropRoomConfig | undefined) {
         super(cache, pmp, textures, objects, txas);
@@ -117,10 +114,6 @@ class ShapeRenderer extends LuxShapeRenderer {
         ];
 
         if (shape.weights.length > 0 && shape.joints.length > 0) {
-            if (shape.weights.filter(w => w !== 0.0).length === 0) {
-                // workaround for when an animated model has all zeroes for weights (for whatever reason???)
-                shape.weights = new Float32Array(Array(shape.weights.length).fill(1.0));
-            }
             inVertexAttributeDescriptors.push({ location: DreamDropShader.a_Weight, bufferIndex: DreamDropShader.a_Weight, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 });
             inVertexAttributeDescriptors.push({ location: DreamDropShader.a_Joint, bufferIndex: DreamDropShader.a_Joint, format: GfxFormat.U8_RGBA, bufferByteOffset: 0 });
             inVertexBufferDescriptors.push({ byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex });
@@ -136,7 +129,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         });
     }
 
-    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number): void {
-        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount));
+    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
+        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, 4, doRigidSkinning));
     }
 }

@@ -4,7 +4,7 @@ import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPAM, LuxPMP, LuxShape, LuxT
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { decodeBBSTIM2 } from "./texture";
 
-// Credit: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
+// Credit for most of the parsing: https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
 
 const MAGIC_ARC = 4411969;
 const MAGIC_PMP = 5262672;

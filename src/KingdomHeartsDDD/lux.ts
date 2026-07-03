@@ -11,15 +11,16 @@ import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/r
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
 import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui";
-import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp } from "../MathHelpers";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp, Mat4Identity } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { White } from "../Color";
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpaceText } from "../DebugJunk";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
-// See notes in scenes.ts for todo items
 
 export enum LuxModelFlagRenderMode {
     UNK,
@@ -86,7 +87,7 @@ export interface LuxModel {
     pmpFlags: number;
     bbox: number[];
     shapes: LuxShape[];
-    skeleton?: LuxSkeleton;
+    skeleton?: Skeleton;
 }
 
 export interface LuxModelInstance {
@@ -94,7 +95,7 @@ export interface LuxModelInstance {
     setId: number;
 }
 
-interface LuxSkeleton {
+interface Skeleton {
     skinnedBoneCount: number;
     skinWeightCount: number;
     bones: LuxBone[];
@@ -177,7 +178,6 @@ const FRAME_TIME = 0.03;
 const WORLD_SCALE = 200.0; // to make camera movement better, tiny XYZ coords are scaled up
 const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
-const SCRATCH_IDENTITY = mat4.create();
 const SCRATCH_BONE = mat4.create();
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
@@ -322,7 +322,8 @@ export class LuxShapeRenderer implements Destroyable {
         }
         this.hasTXA = txa !== undefined;
 
-        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount);
+        // if weights are all zero then rigid skinning is used (assuming an animation is specified as well)
+        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount, shape.weights.filter(w => w !== 0.0).length === 0);
         
         this.drawCount = shape.indices.length;
         this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shape.indices.buffer), byteOffset: 0 };
@@ -347,7 +348,7 @@ export class LuxShapeRenderer implements Destroyable {
                     this.currentTXAFrame += viewerInput.deltaTime * FRAME_TIME;
                     this.currentTXAFrame %= this.txaIndices.length;
                 }
-                renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[1 + this.txaIndices[Math.trunc(this.currentTXAFrame)]]);
+                renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[this.txaIndices[Math.trunc(this.currentTXAFrame)] + 1]);
             } else {
                 renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[0]);
             }
@@ -376,7 +377,7 @@ export class LuxShapeRenderer implements Destroyable {
         
     }
 
-    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number) {
+    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean) {
 
     }
 }
@@ -426,6 +427,8 @@ export class LuxModelRenderer implements Destroyable, Layer {
         this.hasTXA = txas.length > 0;
         this.pamFramerate = this.animation ? this.animation.framerate / 1000.0 : 0;
         this.bones = this.animation ? model.skeleton!.bones : [];
+        // all bone srt matrices are computed ahead of time to save on rendering performance in exchange for a bit of memory usage
+        // the difference may be neglible but there's no point in re-computing the same thing hundreds of times a second
         if (this.animation) {
             this.preComputeBoneMatrices();
         }
@@ -473,7 +476,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
                     mat4.mul(SCRATCH_BONE, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)], this.bones[i].inverseTransform);
                     offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
                 } else {
-                    offset += fillMatrix4x3(d, offset, SCRATCH_IDENTITY);
+                    offset += fillMatrix4x3(d, offset, Mat4Identity);
                 }
             }
             // if (this.boneMatrices.length > 0 && this.instances.indexOf(instance) === 0) {

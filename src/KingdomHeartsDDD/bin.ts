@@ -23,9 +23,6 @@ import { DreamDropCTRTFormat } from "./texture";
 // FEP: Effect file
 // BIN: Many uses and formats
 
-/**
- * Raw model pack for _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export interface DreamDropPMP extends LuxPMP {
     ctrts: DreamDropCTRT[];
 }
@@ -35,11 +32,7 @@ interface CTRTInfo {
     name: string;
 }
 
-/**
- * Raw CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export interface DreamDropCTRT {
-    // ctrt = ctr texture
     name: string;
     width: number;
     height: number;
@@ -47,9 +40,6 @@ export interface DreamDropCTRT {
     data: ArrayBufferSlice;
 }
 
-/**
- * Raw model for _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export interface DreamDropPMO extends LuxModel {
     materials: LuxMaterial[];
     ctrts: DreamDropCTRT[];
@@ -82,9 +72,6 @@ enum PrimitiveFormat {
     QUAD
 }
 
-/**
- * Model shape (mesh) for _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export class DreamDropShape extends LuxShape {
     constructor(vertexCount: number, textureIndex: number, attribute: number, boneIndices: number[], public vertexSizeBytes: number, vertexFlags: number) {
         super(vertexCount, textureIndex, attribute, boneIndices);
@@ -120,9 +107,6 @@ export class DreamDropShape extends LuxShape {
     }
 }
 
-/**
- * Billboard setting from a model's flag 2nd nibble from _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export enum DreamDropModelFlagBillboard {
     BILLBOARD = 4
 }
@@ -155,9 +139,6 @@ function getBitsRange32(value: number, start: number = 0, length: number = 1): n
     return (value << 32 - (start + length)) >> 32 - length;
 }
 
-/**
- * Binary parser for _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export class DreamDropParser {
     protected view: DataView;
     protected offset: number;
@@ -283,14 +264,6 @@ export class DreamDropParser {
             console.warn("Unknown OLO magic", magic);
         }
 
-        // this.offset = 8;
-        // const objectCount = this.getUint32();
-        // const objectOffset = this.getUint32();
-        // this.offset = objectOffset;
-        // const objectNames: string[] = Array(objectCount);
-        // for (let i = 0; i < objectCount; i++) {
-        //     objectNames[i] = this.getString(16);
-        // }
         const objects: LuxOLOInstance[] = [];
 
         this.offset = 0x30;
@@ -298,11 +271,6 @@ export class DreamDropParser {
         const groupOffset = this.getUint32();
         for (let i = 0; i < groupCount; i++) {
             this.offset = groupOffset + (i * 0x30) + 40;
-            // const cx = this.getFloat();
-            // const cy = this.getFloat();
-            // const cz = this.getFloat();
-            // const radius = this.getFloat();
-            // this.offset += 24;
             const layoutCount = this.getUint32();
             const layoutOffset = this.getUint32();
             for (let j = 0; j < layoutCount; j++) {
@@ -383,7 +351,7 @@ export class DreamDropParser {
 
         this.offset += 8;
 
-        // shape names are here, skipping
+        // shape names are here, skipping (model names would have been nice, though...)
 
         if (opaqueShapeOffset !== 0) {
             this.offset = offset + opaqueShapeOffset;
@@ -480,9 +448,15 @@ export class DreamDropParser {
             console.warn("Unimplemented PAM version", version);
         }
 
-        const infos: AnimationInfo[] = Array(animationCount);
+        const infos: AnimationInfo[] = [];
         for (let i = 0; i < animationCount; i++) {
             const offset = this.getUint32();
+            if (offset === 0) {
+                // this animation has no data but still has an info for some reason
+                // could be an alias or something like that, ignoring for now
+                this.offset += 12;
+                continue;
+            }
             let name;
             if (version === 1) {
                 name = this.getString(12); 
@@ -491,13 +465,13 @@ export class DreamDropParser {
                 const ret = this.offset;
                 this.offset = nameOffset;
                 name = this.getString();
-                this.offset = ret;
+                this.offset = ret + 8;
             }
-            infos[i] = { offset, name };
+            infos.push({ offset, name });
         }
 
-        const animations: LuxSkeletalAnimation[] = Array(animationCount);
-        for (let i = 0; i < animationCount; i++) {
+        const animations: LuxSkeletalAnimation[] = Array(infos.length);
+        for (let i = 0; i < infos.length; i++) {
             this.offset = infos[i].offset;
             const flag = this.getUshort();
             const framerate = this.getByte();
@@ -756,7 +730,7 @@ export class DreamDropParser {
             }
             s = this.textDecoder.decode(n);
         } else {
-            // null-terminated string
+            // null-terminated string (or up to 999 characters to avoid errors)
             const n = [];
             while (true) {
                 const b = this.getByte();
