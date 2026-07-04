@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { DreamDropParser } from "./bin";
-import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPAM, LuxPMP, LuxShape, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
+import { LuxBone, LuxModel, LuxModelInfo, LuxOLO, LuxPAM, LuxPMP, LuxPVD, LuxShape, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { decodeBBSTIM2 } from "./texture";
 
@@ -11,6 +11,7 @@ const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_TIM2 = 843925844;
 const MAGIC_TXA = 4282452;
+const MAGIC_PVD = 4478544;
 
 const NORMALIZED_8_SCALE = 128.0;
 const NORMALIZED_16_SCALE = 32768.0;
@@ -235,6 +236,17 @@ export class BBSParser extends DreamDropParser {
         }
     }
 
+    public parsePVDFromARC(): LuxPVD | undefined {
+        const entries = this.parseARC();
+        const pvdEntry = entries.find(e => e.name.toLowerCase().includes(".pvd") && e.dirPointer === 0);
+        if (!pvdEntry) {
+            return undefined;
+        } else {
+            this.view = this.buffer.createDataView(pvdEntry.offset, pvdEntry.size);
+            return this.getPVD();
+        }
+    }
+
     public parseTIM2(): BBSTIM2Parsed {
         this.offset = 0;
         const magic = this.getUint32();
@@ -436,7 +448,7 @@ export class BBSParser extends DreamDropParser {
         return { name, scale, flags, pmpFlags, bbox, shapes, skeleton, textureNames, tims };
     }
 
-    private getTXA(tims: BBSTIM2[], startOffset: number) {
+    private getTXA(tims: BBSTIM2[], startOffset: number): LuxTXA[] {
         this.offset = 0;
         const magic = this.getUint32();
         if (magic !== MAGIC_TXA) {
@@ -512,6 +524,20 @@ export class BBSParser extends DreamDropParser {
         }
 
         return txas;
+    }
+
+    private getPVD(): LuxPVD {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_PVD) {
+            console.warn("Unknown PVD magic", magic);
+        }
+        this.offset += 36;
+        const r = this.getByte();
+        const g = this.getByte();
+        const b = this.getByte();
+        const a = this.getByte();
+        return { clearColor: [r, g, b, a] };
     }
 
     private getShapes(hasSkeleton: boolean): BBSShape[] {

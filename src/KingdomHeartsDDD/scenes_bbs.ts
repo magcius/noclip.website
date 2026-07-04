@@ -7,7 +7,7 @@ import { SceneGfx } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSTIM2Format, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_PMO_ARC_OVERRIDE, BBS_VALID_PRESET_ARC } from "./config/data";
-import { LuxObjectSet, LuxOLOInstance, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation } from "./lux";
+import { LuxObjectSet, LuxOLOInstance, LuxPVD, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
 
@@ -196,8 +196,8 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
 }
 
 class Renderer extends LuxRenderer {
-    constructor(device: GfxDevice, pmp: BBSPMP, objects: LuxRoomObjects) {
-        super(device);
+    constructor(device: GfxDevice, pmp: BBSPMP, pvd: LuxPVD, objects: LuxRoomObjects) {
+        super(device, pvd.clearColor);
 
         const tims = [...pmp.tims];
         for (const model of objects.models.values()) {
@@ -265,11 +265,17 @@ class Room implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const arcName = PMP_REMAP.has(this.id) ? PMP_REMAP.get(this.id)! : this.id;
         const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${arcName.toUpperCase()}.arc`);
-        const pmp = new BBSParser(arcFile).parsePMPFromARC(this.id)!;
+        const p = new BBSParser(arcFile);
+        const pmp = p.parsePMPFromARC(this.id)!;
+        let pvd = p.parsePVDFromARC();
+        if (!pvd) {
+            console.warn("Could not find PVD for", this.id);
+            pvd = { clearColor: [0, 0, 0, 1] };
+        }
 
         const objects = await getRoomObjects(this.id, context);
 
-        return new Renderer(device, pmp, objects);
+        return new Renderer(device, pmp, pvd, objects);
     }
 }
 
@@ -280,12 +286,13 @@ Most models' eye textures have wrong UVs for some reason. They're either almost 
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
     It seems to have something to do with need to scale by the texture width/height and only affects UVs that are single bytes.
     I haven't been able to figure out a consistent way to scale by texture dimensions, since one way will work for some
-    models but not others and vice versa. Texture formats and other flags don't seem to have an effect
+    models but not others and vice versa. Texture formats and other flags don't seem to have an effect. It could also
+    have to do with aspect ratio, rather than width and height, since the very few eye textures that do look right happen to be squares
 Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in jb10 (probably a mismatched texture header?)
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
-    Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup
+    Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup (although some still happen)
     m32ex04 has too complex of a model -> animation pipeline for current logic
     After looking some more, it seems like the OLO name can refer to multiple models, it's not always 1:1 (but usually is anyway), see b50vs00 for an example
     Probably best to make a map of all the chara arc files, then use that to pull models from olo names.
@@ -296,6 +303,7 @@ Figure out why the shop moogle has its balloon upside down and aurora's crown is
     g27dc00 has stray geometry as well
 Filter out objects that are meant for collision but still have visible geometry, usually in boss rooms
 Check for texture scorlling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
+Have better functions for parsing arc files instead of "parseXFromARC" convention
 
 Nice to have
 

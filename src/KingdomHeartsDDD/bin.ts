@@ -1,7 +1,7 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { calcEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
-import { LuxBone, LuxBoneChannel, LuxDataSet, LuxKeyframe, LuxMaterial, LuxModel, LuxModelInfo, LuxOLO, LuxOLOInstance, LuxPAM, LuxPMP, LuxShape, LuxSkeletalAnimation, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
+import { LuxBone, LuxBoneChannel, LuxDataSet, LuxKeyframe, LuxMaterial, LuxModel, LuxModelInfo, LuxOLO, LuxOLOInstance, LuxPAM, LuxPMP, LuxPVD, LuxShape, LuxSkeletalAnimation, LuxTextureAnimation, LuxTXA, LuxTXAFrame } from "./lux";
 import { DreamDropCTRTFormat } from "./texture";
 
 // Credit for most of the parsing:
@@ -111,7 +111,6 @@ export enum DreamDropModelFlagBillboard {
     BILLBOARD = 4
 }
 
-// uint32 at 0x0
 const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_CTRT = 1414681667;
@@ -119,6 +118,7 @@ const MAGIC_SETBIN = 4411969;
 const MAGIC_OLO = 1330401088;
 const MAGIC_PAM = 5062992;
 const MAGIC_TXA = 4282452;
+const MAGIC_PVD = 4478544;
 
 const NORMALIZED_SCALE = 32768.0;
 const SHORT_SCALE = 65535.0;
@@ -565,6 +565,20 @@ export class DreamDropParser {
         }
 
         return txas;
+    }
+
+    public parsePVD(): LuxPVD {
+        this.offset = 0;
+        const magic = this.getUint32();
+        if (magic !== MAGIC_PVD) {
+            console.warn("Unknown PVD magic", magic);
+        }
+        this.offset += 36;
+        const r = this.getByte();
+        const g = this.getByte();
+        const b = this.getByte();
+        const a = this.getByte();
+        return { clearColor: [r, g, b, a] };
     }
 
     private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): LuxBoneChannel {

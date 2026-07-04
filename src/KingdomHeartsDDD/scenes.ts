@@ -9,7 +9,7 @@ import { DreamDropRoomRenderer } from "./render";
 import { getDreamDropRoomConfig, DreamDropRoomConfig } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_INVALID_SETDATA, DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_DROP_OLO, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_OLO, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/data";
-import { LuxObjectSet, LuxOLOInstance, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation, LuxTXA } from "./lux";
+import { LuxObjectSet, LuxOLOInstance, LuxPVD, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation, LuxTXA } from "./lux";
 
 function getCharaSubDirectory(name: string) {
     switch (name.substring(0, 1).toLowerCase()) {
@@ -58,8 +58,8 @@ function getPrettyDataSetName(name: string) {
 }
 
 class Renderer extends LuxRenderer {
-    constructor(device: GfxDevice, pmp: DreamDropPMP, objects: LuxRoomObjects, txas: LuxTXA[], private config?: DreamDropRoomConfig) {
-        super(device);
+    constructor(device: GfxDevice, pmp: DreamDropPMP, pvd: LuxPVD, objects: LuxRoomObjects, txas: LuxTXA[], private config?: DreamDropRoomConfig) {
+        super(device, pvd.clearColor);
 
         const ctrts = [...pmp.ctrts];
         for (const model of objects.models.values()) {
@@ -214,7 +214,13 @@ class Room implements SceneDesc {
             }
         }
 
-        return new Renderer(device, pmp, { sets, models, animations }, txas, config);
+        const pvdFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.pvd`, { allow404: true });
+        let pvd = pvdFile.byteLength > 0 ? new DreamDropParser(pvdFile).parsePVD() : undefined;
+        if (!pvd) {
+            pvd = { clearColor: [0, 0, 0, 1] };
+        }
+
+        return new Renderer(device, pmp, pvd, { sets, models, animations }, txas, config);
     }
 }
 
@@ -256,6 +262,8 @@ Still some lingering bbox issues where culling is visible
     This seems to occur with objects that have their root bone at the world origin (???), so their bbox is also there
 Clean up unused data leftover from parsing (numbers, flags, etc not used for rendering or anything else)
 Rigid skinning should probably be checked for and applied at the model level, rather than the shape level
+Combine duplicate parsing from both bin files into the parser
+Make a whitelist of PVD files to avoid 404s for the few rooms that don't have them
 
 Nice to have
 

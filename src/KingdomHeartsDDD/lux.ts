@@ -166,6 +166,10 @@ export interface LuxTXAFrame {
     data: ArrayBufferSlice;
 }
 
+export interface LuxPVD {
+    clearColor: number[];
+}
+
 export interface LuxRoomObjects {
     sets: LuxObjectSet[];
     models: Map<string, LuxModel>;
@@ -675,15 +679,18 @@ export class LuxRenderer implements SceneGfx {
     protected renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, protected clearColor: number[]) {
         this.textureHolder = new FakeTextureHolder([]);
         this.renderHelper = new GfxRenderHelper(device);
         this.textures = [];
+        this.clearColor = this.clearColor.map(c => c / 255);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
-        const mainColorTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Color");
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        mainColorDesc.clearColor = { r: this.clearColor[0], g: this.clearColor[1], b: this.clearColor[2], a: 1.0 };
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, "Main Color");
         const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Depth");
         builder.pushPass((pass) => {
             pass.setDebugName("Main");
