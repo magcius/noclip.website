@@ -23,7 +23,7 @@ interface ArcEntry {
     name: string;
 }
 
-enum CoordinateFormat {
+enum NumberFormat {
     NO_VERTEX,
     NORMALIZED_8_BITS,
     NORMALIZED_16_BITS,
@@ -49,11 +49,11 @@ enum PrimitiveType {
 }
 
 interface ShapeFlags {
-    uvFormat: CoordinateFormat;
+    uvFormat: NumberFormat;
     colorFormat: ColorFormat;
-    normalFormat: CoordinateFormat;
-    vertexFormat: CoordinateFormat;
-    weightFormat: CoordinateFormat;
+    normalFormat: NumberFormat;
+    vertexFormat: NumberFormat;
+    weightFormat: NumberFormat;
     skinWeightCount: number;
     uniformDiffuse: boolean;
     primitive: PrimitiveType;
@@ -178,13 +178,13 @@ export class BBSParser extends DreamDropParser {
         return entries;
     }
 
-    public parsePMPFromARC(): BBSPMP | undefined {
+    public parsePMPFromARC(levelId: string): BBSPMP | undefined {
         const entries = this.parseARC();
         const pmpEntry = entries.find(e => e.name.toLowerCase().includes(".pmp") && e.dirPointer === 0);
         if (!pmpEntry) {
             return undefined;
         } else {
-            return this.getPMP(pmpEntry.offset);
+            return this.getPMP(levelId, pmpEntry.offset);
         }
     }
 
@@ -273,7 +273,7 @@ export class BBSParser extends DreamDropParser {
         return this.getPMO(name, -1, true);
     }
 
-    private getPMP(start: number): BBSPMP {
+    private getPMP(levelId: string, start: number): BBSPMP {
         this.offset = start;
         const magic = this.getUint32();
         if (magic !== MAGIC_PMP) {
@@ -308,7 +308,7 @@ export class BBSParser extends DreamDropParser {
                 continue;
             } else {
                 this.offset = start + offset;
-                const pmo = this.getPMO(`pmo_${i}`, flags);
+                const pmo = this.getPMO(`${levelId}_${i}_${id}`, flags);
                 pmos[i] = { id, flags, position: vec3.fromValues(px, py, pz), rotation: vec3.fromValues(rx, ry, rz), scale: vec3.fromValues(sx, sy, sz), pmo };
                 this.offset = ret;
             }
@@ -532,22 +532,22 @@ export class BBSParser extends DreamDropParser {
             }
 
             const flags: ShapeFlags = {
-                uvFormat: getBitsRange32(vertexFlags, 0, 2) as CoordinateFormat,
+                uvFormat: getBitsRange32(vertexFlags, 0, 2) as NumberFormat,
                 colorFormat: getBitsRange32(vertexFlags, 2, 3) as ColorFormat,
-                normalFormat: getBitsRange32(vertexFlags, 5, 2) as CoordinateFormat,
-                vertexFormat: getBitsRange32(vertexFlags, 7, 2) as CoordinateFormat,
-                weightFormat: getBitsRange32(vertexFlags, 9, 2) as CoordinateFormat,
-                skinWeightCount: getBitsRange32(vertexFlags, 14, 3) as CoordinateFormat,
+                normalFormat: getBitsRange32(vertexFlags, 5, 2) as NumberFormat,
+                vertexFormat: getBitsRange32(vertexFlags, 7, 2) as NumberFormat,
+                weightFormat: getBitsRange32(vertexFlags, 9, 2) as NumberFormat,
+                skinWeightCount: getBitsRange32(vertexFlags, 14, 3) as NumberFormat,
                 uniformDiffuse: getBitsRange32(vertexFlags, 24, 1) === 1,
                 primitive: getBitsRange32(vertexFlags, 28, 4) as PrimitiveType
             };
 
-            if (flags.vertexFormat === CoordinateFormat.NO_VERTEX) {
+            if (flags.vertexFormat === NumberFormat.NO_VERTEX) {
                 console.warn("Shape has a non-zero vertex count but no vertices!");
                 break;
             }
 
-            const boneIndices: number[] = Array(8).fill(-1);
+            const boneIndices: number[] = Array(8).fill(0xFF);
             if (hasSkeleton) {
                 for (let i = 0; i < boneIndices.length; i++) {
                     boneIndices[i] = this.getByte();
@@ -563,49 +563,48 @@ export class BBSParser extends DreamDropParser {
             }
 
             const ret = this.offset;
-            const w = flags.skinWeightCount + 1;
-            const shape = new BBSShape(vertexCount, textureIndex, attribute, boneIndices, triStripValues, flags, w);
+            const weightCount = flags.skinWeightCount + 1;
+            const shape = new BBSShape(vertexCount, textureIndex, attribute, boneIndices, triStripValues, flags, weightCount);
 
-            shape.weights = new Float32Array(vertexCount * w);
-            shape.joints = new Uint8Array(vertexCount * w);
+            shape.weights = new Float32Array(vertexCount * weightCount);
+            shape.joints = new Uint8Array(vertexCount * weightCount);
             for (let i = 0; i < vertexCount; i++) {
                 const ret2 = this.offset;
 
                 if (hasSkeleton) {
-                    for (let j = 0; j < w; j++) {
+                    for (let j = 0; j < weightCount; j++) {
                         switch (flags.weightFormat) {
-                            case CoordinateFormat.NO_VERTEX:
-                                // if there's no weight data, then default to weights of 1.0
-                                shape.weights[(i * w) + j] = 1.0;
+                            case NumberFormat.NO_VERTEX:
+                                shape.weights[(i * weightCount) + j] = 0.0;
                                 break;
-                            case CoordinateFormat.NORMALIZED_8_BITS:
-                                shape.weights[(i * w) + j] = this.getByte() / NORMALIZED_8_SCALE;
+                            case NumberFormat.NORMALIZED_8_BITS:
+                                shape.weights[(i * weightCount) + j] = this.getByte() / NORMALIZED_8_SCALE;
                                 break;
-                            case CoordinateFormat.NORMALIZED_16_BITS:
-                                shape.weights[(i * w) + j] = this.getUshort() / NORMALIZED_16_SCALE;
+                            case NumberFormat.NORMALIZED_16_BITS:
+                                shape.weights[(i * weightCount) + j] = this.getUshort() / NORMALIZED_16_SCALE;
                                 break;
-                            case CoordinateFormat.FLOAT_32_BITS:
-                                shape.weights[(i * w) + j] = this.getFloat();
+                            case NumberFormat.FLOAT_32_BITS:
+                                shape.weights[(i * weightCount) + j] = this.getFloat();
                             default:
                                 console.warn("Unimplemented weight format", flags.weightFormat);
-                                shape.weights[(i * w) + j] = 0;
+                                shape.weights[(i * weightCount) + j] = 0;
                                 break;
                         }
-                        shape.joints[(i * w) + j] = boneIndices[j];
+                        shape.joints[(i * weightCount) + j] = boneIndices[j];
                     }
                 }
 
                 switch (flags.uvFormat) {
-                    case CoordinateFormat.NORMALIZED_8_BITS:
+                    case NumberFormat.NORMALIZED_8_BITS:
                         shape.uvs[i * 2] = this.getByte() / NORMALIZED_8_SCALE;
                         shape.uvs[(i * 2) + 1] = this.getByte() / NORMALIZED_8_SCALE;
                         break;
-                    case CoordinateFormat.NORMALIZED_16_BITS:
+                    case NumberFormat.NORMALIZED_16_BITS:
                         this.offset += (2 - ((this.offset - ret2) & 1)) & 1;
                         shape.uvs[i * 2] = this.getUshort() / NORMALIZED_16_SCALE;
                         shape.uvs[(i * 2) + 1] = this.getUshort() / NORMALIZED_16_SCALE;
                         break;
-                    case CoordinateFormat.FLOAT_32_BITS:
+                    case NumberFormat.FLOAT_32_BITS:
                         this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                         shape.uvs[i * 2] = this.getFloat();
                         shape.uvs[(i * 2) + 1] = this.getFloat();
@@ -679,18 +678,18 @@ export class BBSParser extends DreamDropParser {
                 }
 
                 switch (flags.vertexFormat) {
-                    case CoordinateFormat.NORMALIZED_8_BITS:
+                    case NumberFormat.NORMALIZED_8_BITS:
                         shape.vertices[i * 3] = this.getByte() / NORMALIZED_8_SCALE;
                         shape.vertices[(i * 3) + 1] = this.getByte() / NORMALIZED_8_SCALE;
                         shape.vertices[(i * 3) + 2] = this.getByte() / NORMALIZED_8_SCALE;
                         break;
-                    case CoordinateFormat.NORMALIZED_16_BITS:
+                    case NumberFormat.NORMALIZED_16_BITS:
                         this.offset += (2 - ((this.offset - ret2) & 1)) & 1;
                         shape.vertices[i * 3] = this.getShort() / NORMALIZED_16_SCALE;
                         shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_16_SCALE;
                         shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_16_SCALE;
                         break;
-                    case CoordinateFormat.FLOAT_32_BITS:
+                    case NumberFormat.FLOAT_32_BITS:
                         this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                         shape.vertices[i * 3] = this.getFloat();
                         shape.vertices[(i * 3) + 1] = this.getFloat();

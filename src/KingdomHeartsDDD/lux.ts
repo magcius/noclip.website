@@ -16,8 +16,6 @@ import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { White } from "../Color";
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpaceText } from "../DebugJunk";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code

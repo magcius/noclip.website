@@ -212,7 +212,12 @@ class Renderer extends LuxRenderer {
 
         const viewerTextures: ViewerTexture[] = Array(this.textures.length);
         for (let i = 0; i < this.textures.length; i++) {
-            viewerTextures[i] = { gfxTexture: this.textures[i].gfxTexture, extraInfo: new Map([["Format", `${BBSTIM2Format[(this.textures[i] as BBSTIM2Texture).format]}`]]) };
+            viewerTextures[i] = {
+                gfxTexture: this.textures[i].gfxTexture,
+                extraInfo: new Map([
+                    ["Pixel Format", `${BBSTIM2Format[(this.textures[i] as BBSTIM2Texture).format]}`]
+                ])
+            };
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
@@ -244,17 +249,23 @@ class Renderer extends LuxRenderer {
     }
 }
 
+// some levels re-use another's pmp with an arc entry, with the only differences being
+// that one texture is replaced (which is ignored for now) and whatever the .nmd file does
+const PMP_REMAP = new Map<string, string>([
+    ["dc12", "dc05"],
+    ["ls14", "ls09"]
+]);
+
 const pathBase = "KingdomHeartsBBS";
 class Room implements SceneDesc {
-    public id: string;
-
-    constructor(id: string, public name: string) {
+    constructor(public id: string, public name: string) {
         this.id = id.toLowerCase();
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${this.id.toUpperCase()}.arc`);
-        const pmp = new BBSParser(arcFile).parsePMPFromARC()!;
+        const arcName = PMP_REMAP.has(this.id) ? PMP_REMAP.get(this.id)! : this.id;
+        const arcFile = await context.dataFetcher.fetchData(`${pathBase}/arc/map/${arcName.toUpperCase()}.arc`);
+        const pmp = new BBSParser(arcFile).parsePMPFromARC(this.id)!;
 
         const objects = await getRoomObjects(this.id, context);
 
@@ -267,15 +278,12 @@ TODO
 
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
-    Perhaps the scaling is different for UVs sometimes, even in the same geometry, for some reason? The texture is usually just a tiny bit too big
-Level object models have vertex colors, but it doesn't look right so color is hardcoded to white
-    Maybe they're supposed to be applied differently. Not sure why there'd be data but not use it?
+    It seems to have something to do with need to scale by the texture width/height and only affects UVs that are single bytes.
+    I haven't been able to figure out a consistent way to scale by texture dimensions, since one way will work for some
+    models but not others and vice versa. Texture formats and other flags don't seem to have an effect
 Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in jb10 (probably a mismatched texture header?)
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
-Debug ls14, can't get textures?
-Take another pass at the ordering of room names to be more chronological. Mostly ok for now but needs work
-    Worlds are roughly chronological, though, with extra/cutscene-only/misc worlds at the end
 Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
     Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup
     m32ex04 has too complex of a model -> animation pipeline for current logic
@@ -306,7 +314,7 @@ Save points and other interactables that aren't proper objects but still visible
 May your heart be your guiding key
 */
 
-// Adapted room names from https://openkh.dev/bbs/dictionary/worlds.html
+// Adapted room names from https://openkh.dev/bbs/dictionary/worlds.html and KH Wiki
 const id = "KHBBS";
 const name = "Kingdom Hearts Birth by Sleep";
 const sceneDescs = [
@@ -331,14 +339,14 @@ const sceneDescs = [
     new Room("SW01", "Mine Entrance"),
     new Room("SW02", "The Mine"),
     new Room("SW07", "Flower Glade"),
+    new Room("SW08", "Deep Woods"),
+    new Room("SW10", "Cottage Clearing"),
+    new Room("SW11", "The Cottage"),
     new Room("SW06", "Courtyard"),
     new Room("SW03", "Vault"),
     new Room("SW05", "Underground Waterway"),
     new Room("SW04", "Magic Mirror Chamber"),
     new Room("SW09", "Inside the Mirror"),
-    new Room("SW08", "Deep Woods"),
-    new Room("SW10", "Cottage Clearing"),
-    new Room("SW11", "The Cottage"),
     "Castle of Dreams",
     new Room("CD01", "Cinderella's Room"),
     new Room("CD02", "Mousehole"),
@@ -380,19 +388,19 @@ const sceneDescs = [
     new Room("YT04", "Sorcerer's Chamber"),
     new Room("YT01", "Sorcerer's Chamber"), // cutscene? only has olos for ventus and generic
     "Radiant Garden",
+    new Room("RG03", "Central Square"),
+    new Room("RG13", "Central Square (Night)"),
+    new Room("RG14", "Central Square (Boss)"),
+    new Room("RG05", "Castle Town"),
+    new Room("RG08", "Merlin's House"),
+    new Room("RG07", "Fountain Court"),
+    new Room("RG04", "Aqueduct"),
+    new Room("RG06", "Reactor"),
+    new Room("RG09", "Gardens"),
     new Room("RG10", "Front Doors"),
     new Room("RG02", "Entryway"),
     new Room("RG01", "Outer Garden"),
     new Room("RG12", "Outer Gardens"),
-    new Room("RG03", "Central Square"),
-    new Room("RG13", "Central Square (Night)"),
-    new Room("RG14", "Central Square (Boss)"),
-    new Room("RG04", "Aqueduct"),
-    new Room("RG07", "Fountain Court"),
-    new Room("RG05", "Castle Town"),
-    new Room("RG08", "Merlin's House"),
-    new Room("RG06", "Reactor"),
-    new Room("RG09", "Gardens"),
     new Room("RG11", "Purification Facility"),
     "Olympus Coliseum", // he = hercules
     new Room("HE01", "Coliseum Gates"),
@@ -412,10 +420,10 @@ const sceneDescs = [
     new Room("LS07", "Ship Hub"),
     new Room("LS08", "Machinery Bay"),
     new Room("LS09", "Launch Deck"),
+    new Room("LS14", "Bay Access"),
     new Room("LS10", "Ship Exterior"),
     new Room("LS11", "Outer Space"),
     new Room("LS13", "Lanes Between"),
-    // new Room("LS14", "Bay Access"),
     "Destiny Islands",
     new Room("DI01", "Beach (Day)"),
     new Room("DI02", "Beach (Evening)"),
@@ -436,21 +444,21 @@ const sceneDescs = [
     new Room("PP12", "Skull Rock: Entrance"),
     new Room("PP13", "Skull Rock: Cavern"),
     new Room("PP14", "Night Sky"),
-    "Disney Town", // dc = disney castle
-    new Room("DC01", "Library"),
+    "Disney Town",
     new Room("DC02", "Main Plaza"),
     new Room("DC03", "Fruitball Court"),
     new Room("DC14", "Fruitball (Minigame)"),
-    new Room("DC13", "Ice Cream (Minigame)"),
-    new Room("DC05", "Raceway"),
-    new Room("DC04", "Racecourse A"),
-    new Room("DC08", "Racecourse B"),
-    new Room("DC09", "Racecourse C"),
-    new Room("DC10", "Racecourse D"),
+    new Room("DC13", "Ice Cream Beat"),
     new Room("DC06", "Gizmo Gallery"),
     new Room("DC07", "Pete's Rec Room"),
+    new Room("DC05", "Raceway"),
+    new Room("DC12", "Raceway Registration"),
+    new Room("DC04", "Racecourse (Country Chase)"),
+    new Room("DC09", "Racecourse (Disney Drive)"),
+    new Room("DC08", "Racecourse (Grand Spree)"),
+    new Room("DC10", "Racecourse (Castle Circuit)"),
+    new Room("DC01", "Library"),
     new Room("DC11", "Lanes Between"),
-    // new Room("DC12", "Raceway Registration"),
     "Keyblade Graveyard",
     new Room("KG01", "Badlands"),
     new Room("KG56", "Badlands (Boss)"),
@@ -461,14 +469,13 @@ const sceneDescs = [
     new Room("KG06", "Eye of the Storm (Green)"),
     new Room("KG07", "Fissure"),
     new Room("KG08", "Keyblade Graveyard"),
-    new Room("KG09", "Keyblade Graveyard (Kingdom Hearts)"),
-    new Room("KG12", "Keyblade Graveyard (Kingdom Hearts) (Boss)"),
-    new Room("KG55", "Keyblade Graveyard (Top of the Plateau)"),
-    new Room("KG10", "Keyblade Graveyard (Top of the Plateau) (Boss)"),
+    new Room("KG09", "Keyblade Graveyard (Under the Cliff)"),
+    new Room("KG12", "Keyblade Graveyard (Under the Cliff) (Boss)"),
+    new Room("KG55", "Keyblade Graveyard (Cliff Top)"),
+    new Room("KG10", "Keyblade Graveyard (Cliff Top) (Boss)"),
     new Room("KG11", "Will's Cage"),
     new Room("KG50", "Ventus's Mind"),
     new Room("KG51", "Ventus's Mind (Boss)"),
-    // new Room("KG52", "Ventus's Mind"),
     new Room("KG53", "Sora's Mind"),
     "Mirage Arena", // vs = versus?
     new Room("VS01", "Hub"),
@@ -490,7 +497,7 @@ const sceneDescs = [
     new Room("BD03", "Cinderella BG"),
     new Room("BD09", "Lilo & Stitch BG"),
     new Room("BD11", "Peter Pan BG"),
-    new Room("BD19", "Peter Pan BG"), // don't know what the difference is
+    new Room("BD19", "Peter Pan BG"),
     new Room("BD12", "Disney Castle BG"),
     new Room("BD18", "Winnie the Pooh BG"),
     "World Map",

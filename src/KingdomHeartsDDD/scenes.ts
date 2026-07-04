@@ -255,6 +255,7 @@ Dream eater model fixes
 Still some lingering bbox issues where culling is visible
     This seems to occur with objects that have their root bone at the world origin (???), so their bbox is also there
 Clean up unused data leftover from parsing (numbers, flags, etc not used for rendering or anything else)
+Rigid skinning should probably be checked for and applied at the model level, rather than the shape level
 
 Nice to have
 
