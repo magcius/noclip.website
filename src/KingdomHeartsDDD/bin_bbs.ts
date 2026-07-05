@@ -15,7 +15,6 @@ const MAGIC_PVD = 4478544;
 
 const NORMALIZED_8_SCALE = 128.0;
 const NORMALIZED_16_SCALE = 32768.0;
-const COLOR_SCALE = 255.0;
 
 interface ArcEntry {
     dirPointer: number;
@@ -692,15 +691,10 @@ export class BBSParser extends DreamDropParser {
                 }
                 if (hasSkeleton) {
                     // temp hardcode to white
-                    shape.colors[i * 4] = 1.0;
-                    shape.colors[(i * 4) + 1] = 1.0;
-                    shape.colors[(i * 4) + 2] = 1.0;
-                    shape.colors[(i * 4) + 3] = 1.0;
-                } else {
-                    shape.colors[i * 4] /= COLOR_SCALE;
-                    shape.colors[(i * 4) + 1] /= COLOR_SCALE;
-                    shape.colors[(i * 4) + 2] /= COLOR_SCALE;
-                    shape.colors[(i * 4) + 3] /= COLOR_SCALE;
+                    shape.colors[i * 4] = 0xFF;
+                    shape.colors[(i * 4) + 1] = 0xFF;
+                    shape.colors[(i * 4) + 2] = 0xFF;
+                    shape.colors[(i * 4) + 3] = 0xFF;
                 }
 
                 switch (flags.vertexFormat) {

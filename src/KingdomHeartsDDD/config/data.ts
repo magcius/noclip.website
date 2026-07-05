@@ -394,6 +394,7 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["n04dc00", { name: "n04dc_000", index: 0 }], // minnie
     ["n06dc00", { name: "n06dc_000", index: 0 }], // chip & dale
     ["n06dc10", { name: "n06dc_000", index: 0 }], // chip & dale
+    ["g32dc00", { name: "g32dc_000", index: 0 }], // tornado
 ]);
 
 export const BBS_MODEL_REMAP = ["b10ex01", "b10ex02", "m02vs00", "m12vs00", "m14vs00", "m04vs00", "m03vs00", "m13vs00", "m01vs00",

@@ -22,6 +22,7 @@ import { DreamDropCTRTFormat } from "./texture";
 // ESE: Effect file
 // FEP: Effect file
 // BIN: Many uses and formats
+// PVD: Fog data, clear color, possible camera info
 
 export interface DreamDropPMP extends LuxPMP {
     ctrts: DreamDropCTRT[];
@@ -122,7 +123,6 @@ const MAGIC_PVD = 4478544;
 
 const NORMALIZED_SCALE = 32768.0;
 const SHORT_SCALE = 65535.0;
-const COLOR_SCALE = 255.0; // standard but might as well
 const UV_SCALE = 2048.0;
 const JOINT_SCALE = 3.0; // why couldn't they just store the actual index? it's only ever 0 to 7...
 const WEIGHT_SCALE = 128.0;
@@ -683,10 +683,10 @@ export class DreamDropParser {
             shape.uvs[i * 2] = this.getShort() / UV_SCALE;
             shape.uvs[(i * 2) + 1] = 1 - this.getShort() / UV_SCALE; // flip
 
-            shape.colors[i * 4] = this.getByte() / COLOR_SCALE;
-            shape.colors[(i * 4) + 1] = this.getByte() / COLOR_SCALE;
-            shape.colors[(i * 4) + 2] = this.getByte() / COLOR_SCALE;
-            shape.colors[(i * 4) + 3] = this.getByte() / COLOR_SCALE;
+            shape.colors[i * 4] = this.getByte();
+            shape.colors[(i * 4) + 1] = this.getByte();
+            shape.colors[(i * 4) + 2] = this.getByte();
+            shape.colors[(i * 4) + 3] = this.getByte();
 
             // uvs + colors are 8 bytes, so there's shape.vertexSizeBytes - 8 bytes left for remaining data
 

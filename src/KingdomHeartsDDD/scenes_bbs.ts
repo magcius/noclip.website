@@ -7,6 +7,7 @@ import { SceneGfx } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSTIM2Format, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_PMO_ARC_OVERRIDE, BBS_VALID_PRESET_ARC } from "./config/data";
+import { BBS_DEFAULT_SETS } from "./config/room";
 import { LuxObjectSet, LuxOLOInstance, LuxPVD, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
@@ -196,7 +197,7 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
 }
 
 class Renderer extends LuxRenderer {
-    constructor(device: GfxDevice, pmp: BBSPMP, pvd: LuxPVD, objects: LuxRoomObjects) {
+    constructor(device: GfxDevice, pmp: BBSPMP, pvd: LuxPVD, objects: LuxRoomObjects, private defaultSets: number[]) {
         super(device, pvd.clearColor);
 
         const tims = [...pmp.tims];
@@ -236,7 +237,15 @@ class Renderer extends LuxRenderer {
             this.roomRenderer!.onSetChanged(index, v);
         };
         if (setNames.length > 0) {
-            select.setItemSelected(0, false);
+            if (this.defaultSets.length === 0) {
+                select.setItemSelected(0, false);
+            } else {
+                for (let i = 0; i < setNames.length; i++) {
+                    const v = this.defaultSets.includes(i);
+                    select.setItemSelected(i, v);
+                    this.roomRenderer!.onSetChanged(i, v);
+                }
+            }
         } else {
             setPanel.setVisible(false);
         }
@@ -275,7 +284,7 @@ class Room implements SceneDesc {
 
         const objects = await getRoomObjects(this.id, context);
 
-        return new Renderer(device, pmp, pvd, objects);
+        return new Renderer(device, pmp, pvd, objects, BBS_DEFAULT_SETS.has(this.id) ? BBS_DEFAULT_SETS.get(this.id)! : []);
     }
 }
 
@@ -304,6 +313,7 @@ Figure out why the shop moogle has its balloon upside down and aurora's crown is
 Filter out objects that are meant for collision but still have visible geometry, usually in boss rooms
 Check for texture scorlling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
 Have better functions for parsing arc files instead of "parseXFromARC" convention
+Do another pass at animations for gimmicks (most were skipped during the first pass since the parsing still had an issue)
 
 Nice to have
 
