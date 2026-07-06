@@ -33,8 +33,8 @@
   "scripts": {
     "start": "wireit",
     "build": "wireit",
-    "build:wasm-debug": "wireit",
-    "build:wasm-release": "wireit",
+    "build:cargo-build-debug": "wireit",
+    "build:cargo-build-release": "wireit",
     "build:ZeldaWindWaker": "tsx src/ZeldaWindWaker/tools/zww_extractor.ts",
     "build:ZeldaTwilightPrincess": "tsx src/ZeldaTwilightPrincess/tools/ztp_extractor.ts",
     "build:DonkeyKong64": "tsx src/DonkeyKong64/tools/extractor.ts",
@@ -56,19 +56,21 @@
         "rsbuild.config.ts",
         "tsconfig.json"
       ],
-      "dependencies": ["build:wasm-release"]
+      "dependencies": ["build:cargo-build-release"]
     },
     "start": {
       "command": "rsbuild dev",
       "dependencies": [
-        "build:wasm-debug"
+        {
+          "script": "build:cargo-build-debug",
+          "cascade": false
+        }
       ],
       "service": true,
-      "cascade": false,
       "files": []
     },
     "build:cargo-build-debug": {
-      "command": "cd rust && cargo build --target wasm32-unknown-unknown",
+      "command": "cd rust && cargo bin wasm-pack build --dev --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/Cargo.toml",
         "rust/src/**/*.rs",
@@ -76,57 +78,28 @@
         "rust/noclip-macros/src/**/*.rs"
       ],
       "output": [
-        "rust/target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm"
-      ]
-    },
-    "build:cargo-build-release": {
-      "command": "cd rust && cargo build --release --target wasm32-unknown-unknown",
-      "files": [
-        "rust/Cargo.toml",
-        "rust/src/**/*.rs",
-        "rust/noclip-macros/Cargo.toml",
-        "rust/noclip-macros/src/**/*.rs"
-      ],
-      "output": [
-        "rust/target/wasm32-unknown-unknown/release/noclip_rust_support.wasm"
-      ]
-    },
-    "build:wasm-debug": {
-      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm --out-dir ./pkg --out-name index --target web",
-      "files": [
-        "rust/target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm"
-      ],
-      "output": [
-        "rust/pkg/*"
-      ],
-      "dependencies": [
-        "build:cargo-build-debug"
+        "rust/pkg/index.js",
+        "rust/pkg/index.d.ts",
+        "rust/pkg/index_bg.wasm",
+        "rust/pkg/index_bg.wasm.d.ts"
       ],
       "clean": false
     },
-    "build:rust-wasm-opt": {
-      "command": "cd rust && cargo bin wasm-opt target/wasm32-unknown-unknown/release/noclip_rust_support.wasm -Os --enable-bulk-memory -g --output target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm",
+    "build:cargo-build-release": {
+      "command": "cd rust && cargo bin wasm-pack build --release --out-dir ./pkg --out-name index --target web",
       "files": [
-        "rust/target/wasm32-unknown-unknown/release/noclip_rust_support.wasm"
+        "rust/Cargo.toml",
+        "rust/src/**/*.rs",
+        "rust/noclip-macros/Cargo.toml",
+        "rust/noclip-macros/src/**/*.rs"
       ],
       "output": [
-        "rust/target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm"
+        "rust/pkg/index.js",
+        "rust/pkg/index.d.ts",
+        "rust/pkg/index_bg.wasm",
+        "rust/pkg/index_bg.wasm.d.ts"
       ],
-      "dependencies": [
-        "build:cargo-build-release"
-      ]
-    },
-    "build:wasm-release": {
-      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm --out-dir ./pkg --out-name index --target web",
-      "files": [
-        "rust/target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm"
-      ],
-      "output": [
-        "rust/pkg/*"
-      ],
-      "dependencies": [
-        "build:rust-wasm-opt"
-      ]
+      "clean": false
     }
   },
   "browserslist": [
