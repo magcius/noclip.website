@@ -33,8 +33,8 @@
   "scripts": {
     "start": "wireit",
     "build": "wireit",
-    "build:wasm-debug": "wireit",
-    "build:wasm-release": "wireit",
+    "build:cargo-build-debug": "wireit",
+    "build:cargo-build-release": "wireit",
     "build:ZeldaWindWaker": "tsx src/ZeldaWindWaker/tools/zww_extractor.ts",
     "build:ZeldaTwilightPrincess": "tsx src/ZeldaTwilightPrincess/tools/ztp_extractor.ts",
     "build:DonkeyKong64": "tsx src/DonkeyKong64/tools/extractor.ts",
@@ -61,14 +61,16 @@
     "start": {
       "command": "rsbuild dev",
       "dependencies": [
-        "build:cargo-build-debug"
+        {
+          "script": "build:cargo-build-debug",
+          "cascade": false
+        }
       ],
       "service": true,
-      "cascade": false,
       "files": []
     },
     "build:cargo-build-debug": {
-      "command": "cd rust && cargo bin wasm-pack target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm --dev --out-dir ./pkg --out-name index --target web",
+      "command": "cd rust && cargo bin wasm-pack build --dev --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/Cargo.toml",
         "rust/src/**/*.rs",
@@ -76,11 +78,15 @@
         "rust/noclip-macros/src/**/*.rs"
       ],
       "output": [
-        "rust/target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm"
-      ]
+        "rust/pkg/index.js",
+        "rust/pkg/index.d.ts",
+        "rust/pkg/index_bg.wasm",
+        "rust/pkg/index_bg.wasm.d.ts"
+      ],
+      "clean": false
     },
     "build:cargo-build-release": {
-      "command": "cd rust && cargo bin wasm-pack target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm --release --out-dir ./pkg --out-name index --target web",
+      "command": "cd rust && cargo bin wasm-pack build --release --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/Cargo.toml",
         "rust/src/**/*.rs",
@@ -88,9 +94,14 @@
         "rust/noclip-macros/src/**/*.rs"
       ],
       "output": [
-        "rust/target/wasm32-unknown-unknown/release/noclip_rust_support.wasm"
-      ]
-    },
+        "rust/pkg/index.js",
+        "rust/pkg/index.d.ts",
+        "rust/pkg/index_bg.wasm",
+        "rust/pkg/index_bg.wasm.d.ts"
+      ],
+      "clean": false
+    }
+  },
   "browserslist": [
     "last 2 Chrome versions"
   ],
