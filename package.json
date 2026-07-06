@@ -56,19 +56,19 @@
         "rsbuild.config.ts",
         "tsconfig.json"
       ],
-      "dependencies": ["build:wasm-release"]
+      "dependencies": ["build:cargo-build-release"]
     },
     "start": {
       "command": "rsbuild dev",
       "dependencies": [
-        "build:wasm-debug"
+        "build:cargo-build-debug"
       ],
       "service": true,
       "cascade": false,
       "files": []
     },
     "build:cargo-build-debug": {
-      "command": "cd rust && cargo build --target wasm32-unknown-unknown",
+      "command": "cd rust && cargo bin wasm-pack target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm --dev --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/Cargo.toml",
         "rust/src/**/*.rs",
@@ -80,7 +80,7 @@
       ]
     },
     "build:cargo-build-release": {
-      "command": "cd rust && cargo build --release --target wasm32-unknown-unknown",
+      "command": "cd rust && cargo bin wasm-pack target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm --release --out-dir ./pkg --out-name index --target web",
       "files": [
         "rust/Cargo.toml",
         "rust/src/**/*.rs",
@@ -91,44 +91,6 @@
         "rust/target/wasm32-unknown-unknown/release/noclip_rust_support.wasm"
       ]
     },
-    "build:wasm-debug": {
-      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm --out-dir ./pkg --out-name index --target web",
-      "files": [
-        "rust/target/wasm32-unknown-unknown/debug/noclip_rust_support.wasm"
-      ],
-      "output": [
-        "rust/pkg/*"
-      ],
-      "dependencies": [
-        "build:cargo-build-debug"
-      ],
-      "clean": false
-    },
-    "build:rust-wasm-opt": {
-      "command": "cd rust && cargo bin wasm-opt target/wasm32-unknown-unknown/release/noclip_rust_support.wasm -Os --enable-bulk-memory -g --output target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm",
-      "files": [
-        "rust/target/wasm32-unknown-unknown/release/noclip_rust_support.wasm"
-      ],
-      "output": [
-        "rust/target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm"
-      ],
-      "dependencies": [
-        "build:cargo-build-release"
-      ]
-    },
-    "build:wasm-release": {
-      "command": "cd rust && cargo bin wasm-bindgen-cli target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm --out-dir ./pkg --out-name index --target web",
-      "files": [
-        "rust/target/wasm32-unknown-unknown/release/noclip-rust-support.opt.wasm"
-      ],
-      "output": [
-        "rust/pkg/*"
-      ],
-      "dependencies": [
-        "build:rust-wasm-opt"
-      ]
-    }
-  },
   "browserslist": [
     "last 2 Chrome versions"
   ],
