@@ -28,7 +28,7 @@ export function decompressBuffer(src: Uint8Array, compressedSize: number, uncomp
         const flagBit = readBit();
 
         if (flagBit === 1) { //literal copy
-            dst[dstOff++] = src[srcOff++]
+            dst[dstOff++] = src[srcOff++];
         } else if (flagBit === 0) { //offset copy
             let byteCount = 0;
             let byteOffset = 0;
@@ -47,10 +47,10 @@ export function decompressBuffer(src: Uint8Array, compressedSize: number, uncomp
                     byteCount = src[srcOff++] + 1;
 
                     if (byteCount === 1) { //end of stream
-                        return dst
+                        return dst;
                     }
                 } else {
-                    byteCount = count + 2
+                    byteCount = count + 2;
                 }
             }
 

@@ -29,7 +29,7 @@ export class FPack {
     view: ArrayBufferSlice;
 
     constructor(view: ArrayBufferSlice) {
-        this.view = view
+        this.view = view;
 
         const dataView = view.createDataView();
 
@@ -37,18 +37,18 @@ export class FPack {
         this.headerSize = dataView.getUint32(8);
         this.fileSize = dataView.getUint32(12);
 
-        this.entries = []
+        this.entries = [];
         for (let i = 0; i < this.fileCount; i++) {
-            const slice = view.slice(this.headerSize + i * 32)
-            this.entries.push(new FPackEntry(slice))
+            const slice = view.slice(this.headerSize + i * 32);
+            this.entries.push(new FPackEntry(slice));
         }
     }
 
     getEntryData(entry: FPackEntry): ArrayBufferSlice {
-        const src = new Uint8Array(this.view.arrayBuffer).slice(entry.offset, entry.offset + entry.compressedSize)
+        const src = new Uint8Array(this.view.arrayBuffer).slice(entry.offset, entry.offset + entry.compressedSize);
 
-        const out = decompressBuffer(src, entry.compressedSize, entry.uncompressedSize)
+        const out = decompressBuffer(src, entry.compressedSize, entry.uncompressedSize);
 
-        return new ArrayBufferSlice(out.buffer)
+        return new ArrayBufferSlice(out.buffer);
     }
 }

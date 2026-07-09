@@ -10,7 +10,7 @@ import { HSD_JObjRoot_Instance } from "../SYSDOLPHIN/SYSDOLPHIN_Render.js";
 import { mat4 } from "gl-matrix";
 import { FPack } from "./fpack.js";
 
-const pathBase = "NarutoGNT4"
+const pathBase = "NarutoGNT4";
 
 class NarutoMapDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
@@ -29,7 +29,7 @@ class NarutoMapDesc implements SceneDesc {
         datEntries.forEach((v) => {datDatas.push(fpack.getEntryData(v))});
 
         const hsdArchives: HSD_Archive[] = [];
-        datDatas.forEach((v) => {hsdArchives.push(HSD_ArchiveParse(v))})
+        datDatas.forEach((v) => {hsdArchives.push(HSD_ArchiveParse(v))});
 
         const renderer = new NarutoMapRenderer(device, hsdArchives, this.id.includes("stg"));
         return renderer;
@@ -42,7 +42,7 @@ class NarutoMapRenderer extends MeleeRenderer {
     constructor(device: GfxDevice, public modelArchives: HSD_Archive[], isStage: boolean = false) {
         super(device);
 
-        this.isStage = isStage
+        this.isStage = isStage;
 
         for (const modelArchive of modelArchives) {
             this.loadModel(modelArchive);
@@ -51,7 +51,7 @@ class NarutoMapRenderer extends MeleeRenderer {
 
     public getDefaultWorldMatrix(dst: mat4) {
         if (this.isStage) {
-            mat4.fromTranslation(dst, [0,30,30])
+            mat4.fromTranslation(dst, [0,30,30]);
         }
     }
 
@@ -63,8 +63,8 @@ class NarutoMapRenderer extends MeleeRenderer {
 
         const scene_data = HSD_Archive__ResolvePtr(arc, scene_data_global.offset).createDataView();
 
-        const jobjDescs = HSD_LoadContext__ResolvePtr(ctx, scene_data.getUint32(0x00)).createDataView()
-        const jobjDesc = HSD_LoadContext__ResolvePtr(ctx, jobjDescs.getUint32(0x00)).createDataView()
+        const jobjDescs = HSD_LoadContext__ResolvePtr(ctx, scene_data.getUint32(0x00)).createDataView();
+        const jobjDesc = HSD_LoadContext__ResolvePtr(ctx, jobjDescs.getUint32(0x00)).createDataView();
 
         //get root joint
         const rootJointData = HSD_LoadContext__ResolvePtr(ctx, jobjDesc.getUint32(0x00), 0x40);
@@ -72,28 +72,28 @@ class NarutoMapRenderer extends MeleeRenderer {
         const rootJointInstance = new HSD_JObjRoot_Instance(this.modelCache.loadJObjRoot(rootJoint));
 
         //get joint animation
-        let jointAnimation: HSD_AnimJointRoot | null = null
+        let jointAnimation: HSD_AnimJointRoot | null = null;
 
-        const jointAnimationsOffset = jobjDesc.getUint32(0x04)
+        const jointAnimationsOffset = jobjDesc.getUint32(0x04);
         if (jointAnimationsOffset > 0) {
             const jointAnimationsPtr = HSD_LoadContext__ResolvePtr(ctx, jointAnimationsOffset);
-            const jointAnimationPtr = HSD_LoadContext__ResolvePtr(ctx, jointAnimationsPtr.createDataView().getUint32(0x00))
+            const jointAnimationPtr = HSD_LoadContext__ResolvePtr(ctx, jointAnimationsPtr.createDataView().getUint32(0x00));
             jointAnimation = jointAnimationPtr ? HSD_AObjLoadAnimJoint(ctx, jointAnimationPtr) : null;
         }
 
         //get material animation
-        let materialAnimation: HSD_MatAnimJointRoot | null = null
+        let materialAnimation: HSD_MatAnimJointRoot | null = null;
 
-        const materialAnimationsOffset = jobjDesc.getUint32(0x08)
+        const materialAnimationsOffset = jobjDesc.getUint32(0x08);
         if (materialAnimationsOffset > 0) {
             const materialAnimationsPtr = HSD_LoadContext__ResolvePtr(ctx, materialAnimationsOffset);
-            const materialAnimationPtr = HSD_LoadContext__ResolvePtr(ctx, materialAnimationsPtr.createDataView().getUint32(0x00))
+            const materialAnimationPtr = HSD_LoadContext__ResolvePtr(ctx, materialAnimationsPtr.createDataView().getUint32(0x00));
             materialAnimation = materialAnimationPtr ? HSD_AObjLoadMatAnimJoint(ctx, materialAnimationPtr) : null;
         }
 
         //add root joint with animations
         if (jointAnimation || materialAnimation) {
-            rootJointInstance.addAnimAll(jointAnimation, materialAnimation, null)
+            rootJointInstance.addAnimAll(jointAnimation, materialAnimation, null);
         }
 
         this.jobjRoots.push(rootJointInstance);
