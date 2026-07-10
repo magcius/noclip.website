@@ -20,14 +20,14 @@ console_error_panic_hook = "0.1.7"
 deku = { version = "0.19.1", features = ["logging"] }
 env_logger = "0.10.1"
 inflate = "0.4.5"
-js-sys = "0.3.60"
+js-sys = "0.3.103"
 polymorph = { git = "https://github.com/wgreenberg/polymorph", features = ["sheepfile-reader"], default-features = false }
 log = "0.4.21"
 lz4_flex = { version = "0.10.0", default-features = false, features = ["safe-decode", "checked-decode"] }
 lzma-rs = { version = "0.3.0", features = ["raw_decoder"] }
 naga = { git = "https://github.com/magcius/wgpu", branch = "issue-4349", features = ["glsl-in", "wgsl-out"] }
-wasm-bindgen = "=0.2.100"
-web-sys = { version = "0.3.48", features = ["console"] }
+wasm-bindgen = "=0.2.126"
+web-sys = { version = "0.3.103", features = ["console"] }
 nalgebra-glm = "0.19.0"
 rand = "0.8.5"
 getrandom = { version = "0.2.15", features = ["js"] }
@@ -40,5 +40,4 @@ tegra_swizzle = "0.4.0"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
 
 [package.metadata.bin]
-wasm-bindgen-cli = { version = "0.2.100", locked = true, bins = ["wasm-bindgen"] }
-wasm-opt = { version = "0.116.1" }
+wasm-pack = { version = "0.15.0" }

@@ -35,14 +35,6 @@ struct DirectionLight {
     vec4 colorB;
 };
 
-// size 4*32*4
-struct TextureRemaps {
-    vec4 tfrags[32];
-    vec4 ties[32];
-    vec4 mobys[32];
-    vec4 shrubs[32];
-};
-
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
     CameraData u_CameraData;
@@ -51,7 +43,6 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_BackgroundColor;
     FogParams u_FogParams;
     DirectionLight u_DirectionLights[16];
-    TextureRemaps u_TextureRemaps;
 };
 
     `,
@@ -123,7 +114,7 @@ ${GfxShaderLibrary.MonochromeNTSCLinear}
 
 const float SATURATION_ADJUST = 1.15;
 
-vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
+vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest) {
     // texture color is multiplied with vertex color immediately
     rgba *= textureSample;
 
@@ -136,8 +127,7 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
     rgba = vec4(rgb, rgba.a);
 
     // alpha test
-    // this should be configured per object but I can't find the data
-    if (rgba.a < 0.01) discard;
+    if (rgba.a < alphaTest) discard;
 
     // with saturation filter (not authentic but looks washed out without it)
     rgba.rgb = mix(vec3(MonochromeNTSCLinear(rgba.rgb)), rgba.rgb, SATURATION_ADJUST);
@@ -147,12 +137,8 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor) {
 
     `,
     Sampler: `
-ivec2 getTexRemap(in vec4 remapArray[32], in int index) {
-    uint v32 = floatBitsToUint(remapArray[index >> 3][(index >> 1) & 0x03]);
-    uint v16 = (v32 >> ((index & 0x01) * 16)) & 0xFFFFu;
-    uint bucket = (v16 & 0x07u);
-    uint slice = (v16 >> 3u);
-    return ivec2(bucket, slice);
+ivec2 getTexRemap(in int index) {
+    return ivec2(uint(index) & 0x7u, uint(index) >> 0x3u);
 }
 
 /*

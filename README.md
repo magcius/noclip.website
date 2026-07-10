@@ -33,7 +33,7 @@ Then, use the following commands to set up your environment (only needed every s
   cargo bin --install
   ```
 
-Finally, to build and run the project, use `pnpm start`. This will start a live-reloading environment and uses filesystem watchers to auto-build the project.
+Finally, to build and run the project, use `pnpm start`. This will start a live-reloading environment and uses filesystem watchers to auto-build the project. To include live-reloading for Rust code as well, use `pnpm start --watch`.
 
 For any questions related to development, see the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv)'s #development channel. A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
 
@@ -52,6 +52,7 @@ Hold `\` | Make camera move slower
 `I`/`J`/`K`/`L` | Tilt camera
 `O` | Rotate camera clockwise
 `U` | Rotate camera counterclockwise
+`X` | in WASD camera mode; enables "Hover Mode", locking changes to the y axis to the "Move camera up/down" controls
 `1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Load savestate
 `Shift`+`1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Save savestate
 `Numpad 3` | Export save states

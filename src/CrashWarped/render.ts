@@ -1012,7 +1012,7 @@ uniform sampler2D u_Texture;
 `;
 
     public override vert = `
-layout(location = 0) in uvec3 a_Position;
+layout(location = 0) in uvec4 a_Position;
 
 void main() {
     vec2 pos = vec2(a_Position.xz);
@@ -1091,7 +1091,7 @@ export class WaterMeshData {
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: WaterProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.U8_RGB },
+            { location: WaterProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.U8_RGBA },
         ];
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
@@ -1145,7 +1145,6 @@ export class WaterMeshData {
 
 class TerrainProgram extends DeviceProgram {
     public static a_Position = 0;
-    public static a_QuadIndex = 1;
 
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
@@ -1176,8 +1175,7 @@ uniform sampler2D u_Texture;
 `;
 
     public override vert = `
-layout(location = 0) in uvec3 a_Position;
-layout(location = 1) in uint a_QuadIndex;
+layout(location = 0) in uvec4 a_Position;
 
 void main() {
     vec2 pos = vec2(a_Position.xy);
@@ -1186,7 +1184,7 @@ void main() {
     vec4 data = textureLod(SAMPLER_2D(u_Terrain), (pos + .5)/64., 0.);
     vec4 realPos = vec4(pos.x, data.a, pos.y, 1.);
     gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
-    uint index = a_QuadIndex;
+    uint index = a_Position.z;
     v_TexCoord = vec2(index & 1u, .5*float(index & 2u));
     v_TexCoord = UnpackMatrix(u_TexMatrix) * vec4(v_TexCoord, 0, 1);
     float dist = clamp(distance(pos, camPos)/4., 4., 5.);
@@ -1248,8 +1246,7 @@ export class TerrainMeshData {
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: TerrainProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.U8_RGB },
-            { location: TerrainProgram.a_QuadIndex, bufferIndex: 0, bufferByteOffset: 2, format: GfxFormat.U8_R },
+            { location: TerrainProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.U8_RGBA },
         ];
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },

@@ -2,6 +2,7 @@
 import { mat4, quat, ReadonlyMat4 } from "gl-matrix";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { atob, btoa } from "./Ascii85";
+import { Mat4Identity, MathConstants, Vec3UnitX, Vec3UnitY } from "./MathHelpers";
 import { assert } from "./util";
 
 export interface SaveState {
@@ -57,6 +58,27 @@ function compressFrame_V1(view: DataView, byteOffs: number, m: ReadonlyMat4): nu
     return 4*4;
 }
 
+function removeSmallAmountsOfRoll(m: mat4): void {
+    // Compression can add unwanted camera roll, which we're very sensitive to.
+    // Check the right vector to make sure it's perfectly horizontal.
+
+    // dot(camera.right, Vec3UnitY) !== 0
+    // dot(camera[0,1,2], Vec3UnitY) !== 0
+    // camera[1] !== 0
+    if (Math.abs(m[1]) >= 0.005) {
+        // Oops, we have some roll. Correct the right vector.
+        m[1] = 0.0;
+        const len = Math.hypot(m[0], m[2]);
+        m[0] /= len;
+        m[2] /= len;
+
+        // Now recompute the up vector with fwd x right. Inline cross product assuming m[1] = 0.
+        m[4] = m[9] * m[2];
+        m[5] = m[10] * m[0] - m[8] * m[2];
+        m[6] = -m[9] * m[0];
+    }
+}
+
 function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
     const qn = view.getUint32(byteOffs + 0x0C, true);
 
@@ -70,6 +92,7 @@ function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
     const q = scratchQuat;
     quat.set(q, x*s, y*s, z*s, 1.0 - d);
     mat4.fromQuat(m, q);
+    removeSmallAmountsOfRoll(m);
 
     m[12] = view.getFloat32(byteOffs + 0x00, true);
     m[13] = view.getFloat32(byteOffs + 0x04, true);
@@ -77,9 +100,48 @@ function decompressFrame_V1(m: mat4, view: DataView, byteOffs: number): number {
     return 4*4;
 }
 
+function compressFrame_V2(view: DataView, byteOffs: number, m: ReadonlyMat4): number | null {
+    // Does not support roll.
+    if (Math.abs(m[1]) > 0.05)
+        return null;
+
+    // Extract the yaw from the right vector.
+    // atan2 returns between -tau/2 and tau/2
+    const a = (((-Math.atan2(m[2], m[0]) / MathConstants.TAU) + 1.0) % 1.0) * 0xFF;
+    // Extract the pitch from the forward vector.
+    const b = (((-Math.atan2(m[9], Math.hypot(m[8], m[10])) / MathConstants.TAU) + 1.0) % 1.0) * 0xFF;
+
+    view.setFloat32(byteOffs + 0x00, m[12], true);
+    view.setFloat32(byteOffs + 0x04, m[13], true);
+    view.setFloat32(byteOffs + 0x08, m[14], true);
+
+    const ab = a << 8 | b;
+    view.setUint16(byteOffs + 0x0C, ab, true);
+
+    return 0x0E;
+}
+
+function decompressFrame_V2(m: mat4, view: DataView, byteOffs: number): number {
+    // Extract the two angles.
+    const ab = view.getUint16(byteOffs + 0x0C, true);
+
+    const a = (ab >>> 8) * MathConstants.TAU / 0xFF;
+    const b = (ab & 0xFF) * MathConstants.TAU / 0xFF;
+    // First rotate around world up (yaw), then rotate around right (pitch).
+    mat4.rotate(m, Mat4Identity, a, Vec3UnitY);
+    mat4.rotate(m, m, b, Vec3UnitX);
+
+    m[12] = view.getFloat32(byteOffs + 0x00, true);
+    m[13] = view.getFloat32(byteOffs + 0x04, true);
+    m[14] = view.getFloat32(byteOffs + 0x08, true);
+    return 0x0E;
+}
+
 enum OptionsBitsV3 {
+    None             = 0b0000,
     CompressFrame_V1 = 0b0001,
-    FovY = 0b0010,
+    FovY             = 0b0010,
+    CompressFrame_V2 = 0b0100,
 }
 
 export class SaveStateSerializer {
@@ -105,7 +167,9 @@ export class SaveStateSerializer {
         const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
         byteOffs++;
 
-        if (optionsBits & OptionsBitsV3.CompressFrame_V1) {
+        if (optionsBits & OptionsBitsV3.CompressFrame_V2) {
+            byteOffs += decompressFrame_V2(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
+        } else if (optionsBits & OptionsBitsV3.CompressFrame_V1) {
             byteOffs += decompressFrame_V1(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
         } else {
             byteOffs += deserializeCameraV2_V3(dst.cameraWorldMatrix, this._saveStateView, byteOffs);
@@ -138,8 +202,21 @@ export class SaveStateSerializer {
     public serializeSaveState(saveState: Readonly<SaveState>): string {
         let byteOffs = 1;
 
-        let optionsBits = OptionsBitsV3.CompressFrame_V1;
-        byteOffs += compressFrame_V1(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
+        let optionsBits: OptionsBitsV3 = 0;
+
+        const enableCompressFrameV2 = false;
+        if (enableCompressFrameV2) {
+            const frameSizeV2 = compressFrame_V2(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
+            if (frameSizeV2 !== null) {
+                byteOffs += frameSizeV2;
+                optionsBits |= OptionsBitsV3.CompressFrame_V2;
+            }
+        }
+
+        if (optionsBits === 0) {
+            byteOffs += compressFrame_V1(this._saveStateView, byteOffs, saveState.cameraWorldMatrix);
+            optionsBits |= OptionsBitsV3.CompressFrame_V1;
+        }
 
         if (saveState.fovY !== undefined) {
             optionsBits |= OptionsBitsV3.FovY;

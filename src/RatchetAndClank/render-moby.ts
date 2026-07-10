@@ -13,6 +13,7 @@ import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { MobyInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
 import { assert } from "../util";
+import { packRemap, TextureAtlases } from "./textures";
 
 export class MobyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -117,9 +118,9 @@ void main() {
     }
 
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    ivec2 texRemap = getTexRemap(u_TextureRemaps.mobys, v_TextureIndex);
+    ivec2 texRemap = getTexRemap(v_TextureIndex);
     vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
-    gl_FragColor = commonFragmentShader(vec4(v_Rgba.rgb / 2.0, v_Rgba.a), textureSample, v_FogFactor);
+    gl_FragColor = commonFragmentShader(vec4(v_Rgba.rgb / 2.0, v_Rgba.a), textureSample, v_FogFactor, 0.01);
 }
 
 `;
@@ -132,7 +133,7 @@ export class MobyGeometry {
     private vertexBuffer: GfxBuffer | null = null;
     private vertexCount: number | null = null;
 
-    constructor(private cache: GfxRenderCache, public oClass: number, public moby: MobyClass, public lod: number, private textureIndices: number[]) {
+    constructor(private cache: GfxRenderCache, public oClass: number, public moby: MobyClass, public lod: number, private textureIndices: number[], private textureAtlases: TextureAtlases) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 // per vertex
@@ -327,7 +328,7 @@ export class MobyGeometry {
             vertexArrayBuffer[vertexPtr++] = angleScale * v.normalElevation;
             vertexArrayBuffer[vertexPtr++] = texcoordScale * v.s;
             vertexArrayBuffer[vertexPtr++] = texcoordScale * v.t;
-            vertexArrayBuffer[vertexPtr++] = v.textureIndex;
+            vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.mobyTextureRemap[v.textureIndex]);
             vertexArrayBuffer[vertexPtr++] = v.clamp;
         }
 
