@@ -13,24 +13,12 @@ import { DreamDropShader } from "./shader";
 import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp, Mat4Identity } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
-
-export enum LuxModelFlagRenderMode {
-    UNK,
-    SKYBOX,
-    UNK2,
-    UNK3,
-    UNK4,
-    SKYBOX2,
-    UNK6,
-    UNK7,
-    BACKGROUND, // not used but "background" geometry has this value I guess?
-}
 
 export enum LuxShapeAttribute {
     NO_BLEND,
@@ -43,6 +31,11 @@ export enum LuxShapeAttribute {
     BLEND_SUBTRACT = 96,
     DROP_SHADOW = 1024,
     ENV_MAP = 2048
+}
+
+export enum LuxModelFlags {
+    SKYBOX = 1,
+    BILLBOARD = 1024
 }
 
 export interface LuxPMP {
@@ -168,6 +161,9 @@ export interface LuxTXAFrame {
 
 export interface LuxPVD {
     clearColor: number[];
+    fogColor: number[];
+    fogNear: number;
+    fogFar: number;
 }
 
 export interface LuxRoomObjects {
@@ -181,7 +177,7 @@ const WORLD_SCALE = 200.0; // to make camera movement better, tiny XYZ coords ar
 const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
 const SCRATCH_BONE = mat4.create();
-const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
+const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 1 }];
 
 function getChannelValue(keyframes: LuxKeyframe[], frame: number, defaultValue: number): number {
     if (keyframes.length === 0) {
@@ -207,13 +203,6 @@ export function computeLuxShiftMatrix(scale: vec3, rotation: vec3, position: vec
         position[0] * WORLD_SCALE, position[1] * WORLD_SCALE, position[2] * WORLD_SCALE
     );
     return srt;
-}
-
-/**
- * Gets the 0-based nth nibble of a 2-byte number. For example, to get 4 from 0x0401, use `1` for `n`
- */
-export function getLuxShortNibble(n: number, nibble: number): number {
-    return (n >> ((3 - nibble) * 4)) & 15;
 }
 
 export class LuxTexture {
@@ -316,8 +305,7 @@ export class LuxShapeRenderer implements Destroyable {
                 this.txaIndices.push(...Array(f).fill(0));
             } else {
                 for (let i = 0; i < txa.frames.length; i++) {
-                    const frame = txa.frames[i];
-                    const n = Array(frame.displayFrames === 0 ? 5 : frame.displayFrames).fill(i - 1);
+                    const n = Array(txa.frames[i].displayFrames === 0 ? 5 : txa.frames[i].displayFrames).fill(i - 1);
                     this.txaIndices.push(...n);
                 }
             }
@@ -402,8 +390,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
 
     constructor(cache: GfxRenderCache, public name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], protected animation?: LuxSkeletalAnimation) {
         this.name = name;
-        const modeNibble = getLuxShortNibble(model.pmpFlags, 3);
-        this.isSkybox = model.pmpFlags !== -1 && (modeNibble === LuxModelFlagRenderMode.SKYBOX || modeNibble === LuxModelFlagRenderMode.SKYBOX2);
+        this.isSkybox = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.SKYBOX) !== 0;
         this.shapes = Array(model.shapes.length);
         for (let i = 0; i < model.shapes.length; i++) {
             const shape = model.shapes[i];
@@ -423,7 +410,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
             this.shapes[i] = this.getShapeRenderer(cache, model, shape, materials, txa);
         }
         this.bboxPoints = new Float32Array(model.bbox);
-        this.isBillboard = this.getIsBillboard(model.flags);
+        this.isBillboard = (model.flags & LuxModelFlags.BILLBOARD) !== 0;
 
         this.currentPAMFrame = 0;
         this.hasTXA = txas.length > 0;
@@ -566,10 +553,6 @@ export class LuxModelRenderer implements Destroyable, Layer {
         }
     }
 
-    protected getIsBillboard(flags: number): boolean {
-        return false;
-    }
-
     protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
         return new LuxShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.animation ? model.skeleton!.bones.length : 0);
     }
@@ -582,9 +565,10 @@ export class LuxRoomRenderer implements Destroyable {
     public selectedSetIndices: number[];
     public applyTextures: boolean = true;
     public scrollingTextures: boolean = true;
+    public showFog: boolean = true;
     private allSetIndices: number[][];
 
-    constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[]) {
+    constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], private pvd: LuxPVD) {
         const gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
@@ -615,6 +599,9 @@ export class LuxRoomRenderer implements Destroyable {
             this.allSetIndices = [[]];
         }
         this.selectedSetIndices = [];
+        // approximation to appearance in game
+        this.pvd.fogNear *= (WORLD_SCALE * 2);
+        this.pvd.fogFar *= (WORLD_SCALE * 2);
     }
 
     public onSetChanged(index: number, v: boolean) {
@@ -631,7 +618,7 @@ export class LuxRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 19);
+        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 20);
         const uniformBuffer = template.mapUniformBufferF32(DreamDropShader.ub_SceneParams);
         // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.projectionMatrix);
@@ -641,6 +628,17 @@ export class LuxRoomRenderer implements Destroyable {
         uniformBuffer[offset++] = this.applyTextures ? 1.0 : 0.0;
         // u_DoScrolling (1)
         uniformBuffer[offset++] = this.scrollingTextures ? 1.0 : 0.0;
+        // u_ShowFog (1)
+        uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
+
+        let offset2 = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 6);
+        const uniformBuffer2 = template.mapUniformBufferF32(DreamDropShader.ub_EnvParams);
+        // u_FogColor (4)
+        offset2 += fillVec4(uniformBuffer2, offset2, this.pvd.fogColor[0], this.pvd.fogColor[1], this.pvd.fogColor[2], this.pvd.fogColor[3]);
+        // u_FogNear (1)
+        uniformBuffer2[offset2++] = this.pvd.fogNear;
+        // u_FogFar (1)
+        uniformBuffer2[offset2++] = this.pvd.fogFar;
 
         for (let i = 0; i < this.parts.length; i++) {
             if (this.parts[i].visible) {
@@ -683,13 +681,12 @@ export class LuxRenderer implements SceneGfx {
         this.textureHolder = new FakeTextureHolder([]);
         this.renderHelper = new GfxRenderHelper(device);
         this.textures = [];
-        this.clearColor = this.clearColor.map(c => c / 255);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        mainColorDesc.clearColor = { r: this.clearColor[0], g: this.clearColor[1], b: this.clearColor[2], a: 1.0 };
+        mainColorDesc.clearColor = { r: this.clearColor[0], g: this.clearColor[1], b: this.clearColor[2], a: this.clearColor[3] };
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, "Main Color");
         const mainDepthTargetID = builder.createRenderTargetID(makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor), "Main Depth");
         builder.pushPass((pass) => {
@@ -754,6 +751,11 @@ export class LuxRenderer implements SceneGfx {
             this.roomRenderer!.scrollingTextures = scrollTextures.checked;
         };
         renderOptions.contents.appendChild(scrollTextures.elem);
+        const showFog = new Checkbox("Show fog", true);
+        showFog.onchanged = () => {
+            this.roomRenderer!.showFog = showFog.checked;
+        };
+        renderOptions.contents.appendChild(showFog.elem);
 
         return [setPanel, layersPanel, renderOptions];
     }

@@ -51,7 +51,7 @@ const EXTERNAL_CTT: Map<string, string[]> = new Map([
 
 // override for default object set(s). If not specified then only the first set is turned on
 const DEFAULT_SETS: Map<string, number[]> = new Map([
-    ["tw01", [2]],
+    ["tw01", [1]],
     ["tw02", [1]],
     ["tw03", [1]],
     ["tw04", [1]],

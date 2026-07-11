@@ -8,8 +8,9 @@ export class DreamDropShader extends DeviceProgram {
     public static a_Weight = 3;
     public static a_Joint = 4;
     public static ub_SceneParams = 0;
-    public static ub_ModelParams = 1;
-    public static ub_ShapeParams = 2;
+    public static ub_EnvParams = 1;
+    public static ub_ModelParams = 2;
+    public static ub_ShapeParams = 3;
 
     constructor(protected attributeCount: number, protected boneSRTCount: number, protected weightCount = 0, protected doRigidSkinning = false) {
         super();
@@ -23,6 +24,13 @@ layout(std140) uniform ub_SceneParams {
     float u_Time;
     float u_ApplyTextures;
     float u_DoScrolling;
+    float u_ShowFog;
+};
+
+layout(std140) uniform ub_EnvParams {
+    vec4 u_FogColor;
+    float u_FogNear;
+    float u_FogFar;
 };
 
 layout(std140) uniform ub_ModelParams {
@@ -39,6 +47,7 @@ uniform sampler2D u_Texture;
 
 varying vec4 v_Color;
 varying vec2 v_UV;
+varying float v_Depth;
 
 #ifdef VERT
 layout(location = ${DreamDropShader.a_Position}) in vec3 a_Position;
@@ -55,20 +64,32 @@ void main() {
     } else {
         v_UV = a_UV;
     }
+    if (u_ShowFog > 0.1) {
+        v_Depth = -(UnpackMatrix(u_View) * vec4(a_Position, 1.0)).z;
+    } else {
+        v_Depth = 0.0;
+    }
     ${this.getVertPosition()}
 }
 #endif
 
 #ifdef FRAG
 void main() {
+    vec4 finalColor;
     if (u_HasTexture > 0.1 && u_ApplyTextures > 0.1) {
         vec4 texColor = texture(SAMPLER_2D(u_Texture), v_UV);
         if (texColor.a < 0.1) {
             discard;
         }
-        gl_FragColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
+        finalColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
     } else {
-        gl_FragColor = v_Color;
+        finalColor = v_Color;
+    }
+    if (u_ShowFog > 0.1) {
+        float fogFactor = clamp((u_FogFar - v_Depth) / (u_FogFar - u_FogNear), 0.0, 1.0);
+        gl_FragColor = vec4(mix(u_FogColor.rgb, finalColor.rgb, fogFactor), finalColor.a);
+    } else {
+        gl_FragColor = finalColor;
     }
 }
 #endif

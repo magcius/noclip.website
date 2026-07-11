@@ -108,10 +108,6 @@ export class DreamDropShape extends LuxShape {
     }
 }
 
-export enum DreamDropModelFlagBillboard {
-    BILLBOARD = 4
-}
-
 const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_CTRT = 1414681667;
@@ -251,7 +247,7 @@ export class DreamDropParser {
             const setOffset = this.getUint32();
             this.offset += 8;
             const name = this.getString(16);
-            sets[i] = this.parseSet(setOffset, name);
+            sets[i] = this.parseDataSet(setOffset, name);
         }
 
         return sets.filter(s => !s.name.includes("evt"));
@@ -379,10 +375,10 @@ export class DreamDropParser {
 
         this.offset = offset + vertexDataOffset;
         for (let i = 0; i < opaqueShapeCount; i++) {
-            this.parsePMOVertices(opaqueShapes[i]);
+            this.parsePMOShapeVertices(opaqueShapes[i]);
         }
         for (let i = 0; i < translucentShapeCount; i++) {
-            this.parsePMOVertices(translucentShapes[i]);
+            this.parsePMOShapeVertices(translucentShapes[i]);
         }
 
         let skeleton;
@@ -573,12 +569,19 @@ export class DreamDropParser {
         if (magic !== MAGIC_PVD) {
             console.warn("Unknown PVD magic", magic);
         }
-        this.offset += 36;
+        this.offset += 12;
+        const fr = this.getByte();
+        const fg = this.getByte();
+        const fb = this.getByte();
+        const fa = this.getByte();
+        const fogNear = this.getFloat();
+        const fogFar = this.getFloat();
+        this.offset += 12;
         const r = this.getByte();
         const g = this.getByte();
         const b = this.getByte();
         const a = this.getByte();
-        return { clearColor: [r, g, b, a] };
+        return { clearColor: [r, g, b, a], fogColor: [fr, fg, fb, fa], fogNear, fogFar };
     }
 
     private parseBoneSRT(flags: AnimationSRTFlags, frameCount: number): LuxBoneChannel {
@@ -593,39 +596,39 @@ export class DreamDropParser {
         let scaleZ: LuxKeyframe[] = [];
 
         if (flags.translationX) {
-            translationX = this.parseAnimationData(frameCount);
+            translationX = this.parseKeyframes(frameCount);
         }
         if (flags.translationY) {
-            translationY = this.parseAnimationData(frameCount);
+            translationY = this.parseKeyframes(frameCount);
         }
         if (flags.translationZ) {
-            translationZ = this.parseAnimationData(frameCount);
+            translationZ = this.parseKeyframes(frameCount);
         }
 
         if (flags.rotationX) {
-            rotationX = this.parseAnimationData(frameCount);
+            rotationX = this.parseKeyframes(frameCount);
         }
         if (flags.rotationY) {
-            rotationY = this.parseAnimationData(frameCount);
+            rotationY = this.parseKeyframes(frameCount);
         }
         if (flags.rotationZ) {
-            rotationZ = this.parseAnimationData(frameCount);
+            rotationZ = this.parseKeyframes(frameCount);
         }
 
         if (flags.scaleX) {
-            scaleX = this.parseAnimationData(frameCount);
+            scaleX = this.parseKeyframes(frameCount);
         }
         if (flags.scaleY) {
-            scaleY = this.parseAnimationData(frameCount);
+            scaleY = this.parseKeyframes(frameCount);
         }
         if (flags.scaleZ) {
-            scaleZ = this.parseAnimationData(frameCount);
+            scaleZ = this.parseKeyframes(frameCount);
         }
 
         return { translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ };
     }
 
-    private parseAnimationData(frameCount: number): LuxKeyframe[] {
+    private parseKeyframes(frameCount: number): LuxKeyframe[] {
         let keyframeCount = 0;
         const maxValue = this.getFloat();
         const minValue = this.getFloat();
@@ -674,7 +677,7 @@ export class DreamDropParser {
         return new DreamDropShape(vertexCount, textureId, attribute, boneIndices, vertexSizeBytes, vertexFlags);
     }
 
-    private parsePMOVertices(shape: DreamDropShape) {
+    private parsePMOShapeVertices(shape: DreamDropShape) {
         if (shape.vertexSizeBytes >= 22) {
             shape.weights = new Float32Array(shape.vertexCount * 4);
             shape.joints = new Uint8Array(shape.vertexCount * 4);
@@ -709,13 +712,13 @@ export class DreamDropParser {
                 shape.joints[(i * 4) + 2] = Math.trunc(this.getByte() / JOINT_SCALE);
                 shape.joints[(i * 4) + 3] = Math.trunc(this.getByte() / JOINT_SCALE);
                 if (shape.vertexSizeBytes === 26) {
-                    this.offset += 4; // not sure what this is skipping
+                    this.offset += 4; // not sure what this is skipping, very rare
                 }
             }
         }
     }
 
-    private parseSet(oloOffset: number, name: string): LuxDataSet {
+    private parseDataSet(oloOffset: number, name: string): LuxDataSet {
         this.offset = oloOffset + 6;
         const oloCount = this.getUshort();
         const olos: string[] = Array(oloCount);

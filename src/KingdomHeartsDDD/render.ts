@@ -1,14 +1,14 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { DreamDropPMO, DreamDropModelFlagBillboard, DreamDropPMP } from "./bin";
+import { DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropRoomConfig } from "./config/room";
 import { DreamDropShader } from "./shader";
-import { computeLuxShiftMatrix, getLuxShortNibble, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxPVD, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 
 export class DreamDropRoomRenderer extends LuxRoomRenderer {
-    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], config: DreamDropRoomConfig | undefined) {
-        super(cache, pmp, textures, objects, txas);
+    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], pvd: LuxPVD, config: DreamDropRoomConfig | undefined) {
+        super(cache, pmp, textures, objects, txas, pvd);
         if (config && config.defaultSets) {
             for (const set of config.defaultSets) {
                 this.onSetChanged(set, true);
@@ -77,10 +77,6 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
 }
 
 class ModelRenderer extends LuxModelRenderer {
-    protected override getIsBillboard(flags: number): boolean {
-        return getLuxShortNibble(flags, 1) === DreamDropModelFlagBillboard.BILLBOARD;
-    }
-
     protected override getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
         return new ShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.animation ? model.skeleton!.bones.length : 0);
     }

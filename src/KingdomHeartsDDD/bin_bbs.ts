@@ -531,12 +531,19 @@ export class BBSParser extends DreamDropParser {
         if (magic !== MAGIC_PVD) {
             console.warn("Unknown PVD magic", magic);
         }
-        this.offset += 36;
+        this.offset += 12;
+        const fr = this.getByte();
+        const fg = this.getByte();
+        const fb = this.getByte();
+        const fa = this.getByte();
+        const fogNear = this.getFloat();
+        const fogFar = this.getFloat();
+        this.offset += 12;
         const r = this.getByte();
         const g = this.getByte();
         const b = this.getByte();
         const a = this.getByte();
-        return { clearColor: [r, g, b, a] };
+        return { clearColor: [r, g, b, a], fogColor: [fr, fg, fb, fa], fogNear, fogFar };
     }
 
     private getShapes(hasSkeleton: boolean): BBSShape[] {

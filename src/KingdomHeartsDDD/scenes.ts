@@ -97,7 +97,7 @@ class Renderer extends LuxRenderer {
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
 
-        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, txas, this.config);
+        this.roomRenderer = new DreamDropRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, txas, pvd, this.config);
     }
 
     protected override getSetPanel() {
@@ -217,7 +217,10 @@ class Room implements SceneDesc {
         const pvdFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.pvd`, { allow404: true });
         let pvd = pvdFile.byteLength > 0 ? new DreamDropParser(pvdFile).parsePVD() : undefined;
         if (!pvd) {
-            pvd = { clearColor: [0, 0, 0, 1] };
+            pvd = { clearColor: [0, 0, 0, 1], fogColor: [1, 1, 1, 0], fogNear: 400, fogFar: 480 };
+        } else {
+            pvd.clearColor = pvd.clearColor.map(c => c / 255);
+            pvd.fogColor = pvd.fogColor.map(c => c / 255);
         }
 
         return new Renderer(device, pmp, pvd, { sets, models, animations }, txas, config);
@@ -235,17 +238,16 @@ TXAs need lots of cleanup and the functionality to animate opacity between frame
     Will probably need an alternative shader that takes two texture inputs, idk how else to do it
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
 Figure out the shape attribute flag for back culling (it's different than BBS, which even that might not be right)
-Figure out the proper interpretation of LuxModelFlagRenderMode, it's probably not meant to be nibbles but works nonetheless
-    Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect?) skybox geometry
-    Most likely this should be derived from the vertex flags?
+Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect?) skybox geometry
 Figure out how world map objects are loaded
     The models exist in chara/gim/g_wm*
     There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)
 Invesigate PMO model issue from BBS. Very rare in DDD, but see the mickey model in musketeers for an example
-Investigate other file types such as GPL, SEB, EAD, ABC, and PVD
+Investigate other file types such as GPL, SEB, EAD and ABC
     MCV is camera/cutscene related and BCD is collision data. Neither of those are needed for noclip
     Likewise, the particle effect files like FEP and ESE would be neat, but probably not worth the effort
     See note in bin.ts for list of known or already used types
+    The .rgr files could be used for getting default animations?
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
 Figure out how shapes' supposed "diffuse color" should be used (completely different than BBS)
 Shadows in the second district are the wrong color, they appear as black in game (they're just fine everywhere else though???)
@@ -279,7 +281,7 @@ const id = "KHDDD";
 const name = "Kingdom Hearts 3D: Dream Drop Distance";
 const sceneDescs = [
     "Destiny Islands",
-    new Room("di01", "Beach (Day)"),
+    new Room("di01", "Beach"),
     new Room("di02", "Beach (Evening)"),
     new Room("di03", "Beach (Night)"),
     new Room("di05", "Combat Tutorial"),
@@ -289,13 +291,13 @@ const sceneDescs = [
     new Room("tw02", "Second District"),
     new Room("tw03", "Third District"),
     new Room("tw14", "Third District (No Power)"),
+    new Room("tw07", "Post Office"),
+    new Room("tw08", "Back Streets"),
     new Room("tw04", "Fourth District"),
     new Room("tw05", "Fifth District"),
-    new Room("tw10", "Fifth District"),
-    new Room("tw07", "Post Office"),
+    new Room("tw10", "Fifth District (Boss)"),
     new Room("tw06", "Garden"),
     new Room("tw11", "Garden (Boss)"),
-    new Room("tw08", "Back Streets"),
     new Room("tw09", "Fountain Plaza"),
     new Room("tw12", "Fountain Plaza (Boss)"),
     new Room("tw60", "Dive (Sora)"),
@@ -364,7 +366,7 @@ const sceneDescs = [
     new Room("pi60", "Dive (Sora)"),
     new Room("pi61", "Dive (Riku)"),
     "Country of the Musketeers", // tm = the three musketeers
-    new Room("tm08", "Training Yard (Day)"),
+    new Room("tm08", "Training Yard"),
     new Room("tm15", "Training Yard (Night)"),
     new Room("tm01", "The Opéra (Sora)"),
     new Room("tm17", "The Opéra (Riku)"),

@@ -223,7 +223,7 @@ class Renderer extends LuxRenderer {
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
-        this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, []);
+        this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, [], pvd);
     }
 
     protected override getSetPanel(): Panel {
@@ -279,7 +279,10 @@ class Room implements SceneDesc {
         let pvd = p.parsePVDFromARC();
         if (!pvd) {
             console.warn("Could not find PVD for", this.id);
-            pvd = { clearColor: [0, 0, 0, 1] };
+            pvd = { clearColor: [0, 0, 0, 1], fogColor: [1, 1, 1, 0], fogNear: 400, fogFar: 480 };
+        } else {
+            pvd.clearColor = pvd.clearColor.map(c => c / 255);
+            pvd.fogColor = pvd.fogColor.map(c => c / 255);
         }
 
         const objects = await getRoomObjects(this.id, context);
@@ -293,11 +296,10 @@ TODO
 
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
-    It seems to have something to do with need to scale by the texture width/height and only affects UVs that are single bytes.
+    It seems to have something to do with needing to scale by the texture width/height and only affects UVs that are single bytes.
     I haven't been able to figure out a consistent way to scale by texture dimensions, since one way will work for some
     models but not others and vice versa. Texture formats and other flags don't seem to have an effect. It could also
     have to do with aspect ratio, rather than width and height, since the very few eye textures that do look right happen to be squares
-Check for billboard textures, move DDD's code for it to Lux if there's any
 Investigate webgl texture error in jb10 (probably a mismatched texture header?)
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
@@ -443,7 +445,7 @@ const sceneDescs = [
     new Room("LS11", "Outer Space"),
     new Room("LS13", "Lanes Between"),
     "Destiny Islands",
-    new Room("DI01", "Beach (Day)"),
+    new Room("DI01", "Beach"),
     new Room("DI02", "Beach (Evening)"),
     new Room("DI03", "Beach (Night)"),
     new Room("DI04", "Main Island"),
