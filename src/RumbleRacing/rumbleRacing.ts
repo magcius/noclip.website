@@ -7,6 +7,7 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { getTextures } from "./asset/txf/TXF";
 import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
+import { vec2, vec3 } from "gl-matrix";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
@@ -24,9 +25,9 @@ export interface JsonBuffer {
   bufferIndex: number;
   textureId: number;
   name: string;
-  vertices: [number, number, number][];
-  uvs: [number, number][];
-  normals: [number, number, number][];
+  positions: vec3[];
+  uvs: vec2[];
+  normals: vec3[];
   indices: number[];
 }
 
@@ -93,26 +94,23 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
     for (let bufIdx = 0; bufIdx < node.geometry.buffers.length; bufIdx++) {
       const buf = node.geometry.buffers[bufIdx];
       const indices: number[] = [];
-      const positions: [number, number, number][] = [];
-      const uvs: [number, number][] = [];
-      const normals: [number, number, number][] = [];
+      const positions: vec3[] = [];
+      const uvs: vec2[] = [];
+      const normals: vec3[] = [];
 
       for (const strip of buf.primitives) {
         const base = positions.length;
 
-        for (let i = 0; i < strip.vertices.length; i++) {
-          const v = strip.vertices[i];
-          const n = strip.normals[i];
-          const u = strip.uvs[i];
-          positions.push([v.x, v.y, v.z]);
-          normals.push([n.x, n.y, n.z]);
-          uvs.push([u.u, u.v]);
+        for (const vert of strip.vertices) {
+          positions.push(vert.position);
+          normals.push(vert.normal);
+          uvs.push(vert.uv);
         }
 
         let isFlipped = false;
         for (let i = 2; i < strip.vertices.length; i++) {
-          if (strip.normals[i].adcBitSet) {
-            if (!strip.normals[i - 1].adcBitSet) {
+          if (strip.vertices[i].adcBitSet) {
+            if (!strip.vertices[i - 1].adcBitSet) {
               isFlipped = false;
             } else {
               isFlipped = !isFlipped;
@@ -135,7 +133,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
         bufferIndex: bufIdx,
         textureId: buf.textureId,
         name: `${node.metadata.headerOffset}_buf${bufIdx}`,
-        vertices: positions,
+        positions,
         uvs,
         normals,
         indices,

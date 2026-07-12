@@ -59,18 +59,18 @@ export class ObfGeometry {
         }
 
         for (const buffer of node.buffers) {
-          if (buffer.vertices.length === 0) continue;
+          if (buffer.positions.length === 0) continue;
 
           // don't draw some unhandled textures
           if (exclude.textureIds?.has(buffer.textureId)) {
             continue;
           }
 
-          const data = new Float32Array(buffer.vertices.length * 8);
-          for (let i = 0; i < buffer.vertices.length; i++) {
-            data[i * 8 + 0] = buffer.vertices[i][0];
-            data[i * 8 + 1] = buffer.vertices[i][1];
-            data[i * 8 + 2] = buffer.vertices[i][2];
+          const data = new Float32Array(buffer.positions.length * 8);
+          for (let i = 0; i < buffer.positions.length; i++) {
+            data[i * 8 + 0] = buffer.positions[i][0];
+            data[i * 8 + 1] = buffer.positions[i][1];
+            data[i * 8 + 2] = buffer.positions[i][2];
 
             data[i * 8 + 3] = buffer.uvs[i][0];
             data[i * 8 + 4] = buffer.uvs[i][1];

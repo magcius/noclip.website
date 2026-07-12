@@ -1,28 +1,16 @@
+import { vec2, vec3 } from "gl-matrix";
 import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
-
-export interface Vertex {
-  x: number;
-  y: number;
-  z: number;
-}
-export interface Normal {
-  adcBitSet: boolean;
-  x: number;
-  y: number;
-  z: number;
-}
-export interface UV {
-  u: number;
-  v: number;
-}
 
 export interface Primitive {
   totalVertsInPrimitive: number;
   primType: number;
-  vertices: Vertex[];
-  normals: Normal[];
-  uvs: UV[];
+  vertices: {
+    position: vec3;
+    normal: vec3;
+    uv: vec2;
+    adcBitSet: boolean;
+  }[];
 }
 
 export interface Buffer {
@@ -168,48 +156,50 @@ export function getGeometry(
         totalVertsInPrimitive: sChunk.gifTagV1 & 0x7fff,
         primType: (sChunk.gifTagV2 & (0b111 << 15)) >> 15,
         vertices: [],
-        normals: [],
-        uvs: [],
       };
 
       for (const triple of sChunk.dataTriples) {
         const { a: cmdA, b: cmdB, c: cmdC } = triple;
 
         if (
-          cmdA.type === VifUnpackFormat.V3_32 &&
-          cmdB.type === VifUnpackFormat.V3_32 &&
-          cmdC.type === VifUnpackFormat.V2_32
+          cmdA.type === VifUnpackFormat.V3_32 && // A = normals
+          cmdB.type === VifUnpackFormat.V3_32 && // B = vertices
+          cmdC.type === VifUnpackFormat.V2_32 // C = uvs
         ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
-            strip.normals.push({
-              x: cmdA.v3_32[j].v1,
-              y: cmdA.v3_32[j].v2,
-              z: cmdA.v3_32[j].v3,
-              adcBitSet: cmdA.v3_32[j].adcBitSet,
-            });
             strip.vertices.push({
-              x: cmdB.v3_32[j].v1,
-              y: cmdB.v3_32[j].v2,
-              z: cmdB.v3_32[j].v3,
+              normal: vec3.fromValues(
+                cmdA.v3_32[j].v1,
+                cmdA.v3_32[j].v2,
+                cmdA.v3_32[j].v3,
+              ),
+              adcBitSet: cmdA.v3_32[j].adcBitSet,
+              position: vec3.fromValues(
+                cmdB.v3_32[j].v1,
+                cmdB.v3_32[j].v2,
+                cmdB.v3_32[j].v3,
+              ),
+              uv: vec2.fromValues(cmdC.v2_32[j].v1, cmdC.v2_32[j].v2),
             });
-            strip.uvs.push({ u: cmdC.v2_32[j].v1, v: cmdC.v2_32[j].v2 });
           }
         } else if (
-          cmdA.type === VifUnpackFormat.V3_32 &&
-          cmdB.type === VifUnpackFormat.V2_32 &&
-          cmdC.type === VifUnpackFormat.V4_8
+          cmdA.type === VifUnpackFormat.V3_32 && // A = vertices
+          cmdB.type === VifUnpackFormat.V2_32 && // B = uvs
+          cmdC.type === VifUnpackFormat.V4_8 // C = normals
         ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
             strip.vertices.push({
-              x: cmdA.v3_32[j].v1,
-              y: cmdA.v3_32[j].v2,
-              z: cmdA.v3_32[j].v3,
-            });
-            strip.uvs.push({ u: cmdB.v2_32[j].v1, v: cmdB.v2_32[j].v2 });
-            strip.normals.push({
-              x: cmdC.v4_8[j].v1 / 255.0,
-              y: cmdC.v4_8[j].v2 / 255.0,
-              z: cmdC.v4_8[j].v3 / 255.0,
+              position: vec3.fromValues(
+                cmdA.v3_32[j].v1,
+                cmdA.v3_32[j].v2,
+                cmdA.v3_32[j].v3,
+              ),
+              uv: vec2.fromValues(cmdB.v2_32[j].v1, cmdB.v2_32[j].v2),
+              normal: vec3.fromValues(
+                cmdC.v4_8[j].v1 / 255.0,
+                cmdC.v4_8[j].v2 / 255.0,
+                cmdC.v4_8[j].v3 / 255.0,
+              ),
               adcBitSet: cmdC.v4_8[j].adcBitSet,
             });
           }
