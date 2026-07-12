@@ -1,3 +1,4 @@
+import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
 
 export interface Vertex {
@@ -69,8 +70,8 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
   while (i < filtered.length) {
     if (
       i + 1 < filtered.length &&
-      filtered[i].unpack?.type === "V4_32" &&
-      filtered[i + 1].unpack?.type === "V4_32"
+      filtered[i].unpack?.type === VifUnpackFormat.V4_32 &&
+      filtered[i + 1].unpack?.type === VifUnpackFormat.V4_32
     ) {
       const bufHeader = filtered[i].unpack!.v4_32.map((e) => ({
         v1: e.v1,
@@ -84,13 +85,13 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
       while (i < filtered.length) {
         if (
           i + 1 < filtered.length &&
-          filtered[i].unpack?.type === "V4_32" &&
-          filtered[i + 1].unpack?.type === "V4_32"
+          filtered[i].unpack?.type === VifUnpackFormat.V4_32 &&
+          filtered[i + 1].unpack?.type === VifUnpackFormat.V4_32
         ) {
           break;
         }
 
-        if (filtered[i].unpack?.type !== "V4_32") {
+        if (filtered[i].unpack?.type !== VifUnpackFormat.V4_32) {
           throw new Error(`expected strip header at index ${i}`);
         }
 
@@ -102,10 +103,13 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         };
         i++;
 
-        while (i < filtered.length && filtered[i].unpack?.type !== "V4_32") {
+        while (
+          i < filtered.length &&
+          filtered[i].unpack?.type !== VifUnpackFormat.V4_32
+        ) {
           const tripl: UnpackData[] = [];
           for (let j = 0; j < 3 && i < filtered.length; j++) {
-            if (filtered[i].unpack?.type === "V4_32") break;
+            if (filtered[i].unpack?.type === VifUnpackFormat.V4_32) break;
             tripl.push(filtered[i].unpack!);
             i++;
           }
@@ -146,7 +150,7 @@ export function getGeometry(
   commandStream: VifCommand[],
   textures: TextureMeta,
 ): Geometry {
-  const filtered = commandStream.filter((c) => c.kind === "UNPACK");
+  const filtered = commandStream.filter((c) => c.kind === VifCmd.UNPACK_MASK);
   const chunks = getBufferChunks(filtered);
   const geometry: Geometry = { buffers: [] };
 
@@ -172,9 +176,9 @@ export function getGeometry(
         const { a: cmdA, b: cmdB, c: cmdC } = triple;
 
         if (
-          cmdA.type === "V3_32" &&
-          cmdB.type === "V3_32" &&
-          cmdC.type === "V2_32"
+          cmdA.type === VifUnpackFormat.V3_32 &&
+          cmdB.type === VifUnpackFormat.V3_32 &&
+          cmdC.type === VifUnpackFormat.V2_32
         ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
             strip.normals.push({
@@ -191,9 +195,9 @@ export function getGeometry(
             strip.uvs.push({ u: cmdC.v2_32[j].v1, v: cmdC.v2_32[j].v2 });
           }
         } else if (
-          cmdA.type === "V3_32" &&
-          cmdB.type === "V2_32" &&
-          cmdC.type === "V4_8"
+          cmdA.type === VifUnpackFormat.V3_32 &&
+          cmdB.type === VifUnpackFormat.V2_32 &&
+          cmdC.type === VifUnpackFormat.V4_8
         ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
             strip.vertices.push({

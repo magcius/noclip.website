@@ -1,16 +1,5 @@
+import { VifUnpackFormat, VifCmd } from "../../../Common/PS2/VIF";
 import { readUint32LE, uint32ToFloat32 } from "../../helpers/bytes";
-
-export type VifCommandKind =
-  | "NOP"
-  | "DIRECT"
-  | "STROW"
-  | "MASK"
-  | "MSCNT"
-  | "FLUSHE"
-  | "CYCLE"
-  | "UNPACK";
-export type UnpackType = "V2_32" | "V3_32" | "V4_32" | "V4_8" | "UNSUPPORTED";
-export type UnpackExtendType = "ZERO" | "SIGNED";
 
 export interface V4_32Entry {
   v1: number;
@@ -41,7 +30,7 @@ export interface V4_8Entry {
 }
 
 export interface UnpackData {
-  type: UnpackType;
+  type: VifUnpackFormat;
   v4_32: V4_32Entry[];
   v3_32: V3_32Entry[];
   v2_32: V2_32Entry[];
@@ -49,7 +38,7 @@ export interface UnpackData {
 }
 
 export interface VifCommand {
-  kind: VifCommandKind;
+  kind: VifCmd;
   opcode: number;
   num: number;
   immediate: number;
@@ -62,38 +51,17 @@ export interface VifCommand {
 
 interface UnpackInfo {
   address: number;
-  extendType: UnpackExtendType;
-  unpackType: UnpackType;
+  unpackFormat: VifUnpackFormat;
   addTopsToAddress: boolean;
   performUnpackWriteMasking: boolean;
 }
 
 function getUnpackInfo(command: number, immediate: number): UnpackInfo {
-  let unpackType: UnpackType = "UNSUPPORTED";
-  switch (command) {
-    case 0x64:
-    case 0x74:
-      unpackType = "V2_32";
-      break;
-    case 0x68:
-    case 0x78:
-      unpackType = "V3_32";
-      break;
-    case 0x6c:
-    case 0x7c:
-      unpackType = "V4_32";
-      break;
-    case 0x6e:
-    case 0x7e:
-      unpackType = "V4_8";
-      break;
-  }
-  const extendType: UnpackExtendType =
-    ((immediate >> 14) & 0x1) === 1 ? "ZERO" : "SIGNED";
+  const unpackFormat = command & VifCmd.UNPACK_PARAM;
+
   return {
     address: (immediate & 0x03ff) * 16,
-    extendType,
-    unpackType,
+    unpackFormat,
     addTopsToAddress: ((immediate >> 15) & 0x1) === 1,
     performUnpackWriteMasking: (command & 0x10) !== 0,
   };
@@ -116,35 +84,39 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
     const immediate = (b[1] << 8) | b[0];
     idx += 4;
 
-    const cmd: VifCommand = { kind: "NOP", opcode: command, num, immediate };
+    const cmd: VifCommand = {
+      kind: VifCmd.NOP,
+      opcode: command,
+      num,
+      immediate,
+    };
 
-    switch (command) {
-      case 0x00:
-        cmd.kind = "NOP";
+    switch (command as VifCmd) {
+      case VifCmd.NOP:
         break;
 
-      case 0x01:
-        cmd.kind = "CYCLE";
+      case VifCmd.STCYCL:
+        cmd.kind = VifCmd.STCYCL;
         cmd.cycle = immediate;
         break;
 
-      case 0x10:
-        cmd.kind = "FLUSHE";
+      case VifCmd.FLUSHE:
+        cmd.kind = VifCmd.FLUSHE;
         break;
 
-      case 0x17:
-        cmd.kind = "MSCNT";
+      case VifCmd.MSCNT:
+        cmd.kind = VifCmd.MSCNT;
         break;
 
-      case 0x20:
-        cmd.kind = "MASK";
+      case VifCmd.STMASK:
+        cmd.kind = VifCmd.STMASK;
         if (idx + 4 > dataLen) throw new Error("unexpected EOF reading MASK");
         cmd.mask = readUint32LE(data, idx);
         idx += 4;
         break;
 
-      case 0x30:
-        cmd.kind = "STROW";
+      case VifCmd.STROW:
+        cmd.kind = VifCmd.STROW;
         if (idx + 16 > dataLen) throw new Error("unexpected EOF reading STROW");
         cmd.strow = [
           readUint32LE(data, idx),
@@ -155,8 +127,8 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
         idx += 16;
         break;
 
-      case 0x50: {
-        cmd.kind = "DIRECT";
+      case VifCmd.DIRECT: {
+        cmd.kind = VifCmd.DIRECT;
         if (immediate === 0)
           throw new Error("DIRECT immediate=0 is not implemented");
         const quadCount = immediate;
@@ -173,20 +145,20 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
       }
 
       default:
-        if (command >= 0x60 && command <= 0x7f) {
-          cmd.kind = "UNPACK";
+        if ((command & VifCmd.UNPACK_MASK) === VifCmd.UNPACK_MASK) {
+          cmd.kind = VifCmd.UNPACK_MASK;
           const info = getUnpackInfo(command, immediate);
           const count = num;
           const unpack: UnpackData = {
-            type: info.unpackType,
+            type: info.unpackFormat,
             v4_32: [],
             v3_32: [],
             v2_32: [],
             v4_8: [],
           };
 
-          switch (info.unpackType) {
-            case "V4_32": {
+          switch (info.unpackFormat) {
+            case VifUnpackFormat.V4_32: {
               const needed = count * 16;
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V4_32");
@@ -203,7 +175,7 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               }
               break;
             }
-            case "V3_32": {
+            case VifUnpackFormat.V3_32: {
               const needed = count * 12;
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V3_32");
@@ -221,7 +193,7 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               }
               break;
             }
-            case "V2_32": {
+            case VifUnpackFormat.V2_32: {
               const needed = count * 8;
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V2_32");
@@ -236,7 +208,7 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               }
               break;
             }
-            case "V4_8": {
+            case VifUnpackFormat.V4_8: {
               const needed = count * 4;
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V4_8");
