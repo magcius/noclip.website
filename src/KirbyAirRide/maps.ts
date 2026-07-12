@@ -260,13 +260,12 @@ export const maps = [
     new KirbyMapDesc("GrZeroyon1", "Drag Race 3"),
     new KirbyMapDesc("GrZeroyon4", "Drag Race 4"),
 
-    new KirbyMapDesc("GrColosseum1", "Dustup Derby 1"),
-    new KirbyMapDesc("GrColosseum3", "Dustup Derby 2"),
+    new KirbyMapDesc("GrColosseum1", "Destruction Derby 1"),
+    new KirbyMapDesc("GrColosseum3", "Destruction Derby 2"),
+    new KirbyMapDesc("GrDedede1", "Destruction Derby 3"),
 
     new KirbyMapDesc("GrPasture1", "Kirby Melee 1"),
     new KirbyMapDesc("GrColosseum5", "Kirby Melee 2"),
-
-    new KirbyMapDesc("GrDedede1", "VS. King Dedede"),
 
     "Test",
     new KirbyMapDesc("GrTest6", "Test6Model"),

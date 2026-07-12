@@ -52,6 +52,7 @@ Hold `\` | Make camera move slower
 `I`/`J`/`K`/`L` | Tilt camera
 `O` | Rotate camera clockwise
 `U` | Rotate camera counterclockwise
+`X` | in WASD camera mode; enables "Hover Mode", locking changes to the y axis to the "Move camera up/down" controls
 `1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Load savestate
 `Shift`+`1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Save savestate
 `Numpad 3` | Export save states

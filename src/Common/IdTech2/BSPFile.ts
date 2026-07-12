@@ -217,7 +217,7 @@ export class BSPFile {
         const vertexData = new Float32Array(numVertexData * 7);
         let dstOffsVertex = 0;
 
-        const indexData = new Uint16Array(numIndexData);
+        const indexData = new Uint32Array(numIndexData);
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
 
@@ -364,10 +364,13 @@ export class BSPFile {
                 x.shift();
                 return x.join('/');
             }
-            return v.replace(/\\/g, '/');
+            v = v.replace(/\\/g, '/');
+            if (!v.includes('/'))
+                v = `valve/${v}`;
+            return v;
         }).filter((v) => {
             // remove non-existent files
-            if (v === 'valve/sample.wad')
+            if (v === 'valve/sample.wad' || v === 'valve/custom.wad')
                 return false;
 
             return true;

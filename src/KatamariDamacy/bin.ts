@@ -7,59 +7,7 @@ import { mat4, quat, vec3 } from "gl-matrix";
 import { GSRegister, GSRegisterTEX0, GSMemoryMap, getGSRegisterTEX0, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTPixelStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS.js";
 import { Endianness } from "../endian.js";
 import { MathConstants, computeModelMatrixSRT } from "../MathHelpers.js";
-
-enum VifUnpackVN {
-    S = 0x00,
-    V2 = 0x01,
-    V3 = 0x02,
-    V4 = 0x03,
-}
-
-enum VifUnpackVL {
-    VL_32 = 0x00,
-    VL_16 = 0x01,
-    VL_8 = 0x02,
-    VL_5 = 0x03,
-}
-
-enum VifUnpackFormat {
-    S_32  = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_32),
-    S_16  = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_16),
-    S_8   = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_8),
-    V2_32 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_32),
-    V2_16 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_16),
-    V2_8  = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_8),
-    V3_32 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_32),
-    V3_16 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_16),
-    V3_8  = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_8),
-    V4_32 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_32),
-    V4_16 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_16),
-    V4_8  = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_8),
-    V4_5  = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_5),
-}
-
-function getVifUnpackVNComponentCount(vn: VifUnpackVN): number {
-    return vn + 1;
-}
-
-function getVifUnpackFormatByteSize(format: number): number {
-    const vn: VifUnpackVN = (format >>> 2) & 0x03;
-    const vl: VifUnpackVL = (format >>> 0) & 0x03;
-    const compCount = getVifUnpackVNComponentCount(vn);
-    if (vl === VifUnpackVL.VL_8) {
-        return 1 * compCount;
-    } else if (vl === VifUnpackVL.VL_16) {
-        return 2 * compCount;
-    } else if (vl === VifUnpackVL.VL_32) {
-        return 4 * compCount;
-    } else if (vl === VifUnpackVL.VL_5) {
-        // V4-5. Special case: 16 bits for the whole format.
-        assert(vn === 0x03);
-        return 2;
-    } else {
-        throw new Error("whoops");
-    }
-}
+import { getVifUnpackFormatByteSize, VifCmd, VifUnpackFormat } from "../Common/PS2/VIF.js";
 
 export interface BINTexture {
     tex0_data0: number;
@@ -400,7 +348,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
             // Katamari will always issue, in-order, UNPACK for vertex positions + 16-byte header,
             // UNPACK for vertex texcoords, then UNPACK for vertex normals, then MSCNT to run the
             // VU1 program. The address of the destination data is relative to 0x8000.
-            if ((cmd & 0x60) === 0x60) { // UNPACK
+            if ((cmd & VifCmd.UNPACK_MASK) === VifCmd.UNPACK_MASK) {
                 const format = (cmd & 0x0F);
 
                 const isVertexData = (imm >= expectedPositionsOffs);
@@ -502,7 +450,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                     console.error(`Unsupported format ${hexzero(format, 2)}`);
                     throw new Error("whoops");
                 }
-            } else if ((cmd & 0x7F) === 0x50) { // DIRECT
+            } else if ((cmd & 0x7F) === VifCmd.DIRECT) {
                 // We need to be at the start of a vertex run.
                 assert(vertexRunData === null);
 
@@ -573,7 +521,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
 
                 // Make sure that we actually created something here.
                 assertExists(currentTextureIndex !== null);
-            } else if (cmd === 0x17) { // MSCNT
+            } else if (cmd === VifCmd.MSCNT) {
                 // Run an HLE form of the VU1 program.
                 assert(vertexRunData !== null);
 
@@ -618,11 +566,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                 vertexRunCount = 0;
                 vertexRunData = null;
                 // Texture does not get reset; it carries over between runs.
-            } else if (cmd === 0x00) { // NOP
-                // Don't need to do anything.
-            } else if (cmd === 0x10) { // FLUSHE
-                // Don't need to do anything.
-            } else if (cmd === 0x11) { // FLUSH
+            } else if (cmd === VifCmd.NOP || cmd === VifCmd.FLUSHE || cmd === VifCmd.FLUSH) {
                 // Don't need to do anything.
             } else {
                 console.error(`Unknown VIF command ${hexzero(cmd, 2)}`);

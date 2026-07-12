@@ -1,61 +1,7 @@
+import { VifCmd, VifUnpackFormat, VifUnpackVL, VifUnpackVN } from "../Common/PS2/VIF";
 import { assert, hexzero } from "../util";
 import { DataViewExt } from "./DataViewExt";
 import { getBits } from "./utils";
-
-export enum VifCmd {
-    NOP = 0b0000000,
-    STCYCL = 0b0000001,
-    OFFSET = 0b0000010,
-    BASE = 0b0000011,
-    ITOP = 0b0000100,
-    STMOD = 0b0000101,
-    MSKPATH3 = 0b0000110,
-    MARK = 0b0000111,
-    FLUSHE = 0b0010000,
-    FLUSH = 0b0010001,
-    FLUSHA = 0b0010011,
-    MSCAL = 0b0010100,
-    MSCNT = 0b0010111,
-    MSCALF = 0b0010101,
-    STMASK = 0b0100000,
-    STROW = 0b0110000,
-    STCOL = 0b0110001,
-    MPG = 0b1001010,
-    DIRECT = 0b1010000,
-    DIRECTHL = 0b1010001
-};
-
-export const VIF_UNPACK_MASK = 0b0110_0000;
-
-enum VifUnpackVN {
-    S = 0x00,
-    V2 = 0x01,
-    V3 = 0x02,
-    V4 = 0x03,
-}
-
-enum VifUnpackVL {
-    VL_32 = 0x00,
-    VL_16 = 0x01,
-    VL_8 = 0x02,
-    VL_5 = 0x03,
-}
-
-export enum VifUnpackFormat {
-    S_32 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_32),
-    S_16 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_16),
-    S_8 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_8),
-    V2_32 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_32),
-    V2_16 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_16),
-    V2_8 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_8),
-    V3_32 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_32),
-    V3_16 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_16),
-    V3_8 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_8),
-    V4_32 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_32),
-    V4_16 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_16),
-    V4_8 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_8),
-    V4_5 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_5),
-}
 
 export function readVifCommandList(view: DataViewExt) {
     assert(view.byteLength % 4 === 0);
@@ -103,7 +49,7 @@ class VifCommand {
     }
 
     isUnpack() {
-        return (this.cmd & VIF_UNPACK_MASK) === VIF_UNPACK_MASK;
+        return (this.cmd & VifCmd.UNPACK_MASK) === VifCmd.UNPACK_MASK;
     }
 
     size() {
