@@ -1,5 +1,4 @@
 import { parseChunks } from "./chunk";
-import { readFloat32LE, readUint32LE } from "../helpers/bytes";
 
 export interface Actor {
   kind: "Actor";
@@ -15,14 +14,24 @@ export function parseActor(buf: Uint8Array): Actor {
   const chunks = parseChunks(buf);
 
   const header = chunks[0].payload.slice(8);
+  const headerView = new DataView(
+    header.buffer,
+    header.byteOffset,
+    header.byteLength,
+  );
 
   const actorType = header[4];
-  const x = readFloat32LE(header, 8);
-  const y = readFloat32LE(header, 12);
-  const z = readFloat32LE(header, 16);
+  const x = headerView.getFloat32(8, true);
+  const y = headerView.getFloat32(12, true);
+  const z = headerView.getFloat32(16, true);
 
   const resource = chunks[1];
-  const o3dResourceIndex = readUint32LE(resource.payload, 0x10);
+  const resourceView = new DataView(
+    resource.payload.buffer,
+    resource.payload.byteOffset,
+    resource.payload.byteLength,
+  );
+  const o3dResourceIndex = resourceView.getUint32(0x10, true);
 
   return {
     kind: "Actor",

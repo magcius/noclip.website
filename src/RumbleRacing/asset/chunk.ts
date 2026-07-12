@@ -1,4 +1,4 @@
-import { reverseBytesInPlace, readUint32LE } from "../helpers/bytes";
+import { readFourCC } from "../helpers/fourCC";
 
 export interface AssetChunk {
   offset: number;
@@ -7,11 +7,8 @@ export interface AssetChunk {
   payload: Uint8Array;
 }
 
-export function magicString(chunk: AssetChunk): string {
-  return new TextDecoder().decode(chunk.magic);
-}
-
 export function parseChunks(data: Uint8Array): AssetChunk[] {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const chunks: AssetChunk[] = [];
   let offset = 0;
 
@@ -20,11 +17,10 @@ export function parseChunks(data: Uint8Array): AssetChunk[] {
       throw new Error(`incomplete chunk header at offset ${offset}`);
     }
     const magic = data.slice(offset, offset + 4);
-    const size = readUint32LE(data, offset + 4);
+    const size = view.getUint32(offset + 4, true);
     if (size < 8) {
-      throw new Error(
-        `invalid chunk size ${size} for "${new TextDecoder().decode(magic)}"`,
-      );
+      const tag = readFourCC(magic, 0);
+      throw new Error(`invalid chunk size ${size} for "${tag}"`);
     }
     const chunkEnd = offset + size;
     if (chunkEnd > data.length) {
@@ -32,10 +28,7 @@ export function parseChunks(data: Uint8Array): AssetChunk[] {
     }
     const payload = data.slice(offset, chunkEnd);
 
-    const magicCopy = magic.slice();
-    reverseBytesInPlace(magicCopy);
-
-    chunks.push({ offset, magic: magicCopy, size, payload });
+    chunks.push({ offset, magic, size, payload });
     offset = chunkEnd;
   }
 

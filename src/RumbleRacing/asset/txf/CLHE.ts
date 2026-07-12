@@ -1,5 +1,3 @@
-import { readUint32LE, readUint16LE } from "../../helpers/bytes";
-
 export interface CLHEEntry {
   cldaStartOffset: number;
   vramDest: number;
@@ -17,11 +15,12 @@ export function parseCLHE(buf: Uint8Array): CLHE {
 
   for (let i = 0; i + 0xc <= buf.length; i += 0xc) {
     const data = buf.slice(i, i + 0xc);
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     entries.push({
-      cldaStartOffset: readUint32LE(data, 0),
-      vramDest: readUint16LE(data, 0x6),
-      clutImageSizeLookup: readUint16LE(data, 0x8),
-      pixelFormat: readUint16LE(data, 0xa),
+      cldaStartOffset: view.getUint32(0, true),
+      vramDest: view.getUint16(0x6, true),
+      clutImageSizeLookup: view.getUint16(0x8, true),
+      pixelFormat: view.getUint16(0xa, true),
     });
   }
 

@@ -1,5 +1,3 @@
-import { readUint32LE } from "../../helpers/bytes";
-
 export interface Rdat {
   kind: "Rdat";
   outBufferSize: number;
@@ -7,6 +5,7 @@ export interface Rdat {
 }
 
 export function parseRdat(data: Uint8Array): Rdat {
-  const size = readUint32LE(data, 0);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const size = view.getUint32(0, true);
   return { kind: "Rdat", outBufferSize: size, data: data.slice(4) };
 }

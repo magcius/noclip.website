@@ -1,4 +1,4 @@
-import { reverseBytesInPlace, readUint32LE } from "../../helpers/bytes";
+import { readFourCC } from "../../helpers/fourCC";
 
 export interface SHDR {
   kind: "SHDR";
@@ -10,12 +10,11 @@ export interface SHDR {
 }
 
 export function parseSHDR(data: Uint8Array, shocIndex: number): SHDR {
-  const fourCCbytes = data.slice(4, 8);
-  reverseBytesInPlace(fourCCbytes);
-  const assetType = new TextDecoder().decode(fourCCbytes);
+  const assetType = readFourCC(data, 4);
 
-  const index = readUint32LE(data, 8);
-  const size = readUint32LE(data, 12);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const index = view.getUint32(8, true);
+  const size = view.getUint32(12, true);
 
   return {
     kind: "SHDR",

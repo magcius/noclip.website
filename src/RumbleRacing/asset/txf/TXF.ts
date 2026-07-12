@@ -1,5 +1,6 @@
 import { SHDR } from "../../chunk/shoc/shdr";
-import { readUint32LE } from "../../helpers/bytes";
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+import { readString } from "../../../util";
 import { HEAD, parseHEAD } from "./HEAD";
 import { ZTHE, parseZTHE } from "./ZTHE";
 import { CLHE, parseCLHE } from "./CLHE";
@@ -20,12 +21,13 @@ export interface TXF {
 }
 
 function splitTaggedChunks(buf: Uint8Array): Uint8Array[] {
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const chunks: Uint8Array[] = [];
   let offset = 0;
 
   while (offset + 8 <= buf.length) {
     const tag = buf.slice(offset, offset + 4);
-    const size = readUint32LE(buf, offset + 4);
+    const size = view.getUint32(offset + 4, true);
     offset += 8;
 
     if (offset + size > buf.length) {
@@ -55,7 +57,7 @@ export function parseTXF(buf: Uint8Array, hdr: SHDR, resName: string): TXF {
   let clutData: CLDA | null = null;
 
   for (const chunk of chunks) {
-    const tag = new TextDecoder().decode(chunk.slice(0, 4));
+    const tag = readString(ArrayBufferSlice.fromView(chunk), 0, 4, false);
 
     switch (tag) {
       case "HEAD":

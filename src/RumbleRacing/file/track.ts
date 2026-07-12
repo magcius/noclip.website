@@ -1,4 +1,3 @@
-import { BinaryReader } from "../helpers/bytes";
 import { TopLevelChunk, readTopLevelChunk } from "../chunk/chunk";
 import { SHDR } from "../chunk/shoc/shdr";
 import { decompress } from "../chunk/shoc/decompress";
@@ -18,20 +17,20 @@ export interface TrackFile {
 }
 
 export function readTrackChunks(data: Uint8Array): TopLevelChunk[] {
-  const r = new BinaryReader(data);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const cursor = { pos: 0 };
   const chunks: TopLevelChunk[] = [];
   let chunkIndex = 0;
 
-  while (!r.eof()) {
-    if (r.tell() >= data.length) break;
+  while (cursor.pos < data.length) {
     try {
-      const chunk = readTopLevelChunk(r, chunkIndex);
+      const chunk = readTopLevelChunk(data, view, cursor, chunkIndex);
       if (chunk === null) break;
       if (chunk.kind === "FILL") continue;
       chunks.push(chunk);
       chunkIndex++;
     } catch (e) {
-      if (r.eof()) break;
+      if (cursor.pos >= data.length) break;
       console.warn("Unexpected error reading chunk:", e);
       break;
     }

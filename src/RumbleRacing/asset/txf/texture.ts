@@ -7,7 +7,6 @@ import {
   swizzleClutPstm4_16,
   PixelBytes,
 } from "../../helpers/pstm8";
-import { readUint32LE } from "../../helpers/bytes";
 
 export interface RGBAImage {
   pix: Uint8Array;
@@ -131,6 +130,11 @@ export function extractTexturesFromZTHE(
     }
 
     const data = txf.textureData.rawData.slice(start, start + colorSize);
+    const dataView = new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    );
     const pix = new Uint8Array(size * 4);
 
     for (let pxIndex = 0; pxIndex < size; pxIndex++) {
@@ -142,7 +146,7 @@ export function extractTexturesFromZTHE(
         case PSMT4: {
           const wordOffset = Math.floor(pxIndex / 8);
           const wordStart = wordOffset * 4;
-          const word = readUint32LE(data, wordStart);
+          const word = dataView.getUint32(wordStart, true);
           const wordIndex = pxIndex % 8;
           const shift = wordIndex * 4;
           colorIndex = (word >> shift) & 0xf;

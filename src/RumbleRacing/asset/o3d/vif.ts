@@ -1,5 +1,4 @@
 import { VifUnpackFormat, VifCmd } from "../../../Common/PS2/VIF";
-import { readUint32LE, uint32ToFloat32 } from "../../helpers/bytes";
 
 export interface V4_32Entry {
   v1: number;
@@ -71,6 +70,7 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
   if (payload.length < 8)
     throw new Error("ELDA payload too small for VIF data");
   const data = payload.slice(8);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const commands: VifCommand[] = [];
   let idx = 0;
   const dataLen = data.length;
@@ -111,7 +111,7 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
       case VifCmd.STMASK:
         cmd.kind = VifCmd.STMASK;
         if (idx + 4 > dataLen) throw new Error("unexpected EOF reading MASK");
-        cmd.mask = readUint32LE(data, idx);
+        cmd.mask = view.getUint32(idx, true);
         idx += 4;
         break;
 
@@ -119,10 +119,10 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
         cmd.kind = VifCmd.STROW;
         if (idx + 16 > dataLen) throw new Error("unexpected EOF reading STROW");
         cmd.strow = [
-          readUint32LE(data, idx),
-          readUint32LE(data, idx + 4),
-          readUint32LE(data, idx + 8),
-          readUint32LE(data, idx + 12),
+          view.getUint32(idx, true),
+          view.getUint32(idx + 4, true),
+          view.getUint32(idx + 8, true),
+          view.getUint32(idx + 12, true),
         ];
         idx += 16;
         break;
@@ -165,10 +165,10 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               for (let i = 0; i < count; i++) {
                 const entryOffset = idx;
                 unpack.v4_32.push({
-                  v1: readUint32LE(data, idx),
-                  v2: readUint32LE(data, idx + 4),
-                  v3: readUint32LE(data, idx + 8),
-                  v4: readUint32LE(data, idx + 12),
+                  v1: view.getUint32(idx, true),
+                  v2: view.getUint32(idx + 4, true),
+                  v3: view.getUint32(idx + 8, true),
+                  v4: view.getUint32(idx + 12, true),
                   offset: entryOffset,
                 });
                 idx += 16;
@@ -180,14 +180,15 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V3_32");
               for (let i = 0; i < count; i++) {
-                const raw1 = readUint32LE(data, idx);
-                const raw2 = readUint32LE(data, idx + 4);
-                const raw3 = readUint32LE(data, idx + 8);
+                const v1 = view.getFloat32(idx, true);
+                const v2 = view.getFloat32(idx + 4, true);
+                const v3 = view.getFloat32(idx + 8, true);
+                const raw3 = view.getUint32(idx + 8, true);
                 idx += 12;
                 unpack.v3_32.push({
-                  v1: uint32ToFloat32(raw1),
-                  v2: uint32ToFloat32(raw2),
-                  v3: uint32ToFloat32(raw3),
+                  v1,
+                  v2,
+                  v3,
                   adcBitSet: (raw3 & 0b1) === 0b1,
                 });
               }
@@ -198,13 +199,10 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V2_32");
               for (let i = 0; i < count; i++) {
-                const raw1 = readUint32LE(data, idx);
-                const raw2 = readUint32LE(data, idx + 4);
+                const v1 = view.getFloat32(idx, true);
+                const v2 = view.getFloat32(idx + 4, true);
                 idx += 8;
-                unpack.v2_32.push({
-                  v1: uint32ToFloat32(raw1),
-                  v2: uint32ToFloat32(raw2),
-                });
+                unpack.v2_32.push({ v1, v2 });
               }
               break;
             }

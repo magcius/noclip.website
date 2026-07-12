@@ -1,4 +1,4 @@
-import { reverseBytesInPlace, BinaryReader } from "../../helpers/bytes";
+import { readFourCC } from "../../helpers/fourCC";
 import { SHDR, parseSHDR } from "./shdr";
 import { SDAT, parseSDAT } from "./sdat";
 import { Rdat, parseRdat } from "./rdat";
@@ -14,9 +14,7 @@ export interface Shoc {
 }
 
 function parseSubChunk(data: Uint8Array, shocIndex: number): ShocMetadata {
-  const fourCCbytes = data.slice(8, 12);
-  reverseBytesInPlace(fourCCbytes);
-  const fourCC = new TextDecoder().decode(fourCCbytes);
+  const fourCC = readFourCC(data, 8);
 
   const inner = data.slice(12);
   switch (fourCC) {
@@ -32,18 +30,22 @@ function parseSubChunk(data: Uint8Array, shocIndex: number): ShocMetadata {
 }
 
 export function readSHOCChunk(
-  r: BinaryReader,
+  data: Uint8Array,
+  view: DataView,
+  cursor: { pos: number },
   startPos: number,
   index: number,
 ): Shoc {
-  const chunkSize = r.readUint32LE();
-  const data = r.readBytes(chunkSize - 8);
+  const chunkSize = view.getUint32(cursor.pos, true);
+  cursor.pos += 4;
+  const chunkData = data.slice(cursor.pos, cursor.pos + (chunkSize - 8));
+  cursor.pos += chunkSize - 8;
 
   return {
     kind: "SHOC",
     index,
     startAddress: startPos,
-    data,
-    metadata: parseSubChunk(data, index),
+    data: chunkData,
+    metadata: parseSubChunk(chunkData, index),
   };
 }
