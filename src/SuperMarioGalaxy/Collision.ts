@@ -823,12 +823,16 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
 }
 
 export function isExistMapCollision(sceneObjHolder: SceneObjHolder, p0: ReadonlyVec3, dir: ReadonlyVec3): boolean {
-    const director = sceneObjHolder.collisionDirector!;
+    const director = sceneObjHolder.collisionDirector;
+    if (director === null)
+        return false;
     return director.keepers[CollisionKeeperCategory.Map].checkStrikeLine(sceneObjHolder, p0, dir) !== 0;
 }
 
 export function isExistMoveLimitCollision(sceneObjHolder: SceneObjHolder, p0: ReadonlyVec3, dir: ReadonlyVec3): boolean {
-    const director = sceneObjHolder.collisionDirector!;
+    const director = sceneObjHolder.collisionDirector;
+    if (director === null)
+        return false;
     return director.keepers[CollisionKeeperCategory.MoveLimit].checkStrikeLine(sceneObjHolder, p0, dir) !== 0;
 }
 
