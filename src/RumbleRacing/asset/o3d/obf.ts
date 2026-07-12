@@ -7,7 +7,6 @@ import {
   eldaParseVif,
 } from "./chunk";
 import { getGeometry, Geometry, TextureMeta } from "./geometry";
-import { readUint32LE } from "../../helpers/bytes";
 
 export interface NodeMetadata {
   x: number;
@@ -50,11 +49,21 @@ function buildTextureMetadata(
 
   const eltlData = eltl.raw.payload.slice(8);
   const eldaData = elda.raw.payload.slice(8);
+  const eltlView = new DataView(
+    eltlData.buffer,
+    eltlData.byteOffset,
+    eltlData.byteLength,
+  );
+  const eldaView = new DataView(
+    eldaData.buffer,
+    eldaData.byteOffset,
+    eldaData.byteLength,
+  );
 
   for (let i = 0; i < elhe.maybeNumTextures; i++) {
-    let offset = readUint32LE(eltlData, i * 4);
+    let offset = eltlView.getUint32(i * 4, true);
     offset *= 4;
-    const textureId = readUint32LE(eldaData, offset);
+    const textureId = eldaView.getUint32(offset, true);
     meta.textureEntries.push({ eldaOffset: offset, textureId });
   }
 

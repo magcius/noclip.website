@@ -1,5 +1,3 @@
-import { readUint32LE, readUint16LE } from "../../helpers/bytes";
-
 export interface HEAD {
   size: number;
   allocBytes: number;
@@ -11,17 +9,23 @@ export interface HEAD {
 }
 
 export function parseHEAD(buf: Uint8Array): HEAD {
-  const size = readUint32LE(buf, 4);
-  const alloc = readUint16LE(buf, 8);
-  const totalTextures = readUint16LE(buf, 10);
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const size = view.getUint32(4, true);
+  const alloc = view.getUint16(8, true);
+  const totalTextures = view.getUint16(10, true);
   const clheIterations = buf[12];
   const zthesCount = buf[13];
   const headPointerCount = buf[14];
 
   const pointers = buf.slice(16);
+  const pointersView = new DataView(
+    pointers.buffer,
+    pointers.byteOffset,
+    pointers.byteLength,
+  );
   const ptrs: number[] = [];
   for (let i = 0; i + 4 <= pointers.length; i += 4) {
-    ptrs.push(readUint32LE(pointers, i));
+    ptrs.push(pointersView.getUint32(i, true));
   }
 
   return {

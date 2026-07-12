@@ -1,3 +1,7 @@
+import {
+  GSCLUTPixelStorageFormat,
+  GSPixelStorageFormat,
+} from "../../../Common/PS2/GS";
 import { TXF } from "./TXF";
 import { CLHEEntry } from "./CLHE";
 import { ZTHETexture } from "./ZTHE";
@@ -7,7 +11,6 @@ import {
   swizzleClutPstm4_16,
   PixelBytes,
 } from "../../helpers/pstm8";
-import { readUint32LE } from "../../helpers/bytes";
 
 export interface RGBAImage {
   pix: Uint8Array;
@@ -27,11 +30,6 @@ export interface Texture {
   textureId: number;
   files: TextureFile[];
 }
-
-const PSMCT32 = 0;
-const PSMCT16 = 2;
-const PSMT8 = 19;
-const PSMT4 = 20;
 
 function extract32bitRGBA(px: PixelBytes): [number, number, number, number] {
   const b = px.bytes;
@@ -68,10 +66,10 @@ export function extractTexturesFromZTHE(
 
     let paletteSize: number;
     switch (zthe.texelStorageFormat) {
-      case PSMT8:
+      case GSPixelStorageFormat.PSMT8:
         paletteSize = 256;
         break;
-      case PSMT4:
+      case GSPixelStorageFormat.PSMT4:
         paletteSize = 16;
         break;
       default:
@@ -80,11 +78,11 @@ export function extractTexturesFromZTHE(
 
     let pixelBytes: number;
     switch (clutHeader.pixelFormat) {
-      case PSMCT32:
+      case GSCLUTPixelStorageFormat.PSMCT32:
         pixelBytes = 4;
         paletteSize *= 4;
         break;
-      case PSMCT16:
+      case GSCLUTPixelStorageFormat.PSMCT16:
         pixelBytes = 2;
         paletteSize *= 2;
         break;
@@ -100,10 +98,10 @@ export function extractTexturesFromZTHE(
 
     let swizzled: PixelBytes[];
     switch (zthe.texelStorageFormat) {
-      case PSMT8:
+      case GSPixelStorageFormat.PSMT8:
         swizzled = swizzleClutPstm8(grouped);
         break;
-      case PSMT4:
+      case GSPixelStorageFormat.PSMT4:
         swizzled = swizzleClutPstm4_16(grouped);
         break;
       default:
@@ -116,9 +114,9 @@ export function extractTexturesFromZTHE(
     const size = height * width;
     let colorSize = size;
     switch (zthe.texelStorageFormat) {
-      case PSMT8:
+      case GSPixelStorageFormat.PSMT8:
         break;
-      case PSMT4:
+      case GSPixelStorageFormat.PSMT4:
         colorSize = Math.floor(size / 2);
         break;
       default:
@@ -131,18 +129,23 @@ export function extractTexturesFromZTHE(
     }
 
     const data = txf.textureData.rawData.slice(start, start + colorSize);
+    const dataView = new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    );
     const pix = new Uint8Array(size * 4);
 
     for (let pxIndex = 0; pxIndex < size; pxIndex++) {
       let colorIndex: number;
       switch (zthe.texelStorageFormat) {
-        case PSMT8:
+        case GSPixelStorageFormat.PSMT8:
           colorIndex = data[pxIndex];
           break;
-        case PSMT4: {
+        case GSPixelStorageFormat.PSMT4: {
           const wordOffset = Math.floor(pxIndex / 8);
           const wordStart = wordOffset * 4;
-          const word = readUint32LE(data, wordStart);
+          const word = dataView.getUint32(wordStart, true);
           const wordIndex = pxIndex % 8;
           const shift = wordIndex * 4;
           colorIndex = (word >> shift) & 0xf;
@@ -156,10 +159,10 @@ export function extractTexturesFromZTHE(
       let R: number, G: number, B: number, A: number;
 
       switch (clutHeader.pixelFormat) {
-        case PSMCT16:
+        case GSCLUTPixelStorageFormat.PSMCT16:
           [R, G, B, A] = extract16bitRGBA(finalPixel);
           break;
-        case PSMCT32:
+        case GSCLUTPixelStorageFormat.PSMCT32:
           [R, G, B, A] = extract32bitRGBA(finalPixel);
           break;
         default:

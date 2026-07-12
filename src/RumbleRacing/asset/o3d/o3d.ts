@@ -1,5 +1,6 @@
 import { SHDR } from "../../chunk/shoc/shdr";
-import { parseChunks, magicString } from "../chunk";
+import { readFourCC } from "../../helpers/fourCC";
+import { parseChunks } from "../chunk";
 import { parseObf, Obf } from "./obf";
 
 export interface Gmd {
@@ -35,7 +36,7 @@ export function parseO3D(
   const chunks = parseChunks(buf);
 
   for (const chunk of chunks) {
-    const magic = magicString(chunk);
+    const magic = readFourCC(chunk.magic, 0);
     switch (magic) {
       case "Gmd ":
         o3d.gmds.push({ rawData: chunk.payload });

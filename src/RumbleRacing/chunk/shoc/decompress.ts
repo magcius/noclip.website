@@ -3,11 +3,6 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
   let dst: number[] = [];
   const n = src.length;
 
-  const readU8 = (idx: number): number => {
-    if (idx < 0 || idx >= n) return 0;
-    return src[idx];
-  };
-
   while (true) {
     if (outSize > 0 && dst.length >= outSize) {
       if (dst.length > outSize) dst.length = outSize;
@@ -20,8 +15,8 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
       continue;
     }
 
-    const b0 = readU8(i);
-    const b1 = readU8(i + 1);
+    const b0 = src[i];
+    const b1 = src[i + 1];
     const control = ((b0 << 8) | b1) >>> 0;
     i += 2;
 
@@ -52,7 +47,7 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
         throw new Error(
           `unexpected end of input while reading extended length at input ${i}`,
         );
-      length = readU8(i) + 7;
+      length = src[i] + 7;
       i++;
     }
     const copyLen = length + 3;
