@@ -1,3 +1,5 @@
+import { GSPixelStorageFormat } from "../../../Common/PS2/GS";
+
 export interface ZTHETextureMetaHeader {
   txdaAddressOffset: number;
   blockHeightPixels: number;
@@ -7,7 +9,7 @@ export interface ZTHETextureMetaHeader {
 
 export interface ZTHETexture {
   images: ZTHETextureMetaHeader[];
-  texelStorageFormat: number;
+  texelStorageFormat: GSPixelStorageFormat;
   imageCount: number;
   blockWidthPixels: number;
   clutHeaderIndex: number;

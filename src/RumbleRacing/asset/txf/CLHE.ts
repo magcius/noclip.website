@@ -1,8 +1,10 @@
+import { GSCLUTPixelStorageFormat } from "../../../Common/PS2/GS";
+
 export interface CLHEEntry {
   cldaStartOffset: number;
   vramDest: number;
   clutImageSizeLookup: number;
-  pixelFormat: number;
+  pixelFormat: GSCLUTPixelStorageFormat;
 }
 
 export interface CLHE {
