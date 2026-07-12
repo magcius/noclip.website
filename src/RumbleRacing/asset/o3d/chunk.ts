@@ -69,6 +69,7 @@ export function parseObfChunks(data: Uint8Array): ObfChunk[] {
       throw new Error(`incomplete chunk header at offset ${offset}`);
     }
 
+    // OBF fourcc bytes are not reversed like all of the other ones..
     const magicBytes = data.slice(offset, offset + 4);
     const magic = readString(
       ArrayBufferSlice.fromView(magicBytes),
