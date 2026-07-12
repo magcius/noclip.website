@@ -11,7 +11,6 @@ const MAGIC_PMP = 5262672;
 const MAGIC_PMO = 5197136;
 const MAGIC_TIM2 = 843925844;
 const MAGIC_TXA = 4282452;
-const MAGIC_PVD = 4478544;
 
 const NORMALIZED_8_SCALE = 128.0;
 const NORMALIZED_16_SCALE = 32768.0;
@@ -242,7 +241,7 @@ export class BBSParser extends DreamDropParser {
             return undefined;
         } else {
             this.view = this.buffer.createDataView(pvdEntry.offset, pvdEntry.size);
-            return this.getPVD();
+            return this.parsePVD();
         }
     }
 
@@ -523,27 +522,6 @@ export class BBSParser extends DreamDropParser {
         }
 
         return txas;
-    }
-
-    private getPVD(): LuxPVD {
-        this.offset = 0;
-        const magic = this.getUint32();
-        if (magic !== MAGIC_PVD) {
-            console.warn("Unknown PVD magic", magic);
-        }
-        this.offset += 12;
-        const fr = this.getByte();
-        const fg = this.getByte();
-        const fb = this.getByte();
-        const fa = this.getByte();
-        const fogNear = this.getFloat();
-        const fogFar = this.getFloat();
-        this.offset += 12;
-        const r = this.getByte();
-        const g = this.getByte();
-        const b = this.getByte();
-        const a = this.getByte();
-        return { clearColor: [r, g, b, a], fogColor: [fr, fg, fb, fa], fogNear, fogFar };
     }
 
     private getShapes(hasSkeleton: boolean): BBSShape[] {

@@ -28,9 +28,6 @@ export class DreamDropCTRTexture extends LuxTexture {
     }
 }
 
-/**
- * Decodes CTR texture for _Kingdom Hearts 3D: Dream Drop Distance_
- */
 export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     switch (ctrt.format) {
         case DreamDropCTRTFormat.RGBA_8888:

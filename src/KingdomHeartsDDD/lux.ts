@@ -11,7 +11,7 @@ import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/r
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
 import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui";
-import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp, Mat4Identity } from "../MathHelpers";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -35,6 +35,7 @@ export enum LuxShapeAttribute {
 
 export enum LuxModelFlags {
     SKYBOX = 1,
+    BACKGROUND = 64, // geometry that's effectively the skybox but rendered normally (i.e. scaled up a lot)
     BILLBOARD = 1024
 }
 
@@ -272,7 +273,7 @@ export class LuxShapeRenderer implements Destroyable {
     protected indexBufferDescriptor: GfxIndexBufferDescriptor;
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
-    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, protected material: LuxMaterialInstance, txa?: LuxTextureAnimation, protected isSkybox: boolean = false, boneCount: number = 0) {
+    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, protected material: LuxMaterialInstance, txa?: LuxTextureAnimation, protected isSkybox: boolean = false, protected isBackground: boolean = false, boneCount: number = 0) {
         const isTranslucent = (shape.attribute & LuxShapeAttribute.BLEND_SEMITRANSPARENT) !== 0;
         const additiveBlend = (shape.attribute & LuxShapeAttribute.BLEND_ADDITIVE) !== 0;
         const transparent = isTranslucent || additiveBlend;
@@ -372,9 +373,6 @@ export class LuxShapeRenderer implements Destroyable {
     }
 }
 
-// const scratchVec3a = vec3.create();
-// const scratchVec3b = vec3.create();
-
 export class LuxModelRenderer implements Destroyable, Layer {
     public visible: boolean = true;
     public instances: LuxModelInstance[] = [];
@@ -383,6 +381,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
     protected hasTXA: boolean;
     protected isBillboard: boolean;
     protected isSkybox: boolean;
+    protected isBackground: boolean;
     protected currentPAMFrame: number;
     protected pamFramerate: number;
     protected bones: LuxBone[];
@@ -391,9 +390,15 @@ export class LuxModelRenderer implements Destroyable, Layer {
     constructor(cache: GfxRenderCache, public name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], protected animation?: LuxSkeletalAnimation) {
         this.name = name;
         this.isSkybox = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.SKYBOX) !== 0;
+        this.isBackground = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.BACKGROUND) !== 0;
         this.shapes = Array(model.shapes.length);
+        const calcBbox = this.name.substring(1, 2) === "_" || !this.name.includes("_");
+        const allVertices = [];
         for (let i = 0; i < model.shapes.length; i++) {
             const shape = model.shapes[i];
+            if (calcBbox) {
+                allVertices.push(...shape.vertices);
+            }
             let txa = undefined;
             for (const t of txas) {
                 const a = t.animations[t.defaultAnimationIndex];
@@ -409,17 +414,49 @@ export class LuxModelRenderer implements Destroyable, Layer {
             }
             this.shapes[i] = this.getShapeRenderer(cache, model, shape, materials, txa);
         }
-        this.bboxPoints = new Float32Array(model.bbox);
         this.isBillboard = (model.flags & LuxModelFlags.BILLBOARD) !== 0;
 
         this.currentPAMFrame = 0;
         this.hasTXA = txas.length > 0;
         this.pamFramerate = this.animation ? this.animation.framerate / 1000.0 : 0;
         this.bones = this.animation ? model.skeleton!.bones : [];
-        // all bone srt matrices are computed ahead of time to save on rendering performance in exchange for a bit of memory usage
-        // the difference may be neglible but there's no point in re-computing the same thing hundreds of times a second
         if (this.animation) {
             this.preComputeBoneMatrices();
+        }
+
+        // manually calculate the bbox for objects
+        // some of the bboxes provided by the game are either too big or stuck at world origin
+        // this adds a tiny bit of load time in exchange for better rendering performance
+        if (calcBbox) {
+            let min = { x: Infinity, y: Infinity, z: Infinity };
+            let max = { x: -Infinity, y: -Infinity, z: -Infinity };
+            for (let i = 0; i < allVertices.length; i += 3) {
+                min.x = Math.min(min.x, allVertices[i]);
+                min.y = Math.min(min.y, allVertices[i + 1]);
+                min.z = Math.min(min.z, allVertices[i + 2]);
+                max.x = Math.max(max.x, allVertices[i]);
+                max.y = Math.max(max.y, allVertices[i + 1]);
+                max.z = Math.max(max.z, allVertices[i + 2]);
+            }
+            min.x *= model.scale;
+            min.y *= model.scale;
+            min.z *= model.scale;
+            max.x *= model.scale;
+            max.y *= model.scale;
+            max.z *= model.scale;
+            // convert from pseudo aabb to box points like the game has them in
+            this.bboxPoints = new Float32Array([
+                min.x, min.y, min.z, 0,
+                max.x, min.y, min.z, 0,
+                min.x, max.y, min.z, 0,
+                max.x, max.y, min.z, 0,
+                min.x, min.y, max.z, 0,
+                max.x, min.y, max.z, 0,
+                min.x, max.y, max.z, 0,
+                max.x, max.y, max.z, 0
+            ]);
+        } else {
+            this.bboxPoints = new Float32Array(model.bbox);
         }
     }
 
@@ -446,7 +483,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
                 ranAnimation = true;
             }
 
-            let offset = template.allocateUniformBuffer(DreamDropShader.ub_ModelParams, 12 + (this.animation ? (12 * this.bones.length) : 0));
+            let offset = template.allocateUniformBuffer(DreamDropShader.ub_ModelParams, 12 + (12 * this.bones.length));
             const d = template.mapUniformBufferF32(DreamDropShader.ub_ModelParams);
             // u_View (12)
             if (this.isSkybox) {
@@ -458,29 +495,13 @@ export class LuxModelRenderer implements Destroyable, Layer {
             if (this.isBillboard && !this.isSkybox) {
                 calcBillboardMatrix(SCRATCH_VIEW, SCRATCH_VIEW, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
             }
+            // technically "view" here is the product of view x model, but don't need them separate for the shader
             offset += fillMatrix4x3(d, offset, SCRATCH_VIEW);
-            // u_BoneSRT (12 * boneCount)
+            // u_BoneSRT (12 * this.bones.length)
             for (let i = 0; i < this.bones.length; i++) {
-                if (this.animation) {
-                    mat4.mul(SCRATCH_BONE, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)], this.bones[i].inverseTransform);
-                    offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
-                } else {
-                    offset += fillMatrix4x3(d, offset, Mat4Identity);
-                }
+                mat4.mul(SCRATCH_BONE, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)], this.bones[i].inverseTransform);
+                offset += fillMatrix4x3(d, offset, SCRATCH_BONE);
             }
-            // if (this.boneMatrices.length > 0 && this.instances.indexOf(instance) === 0) {
-            //     const ctx = getDebugOverlayCanvas2D();
-            //     for (let i = 1; i < this.boneMatrices.length; i++) {
-            //         vec3.set(scratchVec3a, 0, 0, 0);
-            //         mat4.mul(SCRATCH_BONE, instance.shiftMatrix, this.boneMatrices[this.bones[i].parentIndex][Math.trunc(this.currentPAMFrame)]);
-            //         vec3.transformMat4(scratchVec3a, scratchVec3a, SCRATCH_BONE);
-            //         vec3.set(scratchVec3b, 0, 0, 0);
-            //         mat4.mul(SCRATCH_BONE, instance.shiftMatrix, this.boneMatrices[i][Math.trunc(this.currentPAMFrame)]);
-            //         vec3.transformMat4(scratchVec3b, scratchVec3b, SCRATCH_BONE);
-            //         drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b);
-            //         drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3b, `${i}`, 0, White);
-            //     }
-            // }
 
             for (const shape of this.shapes) {
                 shape.prepareToRender(renderHelper, viewerInput, ranTXA);
@@ -502,6 +523,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
     }
 
     private inView(bbox: Float32Array, m: ReadonlyMat4) {
+        // cheaper frustum culling than with aabb, and data has bbox in points anyway
         let aol = true, aor = true;
         let aob = true, aot = true;
         let aon = true, aof = true;
@@ -528,6 +550,8 @@ export class LuxModelRenderer implements Destroyable, Layer {
     }
 
     protected preComputeBoneMatrices() {
+        // pre-computes each bone's srt for each animation frame
+        // this trades some memory usage for rendering performance
         this.boneMatrices = Array(this.bones.length);
         for (let i = 0; i < this.bones.length; i++) {
             const boneFrames: mat4[] = Array.from({ length: this.animation!.frameCount }, () => mat4.create());
@@ -554,7 +578,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
     }
 
     protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
-        return new LuxShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.animation ? model.skeleton!.bones.length : 0);
+        return new LuxShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
     }
 }
 
@@ -600,6 +624,7 @@ export class LuxRoomRenderer implements Destroyable {
         }
         this.selectedSetIndices = [];
         // approximation to appearance in game
+        // idk why only world scale doesn't work, but double is pretty close
         this.pvd.fogNear *= (WORLD_SCALE * 2);
         this.pvd.fogFar *= (WORLD_SCALE * 2);
     }
@@ -631,14 +656,14 @@ export class LuxRoomRenderer implements Destroyable {
         // u_ShowFog (1)
         uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
 
-        let offset2 = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 6);
+        offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 6);
         const uniformBuffer2 = template.mapUniformBufferF32(DreamDropShader.ub_EnvParams);
         // u_FogColor (4)
-        offset2 += fillVec4(uniformBuffer2, offset2, this.pvd.fogColor[0], this.pvd.fogColor[1], this.pvd.fogColor[2], this.pvd.fogColor[3]);
+        offset += fillVec4(uniformBuffer2, offset, this.pvd.fogColor[0], this.pvd.fogColor[1], this.pvd.fogColor[2], this.pvd.fogColor[3]);
         // u_FogNear (1)
-        uniformBuffer2[offset2++] = this.pvd.fogNear;
+        uniformBuffer2[offset++] = this.pvd.fogNear;
         // u_FogFar (1)
-        uniformBuffer2[offset2++] = this.pvd.fogFar;
+        uniformBuffer2[offset++] = this.pvd.fogFar;
 
         for (let i = 0; i < this.parts.length; i++) {
             if (this.parts[i].visible) {
@@ -731,6 +756,7 @@ export class LuxRenderer implements SceneGfx {
         const renderOptions = new Panel();
         renderOptions.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         renderOptions.setTitle(RENDER_HACKS_ICON, "Render Hacks");
+        // player models seem to be used to indicate spawn/entrance locations, hide by default
         const showPC = new Checkbox("Show player characters", false);
         showPC.onchanged = () => {
             for (const o of this.roomRenderer!.objects) {
@@ -751,7 +777,7 @@ export class LuxRenderer implements SceneGfx {
             this.roomRenderer!.scrollingTextures = scrollTextures.checked;
         };
         renderOptions.contents.appendChild(scrollTextures.elem);
-        const showFog = new Checkbox("Show fog", true);
+        const showFog = new Checkbox("Apply fog", true);
         showFog.onchanged = () => {
             this.roomRenderer!.showFog = showFog.checked;
         };

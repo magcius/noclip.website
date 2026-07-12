@@ -314,8 +314,8 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["n02cd01", { name: "n02cd_001", index: 0 }], // cinderella with dress
     ["n01ex00", { name: "n01ex_000", index: 0 }], // flood (cutscene)
     ["b01cd00", { name: "b01cd_000", index: 1 }], // unversed ballroom boss
-    ["g23cd00", { name: "g23cd_000", index: 0 }], // cinderella with dress (they really put the whole cutscene as an animation, huh?)
-    ["g24cd00", { name: "g24cd_000", index: 0 }], // prince charming (they really put the whole cutscene as an animation, huh?)
+    ["g23cd00", { name: "g23cd_000", index: 0 }], // cinderella with dress
+    ["g24cd00", { name: "g24cd_000", index: 0 }], // prince charming
     ["g15wm00", { name: "g15wm_000", index: 0 }], // world map icon
     ["g12wm00", { name: "g12wm_000", index: 0 }], // world map icon
     ["g03wm00", { name: "g03wm_000", index: 0 }], // world map icon

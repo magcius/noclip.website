@@ -12,7 +12,7 @@ export class DreamDropShader extends DeviceProgram {
     public static ub_ModelParams = 2;
     public static ub_ShapeParams = 3;
 
-    constructor(protected attributeCount: number, protected boneSRTCount: number, protected weightCount = 0, protected doRigidSkinning = false) {
+    constructor(protected attributeCount: number, protected boneSRTCount: number, protected isSkybox: boolean = false, protected weightCount = 0, protected doRigidSkinning = false) {
         super();
         this.both = `
 precision highp float;
@@ -64,11 +64,9 @@ void main() {
     } else {
         v_UV = a_UV;
     }
-    if (u_ShowFog > 0.1) {
+    ${!this.isSkybox ? `    if (u_ShowFog > 0.1) {
         v_Depth = -(UnpackMatrix(u_View) * vec4(a_Position, 1.0)).z;
-    } else {
-        v_Depth = 0.0;
-    }
+    }` : ""}
     ${this.getVertPosition()}
 }
 #endif
@@ -85,12 +83,12 @@ void main() {
     } else {
         finalColor = v_Color;
     }
-    if (u_ShowFog > 0.1) {
+    ${!this.isSkybox ? `    if (u_ShowFog > 0.1) {
         float fogFactor = clamp((u_FogFar - v_Depth) / (u_FogFar - u_FogNear), 0.0, 1.0);
         gl_FragColor = vec4(mix(u_FogColor.rgb, finalColor.rgb, fogFactor), finalColor.a);
     } else {
         gl_FragColor = finalColor;
-    }
+    }` : "  gl_FragColor = finalColor;"}
 }
 #endif
     `;

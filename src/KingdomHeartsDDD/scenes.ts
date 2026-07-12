@@ -230,13 +230,16 @@ class Room implements SceneDesc {
 /*
 TODO
 
-Find a way to do proper depth sorting. Bboxes are inconsistent, so typical depth sorting completely breaks some rooms (yt04 for example)
+Find a way to do proper depth sorting. Bboxes for room parts are inconsistent, so typical depth sorting completely breaks some of them (yt04 for example)
     I've tried different render inst lists, depth and material based sort keys, and different permutations of mega state
     flags/blending options. These all introduce more problems than they fix, so the current configuration is the "least bad" of them all
 TXAs need lots of cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
     Will probably need an alternative shader that takes two texture inputs, idk how else to do it
+    Also, the current setup makes the animations a little too slow compared to how they are in game
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
+    Mostly the buildings in twtnw are affected by this (or something very similar)
+    There's also pretty bad z-fighting on the ground path in the Traverse Town garden
 Figure out the shape attribute flag for back culling (it's different than BBS, which even that might not be right)
 Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect?) skybox geometry
 Figure out how world map objects are loaded
@@ -251,7 +254,6 @@ Investigate other file types such as GPL, SEB, EAD and ABC
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
 Figure out how shapes' supposed "diffuse color" should be used (completely different than BBS)
 Shadows in the second district are the wrong color, they appear as black in game (they're just fine everywhere else though???)
-Fix bad z-fighting on the ground path in the Traverse Town garden
 Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron, pinocchio and twtnw
 Dream eater model fixes
     Spellican's broomstick is stretched
@@ -260,18 +262,20 @@ Dream eater model fixes
     Hunchback boss has its chains missing when animated
     Tron turrents have their left arm backwards when animated
     Shop moogle's balloon is upside down
-Still some lingering bbox issues where culling is visible
-    This seems to occur with objects that have their root bone at the world origin (???), so their bbox is also there
+Some of the pistons in the post office have the wrong rotation
 Clean up unused data leftover from parsing (numbers, flags, etc not used for rendering or anything else)
 Rigid skinning should probably be checked for and applied at the model level, rather than the shape level
-Combine duplicate parsing from both bin files into the parser
+Combine duplicate parsing from both bin files into the main parser
 Make a whitelist of PVD files to avoid 404s for the few rooms that don't have them
+Some room parts not marked as skybox (but serve as the skybox nonetheless) shouldn't have fog applied to them
+    There's probably a flag to indicate this
 
 Nice to have
 
 Particle effects (if used on more stuff than just weapons and attacks)
 Save points (could just be glorified particles?) and other interactable world elements that aren't just level objects
 More accurate "lighting," like the neon signs and windows in Traverse Town
+Shimmering/pulsing effect on objects that can have flowmotion used on them
 
 May your heart be your guiding key
 */

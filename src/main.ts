@@ -199,8 +199,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
-    "PlayStation Portable",
-    Scenes_KingdomHeartsBBS.sceneGroup,
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
     Scenes_SpongeBobTSSM.sceneGroup,
@@ -274,6 +272,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
     Scenes_TopGearRally.sceneGroup,
+    Scenes_KingdomHeartsBBS.sceneGroup,
 ];
 
 enum SaveStatesAction {

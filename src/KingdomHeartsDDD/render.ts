@@ -78,13 +78,13 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
 
 class ModelRenderer extends LuxModelRenderer {
     protected override getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
-        return new ShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.animation ? model.skeleton!.bones.length : 0);
+        return new ShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
     }
 }
 
 class ShapeRenderer extends LuxShapeRenderer {
-    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, material: LuxMaterialInstance, txa?: LuxTextureAnimation, isSkybox: boolean = false, boneCount: number = 0) {
-        super(cache, shape, scale, material, txa, isSkybox, boneCount);
+    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, material: LuxMaterialInstance, txa?: LuxTextureAnimation, isSkybox: boolean = false, isBackground: boolean = false, boneCount: number = 0) {
+        super(cache, shape, scale, material, txa, isSkybox, isBackground, boneCount);
     }
 
     protected override setMegaStateFlags(shape: LuxShape): void {
@@ -126,6 +126,6 @@ class ShapeRenderer extends LuxShapeRenderer {
     }
 
     protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
-        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, 4, doRigidSkinning));
+        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, 4, doRigidSkinning));
     }
 }

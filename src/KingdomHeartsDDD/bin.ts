@@ -7,7 +7,6 @@ import { DreamDropCTRTFormat } from "./texture";
 // Credit for most of the parsing:
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Bbs
 // https://github.com/OpenKH/OpenKh/tree/master/OpenKh.Ddd
-// Some things had to be tweaked or fixed here, but mostly the same
 
 // File types
 // CTT: Texture file

@@ -103,6 +103,7 @@ const DEFAULT_SETS: Map<string, number[]> = new Map([
     ["tm04", [1]],
     ["tm05", [1]],
     ["tm06", [1]],
+    ["tm07", [1]],
     ["tm09", [1]],
     ["tm10", [1]],
     ["tm11", [1]],
@@ -125,10 +126,11 @@ const DEFAULT_SETS: Map<string, number[]> = new Map([
     ["eh06", [2]],
     ["eh07", [2]],
     ["eh08", [1]],
-    ["eh13", [1]],
-    ["eh14", [1]],
+    ["eh13", [2]],
+    ["eh14", [1]]
 ]);
 
+// if not specified for a room, then none of the sets are enabled by default
 export const BBS_DEFAULT_SETS: Map<string, number[]> = new Map([
     ["dp01", [0]],
     ["dp07", [0]],
@@ -168,7 +170,6 @@ export const BBS_DEFAULT_SETS: Map<string, number[]> = new Map([
     ["he06", [0]],
     ["ls01", [1]],
     ["ls02", [2]],
-    ["ls12", [0]],
     ["ls05", [0]],
     ["ls06", [1]],
     ["ls07", [1]],
@@ -204,7 +205,7 @@ export const BBS_DEFAULT_SETS: Map<string, number[]> = new Map([
     ["kg11", [0]],
     ["kg51", [0]],
     ["vs01", [0]],
-    ["wm01", [0]],
+    ["wm01", [0]]
 ]);
 
 const TXA = ["tw02", "tw03", "tw04", "tw07", "tm03", "tm04", "tm07", "tm13", "tm16", "tl06", "tl15", "tl18", "rg08",

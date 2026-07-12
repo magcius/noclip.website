@@ -49,13 +49,13 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
 
 class ModelRenderer extends LuxModelRenderer {
     protected override getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
-        return new ShapeRenderer(cache, shape as BBSShape, model.scale, materials[shape.textureIndex], this.isSkybox, this.animation ? model.skeleton!.bones.length : 0);
+        return new ShapeRenderer(cache, shape as BBSShape, model.scale, materials[shape.textureIndex], this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
     }
 }
 
 class ShapeRenderer extends LuxShapeRenderer {
-    constructor(cache: GfxRenderCache, shape: BBSShape, scale: number, material: LuxMaterialInstance, isSkybox: boolean, boneCount: number = 0) {
-        super(cache, shape, scale, material, undefined, isSkybox, boneCount);
+    constructor(cache: GfxRenderCache, shape: BBSShape, scale: number, material: LuxMaterialInstance, isSkybox: boolean, isBackground: boolean, boneCount: number = 0) {
+        super(cache, shape, scale, material, undefined, isSkybox, isBackground, boneCount);
     }
 
     protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
@@ -193,6 +193,6 @@ class ShapeRenderer extends LuxShapeRenderer {
     }
 
     protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
-        this.gfxProgram = cache.createProgram(new BBSShader(this.vertexBufferDescriptors.length, boneCount, weightCount, doRigidSkinning));
+        this.gfxProgram = cache.createProgram(new BBSShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, weightCount, doRigidSkinning));
     }
 }
