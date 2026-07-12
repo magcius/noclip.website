@@ -3,7 +3,8 @@ import { GsPrimitiveType } from "../Common/PS2/GS";
 import { DataViewExt } from "./DataViewExt";
 import { assert } from "../util";
 import { getBits, GN, ImaginaryGsCommand, ImaginaryGsCommandBuffer, truncateTrailing0xFF } from "./utils";
-import { readVifCommandList, VifUnpackFormat, VifUnpackReader } from "./vif";
+import { readVifCommandList, VifUnpackReader } from "./vif";
+import { VifUnpackFormat } from "../Common/PS2/VIF";
 
 export interface GsRamTableEntry {
     psm: number,
