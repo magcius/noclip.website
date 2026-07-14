@@ -127,6 +127,6 @@ class ShapeRenderer extends LuxShapeRenderer {
     }
 
     protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
-        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, 4, doRigidSkinning));
+        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, 4, doRigidSkinning, this.doBlendTXA));
     }
 }

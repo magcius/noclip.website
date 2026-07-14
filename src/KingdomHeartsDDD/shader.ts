@@ -12,7 +12,7 @@ export class DreamDropShader extends DeviceProgram {
     public static ub_ModelParams = 2;
     public static ub_ShapeParams = 3;
 
-    constructor(protected attributeCount: number, protected boneSRTCount: number, protected isSkybox: boolean = false, protected weightCount = 0, protected doRigidSkinning = false) {
+    constructor(protected attributeCount: number, protected boneSRTCount: number, protected isSkybox: boolean = false, protected weightCount = 0, protected doRigidSkinning = false, protected blendTXA = false) {
         super();
         this.both = `
 precision highp float;
@@ -41,9 +41,11 @@ layout(std140) uniform ub_ModelParams {
 layout(std140) uniform ub_ShapeParams {
     vec2 u_Scroll;
     float u_HasTexture;
+    ${this.blendTXA ? `float u_TXAFactor;` : ""}
 };
 
 uniform sampler2D u_Texture;
+${this.blendTXA ? `uniform sampler2D u_Texture2;` : ""}
 
 varying vec4 v_Color;
 varying vec2 v_UV;
@@ -76,6 +78,7 @@ void main() {
     vec4 finalColor;
     if (u_HasTexture > 0.1 && u_ApplyTextures > 0.1) {
         vec4 texColor = texture(SAMPLER_2D(u_Texture), v_UV);
+        ${this.blendTXA ? `        texColor = mix(texColor, texture(SAMPLER_2D(u_Texture2), v_UV), u_TXAFactor);` : ""}
         if (texColor.a < 0.1) {
             discard;
         }

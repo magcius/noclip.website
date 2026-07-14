@@ -469,7 +469,7 @@ export class BBSParser extends DreamDropParser {
             this.offset = animationOffset;
             for (let j = 0; j < animationCount; j++) {
                 const animationName = this.getString(16);
-                this.offset += 2;
+                const flags = this.getUshort();
                 const frameCount = this.getShort();
                 const frameOffset = this.getUint32();
 
@@ -513,7 +513,7 @@ export class BBSParser extends DreamDropParser {
                 }
 
                 this.offset = ret2;
-                animations[j] = { name: animationName, frames };
+                animations[j] = { name: animationName, frames, flags };
             }
 
             this.offset = ret1;

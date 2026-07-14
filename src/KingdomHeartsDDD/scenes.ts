@@ -234,10 +234,13 @@ Find a way to do proper depth sorting. Bboxes for room parts are inconsistent, s
     I've tried different render inst lists, depth (vec distance & aabb) and material based sort keys, and different permutations of mega state
     flags/blending options. These all introduce more problems than they fix, so the current configuration is the "least bad" of them all.
     See the water in destiny islands or the rainbow colored arch signs in the fourth district for examples where the sorting is wrong
-TXAs need lots of cleanup and the functionality to animate opacity between frames like in the game
-    Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
-    Will probably need an alternative shader that takes two texture inputs, idk how else to do it
-    Also, the current setup makes the animations a little too slow compared to how they are in game
+TXAs need some touchup and another pass at checking for them in object models
+    The code for building the fake keyframes and advancing the current frame could be simplified a bit
+    What determines if the textures are blended needs refinement (right now it's more of a heuristic)
+    There's also an edge case where the same animation will get out of sync across two separate models when one of them is culled
+        This is not a problem when it's separate instances of the same model, that case is handled. It only happens when two entirely separate
+        models happen to use the same txa. For an example, look at the flashing lights at the entrance of pi11 and move one of them in and out of sight
+    How frames are handled that have displayFrames as 0 might need tweaking, right need it just defaults to 1.5 since that matches the game the best
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
     Mostly the buildings in twtnw are affected by this (or something very similar)
     There's also pretty bad z-fighting on the ground path in the Traverse Town garden

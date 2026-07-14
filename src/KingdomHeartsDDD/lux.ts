@@ -39,6 +39,10 @@ export enum LuxModelFlags {
     BILLBOARD = 1024
 }
 
+enum TXAFlags {
+    BLEND = 4 // whether textures should be blended together between frames (not 100% accurate)
+}
+
 export interface LuxPMP {
     pmos: LuxModelInfo[];
 }
@@ -153,11 +157,17 @@ export interface LuxTXA {
 export interface LuxTextureAnimation {
     name: string;
     frames: LuxTXAFrame[];
+    flags: number;
 }
 
 export interface LuxTXAFrame {
     displayFrames: number; // amount of frames to show the texture, assumed to be in terms of 30 FPS
     data: ArrayBufferSlice;
+}
+
+interface TXAKeyframe {
+    index: number;
+    startFrame: number;
 }
 
 export interface LuxPVD {
@@ -179,6 +189,7 @@ const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
 const SCRATCH_BONE = mat4.create();
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 1 }];
+const BINDING_LAYOUTS_TXA: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 2 }];
 
 function getChannelValue(keyframes: LuxKeyframe[], frame: number, defaultValue: number): number {
     if (keyframes.length === 0) {
@@ -245,7 +256,7 @@ export class LuxMaterialInstance {
     public name: string;
     public scrollX: number;
     public scrollY: number;
-    public textureMappings: TextureMapping[][];
+    public textureMappings: TextureMapping[];
 
     constructor(material: LuxMaterial, textures: LuxTexture[], gfxSampler: GfxSampler) {
         this.name = textures[0].name;
@@ -256,24 +267,32 @@ export class LuxMaterialInstance {
             const tm = new TextureMapping();
             tm.gfxTexture = texture.gfxTexture;
             tm.gfxSampler = gfxSampler;
-            this.textureMappings.push([tm]);
+            this.textureMappings.push(tm);
         }
     }
 }
 
 export class LuxShapeRenderer implements Destroyable {
-    protected sortKey: number;
-    protected drawCount: number;
     protected hasTXA: boolean;
-    protected currentTXAFrame: number = 0;
-    protected txaIndices: number[] = [];
+    protected doBlendTXA: boolean = false;
     protected gfxProgram?: GfxProgram;
     protected megaStateFlags: Partial<GfxMegaStateDescriptor>;
     protected gfxInputLayout?: GfxInputLayout;
     protected indexBufferDescriptor: GfxIndexBufferDescriptor;
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    private sortKey: number;
+    private drawCount: number;
+    private ubSize: number;
+    private txaFactor: number = 0;
+    private txaKeyframes: TXAKeyframe[] = [];
+    private txaFrameCount: number = 0;
+    private txaIndexNow: number = 0;
+    private txaIndexNext: number = 0;
+    private txaFlip: number = 1;
+    private currentTXAFrame: number = 0;
+    private bindingLayouts: GfxBindingLayoutDescriptor[];
 
-    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, protected material: LuxMaterialInstance, txa?: LuxTextureAnimation, protected isSkybox: boolean = false, protected isBackground: boolean = false, boneCount: number = 0) {
+    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, private material: LuxMaterialInstance, txa?: LuxTextureAnimation, protected isSkybox: boolean = false, protected isBackground: boolean = false, boneCount: number = 0) {
         const isTranslucent = (shape.attribute & LuxShapeAttribute.BLEND_SEMITRANSPARENT) !== 0;
         const additiveBlend = (shape.attribute & LuxShapeAttribute.BLEND_ADDITIVE) !== 0;
         const transparent = isTranslucent || additiveBlend;
@@ -299,17 +318,28 @@ export class LuxShapeRenderer implements Destroyable {
         this.setVertexBuffers(cache, shape, scale);
 
         if (txa) {
-            if (txa.frames.length === 1) {
-                // treat the txa as flipping between two textures for an equal time (give or take 1 frame)
-                const f = txa.frames[0].displayFrames === 0 ? 5 : txa.frames[0].displayFrames;
-                this.txaIndices.push(...Array(f).fill(-1));
-                this.txaIndices.push(...Array(f).fill(0));
-            } else {
-                for (let i = 0; i < txa.frames.length; i++) {
-                    const n = Array(txa.frames[i].displayFrames === 0 ? 5 : txa.frames[i].displayFrames).fill(i - 1);
-                    this.txaIndices.push(...n);
-                }
+            this.doBlendTXA = (txa.flags & TXAFlags.BLEND) !== 0 && txa.flags !== 65532;
+            const frames = txa.frames.length;
+            let n = 0;
+            this.txaKeyframes = Array(frames);
+            for (let i = 0; i < frames; i++) {
+                const f = txa.frames[i].displayFrames === 0 ? 1.5 : txa.frames[i].displayFrames;
+                this.txaKeyframes[i] = { index: i + 1, startFrame: f + n };
+                this.txaFrameCount += f;
+                n += f;
             }
+            if (!this.doBlendTXA && frames > 1) {
+                // pad keyframes so the last frame is actually shown for how long it's supposed to (otherwise it will never show and skip back to the beginning)
+                this.txaKeyframes.push({ index: txa.frames.length, startFrame: this.txaKeyframes[frames - 1].startFrame + txa.frames[frames - 1].displayFrames });
+                this.txaFrameCount = this.txaKeyframes[frames].startFrame;
+            }
+        }
+        if (this.doBlendTXA) {
+            this.bindingLayouts = BINDING_LAYOUTS_TXA;
+            this.ubSize = 4;
+        } else {
+            this.bindingLayouts = BINDING_LAYOUTS;
+            this.ubSize = 3;
         }
         this.hasTXA = txa !== undefined;
 
@@ -324,24 +354,33 @@ export class LuxShapeRenderer implements Destroyable {
         const renderInst = renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setGfxProgram(this.gfxProgram!);
+        renderInst.setBindingLayouts(this.bindingLayouts);
         renderInst.setVertexInput(this.gfxInputLayout!, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, 3);
+        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, this.ubSize);
         const d = renderInst.mapUniformBufferF32(DreamDropShader.ub_ShapeParams);
         // u_Scroll (2)
         d[offset++] = this.material ? this.material.scrollX : 0.0;
         d[offset++] = this.material ? this.material.scrollY : 0.0;
         // u_HasTexture (1)
         d[offset++] = this.material ? 1.0 : 0.0;
+        // u_TXAFactor (1)
+        if (this.doBlendTXA) {
+            d[offset++] = this.txaFactor;
+        }
 
         if (this.material) {
             if (this.hasTXA) {
                 if (!ranTXA) {
-                    this.currentTXAFrame += viewerInput.deltaTime * FRAME_TIME;
-                    this.currentTXAFrame %= this.txaIndices.length;
+                    this.currentTXAFrame += this.txaFlip * viewerInput.deltaTime * FRAME_TIME;
+                    this.advanceTXA();
                 }
-                renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[this.txaIndices[Math.trunc(this.currentTXAFrame)] + 1]);
+                if (this.doBlendTXA) {
+                    renderInst.setSamplerBindingsFromTextureMappings([this.material.textureMappings[this.txaIndexNow], this.material.textureMappings[this.txaIndexNext]]);
+                } else {
+                    renderInst.setSamplerBindingsFromTextureMappings([this.material.textureMappings[this.txaIndexNow]]);
+                }
             } else {
-                renderInst.setSamplerBindingsFromTextureMappings(this.material.textureMappings[0]);
+                renderInst.setSamplerBindingsFromTextureMappings([this.material.textureMappings[0]]);
             }
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -357,6 +396,38 @@ export class LuxShapeRenderer implements Destroyable {
         device.destroyBuffer(this.indexBufferDescriptor.buffer);
         for (const d of this.vertexBufferDescriptors) {
             device.destroyBuffer(d.buffer);
+        }
+    }
+
+    private advanceTXA() {
+        if (this.txaKeyframes.length === 1) {
+            // reverse animation once it completes and vice versa
+            if (this.currentTXAFrame > this.txaFrameCount) {
+                this.txaFlip *= -1;
+                this.currentTXAFrame = this.txaFrameCount - 1;
+            } else if (this.currentTXAFrame < 0) {
+                this.txaFlip *= -1;
+                this.currentTXAFrame = 0;
+            }
+        } else {
+            // otherwise start back at the beginning once complete
+            this.currentTXAFrame %= this.txaFrameCount;
+        }
+        const next = this.txaKeyframes.findIndex(kf => this.currentTXAFrame < kf.startFrame);
+        if (next === 0) {
+            if (this.txaKeyframes.length === 1) {
+                this.txaIndexNow = 0;
+                this.txaIndexNext = this.txaKeyframes[0].index;
+            } else {
+                this.txaIndexNow = this.txaKeyframes[0].index;
+                this.txaIndexNext = this.txaKeyframes[1].index;
+            }
+            this.txaFactor = this.currentTXAFrame / this.txaKeyframes[0].startFrame;
+        } else {
+            const now = next - 1;
+            this.txaIndexNow = this.txaKeyframes[now].index;
+            this.txaIndexNext = this.txaKeyframes[next].index;
+            this.txaFactor = (this.currentTXAFrame - this.txaKeyframes[now].startFrame) / (this.txaKeyframes[next].startFrame - this.txaKeyframes[now].startFrame);
         }
     }
 
