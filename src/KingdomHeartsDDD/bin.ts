@@ -84,12 +84,11 @@ export class DreamDropShape extends LuxShape {
                     if (i % 2 === 0) {
                         indices.push(i);
                         indices.push(i + 1);
-                        indices.push(i + 2);
                     } else {
                         indices.push(i + 1);
                         indices.push(i);
-                        indices.push(i + 2);
                     }
+                    indices.push(i + 2);
                 }
                 break;
             case PrimitiveFormat.TRIANGLE_LIST:

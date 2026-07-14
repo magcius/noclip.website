@@ -12,8 +12,8 @@ const MAGIC_PMO = 5197136;
 const MAGIC_TIM2 = 843925844;
 const MAGIC_TXA = 4282452;
 
-const NORMALIZED_8_SCALE = 128.0;
-const NORMALIZED_16_SCALE = 32768.0;
+const NORMALIZED_BYTE_SCALE = 128.0;
+const NORMALIZED_SHORT_SCALE = 32768.0;
 
 interface ArcEntry {
     dirPointer: number;
@@ -23,28 +23,28 @@ interface ArcEntry {
 }
 
 enum NumberFormat {
-    NO_VERTEX,
-    NORMALIZED_8_BITS,
-    NORMALIZED_16_BITS,
-    FLOAT_32_BITS
+    NONE,
+    NORMALIZED_BYTE,
+    NORMALIZED_SHORT,
+    FLOAT
 }
 
 enum ColorFormat {
-    NO_COLOR,
-    BGR_5650_16BITS = 4,
-    ABGR_5551_16BITS,
-    ABGR_4444_16BITS,
-    ABGR_8888_32BITS,
+    NONE,
+    BGR_5650_16_BITS = 4,
+    ABGR_5551_16_BITS,
+    ABGR_4444_16_BITS,
+    ABGR_8888_32_BITS,
 }
 
 enum PrimitiveType {
-    PRIMITIVE_POINT,
-    PRIMITIVE_LINE,
-    PRIMITIVE_LINE_STRIP,
-    PRIMITIVE_TRIANGLE,
-    PRIMITIVE_TRIANGLE_STRIP,
-    PRIMITIVE_TRIANGLE_FAN,
-    PRIMITIVE_QUAD
+    POINT,
+    LINE,
+    LINE_STRIP,
+    TRIANGLE,
+    TRIANGLE_STRIP,
+    TRIANGLE_FAN,
+    QUAD
 }
 
 interface ShapeFlags {
@@ -132,19 +132,18 @@ export class BBSShape extends LuxShape {
                 }
                 index += triStripValues[i];
             }
-        } else if (flags.primitive === PrimitiveType.PRIMITIVE_TRIANGLE_STRIP) {
+        } else if (flags.primitive === PrimitiveType.TRIANGLE_STRIP) {
             for (let i = 0; i < vertexCount - 2; i++) {
                 if (i % 2 === 0) {
                     indices.push(i);
                     indices.push(i + 1);
-                    indices.push(i + 2);
                 } else {
                     indices.push(i + 1);
                     indices.push(i);
-                    indices.push(i + 2);
                 }
+                indices.push(i + 2);
             }
-        } else if (flags.primitive === PrimitiveType.PRIMITIVE_TRIANGLE) {
+        } else if (flags.primitive === PrimitiveType.TRIANGLE) {
             for (let i = 0; i < vertexCount; i++) {
                 indices.push(i);
             }
@@ -552,7 +551,7 @@ export class BBSParser extends DreamDropParser {
                 primitive: getBitsRange32(vertexFlags, 28, 4) as PrimitiveType
             };
 
-            if (flags.vertexFormat === NumberFormat.NO_VERTEX) {
+            if (flags.vertexFormat === NumberFormat.NONE) {
                 console.warn("Shape has a non-zero vertex count but no vertices!");
                 break;
             }
@@ -584,16 +583,16 @@ export class BBSParser extends DreamDropParser {
                 if (hasSkeleton) {
                     for (let j = 0; j < weightCount; j++) {
                         switch (flags.weightFormat) {
-                            case NumberFormat.NO_VERTEX:
+                            case NumberFormat.NONE:
                                 shape.weights[(i * weightCount) + j] = 0.0;
                                 break;
-                            case NumberFormat.NORMALIZED_8_BITS:
-                                shape.weights[(i * weightCount) + j] = this.getByte() / NORMALIZED_8_SCALE;
+                            case NumberFormat.NORMALIZED_BYTE:
+                                shape.weights[(i * weightCount) + j] = this.getByte() / NORMALIZED_BYTE_SCALE;
                                 break;
-                            case NumberFormat.NORMALIZED_16_BITS:
-                                shape.weights[(i * weightCount) + j] = this.getUshort() / NORMALIZED_16_SCALE;
+                            case NumberFormat.NORMALIZED_SHORT:
+                                shape.weights[(i * weightCount) + j] = this.getUshort() / NORMALIZED_SHORT_SCALE;
                                 break;
-                            case NumberFormat.FLOAT_32_BITS:
+                            case NumberFormat.FLOAT:
                                 shape.weights[(i * weightCount) + j] = this.getFloat();
                             default:
                                 console.warn("Unimplemented weight format", flags.weightFormat);
@@ -605,16 +604,16 @@ export class BBSParser extends DreamDropParser {
                 }
 
                 switch (flags.uvFormat) {
-                    case NumberFormat.NORMALIZED_8_BITS:
-                        shape.uvs[i * 2] = this.getByte() / NORMALIZED_8_SCALE;
-                        shape.uvs[(i * 2) + 1] = this.getByte() / NORMALIZED_8_SCALE;
+                    case NumberFormat.NORMALIZED_BYTE:
+                        shape.uvs[i * 2] = this.getByte() / NORMALIZED_BYTE_SCALE;
+                        shape.uvs[(i * 2) + 1] = this.getByte() / NORMALIZED_BYTE_SCALE;
                         break;
-                    case NumberFormat.NORMALIZED_16_BITS:
+                    case NumberFormat.NORMALIZED_SHORT:
                         this.offset += (2 - ((this.offset - ret2) & 1)) & 1;
-                        shape.uvs[i * 2] = this.getUshort() / NORMALIZED_16_SCALE;
-                        shape.uvs[(i * 2) + 1] = this.getUshort() / NORMALIZED_16_SCALE;
+                        shape.uvs[i * 2] = this.getUshort() / NORMALIZED_SHORT_SCALE;
+                        shape.uvs[(i * 2) + 1] = this.getUshort() / NORMALIZED_SHORT_SCALE;
                         break;
-                    case NumberFormat.FLOAT_32_BITS:
+                    case NumberFormat.FLOAT:
                         this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                         shape.uvs[i * 2] = this.getFloat();
                         shape.uvs[(i * 2) + 1] = this.getFloat();
@@ -632,13 +631,13 @@ export class BBSParser extends DreamDropParser {
                     shape.colors[(i * 4) + 3] = (diffuse >>> 24) & 0xFF;
                 } else {
                     switch (flags.colorFormat) {
-                        case ColorFormat.NO_COLOR:
+                        case ColorFormat.NONE:
                             shape.colors[i * 4] = 0xFF;
                             shape.colors[(i * 4) + 1] = 0xFF;
                             shape.colors[(i * 4) + 2] = 0xFF;
                             shape.colors[(i * 4) + 3] = 0xFF;
                             break;
-                        case ColorFormat.BGR_5650_16BITS:
+                        case ColorFormat.BGR_5650_16_BITS:
                             {
                                 const c = this.getUshort();
                                 shape.colors[i * 4] = 0xFF;
@@ -647,7 +646,7 @@ export class BBSParser extends DreamDropParser {
                                 shape.colors[(i * 4) + 3] = 0xFF;
                             }
                             break;
-                        case ColorFormat.ABGR_5551_16BITS:
+                        case ColorFormat.ABGR_5551_16_BITS:
                             {
                                 const c = this.getUshort();
                                 shape.colors[i * 4] = 0xFF;
@@ -656,7 +655,7 @@ export class BBSParser extends DreamDropParser {
                                 shape.colors[(i * 4) + 3] = 0xFF;
                             }
                             break;
-                        case ColorFormat.ABGR_4444_16BITS:
+                        case ColorFormat.ABGR_4444_16_BITS:
                             {
                                 const c = this.getUshort();
                                 shape.colors[i * 4] = 0xFF;
@@ -665,7 +664,7 @@ export class BBSParser extends DreamDropParser {
                                 shape.colors[(i * 4) + 3] = 0xFF;
                             }
                             break;
-                        case ColorFormat.ABGR_8888_32BITS:
+                        case ColorFormat.ABGR_8888_32_BITS:
                             this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                             shape.colors[(i * 4) + 0] = this.getByte();
                             shape.colors[(i * 4) + 1] = this.getByte();
@@ -683,18 +682,18 @@ export class BBSParser extends DreamDropParser {
                 }
 
                 switch (flags.vertexFormat) {
-                    case NumberFormat.NORMALIZED_8_BITS:
-                        shape.vertices[i * 3] = this.getByte() / NORMALIZED_8_SCALE;
-                        shape.vertices[(i * 3) + 1] = this.getByte() / NORMALIZED_8_SCALE;
-                        shape.vertices[(i * 3) + 2] = this.getByte() / NORMALIZED_8_SCALE;
+                    case NumberFormat.NORMALIZED_BYTE:
+                        shape.vertices[i * 3] = this.getByte() / NORMALIZED_BYTE_SCALE;
+                        shape.vertices[(i * 3) + 1] = this.getByte() / NORMALIZED_BYTE_SCALE;
+                        shape.vertices[(i * 3) + 2] = this.getByte() / NORMALIZED_BYTE_SCALE;
                         break;
-                    case NumberFormat.NORMALIZED_16_BITS:
+                    case NumberFormat.NORMALIZED_SHORT:
                         this.offset += (2 - ((this.offset - ret2) & 1)) & 1;
-                        shape.vertices[i * 3] = this.getShort() / NORMALIZED_16_SCALE;
-                        shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_16_SCALE;
-                        shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_16_SCALE;
+                        shape.vertices[i * 3] = this.getShort() / NORMALIZED_SHORT_SCALE;
+                        shape.vertices[(i * 3) + 1] = this.getShort() / NORMALIZED_SHORT_SCALE;
+                        shape.vertices[(i * 3) + 2] = this.getShort() / NORMALIZED_SHORT_SCALE;
                         break;
-                    case NumberFormat.FLOAT_32_BITS:
+                    case NumberFormat.FLOAT:
                         this.offset += (4 - ((this.offset - ret2) & 3)) & 3;
                         shape.vertices[i * 3] = this.getFloat();
                         shape.vertices[(i * 3) + 1] = this.getFloat();

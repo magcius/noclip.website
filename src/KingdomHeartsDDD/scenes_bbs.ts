@@ -328,8 +328,7 @@ Add TXAs
     texture. Might be best to re-write the entire TIM2 code with TXAs in mind, instead of trying to jerry-rig the existing stuff.
     Honestly, this is a lot of effort with little pay off, since TXAs are less common in BBS than in DDD (other than eye blinking/mouth moving while talking).
     The parsing is already present in bin_bbs.ts, just not used right now.
-Particle effects (if used widely outside of weapons/attacks)
-Save points and other interactables that aren't proper objects but still visible in game
+Save points
 
 May your heart be your guiding key
 */

@@ -230,9 +230,10 @@ class Room implements SceneDesc {
 /*
 TODO
 
-Find a way to do proper depth sorting. Bboxes for room parts are inconsistent, so typical depth sorting completely breaks some of them (yt04 for example)
-    I've tried different render inst lists, depth and material based sort keys, and different permutations of mega state
-    flags/blending options. These all introduce more problems than they fix, so the current configuration is the "least bad" of them all
+Find a way to do proper depth sorting. Bboxes for room parts are inconsistent, so typical approaches completely break some rooms (yt04 for example)
+    I've tried different render inst lists, depth (vec distance & aabb) and material based sort keys, and different permutations of mega state
+    flags/blending options. These all introduce more problems than they fix, so the current configuration is the "least bad" of them all.
+    See the water in destiny islands or the rainbow colored arch signs in the fourth district for examples where the sorting is wrong
 TXAs need lots of cleanup and the functionality to animate opacity between frames like in the game
     Most things look fine with the current implementation, but Monstro looks kind of weird without the fading
     Will probably need an alternative shader that takes two texture inputs, idk how else to do it
@@ -240,42 +241,45 @@ TXAs need lots of cleanup and the functionality to animate opacity between frame
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
     Mostly the buildings in twtnw are affected by this (or something very similar)
     There's also pretty bad z-fighting on the ground path in the Traverse Town garden
-Figure out the shape attribute flag for back culling (it's different than BBS, which even that might not be right)
-Solar Sailor rooms and Mont Saint-Michel have weird (possibly incorrect?) skybox geometry
+Figure out the shape attribute flag for back-face culling (it's different than BBS, which even that might not be right)
+Solar Sailor rooms and Mont Saint-Michel have weird skybox geometry
+    The skybox is correctly identified but it's not being scaled/positioned in the right way?
 Figure out how world map objects are loaded
-    The models exist in chara/gim/g_wm*
-    There doesn't seem to be any plaintext reference to these models (like there is for everything else in OLO files)
-Invesigate PMO model issue from BBS. Very rare in DDD, but see the mickey model in musketeers for an example
+    The models exist in chara/gim/g_wm*. I can't find any OLO files that reference them.
+    Within _grpdef/wm01.rgr, the model names and some MCV files are referenced. It's possible that
+    the world map is technically handled as a cutscene, therefore the loading of models is entirely different
 Investigate other file types such as GPL, SEB, EAD and ABC
-    MCV is camera/cutscene related and BCD is collision data. Neither of those are needed for noclip
-    Likewise, the particle effect files like FEP and ESE would be neat, but probably not worth the effort
-    See note in bin.ts for list of known or already used types
-    The .rgr files could be used for getting default animations?
+    MCV is camera/cutscene related and BCD is collision data. Neither of those are needed
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
 Figure out how shapes' supposed "diffuse color" should be used (completely different than BBS)
 Shadows in the second district are the wrong color, they appear as black in game (they're just fine everywhere else though???)
 Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron, pinocchio and twtnw
 Dream eater model fixes
     Spellican's broomstick is stretched
-    Skeleton t-rex is missing its head (could be a separate model for some reason?)
-    Both rhino variants have the spike ball visibles
+    Both rhino variants have the spike ball visible
     Hunchback boss has its chains missing when animated
     Tron turrents have their left arm backwards when animated
-    Shop moogle's balloon is upside down
+    Shop moogle's balloon is upside down (happens in BBS too, which uses almost the exact same model)
+Figure out how to handle models with different parts in separate files
+    These are defined in _grpdef/*.rgr, for example the skeleton t-rex has its head as a separate model
 Some of the pistons in the post office have the wrong rotation
 Clean up unused data leftover from parsing (numbers, flags, etc not used for rendering or anything else)
 Rigid skinning should probably be checked for and applied at the model level, rather than the shape level
-Combine duplicate parsing from both bin files into the main parser
-Make a whitelist of PVD files to avoid 404s for the few rooms that don't have them
-Some room parts not marked as skybox (but serve as the skybox nonetheless) shouldn't have fog applied to them
-    There's probably a flag to indicate this
+    There may also be a model flag that indicates this, rather than checking to see if the weights are all zero
+Make a whitelist of PVD files to avoid 404s for the few rooms that don't have them (similar to how OLOs work)
+The ice around monstro in pi05 should be transparent but it's not
+Try to combine meshes of room parts with the same texture together to reduce number of draw calls
 
 Nice to have
 
-Particle effects (if used on more stuff than just weapons and attacks)
-Save points (could just be glorified particles?) and other interactable world elements that aren't just level objects
-More accurate "lighting," like the neon signs and windows in Traverse Town
+Save points (could just be glorified particle effects?)
+More accurate "lighting," like on the neon signs and windows in Traverse Town
+    This seems to be a simple form of bloom, likely determined by a model or shape's flags or attribute value
+    Possibly remove the hardcoded increase in brightness in the shader as well (without this it looks too dark compared to the actual game)
 Shimmering/pulsing effect on objects that can have flowmotion used on them
+Battle/link portals
+    The files are in /mission, but need to figure out which room uses which olo file since only the world ID is in the name
+    These olo files are only the enemies/companion dream eaters and don't include the portal itself or its location
 
 May your heart be your guiding key
 */
@@ -346,8 +350,8 @@ const sceneDescs = [
     new Room("tl16", "Light Cycle Arena"),
     new Room("tl12", "Stadium"),
     new Room("tl14", "Flynn's Hideout"),
-    new Room("tl60", "Dive (Sora)"),
-    new Room("tl61", "Dive (Riku)"),
+    new Room("tl61", "Dive (Sora)"),
+    new Room("tl60", "Dive (Riku)"),
     "Prankster's Paradise", // pi = pinocchio
     new Room("pi01", "Amusement Park"),
     new Room("pi11", "Windup Way"),
@@ -358,13 +362,13 @@ const sceneDescs = [
     new Room("pi03", "Ocean Depths"),
     new Room("pi19", "Ocean Depths"),
     new Room("pi14", "Ocean Depths (Floor)"),
-    new Room("pi13", "Ocean Surface"),
     new Room("pi17", "Ocean Surface"),
     new Room("pi05", "Ocean Surface (Boss)"),
+    new Room("pi13", "Ocean Surface (Reality Shift)"),
     new Room("pi06", "Monstro: Mouth"),
-    new Room("pi07", "Monstro: Belly"),
-    new Room("pi18", "Monstro: Belly"),
     new Room("pi08", "Monstro: Gullet"),
+    new Room("pi18", "Monstro: Belly"),
+    new Room("pi07", "Monstro: Belly"),
     new Room("pi09", "Monstro: Cavity"),
     new Room("pi10", "Monstro: Bowels"),
     new Room("pi60", "Dive (Sora)"),

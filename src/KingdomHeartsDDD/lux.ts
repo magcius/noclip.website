@@ -174,7 +174,7 @@ export interface LuxRoomObjects {
 }
 
 const FRAME_TIME = 0.03;
-const WORLD_SCALE = 200.0; // to make camera movement better, tiny XYZ coords are scaled up
+const WORLD_SCALE = 200.0; // to make camera movement better, tiny coords are scaled up
 const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
 const SCRATCH_BONE = mat4.create();
@@ -624,7 +624,7 @@ export class LuxRoomRenderer implements Destroyable {
         }
         this.selectedSetIndices = [];
         // approximation to appearance in game
-        // idk why only world scale doesn't work, but double is pretty close
+        // idk why only world scale doesn't work, but double seems to be about right
         this.pvd.fogNear *= (WORLD_SCALE * 2);
         this.pvd.fogFar *= (WORLD_SCALE * 2);
     }
@@ -757,9 +757,10 @@ export class LuxRenderer implements SceneGfx {
         renderOptions.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         renderOptions.setTitle(RENDER_HACKS_ICON, "Render Hacks");
         // player models seem to be used to indicate spawn/entrance locations, hide by default
-        const showPC = new Checkbox("Show player characters", false);
+        const showPC = new Checkbox("Show Player Characters", false);
         showPC.onchanged = () => {
             for (const o of this.roomRenderer!.objects) {
+                // loosely coupled with model visibility, could be improved
                 if (this.isPlayerCharacterModel(o.name)) {
                     o.visible = showPC.checked;
                 }
@@ -767,17 +768,17 @@ export class LuxRenderer implements SceneGfx {
             layersPanel.syncLayerVisibility();
         };
         renderOptions.contents.appendChild(showPC.elem);
-        const applyTextures = new Checkbox("Enable textures", true);
+        const applyTextures = new Checkbox("Enable Textures", true);
         applyTextures.onchanged = () => {
             this.roomRenderer!.applyTextures = applyTextures.checked;
         };
         renderOptions.contents.appendChild(applyTextures.elem);
-        const scrollTextures = new Checkbox("Enable texture scrolling", true);
+        const scrollTextures = new Checkbox("Enable Texture Scrolling", true);
         scrollTextures.onchanged = () => {
             this.roomRenderer!.scrollingTextures = scrollTextures.checked;
         };
         renderOptions.contents.appendChild(scrollTextures.elem);
-        const showFog = new Checkbox("Apply fog", true);
+        const showFog = new Checkbox("Apply Fog", true);
         showFog.onchanged = () => {
             this.roomRenderer!.showFog = showFog.checked;
         };

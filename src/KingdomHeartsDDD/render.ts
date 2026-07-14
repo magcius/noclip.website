@@ -110,6 +110,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         ];
 
         if (shape.weights.length > 0 && shape.joints.length > 0) {
+            // a weight count of 4 is assumed (any less will just be zeroes and cancel out)
             inVertexAttributeDescriptors.push({ location: DreamDropShader.a_Weight, bufferIndex: DreamDropShader.a_Weight, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 });
             inVertexAttributeDescriptors.push({ location: DreamDropShader.a_Joint, bufferIndex: DreamDropShader.a_Joint, format: GfxFormat.U8_RGBA, bufferByteOffset: 0 });
             inVertexBufferDescriptors.push({ byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex });

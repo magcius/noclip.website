@@ -85,6 +85,7 @@ class ShapeRenderer extends LuxShapeRenderer {
             let weight2Bytes = 4;
             let joint2Bytes = 1;
             const weightCount = shape.weights.length / shape.vertexCount;
+            // there can be up to 8 weights per vertex, so the descriptors are sized to match and be as efficient as possible
             switch (weightCount) {
                 case 1:
                     weight1Format = GfxFormat.F32_R;
