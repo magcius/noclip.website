@@ -8,59 +8,7 @@ import { angleDist, MathConstants } from "../MathHelpers.js";
 import { parseParticleData, LevelParticles, parseFlipbook, parseGeometry } from "./particle.js";
 import { MagicLayout, sniffMagic } from "./magic.js";
 import { parseActorMagicCommands } from "./actor.js";
-
-enum VifUnpackVN {
-    S = 0x00,
-    V2 = 0x01,
-    V3 = 0x02,
-    V4 = 0x03,
-}
-
-enum VifUnpackVL {
-    VL_32 = 0x00,
-    VL_16 = 0x01,
-    VL_8 = 0x02,
-    VL_5 = 0x03,
-}
-
-enum VifUnpackFormat {
-    S_32 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_32),
-    S_16 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_16),
-    S_8 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_8),
-    V2_32 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_32),
-    V2_16 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_16),
-    V2_8 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_8),
-    V3_32 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_32),
-    V3_16 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_16),
-    V3_8 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_8),
-    V4_32 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_32),
-    V4_16 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_16),
-    V4_8 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_8),
-    V4_5 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_5),
-}
-
-function getVifUnpackVNComponentCount(vn: VifUnpackVN): number {
-    return vn + 1;
-}
-
-function getVifUnpackFormatByteSize(format: number): number {
-    const vn: VifUnpackVN = (format >>> 2) & 0x03;
-    const vl: VifUnpackVL = (format >>> 0) & 0x03;
-    const compCount = getVifUnpackVNComponentCount(vn);
-    if (vl === VifUnpackVL.VL_8) {
-        return 1 * compCount;
-    } else if (vl === VifUnpackVL.VL_16) {
-        return 2 * compCount;
-    } else if (vl === VifUnpackVL.VL_32) {
-        return 4 * compCount;
-    } else if (vl === VifUnpackVL.VL_5) {
-        // V4-5. Special case: 16 bits for the whole format.
-        assert(vn === 0x03);
-        return 2;
-    } else {
-        throw new Error("whoops");
-    }
-}
+import { getVifUnpackFormatByteSize, VifCmd, VifUnpackFormat } from "../Common/PS2/VIF.js";
 
 export interface LevelDrawCall {
     indexOffset: number;
@@ -612,8 +560,8 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
         const unpackDest = imm & 0x3FFF;
         packetsIdx += 0x04;
 
-        if ((cmd & 0x60) === 0x60) { // UNPACK
-            const format = (cmd & 0x0F);
+        if ((cmd & VifCmd.UNPACK_MASK) === VifCmd.UNPACK_MASK) { // UNPACK
+            const format = (cmd & VifCmd.UNPACK_PARAM);
 
             // TODO: figure out this constant-offset data, used to mask some flag?
             if (!atITOP) {
@@ -628,7 +576,6 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
 
                 vertexRunData = newVertexRun();
                 packetsIdx += qwc * getVifUnpackFormatByteSize(format);
-
             } else if (format === VifUnpackFormat.V2_16) {
                 let runOffs = 7;
                 assert(vertexRunData !== null);
@@ -687,7 +634,7 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
                 console.error(`Unsupported format ${hexzero(format, 2)}`);
                 throw new Error("whoops");
             }
-        } else if ((cmd & 0x7F) === 0x50 || (cmd & 0x7F) === 0x51) { // DIRECT
+        } else if ((cmd & 0x7F) === VifCmd.DIRECT || (cmd & 0x7F) === VifCmd.DIRECTHL) { // DIRECT
             // We need to be at the start of a vertex run.
             assert(vertexRunData === null);
 
@@ -730,7 +677,7 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
 
                 packetsIdx += 0x10;
             }
-        } else if (cmd === 0x17) { // MSCNT
+        } else if (cmd === VifCmd.MSCNT) {
             // Run an HLE form of the VU1 program.
             assert(vertexRunData !== null);
 
@@ -770,22 +717,22 @@ function parseLevelModel(id: number, view: DataView, offs: number, gsMap: GSMemo
             vertexCount = 0;
             vertexRunData = null;
             // Texture does not get reset; it carries over between runs.
-        } else if (cmd === 0x14) { // MSCAL
+        } else if (cmd === VifCmd.MSCAL) {
             // check if this calls the env map program
             assert(imm <= 2);
             if (imm === 2)
                 currentEffect = LevelEffectType.ENV_MAP;
             else
                 currentEffect = LevelEffectType.NONE;
-        } else if (cmd === 0x00 || cmd === 0x10 || cmd === 0x11) {
+        } else if (cmd === VifCmd.NOP || cmd === VifCmd.FLUSHE || cmd === VifCmd.FLUSH) {
             // NOP and FLUSH commands can be ignored
-        } else if (cmd === 0x01) { // CYCLE
+        } else if (cmd === VifCmd.STCYCL) {
             assert(imm === 0x0101); // equal CL and WL, can ignore
-        } else if (cmd === 0x05) { // STMOD
+        } else if (cmd === VifCmd.STMOD) {
             assert(imm === 0); // normal, no addition
-        } else if (cmd === 0x30) { // STROW
+        } else if (cmd === VifCmd.STROW) {
             packetsIdx += 0x10; // ignore fill data for now
-        } else if (cmd === 0x20) { // STMASK
+        } else if (cmd === VifCmd.STMASK) {
             packetsIdx += 0x04;
         } else {
             console.error(`Unknown VIF command ${hexzero(cmd, 2)} at ${hexzero(packetsIdx, 4)}`);
@@ -875,7 +822,6 @@ export function parseMapFile(id: number, buffer: ArrayBufferSlice, textureData: 
     assert(readString(buffer, 0, 4) === "MAP1");
 
     const view = buffer.createDataView();
-
 
     const geoOffs = view.getUint32(0x14, true);
     const heightmapOffs = view.getUint32(0x18, true);
