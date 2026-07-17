@@ -22,6 +22,8 @@ import { DreamDropCTRTFormat } from "./texture";
 // FEP: Effect file
 // BIN: Many uses and formats
 // PVD: Fog data, clear color, possible camera info
+// RGR: Definition of a "group," has some file paths
+// MSS: Something to do with "missions," usually very tiny
 
 export interface DreamDropPMP extends LuxPMP {
     ctrts: DreamDropCTRT[];

@@ -1,6 +1,6 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder, TextureHolder, TextureMapping } from "../TextureHolder";
 import { Destroyable } from "../SceneBase";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
@@ -21,26 +21,23 @@ import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 // Credit to OOT3D for the basis of the skeletal animation code
 
 export enum LuxShapeAttribute {
-    NO_BLEND,
-    NO_MATERIAL,
-    GLARE,
-    CULL_BACK = 4, // may not be right, can hide some stuff that should be normally visible
-    HAS_ALPHA = 16,
+    UNK0, // most shapes within a model seem to alternate between 0 and 1, unknown usage
+    UNK1, // most shapes within a model seem to alternate between 0 and 1, unknown usage
+    NO_CULL = 4,
     BLEND_SEMITRANSPARENT = 32,
     BLEND_ADDITIVE = 64,
-    BLEND_SUBTRACT = 96,
-    DROP_SHADOW = 1024,
-    ENV_MAP = 2048
+    DEPTH_WRITE = 256, // testing has been inconsistent, unused for now
+    DROP_SHADOW = 1024, // used for polygon offset value, somewhat inconsistent, fixes some shapes and breaks others
 }
 
 export enum LuxModelFlags {
     SKYBOX = 1,
-    BACKGROUND = 64, // geometry that's effectively the skybox but rendered normally (i.e. scaled up a lot)
+    BACKGROUND = 64, // geometry that's effectively the skybox but rendered normally (just scaled up a lot)
     BILLBOARD = 1024
 }
 
 enum TXAFlags {
-    BLEND = 4 // whether textures should be blended together between frames (not 100% accurate)
+    BLEND = 4 // not 100% accurate, but works almost all the time
 }
 
 export interface LuxPMP {
@@ -161,7 +158,7 @@ export interface LuxTextureAnimation {
 }
 
 export interface LuxTXAFrame {
-    displayFrames: number; // amount of frames to show the texture, assumed to be in terms of 30 FPS
+    displayFrames: number; // amount of frames to show the texture, assumed to be at 30 FPS (i.e. "15" will show it for half a second)
     data: ArrayBufferSlice;
 }
 
@@ -183,7 +180,8 @@ export interface LuxRoomObjects {
     animations: Map<string, LuxSkeletalAnimation>;
 }
 
-const FRAME_TIME = 0.03;
+const FRAME_TIME_30 = 0.03;
+const FRAME_TIME_60 = 0.06;
 const WORLD_SCALE = 200.0; // to make camera movement better, tiny coords are scaled up
 const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
@@ -291,15 +289,15 @@ export class LuxShapeRenderer implements Destroyable {
     private txaFlip: number = 1;
     private currentTXAFrame: number = 0;
     private bindingLayouts: GfxBindingLayoutDescriptor[];
+    private cullMode: GfxCullMode;
 
     constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, private material: LuxMaterialInstance, txa?: LuxTextureAnimation, protected isSkybox: boolean = false, protected isBackground: boolean = false, boneCount: number = 0) {
         const isTranslucent = (shape.attribute & LuxShapeAttribute.BLEND_SEMITRANSPARENT) !== 0;
         const additiveBlend = (shape.attribute & LuxShapeAttribute.BLEND_ADDITIVE) !== 0;
         const transparent = isTranslucent || additiveBlend;
 
-        this.megaStateFlags = { depthWrite: !transparent };
-        // the cull back flag makes some level geometry invisible from normal viewing points, disabled for now
-        // this.megaStateFlags = { cullMode: (shape.attribute & LuxShapeAttribute.CULL_BACK) !== 0 ? GfxCullMode.Back : GfxCullMode.None };
+        this.cullMode = (shape.attribute & LuxShapeAttribute.NO_CULL) !== 0 ? GfxCullMode.None : GfxCullMode.Back;
+        this.megaStateFlags = { depthWrite: !transparent, cullMode: this.cullMode };
         this.setMegaStateFlags(shape);
 
         if (transparent) {
@@ -323,15 +321,15 @@ export class LuxShapeRenderer implements Destroyable {
             let n = 0;
             this.txaKeyframes = Array(frames);
             for (let i = 0; i < frames; i++) {
-                const f = txa.frames[i].displayFrames === 0 ? 1.5 : txa.frames[i].displayFrames;
+                const f = Math.max(1.5, txa.frames[i].displayFrames);
                 this.txaKeyframes[i] = { index: i + 1, startFrame: f + n };
                 this.txaFrameCount += f;
                 n += f;
             }
             if (!this.doBlendTXA && frames > 1) {
                 // pad keyframes so the last frame is actually shown for how long it's supposed to (otherwise it will never show and skip back to the beginning)
-                this.txaKeyframes.push({ index: txa.frames.length, startFrame: this.txaKeyframes[frames - 1].startFrame + txa.frames[frames - 1].displayFrames });
-                this.txaFrameCount = this.txaKeyframes[frames].startFrame;
+                this.txaFrameCount = this.txaKeyframes[frames - 1].startFrame + txa.frames[frames - 1].displayFrames;
+                this.txaKeyframes.push({ index: txa.frames.length, startFrame: this.txaFrameCount });
             }
         }
         if (this.doBlendTXA) {
@@ -371,7 +369,7 @@ export class LuxShapeRenderer implements Destroyable {
         if (this.material) {
             if (this.hasTXA) {
                 if (!ranTXA) {
-                    this.currentTXAFrame += this.txaFlip * viewerInput.deltaTime * FRAME_TIME;
+                    this.currentTXAFrame += this.txaFlip * viewerInput.deltaTime * FRAME_TIME_30;
                     this.advanceTXA();
                 }
                 if (this.doBlendTXA) {
@@ -390,6 +388,10 @@ export class LuxShapeRenderer implements Destroyable {
         renderInst.setDrawCount(this.drawCount);
 
         renderHelper.renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public setCullingOverride(v: boolean) {
+        this.megaStateFlags.cullMode = v ? GfxCullMode.None : this.cullMode;
     }
 
     public destroy(device: GfxDevice): void {
@@ -415,13 +417,8 @@ export class LuxShapeRenderer implements Destroyable {
         }
         const next = this.txaKeyframes.findIndex(kf => this.currentTXAFrame < kf.startFrame);
         if (next === 0) {
-            if (this.txaKeyframes.length === 1) {
-                this.txaIndexNow = 0;
-                this.txaIndexNext = this.txaKeyframes[0].index;
-            } else {
-                this.txaIndexNow = this.txaKeyframes[0].index;
-                this.txaIndexNext = this.txaKeyframes[1].index;
-            }
+            this.txaIndexNow = 0;
+            this.txaIndexNext = this.txaKeyframes[0].index;
             this.txaFactor = this.currentTXAFrame / this.txaKeyframes[0].startFrame;
         } else {
             const now = next - 1;
@@ -462,9 +459,9 @@ export class LuxModelRenderer implements Destroyable, Layer {
         this.name = name;
         this.isSkybox = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.SKYBOX) !== 0;
         this.isBackground = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.BACKGROUND) !== 0;
-        this.shapes = Array(model.shapes.length);
         const calcBbox = this.name.substring(1, 2) === "_" || !this.name.includes("_");
         const allVertices = [];
+        this.shapes = Array(model.shapes.length);
         for (let i = 0; i < model.shapes.length; i++) {
             const shape = model.shapes[i];
             if (calcBbox) {
@@ -497,7 +494,6 @@ export class LuxModelRenderer implements Destroyable, Layer {
 
         // manually calculate the bbox for objects
         // some of the bboxes provided by the game are either too big or stuck at world origin
-        // this adds a tiny bit of load time in exchange for better rendering performance
         if (calcBbox) {
             let min = { x: Infinity, y: Infinity, z: Infinity };
             let max = { x: -Infinity, y: -Infinity, z: -Infinity };
@@ -587,6 +583,12 @@ export class LuxModelRenderer implements Destroyable, Layer {
         this.visible = v;
     }
 
+    public setCullingOverride(v: boolean) {
+        for (const s of this.shapes) {
+            s.setCullingOverride(v);
+        }
+    }
+
     public destroy(device: GfxDevice): void {
         for (const shape of this.shapes) {
             shape.destroy(device);
@@ -659,7 +661,6 @@ export class LuxRoomRenderer implements Destroyable {
     public sets: LuxObjectSet[];
     public selectedSetIndices: number[];
     public applyTextures: boolean = true;
-    public scrollingTextures: boolean = true;
     public showFog: boolean = true;
     private allSetIndices: number[][];
 
@@ -714,16 +715,14 @@ export class LuxRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 20);
+        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 19);
         const uniformBuffer = template.mapUniformBufferF32(DreamDropShader.ub_SceneParams);
         // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.projectionMatrix);
         // u_Time (1)
-        uniformBuffer[offset++] = viewerInput.time * FRAME_TIME;
+        uniformBuffer[offset++] = viewerInput.time * FRAME_TIME_60;
         // u_ApplyTextures (1)
         uniformBuffer[offset++] = this.applyTextures ? 1.0 : 0.0;
-        // u_DoScrolling (1)
-        uniformBuffer[offset++] = this.scrollingTextures ? 1.0 : 0.0;
         // u_ShowFog (1)
         uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
 
@@ -751,6 +750,12 @@ export class LuxRoomRenderer implements Destroyable {
         renderHelper.renderInstManager.popTemplate();
     }
 
+    public setCullingOverride(v: boolean) {
+        for (const mr of [...this.parts, ...this.objects]) {
+            mr.setCullingOverride(v);
+        }
+    }
+
     public destroy(device: GfxDevice) {
         for (const mr of [...this.parts, ...this.objects]) {
             mr.destroy(device);
@@ -773,7 +778,7 @@ export class LuxRenderer implements SceneGfx {
     protected renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, protected clearColor: number[]) {
+    constructor(device: GfxDevice, protected clearColor: number[], protected useCullingDefault: boolean) {
         this.textureHolder = new FakeTextureHolder([]);
         this.renderHelper = new GfxRenderHelper(device);
         this.textures = [];
@@ -844,16 +849,16 @@ export class LuxRenderer implements SceneGfx {
             this.roomRenderer!.applyTextures = applyTextures.checked;
         };
         renderOptions.contents.appendChild(applyTextures.elem);
-        const scrollTextures = new Checkbox("Enable Texture Scrolling", true);
-        scrollTextures.onchanged = () => {
-            this.roomRenderer!.scrollingTextures = scrollTextures.checked;
-        };
-        renderOptions.contents.appendChild(scrollTextures.elem);
         const showFog = new Checkbox("Apply Fog", true);
         showFog.onchanged = () => {
             this.roomRenderer!.showFog = showFog.checked;
         };
         renderOptions.contents.appendChild(showFog.elem);
+        const backCull = new Checkbox("Use Back-Face Culling", !this.useCullingDefault);
+        backCull.onchanged = () => {
+            this.roomRenderer!.setCullingOverride(!backCull.checked);
+        };
+        renderOptions.contents.appendChild(backCull.elem);
 
         return [setPanel, layersPanel, renderOptions];
     }

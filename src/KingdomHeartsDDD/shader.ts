@@ -23,7 +23,6 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     float u_Time;
     float u_ApplyTextures;
-    float u_DoScrolling;
     float u_ShowFog;
 };
 
@@ -61,11 +60,7 @@ ${this.getAdditionalAttributes()}
 
 void main() {
     v_Color = a_Color;
-    if (u_DoScrolling > 0.1) {
-        v_UV = a_UV + (u_Time * u_Scroll);
-    } else {
-        v_UV = a_UV;
-    }
+    v_UV = a_UV + (u_Time * u_Scroll);
     ${!this.isSkybox ? `    if (u_ShowFog > 0.1) {
         v_Depth = -(UnpackMatrix(u_View) * vec4(a_Position, 1.0)).z;
     }` : ""}

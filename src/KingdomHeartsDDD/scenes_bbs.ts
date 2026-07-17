@@ -7,7 +7,7 @@ import { SceneGfx } from "../viewer";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { BBSModel, BBSParser, BBSTIM2Format, BBSPMP } from "./bin_bbs";
 import { BBS_ARC_BOSS, BBS_ARC_ENEMY, BBS_ARC_GIMMICK, BBS_ARC_NPC, BBS_ARC_PC, BBS_ARC_PMO_OVERRIDE, BBS_ARC_WEAPON, BBS_MODEL_REMAP, BBS_PAM, BBS_PMO_ARC_OVERRIDE, BBS_VALID_PRESET_ARC } from "./config/data";
-import { BBS_DEFAULT_SETS } from "./config/room";
+import { BBS_DEFAULT_SETS, BBS_NO_CULL_ROOMS } from "./config/room";
 import { LuxObjectSet, LuxOLOInstance, LuxPVD, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation } from "./lux";
 import { BBSRoomRenderer } from "./render_bbs";
 import { decodeBBSTIM2, BBSTIM2Texture } from "./texture";
@@ -197,8 +197,8 @@ async function getRoomObjects(roomId: string, context: SceneContext): Promise<Lu
 }
 
 class Renderer extends LuxRenderer {
-    constructor(device: GfxDevice, pmp: BBSPMP, pvd: LuxPVD, objects: LuxRoomObjects, private defaultSets: number[]) {
-        super(device, pvd.clearColor);
+    constructor(device: GfxDevice, pmp: BBSPMP, pvd: LuxPVD, objects: LuxRoomObjects, private defaultSets: number[], cullingOverride: boolean) {
+        super(device, pvd.clearColor, cullingOverride);
 
         const tims = [...pmp.tims];
         for (const model of objects.models.values()) {
@@ -224,6 +224,8 @@ class Renderer extends LuxRenderer {
         this.textureHolder = new FakeTextureHolder(viewerTextures);
         this.renderHelper = new GfxRenderHelper(device);
         this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, [], pvd);
+        // sync culling override with ui toggle
+        this.roomRenderer.setCullingOverride(cullingOverride);
     }
 
     protected override getSetPanel(): Panel {
@@ -287,20 +289,24 @@ class Room implements SceneDesc {
 
         const objects = await getRoomObjects(this.id, context);
 
-        return new Renderer(device, pmp, pvd, objects, BBS_DEFAULT_SETS.has(this.id) ? BBS_DEFAULT_SETS.get(this.id)! : []);
+        return new Renderer(device, pmp, pvd, objects, BBS_DEFAULT_SETS.has(this.id) ? BBS_DEFAULT_SETS.get(this.id)! : [], BBS_NO_CULL_ROOMS.includes(this.id));
     }
 }
 
 /*
 TODO
 
+...applicable items from Dream Drop's todo and:
+
 Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
     It seems to have something to do with needing to scale by the texture width/height and only affects UVs that are single bytes.
     I haven't been able to figure out a consistent way to scale by texture dimensions, since one way will work for some
     models but not others and vice versa. Texture formats and other flags don't seem to have an effect. It could also
-    have to do with aspect ratio, rather than width and height, since the very few eye textures that do look right happen to be squares
-Investigate webgl texture error in jb10 (probably a mismatched texture header?)
+    have to do with aspect ratio, rather than width and height, since the very few eye textures that do look right happen to be squares.
+    Also, some models will have random polygons seemingly with the wrong texture, however this is because back-face culling is needed for those parts
+    and therefore has nothing to do with the UV scaling issue
+Investigate webgl texture error in jb10 (possibly a mismatched texture header? It's an unfinished room, so that's may be just how it actually is)
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
 Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
     Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup (although some still happen)
@@ -312,10 +318,11 @@ Redo the pipeline of OLO object model names to actual model files (since their l
 Figure out why the shop moogle has its balloon upside down and aurora's crown is sideways (???)
     b01ls00 is also very messed up, has extra geometry not attached to skeleton
     g27dc00 has stray geometry as well
-Filter out objects that are meant for collision but still have visible geometry, usually in boss rooms
-Check for texture scorlling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
+Filter out objects that are meant for collision but still have visible geometry, usually the invisible walls in boss rooms
+Check for texture scrolling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
 Have better functions for parsing arc files instead of "parseXFromARC" convention
 Do another pass at animations for gimmicks (most were skipped during the first pass since the parsing still had an issue)
+Solid white geometry in ls08?
 
 Nice to have
 
@@ -399,7 +406,7 @@ const sceneDescs = [
     new Room("SB12", "Audience Chamber (Boss)"),
     new Room("SB14", "Hallway"),
     new Room("SB16", "Tower Room"),
-    new Room("SB15", "Aurora's Chamber (Bed)"), // cutscene maybe? don't remember...
+    new Room("SB15", "Aurora's Chamber (Bed)"), // cutscene?
     new Room("SB18", "Aurora's Chamber (No Bed)"), // has map chest and shop moogle, default?
     "Myseterious Tower", // yt = yensid tower
     new Room("YT02", "Mysterious Tower"),

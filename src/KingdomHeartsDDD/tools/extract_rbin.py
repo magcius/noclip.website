@@ -5,7 +5,7 @@ import ndspy.codeCompression
 base = "../../../data/"
 extract_path = f"{base}KingdomHeartsDDD"
 rbin_path = f"{base}KingdomHeartsDDD_raw/"
-rbins = ["chara_boss", "chara_d_obj", "chara_e_obj", "chara_enemy", "chara_f_obj", "chara_gim", "chara_high", "chara_npc", "chara_pc", "chara_wep", "effect", "event", "game", "item", "map", "menu", "minigame", "mission", "setdata"]
+rbins = ["_grpdef", "chara_boss", "chara_d_obj", "chara_e_obj", "chara_enemy", "chara_f_obj", "chara_gim", "chara_high", "chara_npc", "chara_pc", "chara_wep", "effect", "event", "game", "item", "map", "menu", "minigame", "mission", "setdata"]
 
 # Credit: https://openkh.dev/ddd/file/rbin.html
 # Also requires "ndspy" library for BLZ decompression
@@ -46,7 +46,7 @@ for rbin_name in rbins:
                     subfile_size = size_flag & ((1 << 31) - 1)
                     subfile_name = read_zero_term_string(rbin, entry_offset + 4 + name_offset)
 
-                    # print(f"{i}: {subfile_name}, {is_compressed}, {subfile_size}")
+                    print(f"{i}: {subfile_name}, {is_compressed}, {subfile_size}")
 
                     output_path = os.path.join(output_dir, subfile_name)
 

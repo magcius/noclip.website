@@ -1,10 +1,12 @@
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
-import { GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropRoomConfig } from "./config/room";
 import { DreamDropShader } from "./shader";
 import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxPVD, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { DREAMDROP_SKYBOX_CENTER } from "./config/data";
+import { vec3 } from "gl-matrix";
 
 export class DreamDropRoomRenderer extends LuxRoomRenderer {
     constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], pvd: LuxPVD, config: DreamDropRoomConfig | undefined) {
@@ -38,27 +40,28 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
             }
         }
         this.parts[i] = new ModelRenderer(cache, model.name, model, materials, modelTXAs);
-        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, info.position), setId: -1 }];
+        const pos = DREAMDROP_SKYBOX_CENTER.includes(model.name) ? vec3.fromValues(0, 0, 0) : info.position;
+        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, pos), setId: -1 }];
     }
 
     protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
-        const i = this.objects.findIndex(r => r.name === instance.name);
+        const index = this.objects.findIndex(r => r.name === instance.name);
         const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId };
-        if (i > -1) {
-            this.objects[i].instances.push(modelInstance);
+        if (index > -1) {
+            this.objects[index].instances.push(modelInstance);
         } else {
             const pmo = model as DreamDropPMO;
             const materials: LuxMaterialInstance[] = Array(pmo.materials.length);
             const modelTXAs: LuxTXA[] = [];
-            for (let k = 0; k < pmo.materials.length; k++) {
-                if (!pmo.materials[k]) {
+            for (let i = 0; i < pmo.materials.length; i++) {
+                if (!pmo.materials[i]) {
                     continue;
                 }
-                const t = textures.filter(texture => texture.name.startsWith(pmo.materials[k].textureName));
+                const t = textures.filter(texture => texture.name.startsWith(pmo.materials[i].textureName));
                 if (t.length > 0) {
-                    materials[k] = new LuxMaterialInstance(pmo.materials[k], t, gfxSampler);
+                    materials[i] = new LuxMaterialInstance(pmo.materials[i], t, gfxSampler);
                     for (const txa of txas) {
-                        if (txa.textureName === pmo.materials[k].textureName) {
+                        if (txa.textureName === pmo.materials[i].textureName) {
                             modelTXAs.push(txa);
                             break;
                         }
@@ -89,7 +92,6 @@ class ShapeRenderer extends LuxShapeRenderer {
 
     protected override setMegaStateFlags(shape: LuxShape): void {
         this.megaStateFlags.polygonOffset = (shape.attribute & LuxShapeAttribute.DROP_SHADOW) === 0;
-        this.megaStateFlags.cullMode = GfxCullMode.None; // different than bbs, unsure what it is in ddd, so default to none
     }
 
     protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
