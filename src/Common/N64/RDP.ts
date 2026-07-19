@@ -1,5 +1,5 @@
 
-// Common utilities for the N64 Reality Display Processor (RDP).
+// Common utilities for the N64 Reality Display Processor (RSP).
 
 import { assert, hexzero } from "../../util.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
@@ -421,28 +421,18 @@ export function getTileHeight(tile: TileState): number {
         return coordHeight;
 }
 
-export function getMaskedCMS(tile: TileState): number {
+export function getMaskedCMS(tile: TileState): TexCM {
     const coordWidth = ((tile.lrs - tile.uls) >>> 2) + 1;
     if (tile.masks !== 0 && (1 << tile.masks) < coordWidth)
         return tile.cms & 1;
     return tile.cms;
 }
 
-export function getMaskedCMT(tile: TileState): number {
+export function getMaskedCMT(tile: TileState): TexCM {
     const coordHeight = ((tile.lrt - tile.ult) >>> 2) + 1;
     if (tile.maskt !== 0 && (1 << tile.maskt) < coordHeight)
         return tile.cmt & 1;
     return tile.cmt;
-}
-
-export function texturePadWidth(siz: ImageSize, line: number, width: number): number {
-    if (line === 0)
-        return 0;
-    const padTexels = (line << (4 - siz)) - width;
-    if (siz === ImageSize.G_IM_SIZ_4b)
-        return padTexels >>> 1;
-    else
-        return padTexels << (siz - 1);
 }
 
 export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): Texture {
@@ -473,6 +463,7 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
         throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
     }
     const out = new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
+    out.name = `${out.name} / ${ImageFormat[tile.fmt]} / ${ImageSize[tile.siz]}`;
 
     return out;
 }
@@ -661,8 +652,7 @@ export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDes
         let blendSrcFactor: GfxBlendFactor;
         if (srcFactor === BlendParam_A.G_BL_0) {
             blendSrcFactor = GfxBlendFactor.Zero;
-        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
-            !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
+        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) && !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
             // this is technically "coverage", admitting blending on edges
             blendSrcFactor = GfxBlendFactor.One;
         } else {
@@ -684,22 +674,18 @@ export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDes
         });
     }
 
-    if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
-        const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
-        out.depthCompare = reverseDepthForCompareMode(translateZMode(zmode));
-    }
+    const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
 
-    const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+    if (renderMode & (1 << OtherModeL_Layout.Z_CMP))
+        out.depthCompare = reverseDepthForCompareMode(translateZMode(zmode));
     if (zmode === ZMode.ZMODE_DEC)
         out.polygonOffset = true;
 
     out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
-
     return out;
 }
 
 export function readMatrixRDP(dst: mat4, view: DataView, offs: number): number {
-    // The RDP matrix format is a bit bizarre. High values are separate from low ones.
     dst[0]  = ((view.getInt16(offs + 0x00) << 16) | (view.getUint16(offs + 0x20))) / 0x10000;
     dst[1]  = ((view.getInt16(offs + 0x02) << 16) | (view.getUint16(offs + 0x22))) / 0x10000;
     dst[2]  = ((view.getInt16(offs + 0x04) << 16) | (view.getUint16(offs + 0x24))) / 0x10000;
