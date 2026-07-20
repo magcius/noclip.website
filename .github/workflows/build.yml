@@ -19,7 +19,7 @@ jobs:
       uses: pnpm/action-setup@v6
 
     - name: Cache Node dependencies
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       with:
         cache: pnpm
 
