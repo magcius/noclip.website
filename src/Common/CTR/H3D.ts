@@ -1,7 +1,6 @@
-
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readString, assert } from "../../util.js";
-import { computeTextureByteSize, decodeTexture, TextureFormat } from "../../OcarinaOfTime3D/pica_texture.js";
+import { computeTextureByteSize, decodeTexture, TextureFormat } from "./pica_texture.js";
 import { mat4 } from "gl-matrix";
 import { GfxTextureDimension } from "../../gfx/platform/GfxPlatform.js";
 

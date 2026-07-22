@@ -1,6 +1,5 @@
-
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { clamp } from "../MathHelpers.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { clamp } from "../../MathHelpers.js";
 
 export enum TextureFormat {
     RGB8,
