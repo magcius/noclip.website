@@ -1,6 +1,5 @@
 
 import { assert } from "../../util.js";
-import { texturePadWidth } from "./RDP.js";
 
 export enum ImageFormat {
     G_IM_FMT_RGBA = 0x00,
@@ -77,6 +76,16 @@ function copyTLUTColor(dst: Uint8Array, dstOffs: number, colorTable: Uint8Array,
     dst[dstOffs + 1] = colorTable[(i * 4) + 1];
     dst[dstOffs + 2] = colorTable[(i * 4) + 2];
     dst[dstOffs + 3] = colorTable[(i * 4) + 3];
+}
+
+function texturePadWidth(siz: ImageSize, line: number, width: number): number {
+    if (line === 0)
+        return 0;
+    const padTexels = (line << (4 - siz)) - width;
+    if (siz === ImageSize.G_IM_SIZ_4b)
+        return padTexels >>> 1;
+    else
+        return padTexels << (siz - 1);
 }
 
 export function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {

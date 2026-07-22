@@ -63,6 +63,7 @@ import * as Scenes_BanjoTooie from './BanjoTooie/scenes.js';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater.js';
 import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource.js';
 import * as Scenes_CounterStrikeGO from './SourceEngine/Scenes_CounterStrikeGO.js';
+import * as Scenes_DayOfDefeatSource from './SourceEngine/Scenes_DayOfDefeatSource.js';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2.js';
 import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM.js';
 import * as Scenes_HalfLife2LostCoast from './SourceEngine/Scenes_HalfLife2LostCoast.js';
@@ -90,6 +91,7 @@ import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_CounterStrike from './GoldSrc/Scenes_CounterStrike.js';
 import * as Scenes_TeamFortressClassic from './GoldSrc/Scenes_TeamFortressClassic.js';
+import * as Scenes_DayOfDefeat from './GoldSrc/Scenes_DayOfDefeat.js';
 import * as Scenes_Quake from './Quake/Scenes_Quake.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
 import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
@@ -113,6 +115,7 @@ import * as Scenes_CasperSD from './CasperSpiritDimensions/scenes.js';
 import * as Scenes_RatchetAndClank from './RatchetAndClank/scenes.js';
 import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
 import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
+import * as Scenes_NarutoGNT4 from './NarutoGNT4/scenes.js'
 import * as Scenes_KingdomHeartsDDD from './KingdomHeartsDDD/scenes.js';
 import * as Scenes_KingdomHeartsBBS from './KingdomHeartsDDD/scenes_bbs.js';
 
@@ -208,6 +211,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Fez.sceneGroup,
     Scenes_RagnarokOnline.sceneGroup,
     Scenes_CounterStrikeSource.sceneGroup,
+    Scenes_DayOfDefeatSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
     Scenes_HalfLife2DM.sceneGroup,
     Scenes_Halo1.sceneGroup,
@@ -235,6 +239,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_CasperSD.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
+    Scenes_NarutoGNT4.sceneGroup,
     Scenes_PaperMarioTheOrigamiKing.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SpongebobRevengeOfTheFlyingDutchman.sceneGroup,
@@ -259,6 +264,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_HalfLife.sceneGroup,
     Scenes_CounterStrike.sceneGroup,
     Scenes_TeamFortressClassic.sceneGroup,
+    Scenes_DayOfDefeat.sceneGroup,
     Scenes_Quake.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,

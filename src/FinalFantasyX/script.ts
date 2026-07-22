@@ -1278,9 +1278,12 @@ export class LevelObjectHolder {
                 continue;
             }
             const newY = triHeight(pos, triScratch);
+            // find the highest triangle below the start point, or if there aren't any, the lowest above
+            // at least one case of something positioned < .1 below the ground (chest w04 in submerged ruins),
+            // could be my plane height calculation is slightly different
             if (groundTri < 0 ||
                 (newY < pos[1] && newY > startY) || // above current and below start
-                (newY > pos[1] && pos[1] < startY) // below current, and current is above start
+                (newY > pos[1] && pos[1] < startY - 1) // below current, and current is (meaningfully) above start
             ) {
                 groundTri = i;
                 pos[1] = newY;
