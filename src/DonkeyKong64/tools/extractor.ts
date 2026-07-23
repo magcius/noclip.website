@@ -34,18 +34,71 @@ function main() {
     const romData = fetchDataSync(`${pathBaseIn}/rom.z64`);
     const view = romData.createDataView();
 
-    // USA pointer table locations
+    // USA ROM pointer-table directory. The first 32 words are table offsets,
+    // relative to PointerTableOffset, and the next 32 words are slot counts.
+    // Some sparse tables pad their final slots with the next table's start;
+    // extractCompressedTable stops at that sentinel.
+    //
+    // Extraction inventory (names match `pointertable_e` in the DK64 decomp):
+    // 00 MIDI: TODO: not extracted; audio playback is not implemented.
+    // 01 map geometry: extracted as MapData; TODO: interpret every map-header
+    //    section, scene-node variant, and runtime material handler.
+    // 02 map walls: TODO: not extracted or interpreted (wall collision).
+    // 03 map floors: TODO: not extracted or interpreted (floor collision).
+    // 04 prop geometry: extracted as PropGeometryData; TODO: interpret every
+    //    prop header/display-list variant, animation, and LOD path.
+    // 05 actor geometry: TODO: not extracted or rendered.
+    // 06 unused: TODO: verify that no retail map references this table.
+    // 07 uncompressed textures: partially extracted as AnimTexData; TODO:
+    //    archive the complete table instead of only known map/sprite frames.
+    // 08 cutscenes: TODO: not extracted or interpreted.
+    // 09 setup: extracted raw as SetupData; model2 props are partially
+    //    interpreted; TODO: identify the 0x24-byte middle records and render
+    //    actor/model1 entries and all remaining model2 behaviors.
+    // 10 instance scripts: extracted raw as ScriptData; TODO: interpret the
+    //    complete condition/action language and stateful object behavior.
+    // 11 animations: TODO: not extracted or interpreted.
+    // 12 text: TODO: not extracted or interpreted.
+    // 13 animation code: TODO: not extracted or interpreted.
+    // 14 HUD textures: TODO: not extracted; not map geometry.
+    // 15 paths: TODO: not extracted or interpreted.
+    // 16 spawners/fences: TODO: not extracted or rendered.
+    // 17 DKTV: TODO: not extracted; not map geometry.
+    // 18 triggers/loading zones: TODO: not extracted or visualized.
+    // 19 unknown: TODO: identify, inventory references, and extract if needed.
+    // 20 unknown per-map data: TODO: identify, extract, and interpret.
+    // 21 autowalks: TODO: not extracted or visualized.
+    // 22 ambient critters: extracted raw as CritterData; TODO: interpret all
+    //    region fields and render the critters.
+    // 23 exits: TODO: not extracted or visualized.
+    // 24 race checkpoints: TODO: not extracted or visualized.
+    // 25 compressed geometry textures: partially extracted as TexData; TODO:
+    //    archive all entries rather than only the range reached by sprites.
+    // 26 uncompressed sizes: TODO: not extracted; retain when generic pointer
+    //    table extraction needs the game's authoritative decompressed sizes.
+    // 27 unused: TODO: verify that no retail map/runtime path uses it.
+    // 28 unused: TODO: verify that no retail map/runtime path uses it.
+    // 29 unused: TODO: verify that no retail map/runtime path uses it.
+    // 30 unused: TODO: verify that no retail map/runtime path uses it.
+    // 31 unused: TODO: verify that no retail map/runtime path uses it.
+    //
+    // Data outside the pointer tables which is currently archived:
+    // SpriteData, CustomScriptFunctionData, and EnvironmentParticleData come
+    // from the global overlay. TODO: inventory other map-rendering tables in
+    // overlays as they are discovered instead of leaving implicit constants.
+    // TODO: locate this directory by ROM revision/signature; all addresses and
+    // overlay offsets below currently describe only the USA ROM.
     const PointerTableOffset = 0x101C50;
-    const MapTableOffset = 0x15232C;
-    const WallTableOffset = 0x43CBEC;
-    const FloorTableOffset = 0x63CA6C;
-    const SetupTableOffset = 0xD0E86C;
-    const StructTableOffset = 0x82A06C;
-    const ActorModelTableOffset = 0x8D3018;
-    const TextureTableOffset = 0x118B638;
-    const UncompressedTextureTableOffset = 0x981018;
-    const ScriptTableOffset = 0xD3B56C;
-    const CritterTableOffset = 0x1188BDC;
+    const PointerTableCountOffset = PointerTableOffset + 0x80;
+    const PointerTable = {
+        MapGeometry: 1,
+        PropGeometry: 4,
+        TexturesUncompressed: 7,
+        Setup: 9,
+        Scripts: 10,
+        Critters: 22,
+        TexturesGeometry: 25,
+    } as const;
     const GlobalASMCodeROMOffset = 0x113F0;
     const GlobalASMDataROMOffset = 0xC29D4;
     const GlobalASMDataCompressedSize = 0x949C;
@@ -57,24 +110,42 @@ function main() {
     const EnvironmentParticleTableOffset = 0x14D8A0;
     const EnvironmentParticleCount = 13;
 
-    function extractMapTable(tableOffset: number, fileCount = 0xD8): (ArrayBufferSlice | number)[] {
+    function getTableOffset(table: number): number {
+        return PointerTableOffset + view.getUint32(PointerTableOffset + table * 4);
+    }
+
+    function getTableCount(table: number): number {
+        return view.getUint32(PointerTableCountOffset + table * 4);
+    }
+
+    function extractCompressedTable(table: number): (ArrayBufferSlice | number)[] {
+        const tableOffset = getTableOffset(table);
+        const fileCount = getTableCount(table);
         const files: (ArrayBufferSlice | number)[] = [];
+        const firstFileForPointer = new Map<number, number>();
         for (let i = 0; i < fileCount; i++) {
             const pointer = view.getUint32(tableOffset + i * 4);
+            const nextTableStart = table < 31 ? view.getUint32(PointerTableOffset + (table + 1) * 4) : 0;
+            if (!(pointer & 0x80000000) && nextTableStart !== 0 && pointer >= nextTableStart)
+                break;
             const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
             if (!!(pointer & 0x80000000))
                 files[i] = view.getUint16(offs);
-            else
+            else if (firstFileForPointer.has(pointer))
+                files[i] = firstFileForPointer.get(pointer)!;
+            else {
+                firstFileForPointer.set(pointer, i);
                 files[i] = cutZlibBuffer(romData, offs);
+            }
         }
         return files;
     }
 
-    // Map data table.
-    const MapData = extractMapTable(MapTableOffset);
-    const SetupData = extractMapTable(SetupTableOffset);
-    const ScriptData = extractMapTable(ScriptTableOffset);
-    const CritterData = extractMapTable(CritterTableOffset, 0xB1);
+    const MapData = extractCompressedTable(PointerTable.MapGeometry);
+    const PropGeometryData = extractCompressedTable(PointerTable.PropGeometry);
+    const SetupData = extractCompressedTable(PointerTable.Setup);
+    const ScriptData = extractCompressedTable(PointerTable.Scripts);
+    const CritterData = extractCompressedTable(PointerTable.Critters);
 
     // SpriteData is stored in the compressed global overlay. This table is
     // the game's authoritative mapping from sprite IDs to texture frames,
@@ -134,7 +205,7 @@ function main() {
     const textureCount = Math.max(...SpriteData
         .filter((sprite) => sprite.table === 1)
         .flatMap((sprite) => sprite.images)) + 1;
-    let texTableIdx = TextureTableOffset;
+    let texTableIdx = getTableOffset(PointerTable.TexturesGeometry);
     for (let i = 0; i < textureCount; i++) {
         const texDataPtr = view.getUint32(texTableIdx + 0x00);
 
@@ -151,7 +222,7 @@ function main() {
     const uncompressedTextureCount = Math.max(0x3E1, Math.max(...SpriteData
         .filter((sprite) => sprite.table === 0)
         .flatMap((sprite) => sprite.images)) + 1);
-    let animTexTableIdx = UncompressedTextureTableOffset;
+    let animTexTableIdx = getTableOffset(PointerTable.TexturesUncompressed);
     for (let i = 0; i < uncompressedTextureCount; i++) {
         const offs = view.getUint32(animTexTableIdx + 0x00) + PointerTableOffset;
         const nextOffs = view.getUint32(animTexTableIdx + 0x04) + PointerTableOffset;
@@ -161,6 +232,7 @@ function main() {
 
     const crg1 = {
         MapData,
+        PropGeometryData,
         SetupData,
         ScriptData,
         CritterData,

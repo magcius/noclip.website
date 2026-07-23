@@ -1176,7 +1176,7 @@ interface SetupProp {
     type: number;
     position: vec3;
     scale: number;
-    rotationY: number;
+    rotation: vec3;
 }
 
 interface ScriptCommand {
@@ -1210,7 +1210,11 @@ function parseSetupProps(data: ArrayBufferSlice): SetupProp[] {
                 view.getFloat32(offs + 0x08, false),
             ),
             scale: view.getFloat32(offs + 0x0C, false),
-            rotationY: view.getFloat32(offs + 0x1C, false),
+            rotation: vec3.fromValues(
+                view.getFloat32(offs + 0x18, false),
+                view.getFloat32(offs + 0x1C, false),
+                view.getFloat32(offs + 0x20, false),
+            ),
         });
     }
     return props;
@@ -1258,6 +1262,7 @@ function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
 
 class ROMData {
     public MapData: (ArrayBufferSlice | number)[];
+    public PropGeometryData: (ArrayBufferSlice | number)[];
     public SetupData: (ArrayBufferSlice | number)[];
     public ScriptData: (ArrayBufferSlice | number)[];
     public CritterData: (ArrayBufferSlice | number)[];
@@ -1271,6 +1276,7 @@ class ROMData {
         const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
 
         this.MapData = obj.MapData;
+        this.PropGeometryData = obj.PropGeometryData ?? [];
         this.SetupData = obj.SetupData ?? [];
         this.ScriptData = obj.ScriptData ?? [];
         this.CritterData = obj.CritterData ?? [];
@@ -1299,12 +1305,133 @@ class ROMData {
         return this.loadMapTableEntry(this.SetupData, mapID);
     }
 
+    public loadPropGeometry(propType: number): ArrayBufferSlice {
+        return this.loadMapTableEntry(this.PropGeometryData, propType);
+    }
+
     public loadScripts(mapID: number): ArrayBufferSlice {
         return this.loadMapTableEntry(this.ScriptData, mapID);
     }
 
     public destroy(device: GfxDevice): void {
     }
+}
+
+function findHighDetailPropDisplayList(view: DataView, mainDisplayListStart: number): number {
+    let half1 = -1;
+    for (let offs = mainDisplayListStart; offs < Math.min(view.byteLength, mainDisplayListStart + 0x80); offs += 8) {
+        const w0 = view.getUint32(offs, false);
+        const w1 = view.getUint32(offs + 4, false);
+        const opcode = w0 >>> 24;
+        if (opcode === 0xE1)
+            half1 = w1;
+        else if (opcode === 0x04 && (half1 >>> 24) === 0x0A)
+            return half1 & 0x00FFFFFF;
+        else if (opcode === 0xDF)
+            break;
+    }
+    return 0;
+}
+
+function propDisplayListUsesMatrices(view: DataView, start: number, end: number): boolean {
+    for (let offs = start; offs + 8 <= Math.min(view.byteLength, end); offs += 8) {
+        if (view.getUint8(offs) === 0xDA)
+            return true;
+    }
+    return false;
+}
+
+function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[]): void {
+    if (props.length === 0 || romData.PropGeometryData.length === 0)
+        return;
+
+    const propsByType = new globalThis.Map<number, SetupProp[]>();
+    for (const prop of props) {
+        if (!propsByType.has(prop.type))
+            propsByType.set(prop.type, []);
+        propsByType.get(prop.type)!.push(prop);
+    }
+
+    for (const [propType, instances] of propsByType) {
+        // func_global_asm_80636FFC explicitly returns without submitting
+        // these object types; they are handled outside the static model path.
+        if (propType === 0x0000 || propType === 0x0241)
+            continue;
+        const geometry = romData.loadPropGeometry(propType);
+        const view = geometry.createDataView();
+        const assetFamily = geometry.createTypedArray(Uint8Array, 0x0C, 0x10);
+        const assetFamilyEnd = assetFamily.indexOf(0);
+        const assetFamilyName = String.fromCharCode(...assetFamily.subarray(0, assetFamilyEnd >= 0 ? assetFamilyEnd : assetFamily.length));
+        // Keep this decoded for diagnostics and future family-specific
+        // behavior, but do not use it to restrict generic prop rendering.
+        void assetFamilyName;
+        // Header layout 1 stores an F3DEX2 display-list range followed by its
+        // segment-8 vertices. Layout 2 is runtime-generated/animated model
+        // data and cannot be interpreted as the same structure.
+        // TODO: parse and render model2 header layout 2.
+        if (view.getUint8(0x1C) !== 1)
+            continue;
+
+        const mainDisplayListStart = view.getUint32(0x40, false);
+        const secondaryDisplayListStart = view.getUint32(0x44, false);
+        const vertexStart = view.getUint32(0x48, false);
+        // Some props have a hierarchy driven by segment-9 matrices generated
+        // at runtime. Ignoring G_MTX collapses those parts into the wrong
+        // transforms, so leave them out until the hierarchy is decoded.
+        // TODO: parse the prop node/matrix data and implement G_MTX.
+        if (propDisplayListUsesMatrices(view, mainDisplayListStart, secondaryDisplayListStart))
+            continue;
+        const segmentBuffers: ArrayBufferSlice[] = [];
+        segmentBuffers[0x08] = geometry.slice(vertexStart);
+        segmentBuffers[0x0A] = geometry.slice(mainDisplayListStart);
+        // The game submits the secondary range by physical address while it
+        // retains segment 0x0A for branches into the primary range. Give the
+        // secondary entry point an otherwise unused local segment.
+        segmentBuffers[0x0F] = geometry;
+
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput);
+        initDL(state, true);
+        // func_global_asm_80636FFC installs this inherited state immediately
+        // before submitting both prop display lists. Tree materials use
+        // primitive color but do not set it inside their own lists.
+        state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
+        // LOD wrappers select their first (highest-detail) target with
+        // G_RDPHALF_1 + G_BRANCH_Z. Direct display lists simply begin at zero.
+        // TODO: implement G_BRANCH_Z and submit the wrapper itself so props
+        // can switch LOD based on the projected Z value.
+        const displayListOffset = findHighDetailPropDisplayList(view, mainDisplayListStart);
+        runDL_F3DEX2(state, 0x0A000000 | displayListOffset);
+        runDL_F3DEX2(state, 0x0F000000 | secondaryDisplayListStart);
+        const output = state.finish();
+        if (output === null)
+            continue;
+
+        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
+        const meshData = new MeshData(device, cache, mesh);
+        sceneRenderer.meshDatas.push(meshData);
+        for (const prop of instances) {
+            const renderer = new RootMeshRenderer(device, cache, meshData);
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
+                prop.position[0] * 3,
+                prop.position[1] * 3,
+                prop.position[2] * 3,
+            ]);
+            mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[0] * Math.PI / 180);
+            mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[1] * Math.PI / 180);
+            mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[2] * Math.PI / 180);
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [
+                prop.scale * 3,
+                prop.scale * 3,
+                prop.scale * 3,
+            ]);
+            sceneRenderer.meshRenderers.push(renderer);
+        }
+    }
+
+    // B0's static tree shadows belong to the map backdrop/materials. The
+    // static-prop renderer (func_global_asm_80636FFC) submits only these two
+    // model ranges, and the tree's secondary range contains no triangles; it
+    // does not emit a separate shadow decal or sprite.
 }
 
 interface SpriteParticleEvent {
@@ -1621,82 +1748,12 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
         }
 
+        const setupProps = parseSetupProps(romData.loadSetup(sceneID));
+        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
         //     sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
-
-        // Load setup data, ported from ScriptHawk's dumpSetup() function
-        /*
-        const model1SetupSize = 0x38;
-        const model1Setup = {
-            x_pos: 0x00, // Float
-            y_pos: 0x04, // Float
-            z_pos: 0x08, // Float
-            scale: 0x0C, // Float
-            rotation: 0x30, // s16_be / 0x1000 * 360 for degrees
-            behavior: 0x32, // Short, see ScriptHawk's obj_model1.actor_types table
-        };
-        
-        const model2SetupSize = 0x30;
-        const model2Setup = {
-            x_pos: 0x00, // Float
-            y_pos: 0x04, // Float
-            z_pos: 0x08, // Float
-            scale: 0x0C, // Float
-            rotation: 0x1C, // Float
-            behavior: 0x28, // Short, see ScriptHawk's obj_model2.object_types table
-        };
-
-        const setup = romHandler.loadSetup(parseInt(this.id, 16));
-        const setupView = setup.createDataView();
-        
-        console.log("Dumping setup for Structs:");
-        let model2Count = setupView.getUint32(0, false);
-        let model2Base = 0x04;
-        console.log("Count: " + model2Count);
-    
-        for (let i = 0; i < model2Count - 1; i++) {
-            let entryBase = model2Base + i * model2SetupSize;
-            let xPos = setupView.getFloat32(entryBase + model2Setup.x_pos, false);
-            let yPos = setupView.getFloat32(entryBase + model2Setup.y_pos, false);
-            let zPos = setupView.getFloat32(entryBase + model2Setup.z_pos, false);
-            let scale = setupView.getFloat32(entryBase + model2Setup.scale, false);
-            let rotation = setupView.getFloat32(entryBase + model2Setup.rotation, false);
-            let behavior = setupView.getUint16(entryBase + model2Setup.behavior, false);
-            // TODO: Actually render model
-            console.log("Struct: " + entryBase.toString(16) + ": " + behavior + " (model: " + (romHandler.StructTableView.getUint32(behavior * 4, false) & 0x7FFFFFFF).toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
-            //let modelFile = romHandler.getStructModel(behavior);
-        }
-    
-        // TODO: What to heck is this data used for?
-        // It's a bunch of floats that get loaded in to struct behaviors as far as I can tell
-        let mysteryModelSize = 0x24;
-        let mysteryModelBase = model2Base + model2Count * model2SetupSize;
-        let mysteryModelCount = setupView.getUint32(mysteryModelBase, false);
-        console.log("Dumping setup for 'mystery model':");
-        console.log("Base: " + mysteryModelBase.toString(16));
-        console.log("Count: " + mysteryModelCount);
-
-        console.log("Dumping setup for Actors:");
-        let model1Base = mysteryModelBase + 0x04 + mysteryModelCount * mysteryModelSize;
-        let model1Count = setupView.getUint32(model1Base, false);
-        console.log("Base: " + model1Base.toString(16));
-        console.log("Count: " + model1Count);
-    
-        for (let i = 0; i < model1Count - 1; i++) {
-            let entryBase = model1Base + 0x04 + i * model1SetupSize;
-            let xPos = setupView.getFloat32(entryBase + model1Setup.x_pos, false);
-            let yPos = setupView.getFloat32(entryBase + model1Setup.y_pos, false);
-            let zPos = setupView.getFloat32(entryBase + model1Setup.z_pos, false);
-            let scale = setupView.getFloat32(entryBase + model1Setup.scale, false);
-            let rotation = setupView.getInt16(entryBase + model1Setup.rotation) / 4096.0 * 360.0;
-            let behavior = (setupView.getUint16(entryBase + model1Setup.behavior, false) + 0x10) % 0x10000;
-            // TODO: Actually render model
-            //console.log("Actor: " + entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
-            //let modelFile = romHandler.getActorModel(behavior);
-        }
-        */
 
         return sceneRenderer;
     }

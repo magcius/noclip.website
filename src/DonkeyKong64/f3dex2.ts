@@ -475,6 +475,10 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
 
             case F3DEX2_GBI.G_DL: {
                 runDL_F3DEX2(state, w1);
+                // G_DL_PUSH (0) returns here and resumes this list, while
+                // G_DL_NOPUSH (1) is a branch and never resumes it.
+                if ((w0 & 0x00010000) !== 0)
+                    return;
             } break;
 
             case F3DEX2_GBI.G_RDPSETOTHERMODE: {

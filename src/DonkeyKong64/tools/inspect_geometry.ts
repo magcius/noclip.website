@@ -3,6 +3,7 @@ import { gunzipSync, inflateRawSync } from 'zlib';
 
 const pointerTableOffset = 0x101C50;
 const mapTableOffset = 0x15232C;
+const propGeometryTableOffset = 0x82A06C;
 const setupTableOffset = 0xD0E86C;
 const scriptTableOffset = 0xD3B56C;
 const spawnerTableOffset = 0x1170D44;
@@ -70,7 +71,7 @@ const opcodeNames = new Map<number, string>([
     [0xFD, 'SETTIMG'],
 ]);
 
-function disassembleDisplayList(map: Buffer, dlStart: number, relativeOffset: number): void {
+function disassembleDisplayList(map: Buffer, dlStart: number, relativeOffset: number, vertexStart = map.readUInt32BE(0x38), vertexSegment = 0x06): void {
     console.log(`\nDisplay list ${hex(relativeOffset)}:`);
     for (let offs = dlStart + relativeOffset; offs + 8 <= map.length; offs += 8) {
         const w0 = map.readUInt32BE(offs);
@@ -80,9 +81,9 @@ function disassembleDisplayList(map: Buffer, dlStart: number, relativeOffset: nu
         let annotation = '';
         if (opcode === 0x00)
             annotation = ` section=${hex(w1)}`;
-        else if (opcode === 0x01 && (w1 >>> 24) === 0x06) {
+        else if (opcode === 0x01 && (w1 >>> 24) === vertexSegment) {
             const count = (w0 >>> 12) & 0xFF;
-            const vertexOffset = map.readUInt32BE(0x38) + (w1 & 0x00FFFFFF);
+            const vertexOffset = vertexStart + (w1 & 0x00FFFFFF);
             const positions: string[] = [];
             for (let i = 0; i < count; i++) {
                 const vertex = vertexOffset + i * 0x10;
@@ -102,6 +103,35 @@ function disassembleDisplayList(map: Buffer, dlStart: number, relativeOffset: nu
         if (opcode === 0xDF)
             return;
     }
+}
+
+function inspectPropGeometry(prop: Buffer, propType: number, disassemble: boolean): void {
+    const name = prop.subarray(0x0C, 0x20).toString('ascii').split('\0')[0];
+    const mainDisplayListStart = prop.readUInt32BE(0x40);
+    const secondaryDisplayListStart = prop.readUInt32BE(0x44);
+    const vertexStart = prop.readUInt32BE(0x48);
+    console.log(`\nProp geometry ${hex(propType, 4)}, decompressed size ${hex(prop.length)}`);
+    console.log(`name                     ${JSON.stringify(name)}`);
+    console.log(`mainDisplayListStart     ${hex(mainDisplayListStart)}`);
+    console.log(`secondaryDisplayListStart ${hex(secondaryDisplayListStart)}`);
+    console.log(`vertexStart              ${hex(vertexStart)}`);
+    if (!disassemble)
+        return;
+    console.log('Main wrapper (segment 0x0A):');
+    disassembleDisplayList(prop, mainDisplayListStart, 0, vertexStart, 0x08);
+    let half1 = -1;
+    for (let offs = mainDisplayListStart; offs < Math.min(prop.length, mainDisplayListStart + 0x80); offs += 8) {
+        const opcode = prop.readUInt8(offs);
+        if (opcode === 0xE1)
+            half1 = prop.readUInt32BE(offs + 4);
+        else if (opcode === 0x04 && (half1 >>> 24) === 0x0A) {
+            console.log('High-detail branch target:');
+            disassembleDisplayList(prop, mainDisplayListStart, half1 & 0x00FFFFFF, vertexStart, 0x08);
+            break;
+        }
+    }
+    console.log('Secondary display list:');
+    disassembleDisplayList(prop, secondaryDisplayListStart, 0, vertexStart, 0x08);
 }
 
 function inspectMap(map: Buffer, mapID: number): void {
@@ -199,7 +229,8 @@ function inspectSetup(setup: Buffer, mapID: number): void {
             `${i.toString().padStart(3)} @${hex(offs, 4)} `
             + `type=${hex(setup.readUInt16BE(offs + 0x28), 4)} id=${hex(setup.readUInt16BE(offs + 0x2A), 4)} `
             + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
-            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} rotY=${setup.readFloatBE(offs + 0x1C).toFixed(1)}`,
+            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} `
+            + `rot=(${setup.readFloatBE(offs + 0x18).toFixed(1)},${setup.readFloatBE(offs + 0x1C).toFixed(1)},${setup.readFloatBE(offs + 0x20).toFixed(1)})`,
         );
     }
 
@@ -432,7 +463,7 @@ function inspectSprites(rom: Buffer, spriteID: number | null): void {
 function main(): void {
     const args = process.argv.slice(2);
     if (args.length < 1) {
-        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
+        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--setup] [--scripts] [--effects] [--environment-particles] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
         console.error('Example: npm run inspect:DonkeyKong64 -- B0 --dl=9778');
         process.exit(1);
     }
@@ -445,6 +476,11 @@ function main(): void {
     inspectMap(map, mapID);
     if (dlArg !== undefined)
         disassembleDisplayList(map, map.readUInt32BE(0x34), parseNumber(dlArg.slice('--dl='.length)));
+    const propGeometryArg = args.find((arg) => arg.startsWith('--prop-geometry='));
+    if (propGeometryArg !== undefined) {
+        const propType = parseNumber(propGeometryArg.slice('--prop-geometry='.length));
+        inspectPropGeometry(getPointerTableData(rom, propGeometryTableOffset, propType, 'Prop geometry'), propType, args.includes('--prop-dl'));
+    }
     if (args.includes('--effect-points'))
         inspectEffectPoints(map, mapID);
     if (args.includes('--setup'))
