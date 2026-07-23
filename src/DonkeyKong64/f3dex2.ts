@@ -83,7 +83,13 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
-    constructor(public textureBuffers: ArrayBufferSlice[], public segmentBuffers: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, private animatedTextures: AnimatedTexture[] = []) {
+    constructor(
+        public textureBuffers: ArrayBufferSlice[],
+        public segmentBuffers: ArrayBufferSlice[],
+        public sharedOutput: F3DEX.RSPSharedOutput,
+        private animatedTextures: AnimatedTexture[] = [],
+        private indexedTextures: AnimatedTexture[] = [],
+    ) {
     }
 
     public finish(): RSPOutput | null {
@@ -147,11 +153,31 @@ export class RSPState {
 
         if (segment === 0x00) {
             // Load from texture index.
+            const animation = this.indexedTextures.find((entry) => entry.group === cache.addr);
+            if (animation !== undefined) {
+                const oldCacheKey = tile.cacheKey;
+                const textureIndices = animation.frames.map((frame, frameIndex) => {
+                    const segmentBuffers: ArrayBufferSlice[] = [];
+                    segmentBuffers[0x01] = frame;
+                    // Indexed animations use table-7 data but retain the
+                    // segment-zero placeholder ID stored in the display list.
+                    tile.cacheKey = 0x40000000 | ((animation.group & 0xFFFF) << 8) | (frameIndex + 1);
+                    return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, 0, tile, cache.dxt === 0);
+                });
+                tile.cacheKey = oldCacheKey;
+                return {
+                    textureIndex: textureIndices[0],
+                    animationIndices: textureIndices.length > 1 ? textureIndices : [],
+                    frameDuration: animation.frameDuration,
+                    frameOffset: animation.frameOffset ?? 0,
+                };
+            }
+
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x01] = assertExists(this.textureBuffers[cache.addr]);
-    
+
             tile.cacheKey = cache.addr;
-    
+
             let dramPalAddr: number;
             if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
                 const textlut = (this.DP_OtherModeH >>> 14) & 0x03;

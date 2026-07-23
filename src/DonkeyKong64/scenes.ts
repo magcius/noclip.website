@@ -342,7 +342,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1): void {
         if (!this.visible)
             return;
 
@@ -388,7 +388,7 @@ class DrawCallInstance {
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         const primColor = this.drawCall.DP_PrimColor;
-        offs += fillVec4(comb, offs, primColor[0], primColor[1], primColor[2], primColor[3]); // primitive color
+        offs += fillVec4(comb, offs, primColor[0], primColor[1], primColor[2], primColor[3] * primAlphaMultiplier); // primitive color
         const envColor = this.drawCall.DP_EnvColor;
         offs += fillVec4(comb, offs, envColor[0], envColor[1], envColor[2], envColor[3]); // environment color
         renderInstManager.submitRenderInst(renderInst);
@@ -597,9 +597,9 @@ export class MeshData {
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -641,6 +641,7 @@ export class RootMeshRenderer {
     public isSkybox = false;
     public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
     public modelMatrix = mat4.create();
+    public distanceFade: { origin: vec3; startDistance: number; endDistance: number } | null = null;
 
     public objectFlags = 0;
     private rootNodeRenderer: MeshRenderer;
@@ -696,6 +697,21 @@ export class RootMeshRenderer {
         if (!this.visible)
             return;
 
+        let primAlphaMultiplier = 1;
+        if (this.distanceFade !== null) {
+            const camera = viewerInput.camera.worldMatrix;
+            const dx = camera[12] - this.distanceFade.origin[0];
+            const dy = camera[13] - this.distanceFade.origin[1];
+            const dz = camera[14] - this.distanceFade.origin[2];
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance >= this.distanceFade.endDistance)
+                return;
+            if (distance > this.distanceFade.startDistance) {
+                primAlphaMultiplier = (this.distanceFade.endDistance - distance)
+                    / (this.distanceFade.endDistance - this.distanceFade.startDistance);
+            }
+        }
+
         this.geometryData.update(device, viewerInput);
         const renderData = this.geometryData.renderData;
 
@@ -723,7 +739,7 @@ export class RootMeshRenderer {
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier);
 
         renderInstManager.popTemplate();
     }
@@ -1179,6 +1195,60 @@ interface SetupProp {
     rotation: vec3;
 }
 
+interface TerrainTriangle {
+    vertices: [vec3, vec3, vec3];
+    normal: vec3;
+}
+
+interface TerrainSurface {
+    y: number;
+    normal: vec3;
+}
+
+function buildTerrainTriangles(sharedOutput: RSPSharedOutput): TerrainTriangle[] {
+    const triangles: TerrainTriangle[] = [];
+    const indices = sharedOutput.indices;
+    const vertices = sharedOutput.vertices;
+    for (let i = 0; i + 2 < indices.length; i += 3) {
+        const va = vertices[indices[i]];
+        const vb = vertices[indices[i + 1]];
+        const vc = vertices[indices[i + 2]];
+        const a = vec3.fromValues(va.x, va.y, va.z);
+        const b = vec3.fromValues(vb.x, vb.y, vb.z);
+        const c = vec3.fromValues(vc.x, vc.y, vc.z);
+        const ab = vec3.subtract(vec3.create(), b, a);
+        const ac = vec3.subtract(vec3.create(), c, a);
+        const normal = vec3.cross(vec3.create(), ab, ac);
+        if (vec3.squaredLength(normal) < 0.0001 || Math.abs(normal[1]) < 0.0001)
+            continue;
+        vec3.normalize(normal, normal);
+        if (normal[1] < 0)
+            vec3.negate(normal, normal);
+        triangles.push({ vertices: [a, b, c], normal });
+    }
+    return triangles;
+}
+
+function findTerrainSurface(triangles: TerrainTriangle[], x: number, z: number, rayStartY: number): TerrainSurface | null {
+    let result: TerrainSurface | null = null;
+    for (const triangle of triangles) {
+        const [a, b, c] = triangle.vertices;
+        const denominator = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+        if (Math.abs(denominator) < 0.0001)
+            continue;
+        const wa = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / denominator;
+        const wb = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / denominator;
+        const wc = 1 - wa - wb;
+        if (wa < -0.0001 || wb < -0.0001 || wc < -0.0001)
+            continue;
+        const y = wa * a[1] + wb * b[1] + wc * c[1];
+        if (y > rayStartY || (result !== null && y <= result.y))
+            continue;
+        result = { y, normal: triangle.normal };
+    }
+    return result;
+}
+
 interface ScriptCommand {
     opcode: number;
     args: [number, number, number];
@@ -1341,7 +1411,187 @@ function propDisplayListUsesMatrices(view: DataView, start: number, end: number)
     return false;
 }
 
-function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[]): void {
+function createPropDecalVertexBuffer(halfWidth: number, halfHeight: number, textureWidth: number, textureHeight: number): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(4 * 0x10);
+    const view = new DataView(buffer);
+    const positions = [
+        -halfWidth, 0, -halfHeight,
+         halfWidth, 0, -halfHeight,
+         halfWidth, 0,  halfHeight,
+        -halfWidth, 0,  halfHeight,
+    ];
+    const textureCoordinates = [
+        0, 0,
+        textureWidth << 5, 0,
+        textureWidth << 5, textureHeight << 5,
+        0, textureHeight << 5,
+    ];
+    for (let i = 0; i < 4; i++) {
+        const offs = i * 0x10;
+        view.setInt16(offs + 0x00, positions[i * 3]);
+        view.setInt16(offs + 0x02, positions[i * 3 + 1]);
+        view.setInt16(offs + 0x04, positions[i * 3 + 2]);
+        view.setInt16(offs + 0x08, textureCoordinates[i * 2]);
+        view.setInt16(offs + 0x0A, textureCoordinates[i * 2 + 1]);
+        view.setUint8(offs + 0x0C, 0xFF);
+        view.setUint8(offs + 0x0D, 0xFF);
+        view.setUint8(offs + 0x0E, 0xFF);
+        view.setUint8(offs + 0x0F, 0xFF);
+    }
+    return new ArrayBufferSlice(buffer);
+}
+
+function parseModel2IndexedTextures(geometryView: DataView, romData: ROMData): AnimatedTexture[] {
+    // func_global_asm_806349FC registers the target G_SETTIMG IDs from this
+    // descriptor list. func_global_asm_80636EFC then deliberately leaves
+    // those IDs unresolved while loading every other model texture from table
+    // 25; func_global_asm_80639CD0 supplies the selected frames from table 7.
+    const descriptorStart = geometryView.getUint32(0x6C, false);
+    if (descriptorStart + 4 > geometryView.byteLength)
+        return [];
+    const descriptorCount = geometryView.getUint32(descriptorStart, false);
+    const textures: AnimatedTexture[] = [];
+    for (let i = 0; i < descriptorCount; i++) {
+        const offs = descriptorStart + 4 + i * 0x84;
+        if (offs + 0x84 > geometryView.byteLength)
+            break;
+        const targetTextureID = geometryView.getUint32(offs + 0x00, false);
+        const crossfade = geometryView.getUint32(offs + 0x04, false);
+        const frameDuration = geometryView.getUint32(offs + 0x08, false);
+        const frameCount = geometryView.getUint32(offs + 0x0C, false);
+        if (frameCount === 0 || frameCount > 0x1E)
+            continue;
+        const frames: ArrayBufferSlice[] = [];
+        for (let frame = 0; frame < frameCount; frame++) {
+            const textureID = frame === 0
+                ? targetTextureID
+                : geometryView.getUint32(offs + 0x0C + frame * 4, false);
+            const texture = romData.AnimTexData[textureID];
+            if (texture === undefined)
+                break;
+            frames.push(texture);
+        }
+        if (frames.length !== frameCount)
+            continue;
+        // func_global_asm_806349FC initializes playback mode to 1, which
+        // advances these frames automatically. Descriptor +0x04 is instead
+        // unk4A: whether 80639CD0 supplies two adjacent frames for a blend.
+        // TODO: interpolate adjacent frames for crossfade-enabled descriptors.
+        void crossfade;
+        textures.push({
+            segment: 0,
+            group: targetTextureID,
+            frameDuration,
+            frames,
+        });
+    }
+    return textures;
+}
+
+function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, geometryView: DataView, instances: SetupProp[], terrainTriangles: TerrainTriangle[]): void {
+    const textureID = geometryView.getUint16(0x28, false);
+    if (textureID === 0xFFFF)
+        return;
+
+    const halfWidth = geometryView.getInt16(0x2E, false);
+    const halfHeight = geometryView.getInt16(0x30, false);
+    const textureWidth = geometryView.getUint8(0x32) || 0x100;
+    const textureHeight = geometryView.getUint8(0x33) || 0x100;
+    const format = geometryView.getUint8(0x34) & 0x07;
+    const size = geometryView.getUint8(0x35);
+    const alpha = geometryView.getUint8(0x38);
+    const fadeStartDistance = geometryView.getUint8(0x36) * 10 * 3;
+    const fadeEndDistance = geometryView.getUint8(0x37) * 10 * 3;
+    if (halfWidth <= 0 || halfHeight <= 0 || size > ImageSize.G_IM_SIZ_32b || romData.TexData[textureID] === undefined)
+        return;
+
+    const bitsPerPixel = 4 << size;
+    const loadCount = Math.min(0x07FF, Math.ceil(textureWidth * textureHeight * bitsPerPixel / 16) - 1);
+    const line = Math.max(1, Math.ceil(textureWidth * bitsPerPixel / 64));
+    const dxt = Math.max(1, Math.ceil(0x0800 / line));
+    const maskS = Math.ceil(Math.log2(textureWidth));
+    const maskT = Math.ceil(Math.log2(textureHeight));
+    const segmentBuffers: ArrayBufferSlice[] = [];
+    segmentBuffers[0x08] = createPropDecalVertexBuffer(halfWidth, halfHeight, textureWidth, textureHeight);
+    const decalTexture: AnimatedTexture[] = [{
+        segment: 0x0E,
+        group: textureID,
+        frameDuration: 0,
+        frames: [romData.TexData[textureID]],
+    }];
+    const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, decalTexture);
+    initDL(state, false);
+    state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    state.gSPClearGeometryMode(0xFFFFFFFF);
+    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+    state.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+    state.gDPSetOtherModeL(0, 29, 0x00504DD8);
+    state.gDPSetCombine(0x00119623, 0xFF2FFFFF);
+    state.gSPSetPrimColor(0, 0x00, 0x00, 0x00, alpha);
+    const loadSize = size === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
+    state.gDPSetTextureImage(format, loadSize, 1, 0x0E000000);
+    state.gDPSetTile(format, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
+    state.gDPLoadBlock(7, 0, 0, loadCount, dxt);
+    state.gDPSetTile(format, size, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
+    state.gDPSetTileSize(0, 0, 0, (textureWidth - 1) << 2, (textureHeight - 1) << 2);
+    state.gSPVertex(0x08000000, 4, 0);
+    state.gSPTri(0, 1, 2);
+    state.gSPTri(0, 2, 3);
+    const output = state.finish();
+    if (output === null)
+        return;
+
+    const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
+    const meshData = new MeshData(device, cache, mesh);
+    sceneRenderer.meshDatas.push(meshData);
+    for (const prop of instances) {
+        const renderer = new RootMeshRenderer(device, cache, meshData);
+        const worldX = prop.position[0] * 3;
+        const worldY = prop.position[1] * 3;
+        const worldZ = prop.position[2] * 3;
+        // func_global_asm_80632FCC performs the same floor query with a ray
+        // beginning 20 game units above the prop, then 8063A968 rotates the
+        // generated quad to the returned ground angles. ZMODE_DEC supplies
+        // polygon offset, so the decal can remain coplanar with the floor.
+        const surface = findTerrainSurface(terrainTriangles, worldX, worldZ, worldY + 20 * 3);
+        const normal = surface?.normal ?? Vec3UnitY;
+        const yaw = prop.rotation[1] * Math.PI / 180;
+        const tangentZ = vec3.fromValues(Math.sin(yaw), 0, Math.cos(yaw));
+        vec3.scaleAndAdd(tangentZ, tangentZ, normal, -vec3.dot(tangentZ, normal));
+        if (vec3.squaredLength(tangentZ) < 0.0001)
+            vec3.set(tangentZ, Math.cos(yaw), 0, -Math.sin(yaw));
+        vec3.normalize(tangentZ, tangentZ);
+        const tangentX = vec3.normalize(vec3.create(), vec3.cross(vec3.create(), normal, tangentZ));
+        const modelMatrix = renderer.modelMatrix;
+        modelMatrix[0] = tangentX[0];
+        modelMatrix[1] = tangentX[1];
+        modelMatrix[2] = tangentX[2];
+        modelMatrix[4] = normal[0];
+        modelMatrix[5] = normal[1];
+        modelMatrix[6] = normal[2];
+        modelMatrix[8] = tangentZ[0];
+        modelMatrix[9] = tangentZ[1];
+        modelMatrix[10] = tangentZ[2];
+        modelMatrix[12] = worldX;
+        modelMatrix[13] = surface?.y ?? worldY;
+        modelMatrix[14] = worldZ;
+        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [
+            prop.scale * 3,
+            prop.scale * 3,
+            prop.scale * 3,
+        ]);
+        if (fadeEndDistance > fadeStartDistance) {
+            renderer.distanceFade = {
+                origin: vec3.fromValues(prop.position[0] * 3, prop.position[1] * 3, prop.position[2] * 3),
+                startDistance: fadeStartDistance,
+                endDistance: fadeEndDistance,
+            };
+        }
+        sceneRenderer.meshRenderers.push(renderer);
+    }
+}
+
+function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], terrainTriangles: TerrainTriangle[]): void {
     if (props.length === 0 || romData.PropGeometryData.length === 0)
         return;
 
@@ -1365,6 +1615,7 @@ function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer:
         // Keep this decoded for diagnostics and future family-specific
         // behavior, but do not use it to restrict generic prop rendering.
         void assetFamilyName;
+        addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainTriangles);
         // Header layout 1 stores an F3DEX2 display-list range followed by its
         // segment-8 vertices. Layout 2 is runtime-generated/animated model
         // data and cannot be interpreted as the same structure.
@@ -1389,7 +1640,8 @@ function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer:
         // secondary entry point an otherwise unused local segment.
         segmentBuffers[0x0F] = geometry;
 
-        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput);
+        const indexedTextures = parseModel2IndexedTextures(view, romData);
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
         initDL(state, true);
         // func_global_asm_80636FFC installs this inherited state immediately
         // before submitting both prop display lists. Tree materials use
@@ -1427,11 +1679,6 @@ function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer:
             sceneRenderer.meshRenderers.push(renderer);
         }
     }
-
-    // B0's static tree shadows belong to the map backdrop/materials. The
-    // static-prop renderer (func_global_asm_80636FFC) submits only these two
-    // model ranges, and the tree's secondary range contains no triangles; it
-    // does not emit a separate shadow decal or sprite.
 }
 
 interface SpriteParticleEvent {
@@ -1702,6 +1949,12 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 
+        // Capture only the map display-list geometry. The game obtains these
+        // planes from its floor-collision query; the rendered triangles give
+        // the decal pass the corresponding visible surface without archiving
+        // a second copy of the map collision data.
+        const terrainTriangles = buildTerrainTriangles(sharedOutput);
+
         for (const surface of map.waterSurfaces) {
             const vertexBuffer = createWaterSurfaceVertexBuffer(surface);
             const segmentBuffers: ArrayBufferSlice[] = [];
@@ -1749,7 +2002,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         const setupProps = parseSetupProps(romData.loadSetup(sceneID));
-        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps);
+        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, terrainTriangles);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)

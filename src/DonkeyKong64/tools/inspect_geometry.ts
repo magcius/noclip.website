@@ -112,6 +112,39 @@ function inspectPropGeometry(prop: Buffer, propType: number, disassemble: boolea
     const vertexStart = prop.readUInt32BE(0x48);
     console.log(`\nProp geometry ${hex(propType, 4)}, decompressed size ${hex(prop.length)}`);
     console.log(`name                     ${JSON.stringify(name)}`);
+    for (let offs = 0; offs < 0x78; offs += 4)
+        console.log(`header[${hex(offs, 2)}]               ${hex(prop.readUInt32BE(offs), 8)}`);
+    const decalTexture = prop.readUInt16BE(0x28);
+    if (decalTexture !== 0xFFFF) {
+        console.log('prop decal:');
+        console.log(`  texture                ${hex(decalTexture)}`);
+        console.log(`  rotationStep           ${prop.readInt16BE(0x2C)}`);
+        console.log(`  footprint              ${prop.readInt16BE(0x2E)} x ${prop.readInt16BE(0x30)}`);
+        console.log(`  textureSize            ${prop.readUInt8(0x32)} x ${prop.readUInt8(0x33)}`);
+        console.log(`  format/size            ${prop.readUInt8(0x34) & 0x07}/${prop.readUInt8(0x35)}`);
+        console.log(`  fade                   ${prop.readUInt8(0x36) * 10} .. ${prop.readUInt8(0x37) * 10}`);
+        console.log(`  alpha/flags            ${hex(prop.readUInt8(0x38), 2)}/${hex(prop.readUInt8(0x39), 2)}`);
+    }
+    const textureDescriptorStart = prop.readUInt32BE(0x6C);
+    if (textureDescriptorStart + 4 <= prop.length) {
+        const textureDescriptorCount = prop.readUInt32BE(textureDescriptorStart);
+        console.log(`indexed texture descriptors (${textureDescriptorCount}):`);
+        for (let i = 0; i < textureDescriptorCount; i++) {
+            const offs = textureDescriptorStart + 4 + i * 0x84;
+            if (offs + 0x84 > prop.length) {
+                console.log(`  ${i}: truncated @${hex(offs)}`);
+                break;
+            }
+            const target = prop.readUInt32BE(offs);
+            const crossfade = prop.readUInt32BE(offs + 4);
+            const duration = prop.readUInt32BE(offs + 8);
+            const frameCount = prop.readUInt32BE(offs + 0x0C);
+            const frames = [target];
+            for (let frame = 1; frame < frameCount && frame < 0x1E; frame++)
+                frames.push(prop.readUInt32BE(offs + 0x0C + frame * 4));
+            console.log(`  ${i}: target=${hex(target)} crossfade=${crossfade} duration=${duration} frames=[${frames.map((frame) => hex(frame)).join(', ')}]`);
+        }
+    }
     console.log(`mainDisplayListStart     ${hex(mainDisplayListStart)}`);
     console.log(`secondaryDisplayListStart ${hex(secondaryDisplayListStart)}`);
     console.log(`vertexStart              ${hex(vertexStart)}`);
