@@ -27,6 +27,7 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimLOD = 0;
     public textureAnimationIndices: number[][] = [];
     public textureAnimationFrameDurations: number[] = [];
+    public textureScrollSpeeds: number[] = [];
 }
 
 export interface AnimatedTexture {
@@ -75,6 +76,7 @@ export class RSPState {
     private DP_PrimColor = vec4.create();
     private DP_EnvColor = vec4.create();
     private DP_PrimLOD = 0;
+    private textureScrollSpeeds: number[] = [];
 
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
@@ -100,6 +102,11 @@ export class RSPState {
             this.vertexCache[i].matrixIndex = 1;
             this.vertexCache[i].outputIndex = -1;
         }
+    }
+
+    public setTextureScrollSpeeds(speeds: number[]): void {
+        this.textureScrollSpeeds = speeds;
+        this.stateChanged = true;
     }
 
     private _setGeometryMode(newGeometryMode: number) {
@@ -206,13 +213,15 @@ export class RSPState {
             dc.textureIndices.push(texture0.textureIndex);
             dc.textureAnimationIndices.push(texture0.animationIndices);
             dc.textureAnimationFrameDurations.push(texture0.frameDuration);
+            dc.textureScrollSpeeds.push(this.textureScrollSpeeds[0] ?? 0);
 
-            if (!lod_en && this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
+            if (!lod_en && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 const texture1 = this._translateTileTexture(this.SP_TextureState.tile + 1);
                 dc.textureIndices.push(texture1.textureIndex);
                 dc.textureAnimationIndices.push(texture1.animationIndices);
                 dc.textureAnimationFrameDurations.push(texture1.frameDuration);
+                dc.textureScrollSpeeds.push(this.textureScrollSpeeds[1] ?? 0);
             }
         }
     }

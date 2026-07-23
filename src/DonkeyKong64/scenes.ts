@@ -39,12 +39,12 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     return gfxTexture;
 }
 
-function translateSampler(cache: GfxRenderCache, texture: Texture): GfxSampler {
+function translateSampler(cache: GfxRenderCache, texture: Texture, linear: boolean): GfxSampler {
     return cache.createSampler({
         wrapS: translateCM(texture.tile.cms),
         wrapT: translateCM(texture.tile.cmt),
-        minFilter: GfxTexFilterMode.Point,
-        magFilter: GfxTexFilterMode.Point,
+        minFilter: linear ? GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point,
+        magFilter: linear ? GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point,
         mipFilter: GfxMipFilterMode.Nearest,
         minLOD: 0, maxLOD: 0,
     });
@@ -62,6 +62,32 @@ function initDL(rspState: RSPState, opaque: boolean): void {
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     // some objects seem to assume this gets set, might rely on stage rendering first
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
+}
+
+// D_global_asm_80747D80[4], used by map scene nodes for water. The game
+// generates this material display list at runtime, before submitting the
+// geometry-only display list stored in the map file.
+function initWaterMaterial(rspState: RSPState): void {
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 0);
+    rspState.gSPTexture(true, 1, 1, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
+    rspState.gDPSetCombine(0x00FF9441, 0xFF13FFFF);
+
+    // Handler 4 loads table-7 texture 0x3E0 once, then interprets the same
+    // TMEM contents through two independently scrolling IA8 render tiles.
+    rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 1, 0x0C000000);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 6, 0, 0, 6, 0);
+    rspState.gDPLoadBlock(7, 0, 0, 2047, 256);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 0, 0, 0, 6, 0, 0, 6, 0);
+    rspState.gDPSetTileSize(0, 0, 0, 0x0FC, 0x0FC);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 1, 0, 0, 6, 1, 0, 6, 1);
+    rspState.gDPSetTileSize(1, 0, 0, 0x0FC, 0x0FC);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 2, 0, 0, 6, 1, 0, 6, 1);
+    rspState.gDPSetTileSize(2, 0, 0, 0x0FC, 0x0FC);
+    rspState.setTextureScrollSpeeds([5, 2]);
 }
 
 const viewMatrixScratch = mat4.create();
@@ -82,6 +108,7 @@ class DrawCallInstance {
     public visible = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall) {
+        const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const textureIndex = drawCall.textureIndices[i];
             const tex = sharedOutput.textureCache.textures[textureIndex];
@@ -89,7 +116,7 @@ class DrawCallInstance {
             if (tex) {
                 this.textureEntry[i] = tex;
                 this.textureMappings[i].gfxTexture = translateTexture(device, tex);
-                this.textureMappings[i].gfxSampler = translateSampler(cache, tex);
+                this.textureMappings[i].gfxSampler = translateSampler(cache, tex, linearFiltering);
             }
 
             const animationIndices = drawCall.textureAnimationIndices[i];
@@ -101,7 +128,7 @@ class DrawCallInstance {
                         return this.textureMappings[i];
                     const mapping = new TextureMapping();
                     mapping.gfxTexture = translateTexture(device, entry);
-                    mapping.gfxSampler = translateSampler(cache, entry);
+                    mapping.gfxSampler = translateSampler(cache, entry, linearFiltering);
                     return mapping;
                 });
             }
@@ -170,10 +197,19 @@ class DrawCallInstance {
         this.createProgram();
     }
 
-    private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
+    private computeTextureMatrix(m: mat4, textureEntryIndex: number, time: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
             calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
+            const speed = this.drawCall.textureScrollSpeeds[textureEntryIndex] ?? 0;
+            if (speed !== 0) {
+                const ticks = Math.floor(time / (1000 / 30));
+                if (ticks > 0) {
+                    const cycle = (Math.floor(255 / speed) + 1) * speed;
+                    const tileOffset = 255 - (((ticks - 1) * speed) % cycle);
+                    m[13] -= (tileOffset / 4) / entry.height;
+                }
+            }
         } else {
             mat4.identity(m);
         }
@@ -215,10 +251,10 @@ class DrawCallInstance {
 
         offs += fillMatrix4x3(mappedF32, offs, viewMatrixScratch); // u_ModelView
 
-        this.computeTextureMatrix(texMatrixScratch, 0);
+        this.computeTextureMatrix(texMatrixScratch, 0, viewerInput.time);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[0]
 
-        this.computeTextureMatrix(texMatrixScratch, 1);
+        this.computeTextureMatrix(texMatrixScratch, 1, viewerInput.time);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[1]
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
@@ -576,6 +612,7 @@ export class DisplayListInfo {
     public dlStartAddr: number;
     public VertStartIndex: number;
     public textureAnimationGroup: number | null;
+    public materialIndex: number | null;
 }
 
 export class MapChunk {
@@ -717,6 +754,7 @@ export class Map {
                                         dlStartAddr: currf3dexOffset - this.dlStart,
                                         VertStartIndex: (chunk.vertOffset/0x10 + currSection.vertOffsets[iDL]),
                                         textureAnimationGroup: currSection.textureAnimationGroup,
+                                        materialIndex: null,
                                     });
                                 }
                             }
@@ -733,6 +771,7 @@ export class Map {
                                 dlStartAddr: chunk.dlOffsets[iDL],
                                 VertStartIndex: chunk.vertOffset/0x10,
                                 textureAnimationGroup: null,
+                                materialIndex: null,
                             });
                         }
                     }
@@ -744,6 +783,29 @@ export class Map {
                 dlStartAddr: 0,
                 VertStartIndex: 0,
                 textureAnimationGroup: null,
+                materialIndex: null,
+            });
+        }
+
+        // Scene nodes can reference geometry-only display lists which the game
+        // surrounds with one of eight runtime-generated material handlers.
+        // These lists are independent of the normal map chunk table.
+        const rootNode = view.getUint32(0x30, false);
+        const specialDisplayListCount = view.getUint8(rootNode + 0xC5);
+        for (let i = 0; i < specialDisplayListCount; i++) {
+            const dlStartAddr = view.getInt32(rootNode + 0x1C + i * 0x04, false);
+            if (dlStartAddr < 0)
+                continue;
+            const materialIndex = view.getUint16(rootNode + 0x70 + i * 0x02, false);
+            // The remaining runtime handlers need their own exact RDP setup.
+            if (materialIndex !== 4)
+                continue;
+            this.displayLists.push({
+                ChunkID: -1,
+                dlStartAddr,
+                VertStartIndex: 0,
+                textureAnimationGroup: null,
+                materialIndex,
             });
         }
 
@@ -812,9 +874,19 @@ class SceneDesc implements Viewer.SceneDesc {
                     ...map.animatedTextures.filter((entry) => entry.group === dl.textureAnimationGroup),
                     ...map.animatedTextures.filter((entry) => entry.group !== dl.textureAnimationGroup),
                 ]
-                : map.animatedTextures;
+                : [...map.animatedTextures];
+            if (dl.materialIndex === 4) {
+                animatedTextures.unshift({
+                    segment: 0x0C,
+                    group: 0,
+                    frameDuration: 0,
+                    frames: [romData.AnimTexData[0x3E0]],
+                });
+            }
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             initDL(state, true);
+            if (dl.materialIndex === 4)
+                initWaterMaterial(state);
             runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
             const output = state.finish();
