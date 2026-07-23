@@ -114,6 +114,23 @@ function inspectPropGeometry(prop: Buffer, propType: number, disassemble: boolea
     console.log(`name                     ${JSON.stringify(name)}`);
     for (let offs = 0; offs < 0x78; offs += 4)
         console.log(`header[${hex(offs, 2)}]               ${hex(prop.readUInt32BE(offs), 8)}`);
+    if (prop.readUInt8(0x1C) === 2) {
+        const runtimeDescriptorStart = prop.readUInt32BE(0x70);
+        const runtimeDescriptorCount = runtimeDescriptorStart + 4 <= prop.length
+            ? prop.readUInt32BE(runtimeDescriptorStart) : 0;
+        console.log(`runtime quad descriptors (${runtimeDescriptorCount}):`);
+        for (let i = 0; i < runtimeDescriptorCount; i++) {
+            const offs = runtimeDescriptorStart + 4 + i * 0x30;
+            if (offs + 0x30 > prop.length)
+                break;
+            const values = (base: number, stride: number) => Array.from({ length: 4 }, (_, j) => prop.readInt16BE(offs + base + j * stride));
+            console.log(`  ${i}: texture=${hex(prop.readUInt16BE(offs))} palette=${hex(prop.readUInt16BE(offs + 2))}`
+                + ` dimensions=${prop.readUInt8(offs + 0x2C)}x${prop.readUInt8(offs + 0x2D)}`
+                + ` format/size=${prop.readUInt8(offs + 0x2F)}/${prop.readUInt8(offs + 0x2E)}`);
+            console.log(`     x=${values(0x04, 2).join(',')} y=${values(0x0C, 2).join(',')} z=${values(0x14, 2).join(',')}`);
+            console.log(`     s=${values(0x1C, 4).join(',')} t=${values(0x1E, 4).join(',')}`);
+        }
+    }
     const decalTexture = prop.readUInt16BE(0x28);
     if (decalTexture !== 0xFFFF) {
         console.log('prop decal:');
@@ -216,7 +233,11 @@ function inspectMap(map: Buffer, mapID: number): void {
     for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
         const chunkOffs = chunkStart + chunkIndex * 0x34;
         const vertOffset = map.readInt32BE(chunkOffs + 0x2C);
-        console.log(`chunk ${chunkIndex}: vertOffset=${hex(vertOffset)}`);
+        console.log(
+            `chunk ${chunkIndex}: vertOffset=${hex(vertOffset)} `
+            + `ambient=(${map.readUInt8(chunkOffs)},${map.readUInt8(chunkOffs + 1)},${map.readUInt8(chunkOffs + 2)}) `
+            + `modulateVertexColors=${map.readUInt32BE(chunkOffs + 0x08) === 1}`,
+        );
         for (let slot = 0; slot < 4; slot++) {
             const relativeOffset = map.readInt32BE(chunkOffs + 0x0C + slot * 8);
             const size = map.readUInt32BE(chunkOffs + 0x10 + slot * 8);
@@ -253,17 +274,22 @@ function inspectEffectPoints(map: Buffer, mapID: number): void {
 }
 
 function inspectSetup(setup: Buffer, mapID: number): void {
+    const lightPropTypes = new Set([0x0001, 0x000C, 0x0010, 0x00F3, 0x0134, 0x0135, 0x0138]);
     const propCount = setup.readUInt32BE(0);
     let offs = 4;
     console.log(`\nSetup ${hex(mapID, 2)}, decompressed size ${hex(setup.length)}`);
     console.log(`Props (${propCount}):`);
     for (let i = 0; i < propCount; i++, offs += 0x30) {
+        const type = setup.readUInt16BE(offs + 0x28);
+        const light = lightPropTypes.has(type)
+            ? ` lightAnimation=${hex(setup.readUInt8(offs + 0x2E), 2)}`
+            : '';
         console.log(
             `${i.toString().padStart(3)} @${hex(offs, 4)} `
-            + `type=${hex(setup.readUInt16BE(offs + 0x28), 4)} id=${hex(setup.readUInt16BE(offs + 0x2A), 4)} `
+            + `type=${hex(type, 4)} id=${hex(setup.readUInt16BE(offs + 0x2A), 4)} `
             + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
             + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} `
-            + `rot=(${setup.readFloatBE(offs + 0x18).toFixed(1)},${setup.readFloatBE(offs + 0x1C).toFixed(1)},${setup.readFloatBE(offs + 0x20).toFixed(1)})`,
+            + `rot=(${setup.readFloatBE(offs + 0x18).toFixed(1)},${setup.readFloatBE(offs + 0x1C).toFixed(1)},${setup.readFloatBE(offs + 0x20).toFixed(1)})${light}`,
         );
     }
 
@@ -496,7 +522,7 @@ function inspectSprites(rom: Buffer, spriteID: number | null): void {
 function main(): void {
     const args = process.argv.slice(2);
     if (args.length < 1) {
-        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--setup] [--scripts] [--effects] [--environment-particles] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
+        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--texture=<id-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
         console.error('Example: npm run inspect:DonkeyKong64 -- B0 --dl=9778');
         process.exit(1);
     }
@@ -513,6 +539,14 @@ function main(): void {
     if (propGeometryArg !== undefined) {
         const propType = parseNumber(propGeometryArg.slice('--prop-geometry='.length));
         inspectPropGeometry(getPointerTableData(rom, propGeometryTableOffset, propType, 'Prop geometry'), propType, args.includes('--prop-dl'));
+    }
+    const textureArg = args.find((arg) => arg.startsWith('--texture='));
+    if (textureArg !== undefined) {
+        const textureID = parseNumber(textureArg.slice('--texture='.length));
+        const texture = getPointerTableData(rom, pointerTableOffset + rom.readUInt32BE(pointerTableOffset + 25 * 4), textureID, 'Texture');
+        console.log(`\nTexture ${hex(textureID)}, decompressed size ${hex(texture.length)}`);
+        console.log(`first 32 bytes: ${texture.subarray(0, 0x20).toString('hex').match(/../g)?.join(' ')}`);
+        console.log(`last 32 bytes:  ${texture.subarray(Math.max(0, texture.length - 0x20)).toString('hex').match(/../g)?.join(' ')}`);
     }
     if (args.includes('--effect-points'))
         inspectEffectPoints(map, mapID);

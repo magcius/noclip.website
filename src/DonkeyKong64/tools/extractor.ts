@@ -344,8 +344,27 @@ function main() {
             }
         }
 
-        // Layout 2 is runtime-generated model data and is not currently
-        // rendered as an F3DEX2 display-list range.
+        if (prop.readUInt8(0x1C) === 2) {
+            // func_global_asm_8063524C builds one textured quad from each
+            // 0x30-byte descriptor. The first texture is the image and the
+            // optional second texture is its CI palette.
+            const descriptorStart = prop.readUInt32BE(0x70);
+            if (descriptorStart + 4 <= prop.byteLength) {
+                const descriptorCount = prop.readUInt32BE(descriptorStart);
+                for (let i = 0; i < descriptorCount; i++) {
+                    const offs = descriptorStart + 4 + i * 0x30;
+                    if (offs + 0x30 > prop.byteLength)
+                        break;
+                    const texture = prop.readUInt16BE(offs);
+                    if (!animatedTargets.has(texture))
+                        usage.geometry.add(texture);
+                    const palette = prop.readUInt16BE(offs + 2);
+                    if (palette !== 0xFFFF)
+                        usage.geometry.add(palette);
+                }
+            }
+            return;
+        }
         if (prop.readUInt8(0x1C) !== 1)
             return;
         const mainDisplayListStart = prop.readUInt32BE(0x40);

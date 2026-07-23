@@ -477,6 +477,13 @@ export interface Mesh {
         firstVertex: number;
         vertexCount: number;
     };
+    dynamicLighting?: {
+        ambientColor: vec3;
+        modulateVertexColors: boolean;
+        firstVertex: number;
+        vertexCount: number;
+        lights: readonly DynamicPointLight[];
+    };
     spriteBillboards?: {
         firstVertex: number;
         origin: vec3;
@@ -484,6 +491,9 @@ export interface Mesh {
         centerY: number;
         halfWidth: number;
         halfHeight: number;
+        rightOffsets?: number[];
+        upOffsets?: number[];
+        forwardOffsets?: number[];
         spawnTick?: number;
         lifetime?: number;
         loopTicks?: number;
@@ -495,23 +505,24 @@ export interface Mesh {
 
 export class MeshData {
     public renderData: RenderData;
-    private lastWaterTick = -1;
+    private lastUpdateTick = -1;
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined);
+        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined);
         this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
     }
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const animation = this.mesh.waterAnimation;
         const sprites = this.mesh.spriteBillboards;
-        if (animation === undefined && sprites === undefined)
+        const lighting = this.mesh.dynamicLighting;
+        if (animation === undefined && sprites === undefined && lighting === undefined)
             return;
         const tick = Math.floor(viewerInput.time / (1000 / 30));
-        if (tick === this.lastWaterTick)
+        if (tick === this.lastUpdateTick)
             return;
-        this.lastWaterTick = tick;
+        this.lastUpdateTick = tick;
 
         if (animation !== undefined) {
             const surface = animation.surface;
@@ -525,6 +536,78 @@ export class MeshData {
                 )));
                 this.renderData.vertexBufferData[vertexIndex * 10 + 1] = Math.trunc(y * 3);
                 this.renderData.vertexBufferData[vertexIndex * 10 + 9] = alpha / 0xFF;
+            }
+        }
+
+        if (lighting !== undefined) {
+            const camera = viewerInput.camera.worldMatrix;
+            const activeLights: {
+                origin: vec3;
+                innerRadius: number;
+                outerRadius: number;
+                color: [number, number, number];
+            }[] = [];
+            for (const light of lighting.lights) {
+                const cameraDistance = Math.hypot(
+                    camera[12] - light.origin[0],
+                    camera[13] - light.origin[1],
+                    camera[14] - light.origin[2],
+                ) / 3;
+                const distanceRatio = cameraDistance / light.maxDistance;
+                const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
+                if (cameraFade === 0)
+                    continue;
+                const keyframes = light.animation;
+                const totalDuration = keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0);
+                let animationTick = (tick + light.phase) % totalDuration;
+                let keyframeIndex = 0;
+                while (animationTick >= keyframes[keyframeIndex].duration) {
+                    animationTick -= keyframes[keyframeIndex].duration;
+                    keyframeIndex++;
+                }
+                const current = keyframes[keyframeIndex];
+                const next = keyframes[(keyframeIndex + 1) % keyframes.length];
+                const t = animationTick / current.duration;
+                const radius = current.radius + (next.radius - current.radius) * t;
+                const intensity = (current.intensity + (next.intensity - current.intensity) * t) * cameraFade;
+                activeLights.push({
+                    origin: light.origin,
+                    innerRadius: radius,
+                    outerRadius: radius * 3,
+                    color: [
+                        (current.color[0] + (next.color[0] - current.color[0]) * t) / 0xFF * intensity,
+                        (current.color[1] + (next.color[1] - current.color[1]) * t) / 0xFF * intensity,
+                        (current.color[2] + (next.color[2] - current.color[2]) * t) / 0xFF * intensity,
+                    ],
+                });
+            }
+            for (let i = 0; i < lighting.vertexCount; i++) {
+                const vertexIndex = lighting.firstVertex + i;
+                const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
+                let red = lighting.ambientColor[0];
+                let green = lighting.ambientColor[1];
+                let blue = lighting.ambientColor[2];
+                for (const light of activeLights) {
+                    const dx = vertex.x - light.origin[0];
+                    const dy = vertex.y - light.origin[1];
+                    const dz = vertex.z - light.origin[2];
+                    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (distance >= light.outerRadius)
+                        continue;
+                    const falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
+                    red += light.color[0] * falloff;
+                    green += light.color[1] * falloff;
+                    blue += light.color[2] * falloff;
+                }
+                // The chunk flag selects whether the game modulates the
+                // accumulated light by the original material tint bytes.
+                const dst = vertexIndex * 10 + 6;
+                const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
+                const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
+                const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;
+                this.renderData.vertexBufferData[dst + 0] = Math.min(1, red) * baseRed;
+                this.renderData.vertexBufferData[dst + 1] = Math.min(1, green) * baseGreen;
+                this.renderData.vertexBufferData[dst + 2] = Math.min(1, blue) * baseBlue;
             }
         }
 
@@ -560,12 +643,6 @@ export class MeshData {
             const centerZ = sprite.origin[2]
                 + viewerInput.camera.worldMatrix[2] * rightScale
                 + viewerInput.camera.worldMatrix[6] * upScale;
-            const rightX = viewerInput.camera.worldMatrix[0] * sprite.halfWidth;
-            const rightY = viewerInput.camera.worldMatrix[1] * sprite.halfWidth;
-            const rightZ = viewerInput.camera.worldMatrix[2] * sprite.halfWidth;
-            const upX = viewerInput.camera.worldMatrix[4] * sprite.halfHeight;
-            const upY = viewerInput.camera.worldMatrix[5] * sprite.halfHeight;
-            const upZ = viewerInput.camera.worldMatrix[6] * sprite.halfHeight;
             const signs = [-1, 1, 1, 1, 1, -1, -1, -1];
             for (let i = 0; i < 4; i++) {
                 const vertex = (sprite.firstVertex + i) * 10;
@@ -575,10 +652,21 @@ export class MeshData {
                     this.renderData.vertexBufferData[vertex + 2] = sprite.origin[2];
                     continue;
                 }
-                const sx = signs[i * 2], sy = signs[i * 2 + 1];
-                this.renderData.vertexBufferData[vertex + 0] = centerX + rightX * sx + upX * sy;
-                this.renderData.vertexBufferData[vertex + 1] = centerY + rightY * sx + upY * sy;
-                this.renderData.vertexBufferData[vertex + 2] = centerZ + rightZ * sx + upZ * sy;
+                const rightOffset = sprite.rightOffsets?.[i] ?? sprite.halfWidth * signs[i * 2];
+                const upOffset = sprite.upOffsets?.[i] ?? sprite.halfHeight * signs[i * 2 + 1];
+                const forwardOffset = sprite.forwardOffsets?.[i] ?? 0;
+                this.renderData.vertexBufferData[vertex + 0] = centerX
+                    + viewerInput.camera.worldMatrix[0] * rightOffset
+                    + viewerInput.camera.worldMatrix[4] * upOffset
+                    + viewerInput.camera.worldMatrix[8] * forwardOffset;
+                this.renderData.vertexBufferData[vertex + 1] = centerY
+                    + viewerInput.camera.worldMatrix[1] * rightOffset
+                    + viewerInput.camera.worldMatrix[5] * upOffset
+                    + viewerInput.camera.worldMatrix[9] * forwardOffset;
+                this.renderData.vertexBufferData[vertex + 2] = centerZ
+                    + viewerInput.camera.worldMatrix[2] * rightOffset
+                    + viewerInput.camera.worldMatrix[6] * upOffset
+                    + viewerInput.camera.worldMatrix[10] * forwardOffset;
             }
         }
         if (hasSpriteFade) {
@@ -895,9 +983,8 @@ interface WaterSurface {
 }
 
 export class MapChunk {
-    public x: number
-    public y: number
-    public z: number
+    public ambientColor: vec3;
+    public modulateVertexColors: boolean;
 
     public dlOffsets: number[] = [];
     public dlSizes: number[] = [];
@@ -908,8 +995,14 @@ export class MapChunk {
 
     constructor(bin: ArrayBufferSlice, public id: number) {
         let view = bin.createDataView();
-        this.x = view.getInt32(0x00);
-        this.y = view.getInt32(0x04);
+        // func_global_asm_80650ECC copies these bytes into the per-chunk
+        // ambient arrays used by func_global_asm_8065C990.
+        this.ambientColor = vec3.fromValues(
+            view.getUint8(0x00) / 0xFF,
+            view.getUint8(0x01) / 0xFF,
+            view.getUint8(0x02) / 0xFF,
+        );
+        this.modulateVertexColors = view.getUint32(0x08, false) === 1;
 
         let dlTableIdx = 0x0C;
         for (let i = 0; i < 4; i++) {
@@ -1193,7 +1286,58 @@ interface SetupProp {
     position: vec3;
     scale: number;
     rotation: vec3;
+    lightAnimation: number;
+    setupIndex: number;
 }
+
+interface LightAnimationKeyframe {
+    intensity: number;
+    color: readonly [number, number, number];
+    radius: number;
+    duration: number;
+}
+
+interface DynamicPointLight {
+    origin: vec3;
+    animation: readonly LightAnimationKeyframe[];
+    phase: number;
+    maxDistance: number;
+}
+
+// D_global_asm_80748430, consumed by func_global_asm_8065EB10. Entry zero is
+// the "no light" setup value; the remaining indices are the game's keyframes.
+const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
+    [],
+    [{ intensity: .4, color: [255, 0, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 255], radius: 150, duration: 15 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }],
+    [{ intensity: .4, color: [0, 0, 255], radius: 150, duration: 15 }, { intensity: 1, color: [0, 0, 255], radius: 150, duration: 15 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 0], radius: 150, duration: 15 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 100, 100], radius: 110, duration: 15 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 300, duration: 25 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 25 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 0], radius: 110, duration: 15 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 500, duration: 8 }, { intensity: 1, color: [255, 100, 100], radius: 470, duration: 2 }],
+    [{ intensity: 1, color: [200, 200, 200], radius: 500, duration: 4 }, { intensity: 1, color: [150, 50, 50], radius: 350, duration: 2 }],
+    [{ intensity: 1, color: [0, 100, 255], radius: 150, duration: 15 }, { intensity: 1, color: [0, 250, 255], radius: 150, duration: 15 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 8 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 8 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 20, duration: 15 }, { intensity: 1, color: [255, 0, 0], radius: 110, duration: 15 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 1 }, { intensity: 1, color: [0, 0, 0], radius: 150, duration: 14 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 1 }, { intensity: 1, color: [0, 0, 0], radius: 150, duration: 14 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 100, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 100, duration: 15 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [120, 255, 255], radius: 120, duration: 15 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 100, duration: 5 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 120, duration: 25 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 25 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 25 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 25 }],
+    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 25 }, { intensity: 1, color: [255, 0, 0], radius: 150, duration: 25 }],
+    [{ intensity: 1, color: [0, 150, 255], radius: 300, duration: 25 }, { intensity: 1, color: [0, 150, 255], radius: 120, duration: 25 }],
+    [{ intensity: .4, color: [255, 100, 100], radius: 180, duration: 15 }, { intensity: 1, color: [255, 100, 100], radius: 225, duration: 15 }],
+    [{ intensity: .4, color: [100, 170, 100], radius: 180, duration: 15 }, { intensity: 1, color: [100, 170, 100], radius: 225, duration: 15 }],
+    [{ intensity: .4, color: [255, 200, 120], radius: 180, duration: 15 }, { intensity: 1, color: [255, 200, 120], radius: 225, duration: 15 }],
+    [{ intensity: .4, color: [130, 70, 255], radius: 180, duration: 15 }, { intensity: 1, color: [130, 70, 255], radius: 225, duration: 15 }],
+    [{ intensity: .4, color: [0, 80, 255], radius: 180, duration: 15 }, { intensity: 1, color: [0, 80, 255], radius: 225, duration: 15 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 180, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 225, duration: 15 }],
+    [{ intensity: .4, color: [255, 255, 255], radius: 250, duration: 20 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 20 }],
+];
+
+const lightPropTypes = new Set([0x0001, 0x000C, 0x0010, 0x00F3, 0x0134, 0x0135, 0x0138]);
 
 interface TerrainTriangle {
     vertices: [vec3, vec3, vec3];
@@ -1285,6 +1429,8 @@ function parseSetupProps(data: ArrayBufferSlice): SetupProp[] {
                 view.getFloat32(offs + 0x1C, false),
                 view.getFloat32(offs + 0x20, false),
             ),
+            lightAnimation: view.getUint8(offs + 0x2E),
+            setupIndex: i,
         });
     }
     return props;
@@ -1637,6 +1783,197 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
     }
 }
 
+interface RuntimePropQuad {
+    textureID: number;
+    paletteID: number;
+    x: number[];
+    y: number[];
+    z: number[];
+    s: number[];
+    t: number[];
+    width: number;
+    height: number;
+    size: ImageSize;
+    format: ImageFormat;
+}
+
+function parseRuntimePropQuads(view: DataView): RuntimePropQuad[] {
+    const tableStart = view.getUint32(0x70, false);
+    if (tableStart + 4 > view.byteLength)
+        return [];
+    const count = view.getUint32(tableStart, false);
+    if (count > 0x100 || tableStart + 4 + count * 0x30 > view.byteLength)
+        return [];
+
+    const quads: RuntimePropQuad[] = [];
+    for (let i = 0; i < count; i++) {
+        const offs = tableStart + 4 + i * 0x30;
+        quads.push({
+            textureID: view.getUint16(offs + 0x00, false),
+            paletteID: view.getUint16(offs + 0x02, false),
+            x: nArray(4, (j) => view.getInt16(offs + 0x04 + j * 2, false)),
+            y: nArray(4, (j) => view.getInt16(offs + 0x0C + j * 2, false)),
+            z: nArray(4, (j) => view.getInt16(offs + 0x14 + j * 2, false)),
+            s: nArray(4, (j) => view.getInt16(offs + 0x1C + j * 4, false)),
+            t: nArray(4, (j) => view.getInt16(offs + 0x1E + j * 4, false)),
+            width: view.getUint8(offs + 0x2C),
+            height: view.getUint8(offs + 0x2D),
+            size: view.getUint8(offs + 0x2E) as ImageSize,
+            format: view.getUint8(offs + 0x2F) as ImageFormat,
+        });
+    }
+    return quads;
+}
+
+function buildDynamicPointLights(props: readonly SetupProp[], romData: ROMData): DynamicPointLight[] {
+    const lights: DynamicPointLight[] = [];
+    for (const prop of props) {
+        if (!lightPropTypes.has(prop.type) || prop.lightAnimation === 0)
+            continue;
+        const animation = lightAnimations[prop.lightAnimation];
+        if (animation === undefined || animation.length === 0)
+            continue;
+        const geometry = romData.loadPropGeometry(prop.type).createDataView();
+        const maxDistance = geometry.getUint16(0x1E, false);
+        lights.push({
+            origin: vec3.fromValues(prop.position[0] * 3, prop.position[1] * 3, prop.position[2] * 3),
+            animation,
+            // func_global_asm_8065EB10 adds the model instance index to
+            // object_timer so nearby flames do not pulse in lockstep.
+            phase: prop.setupIndex,
+            maxDistance: maxDistance > 0 ? maxDistance : 700,
+        });
+    }
+    return lights;
+}
+
+function filterDynamicLightsForVertices(sharedOutput: RSPSharedOutput, firstVertex: number, vertexCount: number, lights: readonly DynamicPointLight[]): DynamicPointLight[] {
+    if (vertexCount === 0)
+        return [];
+    const min = vec3.fromValues(Infinity, Infinity, Infinity);
+    const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
+    for (let i = 0; i < vertexCount; i++) {
+        const vertex = sharedOutput.vertices[firstVertex + i];
+        min[0] = Math.min(min[0], vertex.x);
+        min[1] = Math.min(min[1], vertex.y);
+        min[2] = Math.min(min[2], vertex.z);
+        max[0] = Math.max(max[0], vertex.x);
+        max[1] = Math.max(max[1], vertex.y);
+        max[2] = Math.max(max[2], vertex.z);
+    }
+    return lights.filter((light) => {
+        const radius = Math.max(...light.animation.map((keyframe) => keyframe.radius)) * 3;
+        let distanceSquared = 0;
+        for (let axis = 0; axis < 3; axis++) {
+            const delta = light.origin[axis] < min[axis]
+                ? min[axis] - light.origin[axis]
+                : light.origin[axis] > max[axis] ? light.origin[axis] - max[axis] : 0;
+            distanceSquared += delta * delta;
+        }
+        return distanceSquared < radius * radius;
+    });
+}
+
+function createRuntimePropVertexBuffer(quad: RuntimePropQuad, instanceCount: number): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(instanceCount * 4 * 0x10);
+    const view = new DataView(buffer);
+    for (let instance = 0; instance < instanceCount; instance++) {
+        for (let i = 0; i < 4; i++) {
+            const offs = (instance * 4 + i) * 0x10;
+            view.setInt16(offs + 0x08, quad.s[i]);
+            view.setInt16(offs + 0x0A, quad.t[i]);
+            view.setUint8(offs + 0x0C, 0xFF);
+            view.setUint8(offs + 0x0D, 0xFF);
+            view.setUint8(offs + 0x0E, 0xFF);
+            view.setUint8(offs + 0x0F, 0xFF);
+        }
+    }
+    return new ArrayBufferSlice(buffer);
+}
+
+function initRuntimePropMaterial(state: RSPState, quad: RuntimePropQuad): void {
+    const bitsPerPixel = 4 << quad.size;
+    const loadCount = Math.min(0x07FF, Math.ceil(quad.width * quad.height * bitsPerPixel / 16) - 1);
+    const line = Math.max(1, Math.ceil(quad.width * bitsPerPixel / 64));
+    const dxt = Math.max(1, Math.ceil(0x0800 / line));
+    const maskS = Math.ceil(Math.log2(quad.width));
+    const maskT = Math.ceil(Math.log2(quad.height));
+
+    state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    state.gSPClearGeometryMode(0xFFFFFFFF);
+    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+    state.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+    // Layout-2 props with setup flag 1 are placed in the game's translucent
+    // object list. func_global_asm_80637B6C selects this depth-tested,
+    // non-depth-writing render mode for them.
+    state.gDPSetOtherModeL(0, 29, 0x0C184A50);
+    state.gDPSetCombine(0x00119623, 0xFF2FFFFF); // G_CC_MODULATEIA_PRIM
+    state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
+
+    const indexed = quad.format === ImageFormat.G_IM_FMT_CI;
+    state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLUT, 2, indexed ? 0x8000 : 0);
+    if (indexed) {
+        assert(quad.paletteID !== 0xFFFF);
+        state.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, quad.paletteID);
+        state.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 7, 0, 0, 0, 0, 0, 0, 0);
+        state.gDPLoadTLUT(7, quad.size === ImageSize.G_IM_SIZ_4b ? 15 : 255);
+    }
+
+    const loadSize = quad.size === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
+    state.gDPSetTextureImage(quad.format, loadSize, 1, quad.textureID);
+    state.gDPSetTile(quad.format, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
+    state.gDPLoadBlock(7, 0, 0, loadCount, dxt);
+    state.gDPSetTile(quad.format, quad.size, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
+    state.gDPSetTileSize(0, 0, 0, (quad.width - 1) << 2, (quad.height - 1) << 2);
+}
+
+function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, view: DataView, instances: SetupProp[]): void {
+    for (const quad of parseRuntimePropQuads(view)) {
+        if (quad.width === 0 || quad.height === 0 || quad.size > ImageSize.G_IM_SIZ_32b)
+            continue;
+        const segmentBuffers: ArrayBufferSlice[] = [];
+        segmentBuffers[0x08] = createRuntimePropVertexBuffer(quad, instances.length);
+        // Pickup-style layout-2 props use the same segment-zero placeholder
+        // IDs and table-7 animation descriptors as regular model2 geometry.
+        const indexedTextures = parseModel2IndexedTextures(view, romData);
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
+        initRuntimePropMaterial(state, quad);
+        const billboards: NonNullable<Mesh['spriteBillboards']> = [];
+        for (let i = 0; i < instances.length; i++) {
+            const firstVertex = sharedOutput.vertices.length;
+            state.gSPVertex(0x08000000 + i * 4 * 0x10, 4, 0);
+            state.gSPTri(0, 1, 2);
+            state.gSPTri(0, 2, 3);
+            const prop = instances[i];
+            const scale = prop.scale * 3;
+            billboards.push({
+                firstVertex,
+                origin: vec3.fromValues(prop.position[0] * 3, prop.position[1] * 3, prop.position[2] * 3),
+                centerX: 0,
+                centerY: 0,
+                halfWidth: 0,
+                halfHeight: 0,
+                rightOffsets: quad.x.map((x) => x * scale),
+                upOffsets: quad.y.map((y) => y * scale),
+                forwardOffsets: quad.z.map((z) => z * scale),
+            });
+        }
+        const output = state.finish();
+        if (output === null)
+            continue;
+        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, spriteBillboards: billboards };
+        const meshData = new MeshData(device, cache, mesh);
+        sceneRenderer.meshDatas.push(meshData);
+        const renderer = new RootMeshRenderer(device, cache, meshData);
+        // The game sorts this object list far-to-near. At minimum these must
+        // follow translucent map surfaces; leaving the default opaque sort key
+        // lets water submitted later blend over the plants.
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+        renderer.setBackfaceCullingEnabled(false);
+        sceneRenderer.meshRenderers.push(renderer);
+    }
+}
+
 function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], terrainTriangles: TerrainTriangle[]): void {
     if (props.length === 0 || romData.PropGeometryData.size === 0)
         return;
@@ -1662,10 +1999,12 @@ function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer:
         // behavior, but do not use it to restrict generic prop rendering.
         void assetFamilyName;
         addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainTriangles);
+        if (view.getUint8(0x1C) === 2) {
+            addRuntimeModel2Props(device, cache, sceneRenderer, sharedOutput, romData, view, instances);
+            continue;
+        }
         // Header layout 1 stores an F3DEX2 display-list range followed by its
-        // segment-8 vertices. Layout 2 is runtime-generated/animated model
-        // data and cannot be interpreted as the same structure.
-        // TODO: parse and render model2 header layout 2.
+        // segment-8 vertices.
         if (view.getUint8(0x1C) !== 1)
             continue;
 
@@ -1962,6 +2301,8 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
         const romData = new ROMData(commonData, levelData, commonTextureGroups, unknownData);
         const map = new Map(decompress(romData.MapData), romData.AnimTexData);
+        const setupProps = parseSetupProps(romData.loadSetup());
+        const dynamicLights = buildDynamicPointLights(setupProps, romData);
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
@@ -1994,6 +2335,7 @@ class SceneDesc implements Viewer.SceneDesc {
             initDL(state, true);
             if (dl.materialIndex === 4)
                 initWaterMaterial(state);
+            const firstVertex = sharedOutput.vertices.length;
             runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
             const output = state.finish();
@@ -2003,7 +2345,23 @@ class SceneDesc implements Viewer.SceneDesc {
                 continue;
             }
 
-            const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
+            const mesh: Mesh = {
+                sharedOutput,
+                rspState: state,
+                rspOutput: output,
+                dynamicLighting: dl.ChunkID >= 0 ? {
+                    ambientColor: map.chunks[dl.ChunkID].ambientColor,
+                    modulateVertexColors: map.chunks[dl.ChunkID].modulateVertexColors,
+                    firstVertex,
+                    vertexCount: sharedOutput.vertices.length - firstVertex,
+                    lights: filterDynamicLightsForVertices(
+                        sharedOutput,
+                        firstVertex,
+                        sharedOutput.vertices.length - firstVertex,
+                        dynamicLights,
+                    ),
+                } : undefined,
+            };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
 
@@ -2063,7 +2421,6 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
         }
 
-        const setupProps = parseSetupProps(romData.loadSetup());
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, terrainTriangles);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
