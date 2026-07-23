@@ -13,6 +13,9 @@ const globalASMDataCompressedSize = 0x949C;
 const spritePointerTableOffset = 0x15A090;
 const spritePointerCount = 176;
 const globalASMVirtualBase = 0x805FB300;
+const customScriptFunctionTableOffset = 0x14CB70;
+const environmentParticleTableOffset = 0x14D8A0;
+const environmentParticleCount = 13;
 
 function parseNumber(s: string): number {
     if (s.startsWith('0x'))
@@ -171,6 +174,21 @@ function inspectMap(map: Buffer, mapID: number): void {
     console.log(`\nDisplay-list expansions: ${map.readUInt32BE(expansionStart)}`);
 }
 
+function inspectEffectPoints(map: Buffer, mapID: number): void {
+    const table = map.readUInt32BE(0x40);
+    const setCount = map.readInt32BE(table) + 1;
+    console.log(`\nEffect point sets ${hex(mapID, 2)} (${setCount}):`);
+    for (let set = 0; set < setCount; set++) {
+        const start = table + map.readUInt32BE(table + 4 + set * 4);
+        const end = table + map.readUInt32BE(table + 8 + set * 4);
+        const count = (end - start) / 12;
+        const first = count > 0
+            ? ` first=(${map.readFloatBE(start).toFixed(1)},${map.readFloatBE(start + 4).toFixed(1)},${map.readFloatBE(start + 8).toFixed(1)})`
+            : '';
+        console.log(`  set=${set} start=${hex(start)} end=${hex(end)} points=${count}${first}`);
+    }
+}
+
 function inspectSetup(setup: Buffer, mapID: number): void {
     const propCount = setup.readUInt32BE(0);
     let offs = 4;
@@ -242,6 +260,82 @@ function inspectScripts(scripts: Buffer, mapID: number): void {
         }
     }
     console.log(`Parsed through ${hex(offs)} of ${hex(scripts.length)}`);
+}
+
+function inspectEffectCalls(rom: Buffer, setup: Buffer, scripts: Buffer, mapID: number): void {
+    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
+    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
+    const globalASM = Buffer.concat([code, data]);
+    const propCount = setup.readUInt32BE(0);
+    const props = new Map<number, { type: number, x: number, y: number, z: number }>();
+    for (let i = 0; i < propCount; i++) {
+        const offs = 4 + i * 0x30;
+        props.set(setup.readUInt16BE(offs + 0x2A), {
+            type: setup.readUInt16BE(offs + 0x28),
+            x: setup.readFloatBE(offs),
+            y: setup.readFloatBE(offs + 4),
+            z: setup.readFloatBE(offs + 8),
+        });
+    }
+
+    console.log(`\nCustom effect calls ${hex(mapID, 2)}:`);
+    const scriptCount = scripts.readUInt16BE(0);
+    let offs = 2;
+    for (let scriptIndex = 0; scriptIndex < scriptCount; scriptIndex++) {
+        const id = scripts.readUInt16BE(offs);
+        const blockCount = scripts.readUInt16BE(offs + 2);
+        offs += 6;
+        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
+            const conditionCount = scripts.readUInt16BE(offs);
+            offs += 2;
+            const conditions: string[] = [];
+            for (let i = 0; i < conditionCount; i++, offs += 8) {
+                conditions.push(
+                    `${hex(scripts.readUInt16BE(offs), 4)}(`
+                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
+                );
+            }
+            const executionCount = scripts.readUInt16BE(offs);
+            offs += 2;
+            for (let i = 0; i < executionCount; i++, offs += 8) {
+                if (scripts.readUInt16BE(offs) !== 7)
+                    continue;
+                const functionIndex = scripts.readInt16BE(offs + 2);
+                const functionAddress = globalASM.readUInt32BE(customScriptFunctionTableOffset + functionIndex * 4);
+                const prop = props.get(id);
+                console.log(
+                    `  script=${hex(id, 4)} block=${blockIndex} function=${functionIndex} address=${hex(functionAddress, 8)} `
+                    + `args=(${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)}) `
+                    + `conditions=[${conditions.join(', ')}] `
+                    + (prop !== undefined
+                        ? `propType=${hex(prop.type, 4)} pos=(${prop.x.toFixed(1)},${prop.y.toFixed(1)},${prop.z.toFixed(1)})`
+                        : 'prop=missing'),
+                );
+            }
+        }
+    }
+}
+
+function inspectEnvironmentParticles(rom: Buffer, mapID: number): void {
+    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
+    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
+    const globalASM = Buffer.concat([code, data]);
+    console.log(`\nEnvironmental particle definitions ${hex(mapID, 2)}:`);
+    let matches = 0;
+    for (let i = 0; i < environmentParticleCount; i++) {
+        const offs = environmentParticleTableOffset + i * 0x20;
+        if (globalASM.readUInt8(offs) !== mapID)
+            continue;
+        matches++;
+        console.log(
+            `  entry=${i} start=(${globalASM.readInt16BE(offs + 2)},${globalASM.readInt16BE(offs + 4)},${globalASM.readInt16BE(offs + 6)})`
+            + ` end=(${globalASM.readInt16BE(offs + 8)},${globalASM.readInt16BE(offs + 10)},${globalASM.readInt16BE(offs + 12)})`
+            + ` gap=${globalASM.readFloatBE(offs + 0x10)} distance=${globalASM.readInt16BE(offs + 0x14)}`
+            + ` baseScale=${globalASM.readFloatBE(offs + 0x18)} risingScale=${globalASM.readFloatBE(offs + 0x1C)}`,
+        );
+    }
+    if (matches === 0)
+        console.log('  none');
 }
 
 function inspectSpawners(spawners: Buffer, mapID: number): void {
@@ -338,7 +432,7 @@ function inspectSprites(rom: Buffer, spriteID: number | null): void {
 function main(): void {
     const args = process.argv.slice(2);
     if (args.length < 1) {
-        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--setup] [--scripts] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
+        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
         console.error('Example: npm run inspect:DonkeyKong64 -- B0 --dl=9778');
         process.exit(1);
     }
@@ -351,10 +445,21 @@ function main(): void {
     inspectMap(map, mapID);
     if (dlArg !== undefined)
         disassembleDisplayList(map, map.readUInt32BE(0x34), parseNumber(dlArg.slice('--dl='.length)));
+    if (args.includes('--effect-points'))
+        inspectEffectPoints(map, mapID);
     if (args.includes('--setup'))
         inspectSetup(getPointerTableData(rom, setupTableOffset, mapID, 'Setup'), mapID);
     if (args.includes('--scripts'))
         inspectScripts(getPointerTableData(rom, scriptTableOffset, mapID, 'Scripts'), mapID);
+    if (args.includes('--effects'))
+        inspectEffectCalls(
+            rom,
+            getPointerTableData(rom, setupTableOffset, mapID, 'Setup'),
+            getPointerTableData(rom, scriptTableOffset, mapID, 'Scripts'),
+            mapID,
+        );
+    if (args.includes('--environment-particles'))
+        inspectEnvironmentParticles(rom, mapID);
     if (args.includes('--spawners'))
         inspectSpawners(getPointerTableData(rom, spawnerTableOffset, mapID, 'Spawners'), mapID);
     if (args.includes('--critters'))

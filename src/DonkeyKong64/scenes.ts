@@ -110,6 +110,75 @@ function initWaterSurfaceMaterial(rspState: RSPState, scrollS: number, scrollT: 
     rspState.setTextureScrollSpeeds([scrollS, scrollT]);
 }
 
+function getSpriteImageFormat(sprite: SpriteData): ImageFormat {
+    // func_global_asm_80714778 copies SpriteData::unk6 to the runtime
+    // descriptor's unkA. func_global_asm_80715E94 then uses unkA & 7 as
+    // G_IM_FMT for every texture command.
+    return sprite.flags & 0x07;
+}
+
+function getSpriteImageSize(sprite: SpriteData): ImageSize {
+    // The four branches in func_global_asm_80715E94 are the N64's four
+    // texel sizes in order.
+    assert(sprite.codec >= 0 && sprite.codec <= 3);
+    return sprite.codec as ImageSize;
+}
+
+function initSpriteMaterial(rspState: RSPState, sprite: SpriteData, segment: number, color: readonly number[]): void {
+    const fmt = getSpriteImageFormat(sprite);
+    const siz = getSpriteImageSize(sprite);
+    const bitsPerPixel = 4 << siz;
+    const texelCount = sprite.width * sprite.height;
+    const loadCount = Math.min(0x07FF, Math.ceil(texelCount * bitsPerPixel / 16) - 1);
+    const line = Math.max(1, Math.ceil(sprite.width * bitsPerPixel / 64));
+    // G_TX_DXT_FRAC is 11: CALC_DXT rounds 2^11 / words-per-line up.
+    // Using 0x07FF here is one short for exact divisors (including both
+    // waterfall sprites), which shears the texture as it is loaded to TMEM.
+    const dxt = Math.max(1, Math.ceil(0x0800 / line));
+    const maskS = Math.ceil(Math.log2(sprite.width));
+    const maskT = Math.ceil(Math.log2(sprite.height));
+
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+    rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x005049D8);
+    rspState.gDPSetCombine(0x00119623, 0xFF2FFFFF); // G_CC_MODULATEIA_PRIM
+    rspState.gSPSetPrimColor(0, color[0], color[1], color[2], color[3]);
+
+    // The game loads through a 16-bit tile for 4/8/16-bit sprites and a
+    // 32-bit tile for RGBA32, then renders using the definition's real size.
+    const loadSize = siz === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
+    rspState.gDPSetTextureImage(fmt, loadSize, 1, segment << 24);
+    rspState.gDPSetTile(fmt, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
+    rspState.gDPLoadBlock(7, 0, 0, loadCount, dxt);
+    rspState.gDPSetTile(fmt, siz, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
+    rspState.gDPSetTileSize(0, 0, 0, (sprite.width - 1) << 2, (sprite.height - 1) << 2);
+}
+
+function createSpriteVertexBuffer(sprite: SpriteData, quadCount = 1): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(quadCount * 4 * 0x10);
+    const view = new DataView(buffer);
+    const textureCoordinates = [
+        0, 0,
+        sprite.width << 5, 0,
+        sprite.width << 5, sprite.height << 5,
+        0, sprite.height << 5,
+    ];
+    for (let quad = 0; quad < quadCount; quad++) {
+        for (let i = 0; i < 4; i++) {
+            const offs = (quad * 4 + i) * 0x10;
+            view.setInt16(offs + 0x08, textureCoordinates[i * 2]);
+            view.setInt16(offs + 0x0A, textureCoordinates[i * 2 + 1]);
+            view.setUint8(offs + 0x0C, 0xFF);
+            view.setUint8(offs + 0x0D, 0xFF);
+            view.setUint8(offs + 0x0E, 0xFF);
+            view.setUint8(offs + 0x0F, 0xFF);
+        }
+    }
+    return new ArrayBufferSlice(buffer);
+}
+
 function waterSurfaceHeight(surface: WaterSurface, x: number, z: number, tick: number): number {
     const phaseS = tick * surface.phaseSpeedS;
     const phaseT = tick * surface.phaseSpeedT;
@@ -408,19 +477,36 @@ export interface Mesh {
         firstVertex: number;
         vertexCount: number;
     };
+    spriteBillboards?: {
+        firstVertex: number;
+        origin: vec3;
+        centerX: number;
+        centerY: number;
+        halfWidth: number;
+        halfHeight: number;
+        spawnTick?: number;
+        lifetime?: number;
+        loopTicks?: number;
+        velocityY?: number;
+        maxDistance?: number;
+        fadeStartDistance?: number;
+    }[];
 }
 
 export class MeshData {
     public renderData: RenderData;
     private lastWaterTick = -1;
+    private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined);
+        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined);
+        this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
     }
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const animation = this.mesh.waterAnimation;
-        if (animation === undefined)
+        const sprites = this.mesh.spriteBillboards;
+        if (animation === undefined && sprites === undefined)
             return;
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         if (tick === this.lastWaterTick)
@@ -440,6 +526,64 @@ export class MeshData {
                 this.renderData.vertexBufferData[vertexIndex * 10 + 1] = Math.trunc(y * 3);
                 this.renderData.vertexBufferData[vertexIndex * 10 + 9] = alpha / 0xFF;
             }
+        }
+
+        let spriteFade = 0;
+        let hasSpriteFade = false;
+        for (const sprite of sprites ?? []) {
+            const age = sprite.spawnTick === undefined
+                ? 0
+                : ((tick - sprite.spawnTick + sprite.loopTicks!) % sprite.loopTicks!);
+            const dx = viewerInput.camera.worldMatrix[12] - sprite.origin[0];
+            const dy = viewerInput.camera.worldMatrix[13] - sprite.origin[1];
+            const dz = viewerInput.camera.worldMatrix[14] - sprite.origin[2];
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const withinDistance = sprite.maxDistance === undefined
+                || distance <= sprite.maxDistance;
+            const active = withinDistance && (sprite.spawnTick === undefined || age < sprite.lifetime!);
+            if (sprite.fadeStartDistance !== undefined) {
+                hasSpriteFade = true;
+                const fade = distance < sprite.fadeStartDistance
+                    ? 1
+                    : Math.max(0, Math.min(1, (sprite.maxDistance! - distance) / (sprite.maxDistance! - sprite.fadeStartDistance)));
+                if (active)
+                    spriteFade = Math.max(spriteFade, fade);
+            }
+            const rightScale = sprite.centerX;
+            const upScale = sprite.centerY;
+            const centerX = sprite.origin[0]
+                + viewerInput.camera.worldMatrix[0] * rightScale
+                + viewerInput.camera.worldMatrix[4] * upScale;
+            const centerY = sprite.origin[1] + age * (sprite.velocityY ?? 0)
+                + viewerInput.camera.worldMatrix[1] * rightScale
+                + viewerInput.camera.worldMatrix[5] * upScale;
+            const centerZ = sprite.origin[2]
+                + viewerInput.camera.worldMatrix[2] * rightScale
+                + viewerInput.camera.worldMatrix[6] * upScale;
+            const rightX = viewerInput.camera.worldMatrix[0] * sprite.halfWidth;
+            const rightY = viewerInput.camera.worldMatrix[1] * sprite.halfWidth;
+            const rightZ = viewerInput.camera.worldMatrix[2] * sprite.halfWidth;
+            const upX = viewerInput.camera.worldMatrix[4] * sprite.halfHeight;
+            const upY = viewerInput.camera.worldMatrix[5] * sprite.halfHeight;
+            const upZ = viewerInput.camera.worldMatrix[6] * sprite.halfHeight;
+            const signs = [-1, 1, 1, 1, 1, -1, -1, -1];
+            for (let i = 0; i < 4; i++) {
+                const vertex = (sprite.firstVertex + i) * 10;
+                if (!active) {
+                    this.renderData.vertexBufferData[vertex + 0] = sprite.origin[0];
+                    this.renderData.vertexBufferData[vertex + 1] = sprite.origin[1];
+                    this.renderData.vertexBufferData[vertex + 2] = sprite.origin[2];
+                    continue;
+                }
+                const sx = signs[i * 2], sy = signs[i * 2 + 1];
+                this.renderData.vertexBufferData[vertex + 0] = centerX + rightX * sx + upX * sy;
+                this.renderData.vertexBufferData[vertex + 1] = centerY + rightY * sx + upY * sy;
+                this.renderData.vertexBufferData[vertex + 2] = centerZ + rightZ * sx + upZ * sy;
+            }
+        }
+        if (hasSpriteFade) {
+            for (let i = 0; i < this.spritePrimAlphas.length; i++)
+                this.mesh.rspOutput!.drawCalls[i].DP_PrimColor[3] = this.spritePrimAlphas[i] * spriteFade;
         }
 
         device.uploadBufferData(this.renderData.vertexBuffer, 0, new Uint8Array(this.renderData.vertexBufferData.buffer));
@@ -789,6 +933,7 @@ export class Map {
     public displayLists: DisplayListInfo[] = [];
     public animatedTextures: AnimatedTexture[] = [];
     public waterSurfaces: WaterSurface[] = [];
+    public effectPointSets: vec3[][] = [];
 
     // headerInfo
     private dlStart: number;
@@ -810,6 +955,27 @@ export class Map {
         this.sectionEnd = view.getUint32(0x5C, false);
         this.chunkCountOffset = view.getUint32(0x64, false);
         this.chunkStart = view.getUint32(0x68, false);
+
+        // MapGeometryHeader::unk40 is the point-set table used by generic
+        // prop-script effects (D_global_asm_807F5FD4 in the game). Its first
+        // word is the highest set index, followed by relative start pointers
+        // and one sentinel end pointer.
+        const effectPointStart = view.getUint32(0x40, false);
+        const effectPointSetMax = view.getInt32(effectPointStart, false);
+        const effectPointSetCount = effectPointSetMax + 1;
+        for (let set = 0; set < effectPointSetCount; set++) {
+            const start = effectPointStart + view.getUint32(effectPointStart + 4 + set * 4, false);
+            const end = effectPointStart + view.getUint32(effectPointStart + 8 + set * 4, false);
+            const points: vec3[] = [];
+            for (let offs = start; offs + 12 <= end; offs += 12) {
+                points.push(vec3.fromValues(
+                    view.getFloat32(offs + 0, false),
+                    view.getFloat32(offs + 4, false),
+                    view.getFloat32(offs + 8, false),
+                ));
+            }
+            this.effectPointSets.push(points);
+        }
 
         const animatedTextureStart = view.getUint32(0x48, false);
         const animatedTextureCount = view.getUint32(animatedTextureStart, false);
@@ -995,12 +1161,109 @@ interface SpriteData {
     images: number[];
 }
 
+interface EnvironmentParticleData {
+    map: number;
+    start: [number, number, number];
+    end: [number, number, number];
+    gap: number;
+    distance: number;
+    baseScale: number;
+    risingScale: number;
+}
+
+interface SetupProp {
+    id: number;
+    type: number;
+    position: vec3;
+    scale: number;
+    rotationY: number;
+}
+
+interface ScriptCommand {
+    opcode: number;
+    args: [number, number, number];
+}
+
+interface ScriptBlock {
+    conditions: ScriptCommand[];
+    executions: ScriptCommand[];
+}
+
+interface InstanceScript {
+    id: number;
+    behavior: number;
+    blocks: ScriptBlock[];
+}
+
+function parseSetupProps(data: ArrayBufferSlice): SetupProp[] {
+    const view = data.createDataView();
+    const count = view.getUint32(0, false);
+    const props: SetupProp[] = [];
+    for (let i = 0; i < count; i++) {
+        const offs = 4 + i * 0x30;
+        props.push({
+            id: view.getUint16(offs + 0x2A, false),
+            type: view.getUint16(offs + 0x28, false),
+            position: vec3.fromValues(
+                view.getFloat32(offs + 0x00, false),
+                view.getFloat32(offs + 0x04, false),
+                view.getFloat32(offs + 0x08, false),
+            ),
+            scale: view.getFloat32(offs + 0x0C, false),
+            rotationY: view.getFloat32(offs + 0x1C, false),
+        });
+    }
+    return props;
+}
+
+function parseScriptCommand(view: DataView, offs: number): ScriptCommand {
+    return {
+        opcode: view.getUint16(offs, false),
+        args: [
+            view.getInt16(offs + 2, false),
+            view.getInt16(offs + 4, false),
+            view.getInt16(offs + 6, false),
+        ],
+    };
+}
+
+function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
+    const view = data.createDataView();
+    const count = view.getUint16(0, false);
+    const scripts: InstanceScript[] = [];
+    let offs = 2;
+    for (let scriptIndex = 0; scriptIndex < count; scriptIndex++) {
+        const id = view.getUint16(offs, false);
+        const blockCount = view.getUint16(offs + 2, false);
+        const behavior = view.getUint16(offs + 4, false);
+        offs += 6;
+        const blocks: ScriptBlock[] = [];
+        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
+            const conditionCount = view.getUint16(offs, false);
+            offs += 2;
+            const conditions: ScriptCommand[] = [];
+            for (let i = 0; i < conditionCount; i++, offs += 8)
+                conditions.push(parseScriptCommand(view, offs));
+            const executionCount = view.getUint16(offs, false);
+            offs += 2;
+            const executions: ScriptCommand[] = [];
+            for (let i = 0; i < executionCount; i++, offs += 8)
+                executions.push(parseScriptCommand(view, offs));
+            blocks.push({ conditions, executions });
+        }
+        scripts.push({ id, behavior, blocks });
+    }
+    return scripts;
+}
+
 class ROMData {
     public MapData: (ArrayBufferSlice | number)[];
     public SetupData: (ArrayBufferSlice | number)[];
     public ScriptData: (ArrayBufferSlice | number)[];
     public CritterData: (ArrayBufferSlice | number)[];
     public SpriteData: SpriteData[];
+    public CustomScriptFunctionData: number[];
+    public EnvironmentParticleData: EnvironmentParticleData[];
     public TexData: ArrayBufferSlice[];
     public AnimTexData: ArrayBufferSlice[];
 
@@ -1012,13 +1275,238 @@ class ROMData {
         this.ScriptData = obj.ScriptData ?? [];
         this.CritterData = obj.CritterData ?? [];
         this.SpriteData = obj.SpriteData ?? [];
+        this.CustomScriptFunctionData = obj.CustomScriptFunctionData ?? [];
+        this.EnvironmentParticleData = obj.EnvironmentParticleData ?? [];
         this.TexData = obj.TexData.map((buffer: ArrayBufferSlice) => decompress(buffer));
         if (obj.AnimTexData === undefined)
             throw new Error('DK64 archive is missing animated textures; rerun npm run build:DonkeyKong64');
         this.AnimTexData = obj.AnimTexData;
     }
 
+    private loadMapTableEntry(table: (ArrayBufferSlice | number)[], mapID: number): ArrayBufferSlice {
+        let entry = table[mapID];
+        const visited = new Set<number>();
+        while (typeof entry === 'number') {
+            assert(!visited.has(entry));
+            visited.add(entry);
+            entry = table[entry];
+        }
+        assert(entry !== undefined);
+        return decompress(entry);
+    }
+
+    public loadSetup(mapID: number): ArrayBufferSlice {
+        return this.loadMapTableEntry(this.SetupData, mapID);
+    }
+
+    public loadScripts(mapID: number): ArrayBufferSlice {
+        return this.loadMapTableEntry(this.ScriptData, mapID);
+    }
+
     public destroy(device: GfxDevice): void {
+    }
+}
+
+interface SpriteParticleEvent {
+    origin: vec3;
+    spawnTick: number;
+    frameOffset?: number;
+    velocityY?: number;
+}
+
+function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, definition: SpriteData, events: SpriteParticleEvent[], scale: number, loopTicks: number, frameDuration = 1, lifetime: number | undefined = definition.images.length * frameDuration, color: readonly number[] = definition.params.slice(0, 4), maxDistance?: number, fadeStartDistance?: number): void {
+    assert(definition.imagesPerFrameHorizontal === 1 && definition.imagesPerFrameVertical === 1);
+    const sourceTable = definition.table !== 0 ? romData.TexData : romData.AnimTexData;
+    const sourceFrames = definition.images.map((image) => sourceTable[image]);
+    const frameCount = sourceFrames.length;
+    // Sprite instances have their own sub-frame counter in the game. Expand
+    // the frame list to one entry per tick so particles emitted between global
+    // frame boundaries still begin on their requested first image.
+    const frames = sourceFrames.flatMap((frame) => new Array(frameDuration).fill(frame));
+    const animationTickCount = frames.length;
+
+    for (let phase = 0; phase < animationTickCount; phase++) {
+        const phaseEvents = events.filter((event) => {
+            const requestedTick = (event.frameOffset ?? 0) * frameDuration;
+            const animationOffset = ((requestedTick - event.spawnTick) % animationTickCount + animationTickCount) % animationTickCount;
+            return animationOffset === phase;
+        });
+        for (let eventBase = 0; eventBase < phaseEvents.length; eventBase += 8) {
+            const batch = phaseEvents.slice(eventBase, eventBase + 8);
+            const segment = 0x0E;
+            const segmentBuffers: ArrayBufferSlice[] = [];
+            segmentBuffers[0x08] = createSpriteVertexBuffer(definition, batch.length);
+            const animation: AnimatedTexture[] = [{
+                segment,
+                // All phase batches use the same source frames. Key the
+                // translated textures by sprite definition, not phase;
+                // otherwise different sprites on segment 0x0E can alias in
+                // the shared texture cache when their phase numbers match.
+                group: definition.id,
+                frameDuration: 1,
+                frameOffset: phase,
+                frames,
+            }];
+            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animation);
+            initDL(state, false);
+            initSpriteMaterial(state, definition, segment, color);
+            const firstVertex = sharedOutput.vertices.length;
+            for (let quad = 0; quad < batch.length; quad++) {
+                state.gSPVertex(0x08000000 + quad * 4 * 0x10, 4, 0);
+                state.gSPTri(0, 1, 2);
+                state.gSPTri(0, 2, 3);
+            }
+            const output = state.finish();
+            if (output === null)
+                continue;
+
+            const width = definition.width * scale * 3;
+            const height = definition.height * scale * 3;
+            const mesh: Mesh = {
+                sharedOutput,
+                rspState: state,
+                rspOutput: output,
+                spriteBillboards: batch.map((event, index) => ({
+                    firstVertex: firstVertex + index * 4,
+                    origin: event.origin,
+                    centerX: 0,
+                    centerY: 0,
+                    halfWidth: width / 2,
+                    halfHeight: height / 2,
+                    spawnTick: lifetime === undefined ? undefined : event.spawnTick,
+                    lifetime: lifetime,
+                    loopTicks: lifetime === undefined ? undefined : loopTicks,
+                    velocityY: event.velocityY,
+                    maxDistance,
+                    fadeStartDistance,
+                })),
+            };
+            const meshData = new MeshData(device, cache, mesh);
+            sceneRenderer.meshDatas.push(meshData);
+            const renderer = new RootMeshRenderer(device, cache, meshData);
+            renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            renderer.setBackfaceCullingEnabled(false);
+            sceneRenderer.meshRenderers.push(renderer);
+        }
+    }
+}
+
+function isAlwaysRunningInitialBlock(block: ScriptBlock): boolean {
+    return block.conditions.length === 1
+        && block.conditions[0].opcode === 1
+        && block.conditions[0].args[0] === 0
+        && !block.executions.some((command) => command.opcode === 1);
+}
+
+function nextEffectRandom(state: { value: number }): number {
+    // A fixed stream makes the viewer's static reconstruction repeatable.
+    // The game uses its shared RNG; emitter frequency and selection semantics
+    // below are otherwise identical.
+    state.value = (Math.imul(state.value, 0x41C64E6D) + 0x3039) >>> 0;
+    return state.value >>> 16;
+}
+
+function interpolateEnvironmentParticle(entry: EnvironmentParticleData, offset: number): vec3 {
+    return vec3.fromValues(
+        (entry.start[0] + (entry.end[0] - entry.start[0]) * offset) * 3,
+        (entry.start[1] + (entry.end[1] - entry.start[1]) * offset) * 3,
+        (entry.start[2] + (entry.end[2] - entry.start[2]) * offset) * 3,
+    );
+}
+
+function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: Map, mapID: number): void {
+    const props = parseSetupProps(romData.loadSetup(mapID));
+    const propsByID = new globalThis.Map(props.map((prop) => [prop.id, prop]));
+    const scripts = parseInstanceScripts(romData.loadScripts(mapID));
+    const spriteByAddress = new globalThis.Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
+    const loopTicks = 900;
+
+    // func_global_asm_80664CB0 / func_global_asm_80664D20: map-keyed
+    // ambient waterfall emitters. Each definition emits a broad, stationary
+    // RGBA32 splash along its line and a smaller rising IA8 spray.
+    const baseSpray = spriteByAddress.get(0x8072140C);
+    const risingSpray = spriteByAddress.get(0x8071FF18);
+    if (baseSpray !== undefined && risingSpray !== undefined) {
+        for (const [entryIndex, entry] of romData.EnvironmentParticleData.entries()) {
+            if (entry.map !== mapID)
+                continue;
+            const random = { value: (mapID << 16) ^ entryIndex ^ 0x664D20 };
+            const baseEvents: SpriteParticleEvent[] = [];
+            const risingEvents: SpriteParticleEvent[] = [];
+            // func_global_asm_80717B64 kills the base sprite after one full
+            // animation: 6 frames * 3 ticks. The emitter replaces all five
+            // B0 sprites on that same 18-tick cadence. Generate every row,
+            // rather than leaving the first row alive forever, since each
+            // replacement chooses a fresh random starting frame.
+            for (let tick = 0; tick < loopTicks; tick++) {
+                if (tick % 18 === 0) {
+                    for (let offset = 0; offset <= 1.00001; offset += entry.gap) {
+                        baseEvents.push({
+                            origin: interpolateEnvironmentParticle(entry, Math.min(offset, 1)),
+                            spawnTick: tick,
+                            frameOffset: (nextEffectRandom(random) % 10000) % 6,
+                        });
+                    }
+                }
+                if (tick % 10 === 0) {
+                    risingEvents.push({
+                        origin: interpolateEnvironmentParticle(entry, ((nextEffectRandom(random) % 10000) % 1000) / 1000),
+                        spawnTick: tick,
+                        velocityY: 1.7 * 3,
+                    });
+                }
+            }
+            const drawDistance = entry.distance * 3;
+            // func_global_asm_80717B64 preserves the spawn alpha through the
+            // first 3/4 of the draw distance, then fades it to zero.
+            addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, baseSpray, baseEvents, entry.baseScale, loopTicks, 3, 18, [0xFF, 0xFF, 0xFF, 0x96], drawDistance, drawDistance * 3 / 4);
+            addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, risingSpray, risingEvents, entry.risingScale, loopTicks, 3, 30, [0xFF, 0xFF, 0xFF, 0x96], entry.distance * 3);
+        }
+    }
+
+    for (const script of scripts) {
+        const prop = propsByID.get(script.id);
+        if (prop === undefined)
+            continue;
+        for (const block of script.blocks) {
+            if (!isAlwaysRunningInitialBlock(block))
+                continue;
+            for (const command of block.executions) {
+                if (command.opcode !== 7)
+                    continue;
+                const functionAddress = romData.CustomScriptFunctionData[command.args[0]];
+
+                // func_global_asm_80644EC8: twice per tick, emit sprite
+                // D_global_asm_80720A7C at a random point in point sets 0/1.
+                if (functionAddress === 0x80644EC8) {
+                    const definition = spriteByAddress.get(0x80720A7C);
+                    if (definition === undefined)
+                        continue;
+                    const frequency = command.args[1];
+                    const requestedPointCount = command.args[2];
+                    if (frequency <= 0 || requestedPointCount <= 0)
+                        continue;
+                    const random = { value: (mapID << 16) ^ script.id ^ 0x44EC8 };
+                    const events: SpriteParticleEvent[] = [];
+                    for (let tick = 0; tick < loopTicks; tick++) {
+                        for (let set = 0; set < 2; set++) {
+                            if ((nextEffectRandom(random) % frequency) !== 0)
+                                continue;
+                            const points = map.effectPointSets[set];
+                            if (points === undefined || points.length === 0)
+                                continue;
+                            const pointCount = Math.min(requestedPointCount, points.length);
+                            const point = points[nextEffectRandom(random) % pointCount];
+                            events.push({
+                                origin: vec3.fromValues(point[0] * 3, point[1] * 3, point[2] * 3),
+                                spawnTick: tick,
+                            });
+                        }
+                    }
+                    addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, definition, events, 1.2, loopTicks);
+                }
+            }
+        }
     }
 }
 
@@ -1132,6 +1620,8 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshDatas.push(meshData);
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
         }
+
+        addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
         //     sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));

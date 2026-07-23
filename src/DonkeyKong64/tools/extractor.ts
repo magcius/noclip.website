@@ -52,6 +52,10 @@ function main() {
     const GlobalASMVirtualBase = 0x805FB300;
     const SpritePointerTableOffset = 0x15A090;
     const SpritePointerCount = 176;
+    const CustomScriptFunctionTableOffset = 0x14CB70;
+    const CustomScriptFunctionCount = 118;
+    const EnvironmentParticleTableOffset = 0x14D8A0;
+    const EnvironmentParticleCount = 13;
 
     function extractMapTable(tableOffset: number, fileCount = 0xD8): (ArrayBufferSlice | number)[] {
         const files: (ArrayBufferSlice | number)[] = [];
@@ -100,6 +104,30 @@ function main() {
             images,
         });
     }
+    const CustomScriptFunctionData = [];
+    for (let i = 0; i < CustomScriptFunctionCount; i++)
+        CustomScriptFunctionData.push(globalASM.readUInt32BE(CustomScriptFunctionTableOffset + i * 4));
+    const EnvironmentParticleData = [];
+    for (let i = 0; i < EnvironmentParticleCount; i++) {
+        const offs = EnvironmentParticleTableOffset + i * 0x20;
+        EnvironmentParticleData.push({
+            map: globalASM.readUInt8(offs + 0x00),
+            start: [
+                globalASM.readInt16BE(offs + 0x02),
+                globalASM.readInt16BE(offs + 0x04),
+                globalASM.readInt16BE(offs + 0x06),
+            ],
+            end: [
+                globalASM.readInt16BE(offs + 0x08),
+                globalASM.readInt16BE(offs + 0x0A),
+                globalASM.readInt16BE(offs + 0x0C),
+            ],
+            gap: globalASM.readFloatBE(offs + 0x10),
+            distance: globalASM.readInt16BE(offs + 0x14),
+            baseScale: globalASM.readFloatBE(offs + 0x18),
+            risingScale: globalASM.readFloatBE(offs + 0x1C),
+        });
+    }
 
     // Texture data table.
     const TexData: ArrayBufferSlice[] = [];
@@ -137,6 +165,8 @@ function main() {
         ScriptData,
         CritterData,
         SpriteData,
+        CustomScriptFunctionData,
+        EnvironmentParticleData,
         TexData,
         AnimTexData,
     };
