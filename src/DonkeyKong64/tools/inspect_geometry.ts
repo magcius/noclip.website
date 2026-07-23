@@ -323,10 +323,12 @@ function inspectSprites(rom: Buffer, spriteID: number | null): void {
         const images: string[] = [];
         for (let i = 0; i < imageCount; i++)
             images.push(hex(globalASM.readUInt16BE(offs + 0x14 + i * 2), 4));
+        const params = Array.from(globalASM.subarray(offs + 8, offs + 0x0D), (value) => hex(value, 2));
         console.log(
             `  index=${index} id=${hex(id, 2)} address=${hex(address, 8)} `
             + `grid=${globalASM.readUInt8(offs + 4)}x${globalASM.readUInt8(offs + 5)} `
-            + `codec=${globalASM.readUInt8(offs + 7)} table=${globalASM.readUInt8(offs + 0x0D)} `
+            + `flags=${hex(globalASM.readUInt8(offs + 6), 2)} codec=${globalASM.readUInt8(offs + 7)} `
+            + `params=[${params.join(', ')}] table=${globalASM.readUInt8(offs + 0x0D)} `
             + `dimensions=${globalASM.readUInt16BE(offs + 0x0E)}x${globalASM.readUInt16BE(offs + 0x10)} `
             + `images=[${images.join(', ')}]`,
         );

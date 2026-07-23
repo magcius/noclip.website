@@ -87,6 +87,7 @@ function main() {
         for (let j = 0; j < imageCount; j++)
             images.push(globalASM.readUInt16BE(offs + 0x14 + j * 2));
         SpriteData.push({
+            address,
             id: globalASM.readUInt32BE(offs),
             imagesPerFrameHorizontal: globalASM.readUInt8(offs + 4),
             imagesPerFrameVertical: globalASM.readUInt8(offs + 5),

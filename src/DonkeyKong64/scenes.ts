@@ -982,6 +982,7 @@ function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
 }
 
 interface SpriteData {
+    address: number;
     id: number;
     imagesPerFrameHorizontal: number;
     imagesPerFrameVertical: number;
