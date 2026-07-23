@@ -1085,4 +1085,4 @@ const sceneDescs = [
     new SceneDesc(`BF`, "Rambi Arena"),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, altName: "dk64" };
