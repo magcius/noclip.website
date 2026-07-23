@@ -90,6 +90,64 @@ function initWaterMaterial(rspState: RSPState): void {
     rspState.setTextureScrollSpeeds([5, 2]);
 }
 
+function initWaterSurfaceMaterial(rspState: RSPState, scrollS: number, scrollT: number): void {
+    rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 1, 0x0D000000);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 0, 0, 7, 0, 0, 5, 14, 0, 5, 14);
+    rspState.gDPLoadBlock(7, 0, 0, 1023, 128);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 8, 0, 0, 0, 0, 5, 14, 0, 5, 14);
+    rspState.gDPSetTileSize(0, 0, 0, 0x07C, 0x07C);
+    rspState.gDPSetCombine(0x0020FE04, 0xFF13F3FF);
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 0);
+    rspState.gSPTexture(true, 1, 1, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 8, 0, 1, 0, 0, 5, 14, 0, 5, 14);
+    rspState.gDPSetTileSize(1, 0, 0, 0x07C, 0x07C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 8, 0, 2, 0, 0, 5, 13, 0, 5, 13);
+    rspState.gDPSetTileSize(2, 0, 0, 0x07C, 0x07C);
+    rspState.setTextureScrollSpeeds([scrollS, scrollT]);
+}
+
+function waterSurfaceHeight(surface: WaterSurface, x: number, z: number, tick: number): number {
+    const phaseS = tick * surface.phaseSpeedS;
+    const phaseT = tick * surface.phaseSpeedT;
+    const angleS = (phaseS + Math.trunc(surface.frequencyS * x)) % 0x0FFF;
+    const angleT = (phaseT + Math.trunc(surface.frequencyT * z)) % 0x0FFF;
+    return surface.baseY
+        + Math.sin(angleS * Math.PI * 2 / 0x1000) * surface.amplitudeS
+        + Math.sin(angleT * Math.PI * 2 / 0x1000) * surface.amplitudeT;
+}
+
+function createWaterSurfaceVertexBuffer(surface: WaterSurface): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(surface.columns * surface.rows * 0x10);
+    const view = new DataView(buffer);
+    let offs = 0;
+    for (let row = 0; row < surface.rows; row++) {
+        const z = Math.min(surface.minZ + row * surface.step, surface.maxZ);
+        for (let column = 0; column < surface.columns; column++) {
+            const x = Math.min(surface.minX + column * surface.step, surface.maxX);
+            const y = waterSurfaceHeight(surface, x, z, 0);
+            const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
+                ((y - surface.baseY) / (surface.amplitudeS + surface.amplitudeT))
+                * surface.alphaRange + surface.alphaBase,
+            )));
+            view.setInt16(offs + 0x00, x * 3);
+            view.setInt16(offs + 0x02, Math.trunc(y * 3));
+            view.setInt16(offs + 0x04, z * 3);
+            view.setInt16(offs + 0x08, Math.trunc(x * surface.textureScale) % 0x7FFF);
+            view.setInt16(offs + 0x0A, Math.trunc(z * surface.textureScale) % 0x7FFF);
+            view.setUint8(offs + 0x0C, surface.colorR);
+            view.setUint8(offs + 0x0D, surface.colorG);
+            view.setUint8(offs + 0x0E, surface.colorB);
+            view.setUint8(offs + 0x0F, alpha);
+            offs += 0x10;
+        }
+    }
+    return new ArrayBufferSlice(buffer);
+}
+
 const viewMatrixScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 class DrawCallInstance {
@@ -344,13 +402,43 @@ export interface Mesh {
     sharedOutput: RSPSharedOutput;
     rspState: RSPState;
     rspOutput: RSPOutput | null;
+    waterAnimation?: {
+        surface: WaterSurface;
+        firstVertex: number;
+        vertexCount: number;
+    };
 }
 
 export class MeshData {
     public renderData: RenderData;
+    private lastWaterTick = -1;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, false);
+        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined);
+    }
+
+    public update(device: GfxDevice, time: number): void {
+        const animation = this.mesh.waterAnimation;
+        if (animation === undefined)
+            return;
+        const tick = Math.floor(time / (1000 / 30));
+        if (tick === this.lastWaterTick)
+            return;
+        this.lastWaterTick = tick;
+
+        const surface = animation.surface;
+        const amplitude = surface.amplitudeS + surface.amplitudeT;
+        for (let i = 0; i < animation.vertexCount; i++) {
+            const vertexIndex = animation.firstVertex + i;
+            const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
+            const y = waterSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
+            const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
+                ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
+            )));
+            this.renderData.vertexBufferData[vertexIndex * 10 + 1] = Math.trunc(y * 3);
+            this.renderData.vertexBufferData[vertexIndex * 10 + 9] = alpha / 0xFF;
+        }
+        device.uploadBufferData(this.renderData.vertexBuffer, 0, new Uint8Array(this.renderData.vertexBufferData.buffer));
     }
 
     public destroy(device: GfxDevice): void {
@@ -460,6 +548,7 @@ export class RootMeshRenderer {
         if (!this.visible)
             return;
 
+        this.geometryData.update(device, viewerInput.time);
         const renderData = this.geometryData.renderData;
 
         const template = renderInstManager.pushTemplate();
@@ -615,6 +704,32 @@ export class DisplayListInfo {
     public materialIndex: number | null;
 }
 
+interface WaterSurface {
+    textureScale: number;
+    frequencyS: number;
+    frequencyT: number;
+    amplitudeS: number;
+    amplitudeT: number;
+    phaseSpeedS: number;
+    phaseSpeedT: number;
+    scrollSpeedS: number;
+    scrollSpeedT: number;
+    step: number;
+    minX: number;
+    minZ: number;
+    maxX: number;
+    maxZ: number;
+    baseY: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+    alphaBase: number;
+    alphaRange: number;
+    materialIndex: number;
+    columns: number;
+    rows: number;
+}
+
 export class MapChunk {
     public x: number
     public y: number
@@ -669,6 +784,7 @@ export class Map {
     public sections: MapSection[] = [];
     public displayLists: DisplayListInfo[] = [];
     public animatedTextures: AnimatedTexture[] = [];
+    public waterSurfaces: WaterSurface[] = [];
 
     // headerInfo
     private dlStart: number;
@@ -710,6 +826,47 @@ export class Map {
                 group: view.getUint8(offs + 0x01),
                 frameDuration: view.getUint8(offs + 0x02),
                 frames,
+            });
+        }
+
+        const waterSurfaceStart = view.getUint32(0x4C, false);
+        const waterSurfaceCount = view.getUint32(waterSurfaceStart, false);
+        for (let i = 0; i < waterSurfaceCount; i++) {
+            const offs = waterSurfaceStart + 0x04 + i * 0x6C;
+            const step = view.getInt16(offs + 0x44, false);
+            const minX = view.getInt16(offs + 0x46, false);
+            const minZ = view.getInt16(offs + 0x48, false);
+            const maxX = view.getInt16(offs + 0x4A, false);
+            const maxZ = view.getInt16(offs + 0x4C, false);
+            const materialIndex = view.getUint8(offs + 0x66);
+            // Material zero is the two-layer, sine-deformed water surface.
+            // Other entries in this table drive different generated effects.
+            if (materialIndex !== 0)
+                continue;
+            this.waterSurfaces.push({
+                textureScale: view.getFloat32(offs + 0x00, false),
+                frequencyS: view.getFloat32(offs + 0x04, false),
+                frequencyT: view.getFloat32(offs + 0x08, false),
+                amplitudeS: view.getFloat32(offs + 0x0C, false),
+                amplitudeT: view.getFloat32(offs + 0x10, false),
+                phaseSpeedS: view.getInt32(offs + 0x14, false),
+                phaseSpeedT: view.getInt32(offs + 0x18, false),
+                scrollSpeedS: view.getFloat32(offs + 0x34, false),
+                scrollSpeedT: view.getFloat32(offs + 0x38, false),
+                step,
+                minX,
+                minZ,
+                maxX,
+                maxZ,
+                baseY: view.getInt16(offs + 0x4E, false),
+                colorR: view.getUint8(offs + 0x61),
+                colorG: view.getUint8(offs + 0x62),
+                colorB: view.getUint8(offs + 0x63),
+                alphaBase: view.getUint8(offs + 0x64),
+                alphaRange: view.getUint8(offs + 0x65),
+                materialIndex,
+                columns: Math.trunc((maxX - minX) / step) + 2,
+                rows: Math.trunc((maxZ - minZ) / step) + 2,
             });
         }
 
@@ -902,6 +1059,52 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const meshRenderer = new RootMeshRenderer(device, cache, meshData);
             sceneRenderer.meshRenderers.push(meshRenderer);
+        }
+
+        for (const surface of map.waterSurfaces) {
+            const vertexBuffer = createWaterSurfaceVertexBuffer(surface);
+            const segmentBuffers: ArrayBufferSlice[] = [];
+            segmentBuffers[0x08] = vertexBuffer;
+            const materialTextures: AnimatedTexture[] = [{
+                segment: 0x0D,
+                group: 0,
+                frameDuration: 0,
+                frames: [romData.AnimTexData[0x3C5]],
+            }];
+            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, materialTextures);
+            initDL(state, false);
+            initWaterSurfaceMaterial(state, surface.scrollSpeedS, surface.scrollSpeedT);
+
+            const firstVertex = sharedOutput.vertices.length;
+            for (let row = 0; row < surface.rows - 1; row++) {
+                for (let column = 0; column < surface.columns - 1; column += 15) {
+                    const cellCount = Math.min(15, surface.columns - 1 - column);
+                    const vertexCount = cellCount + 1;
+                    state.gSPVertex(0x08000000 + (row * surface.columns + column) * 0x10, vertexCount, 0);
+                    state.gSPVertex(0x08000000 + ((row + 1) * surface.columns + column) * 0x10, vertexCount, 16);
+                    for (let cell = 0; cell < cellCount; cell++) {
+                        state.gSPTri(cell + 1, cell, 16 + cell);
+                        state.gSPTri(16 + cell, 16 + cell + 1, cell + 1);
+                    }
+                }
+            }
+
+            const output = state.finish();
+            if (output === null)
+                continue;
+            const mesh: Mesh = {
+                sharedOutput,
+                rspState: state,
+                rspOutput: output,
+                waterAnimation: {
+                    surface,
+                    firstVertex,
+                    vertexCount: sharedOutput.vertices.length - firstVertex,
+                },
+            };
+            const meshData = new MeshData(device, cache, mesh);
+            sceneRenderer.meshDatas.push(meshData);
+            sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
         }
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
