@@ -110,6 +110,39 @@ function initWaterSurfaceMaterial(rspState: RSPState, scrollS: number, scrollT: 
     rspState.setTextureScrollSpeeds([scrollS, scrollT]);
 }
 
+function initWaterfallSprayMaterial(rspState: RSPState): void {
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+    rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x005049D8);
+    // G_CC_MODULATEIA_PRIM: the IA8 sprite supplies intensity and cutout
+    // alpha, modulated by the emitter's white, alpha-0x64 primitive color.
+    rspState.gDPSetCombine(0x00119623, 0xFF2FFFFF);
+    rspState.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0x64);
+    rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 1, 0x0E000000);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 5, 0, 0, 5, 0);
+    rspState.gDPLoadBlock(7, 0, 0, 511, 256);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 4, 0, 0, 0, 0, 5, 0, 0, 5, 0);
+    rspState.gDPSetTileSize(0, 0, 0, 0x07C, 0x07C);
+}
+
+function createWaterfallParticleVertexBuffer(): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(4 * 0x10);
+    const view = new DataView(buffer);
+    const textureCoordinates = [0, 0, 0x400, 0, 0x400, 0x400, 0, 0x400];
+    for (let i = 0; i < 4; i++) {
+        const offs = i * 0x10;
+        view.setInt16(offs + 0x08, textureCoordinates[i * 2]);
+        view.setInt16(offs + 0x0A, textureCoordinates[i * 2 + 1]);
+        view.setUint8(offs + 0x0C, 0xFF);
+        view.setUint8(offs + 0x0D, 0xFF);
+        view.setUint8(offs + 0x0E, 0xFF);
+        view.setUint8(offs + 0x0F, 0xFF);
+    }
+    return new ArrayBufferSlice(buffer);
+}
+
 function waterSurfaceHeight(surface: WaterSurface, x: number, z: number, tick: number): number {
     const phaseS = tick * surface.phaseSpeedS;
     const phaseT = tick * surface.phaseSpeedT;
@@ -286,7 +319,8 @@ class DrawCallInstance {
                 continue;
             // DK64 advances these counters once per 30 Hz game tick.
             const frameDuration = Math.max(this.drawCall.textureAnimationFrameDurations[i], 1);
-            const frame = Math.floor(viewerInput.time / (1000 / 30) / frameDuration) % mappings.length;
+            const frameOffset = this.drawCall.textureAnimationFrameOffsets[i] ?? 0;
+            const frame = (Math.floor(viewerInput.time / (1000 / 30) / frameDuration) + frameOffset) % mappings.length;
             this.textureMappings[i] = mappings[frame];
         }
 
@@ -407,6 +441,12 @@ export interface Mesh {
         firstVertex: number;
         vertexCount: number;
     };
+    waterfallParticle?: {
+        firstVertex: number;
+        origin: vec3;
+        phase: number;
+        halfSize: number;
+    };
 }
 
 export class MeshData {
@@ -414,29 +454,55 @@ export class MeshData {
     private lastWaterTick = -1;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined);
+        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.waterfallParticle !== undefined);
     }
 
-    public update(device: GfxDevice, time: number): void {
+    public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const animation = this.mesh.waterAnimation;
-        if (animation === undefined)
+        const particle = this.mesh.waterfallParticle;
+        if (animation === undefined && particle === undefined)
             return;
-        const tick = Math.floor(time / (1000 / 30));
+        const tick = Math.floor(viewerInput.time / (1000 / 30));
         if (tick === this.lastWaterTick)
             return;
         this.lastWaterTick = tick;
 
-        const surface = animation.surface;
-        const amplitude = surface.amplitudeS + surface.amplitudeT;
-        for (let i = 0; i < animation.vertexCount; i++) {
-            const vertexIndex = animation.firstVertex + i;
-            const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
-            const y = waterSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
-            const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
-                ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
-            )));
-            this.renderData.vertexBufferData[vertexIndex * 10 + 1] = Math.trunc(y * 3);
-            this.renderData.vertexBufferData[vertexIndex * 10 + 9] = alpha / 0xFF;
+        if (animation !== undefined) {
+            const surface = animation.surface;
+            const amplitude = surface.amplitudeS + surface.amplitudeT;
+            for (let i = 0; i < animation.vertexCount; i++) {
+                const vertexIndex = animation.firstVertex + i;
+                const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
+                const y = waterSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
+                const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
+                    ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
+                )));
+                this.renderData.vertexBufferData[vertexIndex * 10 + 1] = Math.trunc(y * 3);
+                this.renderData.vertexBufferData[vertexIndex * 10 + 9] = alpha / 0xFF;
+            }
+        }
+
+        if (particle !== undefined) {
+            // Sprite callback func_global_asm_80717D4C applies -(-120 / 100)
+            // to Y once per game tick: the spray rises 1.2 game units at 30 Hz.
+            const age = (tick + particle.phase) % 15;
+            const cx = particle.origin[0];
+            const cy = particle.origin[1] + age * 1.2 * 3;
+            const cz = particle.origin[2];
+            const rightX = viewerInput.camera.worldMatrix[0] * particle.halfSize;
+            const rightY = viewerInput.camera.worldMatrix[1] * particle.halfSize;
+            const rightZ = viewerInput.camera.worldMatrix[2] * particle.halfSize;
+            const upX = viewerInput.camera.worldMatrix[4] * particle.halfSize;
+            const upY = viewerInput.camera.worldMatrix[5] * particle.halfSize;
+            const upZ = viewerInput.camera.worldMatrix[6] * particle.halfSize;
+            const signs = [-1, -1, 1, -1, 1, 1, -1, 1];
+            for (let i = 0; i < 4; i++) {
+                const vertex = particle.firstVertex + i;
+                const sx = signs[i * 2], sy = signs[i * 2 + 1];
+                this.renderData.vertexBufferData[vertex * 10 + 0] = cx + rightX * sx + upX * sy;
+                this.renderData.vertexBufferData[vertex * 10 + 1] = cy + rightY * sx + upY * sy;
+                this.renderData.vertexBufferData[vertex * 10 + 2] = cz + rightZ * sx + upZ * sy;
+            }
         }
         device.uploadBufferData(this.renderData.vertexBuffer, 0, new Uint8Array(this.renderData.vertexBufferData.buffer));
     }
@@ -548,7 +614,7 @@ export class RootMeshRenderer {
         if (!this.visible)
             return;
 
-        this.geometryData.update(device, viewerInput.time);
+        this.geometryData.update(device, viewerInput);
         const renderData = this.geometryData.renderData;
 
         const template = renderInstManager.pushTemplate();
@@ -1105,6 +1171,57 @@ class SceneDesc implements Viewer.SceneDesc {
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
+        }
+
+        if (sceneID === 0xB0) {
+            // SpriteData 0x26 (D_global_asm_8071FFA0): IA8, 32x32,
+            // 15 frames at table-25 indices 0x143C..0x144A. Three staggered
+            // instances reproduce the continuously respawned base spray.
+            const sprayFrames = romData.TexData.slice(0x143C, 0x144B);
+            const sprayOrigins = [
+                vec3.fromValues(1989 * 3, 53 * 3, 1145 * 3),
+                vec3.fromValues(1991 * 3, 53 * 3, 1177 * 3),
+                vec3.fromValues(1989 * 3, 53 * 3, 1209 * 3),
+            ];
+            const phases = [0, 5, 10];
+            for (let i = 0; i < sprayOrigins.length; i++) {
+                const segmentBuffers: ArrayBufferSlice[] = [];
+                segmentBuffers[0x08] = createWaterfallParticleVertexBuffer();
+                const spriteAnimation: AnimatedTexture[] = [{
+                    segment: 0x0E,
+                    group: i,
+                    frameDuration: 1,
+                    frameOffset: phases[i],
+                    frames: sprayFrames,
+                }];
+                const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, spriteAnimation);
+                initDL(state, false);
+                initWaterfallSprayMaterial(state);
+                const firstVertex = sharedOutput.vertices.length;
+                state.gSPVertex(0x08000000, 4, 0);
+                state.gSPTri(0, 1, 2);
+                state.gSPTri(0, 2, 3);
+                const output = state.finish();
+                if (output === null)
+                    continue;
+                const mesh: Mesh = {
+                    sharedOutput,
+                    rspState: state,
+                    rspOutput: output,
+                    waterfallParticle: {
+                        firstVertex,
+                        origin: sprayOrigins[i],
+                        phase: phases[i],
+                        halfSize: 24 * 3,
+                    },
+                };
+                const meshData = new MeshData(device, cache, mesh);
+                sceneRenderer.meshDatas.push(meshData);
+                const renderer = new RootMeshRenderer(device, cache, meshData);
+                renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+                renderer.setBackfaceCullingEnabled(false);
+                sceneRenderer.meshRenderers.push(renderer);
+            }
         }
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)

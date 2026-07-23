@@ -66,9 +66,11 @@ function main() {
 
     // Texture data table.
     const TexData: ArrayBufferSlice[] = [];
-    // TODO(jstpierre): Proper count
+    // Includes sprite frames used by environmental effects. In particular,
+    // waterfall spray sprite 0x26 uses entries 0x143C through 0x144A.
+    // TODO(jstpierre): Read the proper count from pointer-table metadata.
     let texTableIdx = TextureTableOffset;
-    for (let i = 0; i < 0xC00; i++) {
+    for (let i = 0; i < 0x1450; i++) {
         const texDataPtr = view.getUint32(texTableIdx + 0x00);
 
         const offs = (texDataPtr & 0x7FFFFFFF) + PointerTableOffset;

@@ -27,6 +27,7 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimLOD = 0;
     public textureAnimationIndices: number[][] = [];
     public textureAnimationFrameDurations: number[] = [];
+    public textureAnimationFrameOffsets: number[] = [];
     public textureScrollSpeeds: number[] = [];
 }
 
@@ -34,6 +35,7 @@ export interface AnimatedTexture {
     segment: number;
     group: number;
     frameDuration: number;
+    frameOffset?: number;
     frames: ArrayBufferSlice[];
 }
 
@@ -138,7 +140,7 @@ export class RSPState {
         }
     }
 
-    private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number } {
+    private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number, frameOffset: number } {
         const tile = this.DP_TileState[tileIndex];
         const cache = assertExists(this.DP_TMemUploadTracker.get(tile.tmem));
         const segment = (cache.addr >>> 24) & 0xFF;
@@ -168,12 +170,13 @@ export class RSPState {
                 textureIndex: this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile, deinterleave),
                 animationIndices: [],
                 frameDuration: 0,
+                frameOffset: 0,
             };
         } else {
             const animation = this.animatedTextures.find((entry) => entry.segment === segment);
             if (animation === undefined) {
                 console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
-                return { textureIndex: 0, animationIndices: [], frameDuration: 0 };
+                return { textureIndex: 0, animationIndices: [], frameDuration: 0, frameOffset: 0 };
             }
 
             const oldCacheKey = tile.cacheKey;
@@ -191,6 +194,7 @@ export class RSPState {
                 textureIndex: textureIndices[0],
                 animationIndices: textureIndices,
                 frameDuration: animation.frameDuration,
+                frameOffset: animation.frameOffset ?? 0,
             };
         }
     }
@@ -213,6 +217,7 @@ export class RSPState {
             dc.textureIndices.push(texture0.textureIndex);
             dc.textureAnimationIndices.push(texture0.animationIndices);
             dc.textureAnimationFrameDurations.push(texture0.frameDuration);
+            dc.textureAnimationFrameOffsets.push(texture0.frameOffset);
             dc.textureScrollSpeeds.push(this.textureScrollSpeeds[0] ?? 0);
 
             if (!lod_en && RDP.combineParamsUsesT1(dc.DP_Combine)) {
@@ -221,6 +226,7 @@ export class RSPState {
                 dc.textureIndices.push(texture1.textureIndex);
                 dc.textureAnimationIndices.push(texture1.animationIndices);
                 dc.textureAnimationFrameDurations.push(texture1.frameDuration);
+                dc.textureAnimationFrameOffsets.push(texture1.frameOffset);
                 dc.textureScrollSpeeds.push(this.textureScrollSpeeds[1] ?? 0);
             }
         }
