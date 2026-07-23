@@ -38,6 +38,7 @@
     "build:ZeldaWindWaker": "tsx src/ZeldaWindWaker/tools/zww_extractor.ts",
     "build:ZeldaTwilightPrincess": "tsx src/ZeldaTwilightPrincess/tools/ztp_extractor.ts",
     "build:DonkeyKong64": "tsx src/DonkeyKong64/tools/extractor.ts",
+    "inspect:DonkeyKong64": "node --import tsx src/DonkeyKong64/tools/inspect_geometry.ts",
     "build:KatamariDamacy": "tsx src/KatamariDamacy/tools/extractor.ts",
     "build:FinalFantasyX": "tsx src/FinalFantasyX/tools/extractor.ts",
     "build:zelview": "tsx src/zelview/tools/extractor.ts",
