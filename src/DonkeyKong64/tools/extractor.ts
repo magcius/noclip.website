@@ -20,9 +20,9 @@ function determineSizeOfZlibStream(buffer: ArrayBufferSlice, srcOffs: number): n
 
     // typescript types are wrong, when info = true, then it returns a buffer and an engine
     const { engine } = inflateRawSync(buffer.createTypedArray(Uint8Array, srcOffs + 0x0A), { info: true }) as unknown as { buffer: Buffer, engine: Zlib };
-    const size = buffer.byteLength - engine.bytesWritten;
-
-    return 0x0A + size;
+    // `bytesWritten` is the number of compressed bytes consumed by the
+    // inflater, not the number of bytes remaining in the ROM buffer.
+    return 0x0A + engine.bytesWritten;
 }
 
 function cutZlibBuffer(buffer: ArrayBufferSlice, srcOffs: number): ArrayBufferSlice {
