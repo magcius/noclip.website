@@ -1,8 +1,18 @@
 import { readFileSync } from 'fs';
-import { inflateRawSync } from 'zlib';
+import { gunzipSync, inflateRawSync } from 'zlib';
 
 const pointerTableOffset = 0x101C50;
 const mapTableOffset = 0x15232C;
+const setupTableOffset = 0xD0E86C;
+const scriptTableOffset = 0xD3B56C;
+const spawnerTableOffset = 0x1170D44;
+const critterTableOffset = 0x1188BDC;
+const globalASMCodeROMOffset = 0x113F0;
+const globalASMDataROMOffset = 0xC29D4;
+const globalASMDataCompressedSize = 0x949C;
+const spritePointerTableOffset = 0x15A090;
+const spritePointerCount = 176;
+const globalASMVirtualBase = 0x805FB300;
 
 function parseNumber(s: string): number {
     if (s.startsWith('0x'))
@@ -14,18 +24,22 @@ function hex(n: number, width = 0): string {
     return `0x${n.toString(16).padStart(width, '0')}`;
 }
 
-function getMapData(rom: Buffer, mapID: number): Buffer {
-    const mapPointer = rom.readUInt32BE(mapTableOffset + mapID * 4);
-    const romOffset = (mapPointer & 0x7FFFFFFF) + pointerTableOffset;
-    if ((mapPointer & 0x80000000) !== 0) {
+function getPointerTableData(rom: Buffer, tableOffset: number, fileID: number, name: string): Buffer {
+    const pointer = rom.readUInt32BE(tableOffset + fileID * 4);
+    const romOffset = (pointer & 0x7FFFFFFF) + pointerTableOffset;
+    if ((pointer & 0x80000000) !== 0) {
         const targetMapID = rom.readUInt16BE(romOffset);
-        console.log(`Map ${hex(mapID, 2)} redirects to ${hex(targetMapID, 2)}`);
-        return getMapData(rom, targetMapID);
+        console.log(`${name} ${hex(fileID, 2)} redirects to ${hex(targetMapID, 2)}`);
+        return getPointerTableData(rom, tableOffset, targetMapID, name);
     }
 
     if (rom.readUInt32BE(romOffset) !== 0x1F8B0800)
-        throw new Error(`Map ${hex(mapID, 2)} does not point to a DK64 gzip stream`);
+        throw new Error(`${name} ${hex(fileID, 2)} does not point to a DK64 gzip stream`);
     return inflateRawSync(rom.subarray(romOffset + 0x0A));
+}
+
+function getMapData(rom: Buffer, mapID: number): Buffer {
+    return getPointerTableData(rom, mapTableOffset, mapID, 'Map');
 }
 
 const opcodeNames = new Map<number, string>([
@@ -63,6 +77,20 @@ function disassembleDisplayList(map: Buffer, dlStart: number, relativeOffset: nu
         let annotation = '';
         if (opcode === 0x00)
             annotation = ` section=${hex(w1)}`;
+        else if (opcode === 0x01 && (w1 >>> 24) === 0x06) {
+            const count = (w0 >>> 12) & 0xFF;
+            const vertexOffset = map.readUInt32BE(0x38) + (w1 & 0x00FFFFFF);
+            const positions: string[] = [];
+            for (let i = 0; i < count; i++) {
+                const vertex = vertexOffset + i * 0x10;
+                positions.push(
+                    `(${map.readInt16BE(vertex)},${map.readInt16BE(vertex + 2)},${map.readInt16BE(vertex + 4)}`
+                    + `;uv=${map.readInt16BE(vertex + 8)},${map.readInt16BE(vertex + 0x0A)}`
+                    + `;rgba=${map.readUInt8(vertex + 0x0C)},${map.readUInt8(vertex + 0x0D)},${map.readUInt8(vertex + 0x0E)},${map.readUInt8(vertex + 0x0F)})`,
+                );
+            }
+            annotation = ` vertices=${positions.join(',')}`;
+        }
         else if (opcode === 0xFD)
             annotation = ` segment=${hex(w1 >>> 24, 2)} address=${hex(w1 & 0x00FFFFFF, 6)}`;
         else if (opcode === 0xDE)
@@ -89,6 +117,7 @@ function inspectMap(map: Buffer, mapID: number): void {
     ] as const;
 
     console.log(`Map ${hex(mapID, 2)}, decompressed size ${hex(map.length)}`);
+    console.log(`mapFlags                 ${hex(map.readUInt8(0x08), 2)} (fog=${(map.readUInt8(0x08) & 1) !== 0})`);
     for (const [name, offs] of headerFields)
         console.log(`${name.padEnd(24)} ${hex(map.readUInt32BE(offs))}`);
 
@@ -142,10 +171,172 @@ function inspectMap(map: Buffer, mapID: number): void {
     console.log(`\nDisplay-list expansions: ${map.readUInt32BE(expansionStart)}`);
 }
 
+function inspectSetup(setup: Buffer, mapID: number): void {
+    const propCount = setup.readUInt32BE(0);
+    let offs = 4;
+    console.log(`\nSetup ${hex(mapID, 2)}, decompressed size ${hex(setup.length)}`);
+    console.log(`Props (${propCount}):`);
+    for (let i = 0; i < propCount; i++, offs += 0x30) {
+        console.log(
+            `${i.toString().padStart(3)} @${hex(offs, 4)} `
+            + `type=${hex(setup.readUInt16BE(offs + 0x28), 4)} id=${hex(setup.readUInt16BE(offs + 0x2A), 4)} `
+            + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
+            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} rotY=${setup.readFloatBE(offs + 0x1C).toFixed(1)}`,
+        );
+    }
+
+    const mysteryCount = setup.readUInt32BE(offs);
+    offs += 4;
+    console.log(`Mystery entries (${mysteryCount}):`);
+    for (let i = 0; i < mysteryCount; i++, offs += 0x24) {
+        const words: string[] = [];
+        for (let j = 0; j < 9; j++)
+            words.push(hex(setup.readUInt32BE(offs + j * 4), 8));
+        console.log(`${i.toString().padStart(3)} @${hex(offs, 4)} ${words.join(' ')}`);
+    }
+
+    const actorCount = setup.readUInt32BE(offs);
+    offs += 4;
+    console.log(`Actors (${actorCount}):`);
+    for (let i = 0; i < actorCount; i++, offs += 0x38) {
+        console.log(
+            `${i.toString().padStart(3)} @${hex(offs, 4)} `
+            + `type=${hex(setup.readUInt16BE(offs + 0x32), 4)} id=${hex(setup.readUInt16BE(offs + 0x34), 4)} `
+            + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
+            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} rotY=${setup.readInt16BE(offs + 0x30)}`,
+        );
+    }
+}
+
+function inspectScripts(scripts: Buffer, mapID: number): void {
+    console.log(`\nScripts ${hex(mapID, 2)}, decompressed size ${hex(scripts.length)}`);
+    const scriptCount = scripts.readUInt16BE(0);
+    let offs = 2;
+    console.log(`Script entries (${scriptCount}):`);
+    for (let scriptIndex = 0; scriptIndex < scriptCount; scriptIndex++) {
+        const id = scripts.readUInt16BE(offs);
+        const blockCount = scripts.readUInt16BE(offs + 2);
+        const behavior = scripts.readUInt16BE(offs + 4);
+        console.log(`${scriptIndex}: id=${hex(id, 4)} blocks=${blockCount} behavior=${hex(behavior, 4)} @${hex(offs, 4)}`);
+        offs += 6;
+        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
+            const conditionCount = scripts.readUInt16BE(offs);
+            offs += 2;
+            const conditions: string[] = [];
+            for (let i = 0; i < conditionCount; i++, offs += 8) {
+                conditions.push(
+                    `${hex(scripts.readUInt16BE(offs), 4)}(`
+                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
+                );
+            }
+            const executionCount = scripts.readUInt16BE(offs);
+            offs += 2;
+            const executions: string[] = [];
+            for (let i = 0; i < executionCount; i++, offs += 8) {
+                executions.push(
+                    `${hex(scripts.readUInt16BE(offs), 4)}(`
+                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
+                );
+            }
+            console.log(`  block ${blockIndex}: if [${conditions.join(', ')}] exec [${executions.join(', ')}]`);
+        }
+    }
+    console.log(`Parsed through ${hex(offs)} of ${hex(scripts.length)}`);
+}
+
+function inspectSpawners(spawners: Buffer, mapID: number): void {
+    console.log(`\nSpawners ${hex(mapID, 2)}, decompressed size ${hex(spawners.length)}`);
+    let offs = 0;
+    const fenceCount = spawners.readUInt16BE(offs);
+    offs += 2;
+    console.log(`Fences (${fenceCount}):`);
+    for (let fenceIndex = 0; fenceIndex < fenceCount; fenceIndex++) {
+        const pointCount = spawners.readUInt16BE(offs);
+        offs += 2;
+        const points: string[] = [];
+        for (let i = 0; i < pointCount; i++, offs += 6)
+            points.push(`(${spawners.readInt16BE(offs)},${spawners.readInt16BE(offs + 2)},${spawners.readInt16BE(offs + 4)})`);
+        const extraCount = spawners.readUInt16BE(offs);
+        offs += 2;
+        const extras: string[] = [];
+        for (let i = 0; i < extraCount; i++, offs += 0x0A)
+            extras.push(spawners.subarray(offs, offs + 0x0A).toString('hex'));
+        const flags = spawners.subarray(offs, offs + 2).toString('hex');
+        offs += 2;
+        console.log(`  ${fenceIndex}: points=[${points.join(', ')}] extras=[${extras.join(', ')}] flags=${flags}`);
+    }
+
+    const spawnerCount = spawners.readUInt16BE(offs);
+    offs += 2;
+    console.log(`Enemy spawners (${spawnerCount}):`);
+    for (let i = 0; i < spawnerCount; i++) {
+        const start = offs;
+        const extraDataCount = spawners.readUInt8(offs + 0x11);
+        console.log(
+            `  ${i} @${hex(start, 4)} enemy=${hex(spawners.readUInt8(offs), 2)} `
+            + `pos=(${spawners.readInt16BE(offs + 4)},${spawners.readInt16BE(offs + 6)},${spawners.readInt16BE(offs + 8)}) `
+            + `rotY=${spawners.readUInt16BE(offs + 2)} scale=${spawners.readUInt8(offs + 0x0F)} `
+            + `state=${spawners.readUInt8(offs + 0x12)} trigger=${spawners.readUInt8(offs + 0x13)} `
+            + `extra=${extraDataCount}`,
+        );
+        offs += 0x16 + extraDataCount * 2;
+    }
+    console.log(`Parsed through ${hex(offs)} of ${hex(spawners.length)}`);
+}
+
+function inspectCritters(critters: Buffer, mapID: number): void {
+    console.log(`\nAmbient critters ${hex(mapID, 2)}, decompressed size ${hex(critters.length)}`);
+    let offs = 0;
+    const groupCount = critters.readUInt8(offs++);
+    console.log(`Groups (${groupCount}):`);
+    for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+        const type = critters.readUInt8(offs++);
+        const regionCount = critters.readUInt8(offs++);
+        const critterCount = critters.readUInt8(offs++);
+        console.log(`  ${groupIndex}: type=${type} regions=${regionCount} critters=${critterCount}`);
+        for (let regionIndex = 0; regionIndex < regionCount; regionIndex++, offs += 0x20) {
+            const fields: string[] = [];
+            for (let fieldOffset = 6; fieldOffset < 0x20; fieldOffset += 2)
+                fields.push(hex(critters.readUInt16BE(offs + fieldOffset), 4));
+            console.log(
+                `    region ${regionIndex} @${hex(offs, 4)} `
+                + `pos=(${critters.readInt16BE(offs)},${critters.readInt16BE(offs + 2)},${critters.readInt16BE(offs + 4)}) `
+                + `fields=[${fields.join(', ')}]`,
+            );
+        }
+    }
+    console.log(`Parsed through ${hex(offs)} of ${hex(critters.length)}`);
+}
+
+function inspectSprites(rom: Buffer, spriteID: number | null): void {
+    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
+    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
+    const globalASM = Buffer.concat([code, data]);
+    console.log('\nGlobal sprite definitions:');
+    for (let index = 0; index < spritePointerCount; index++) {
+        const address = globalASM.readUInt32BE(spritePointerTableOffset + index * 4);
+        const offs = address - globalASMVirtualBase;
+        const id = globalASM.readUInt32BE(offs);
+        if (spriteID !== null && id !== spriteID)
+            continue;
+        const imageCount = globalASM.readUInt16BE(offs + 0x12);
+        const images: string[] = [];
+        for (let i = 0; i < imageCount; i++)
+            images.push(hex(globalASM.readUInt16BE(offs + 0x14 + i * 2), 4));
+        console.log(
+            `  index=${index} id=${hex(id, 2)} address=${hex(address, 8)} `
+            + `grid=${globalASM.readUInt8(offs + 4)}x${globalASM.readUInt8(offs + 5)} `
+            + `codec=${globalASM.readUInt8(offs + 7)} table=${globalASM.readUInt8(offs + 0x0D)} `
+            + `dimensions=${globalASM.readUInt16BE(offs + 0x0E)}x${globalASM.readUInt16BE(offs + 0x10)} `
+            + `images=[${images.join(', ')}]`,
+        );
+    }
+}
+
 function main(): void {
     const args = process.argv.slice(2);
     if (args.length < 1) {
-        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--rom=<path>]');
+        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--setup] [--scripts] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
         console.error('Example: npm run inspect:DonkeyKong64 -- B0 --dl=9778');
         process.exit(1);
     }
@@ -158,6 +349,17 @@ function main(): void {
     inspectMap(map, mapID);
     if (dlArg !== undefined)
         disassembleDisplayList(map, map.readUInt32BE(0x34), parseNumber(dlArg.slice('--dl='.length)));
+    if (args.includes('--setup'))
+        inspectSetup(getPointerTableData(rom, setupTableOffset, mapID, 'Setup'), mapID);
+    if (args.includes('--scripts'))
+        inspectScripts(getPointerTableData(rom, scriptTableOffset, mapID, 'Scripts'), mapID);
+    if (args.includes('--spawners'))
+        inspectSpawners(getPointerTableData(rom, spawnerTableOffset, mapID, 'Spawners'), mapID);
+    if (args.includes('--critters'))
+        inspectCritters(getPointerTableData(rom, critterTableOffset, mapID, 'Critters'), mapID);
+    const spritesArg = args.find((arg) => arg === '--sprites' || arg.startsWith('--sprites='));
+    if (spritesArg !== undefined)
+        inspectSprites(rom, spritesArg.includes('=') ? parseNumber(spritesArg.slice(spritesArg.indexOf('=') + 1)) : null);
 }
 
 main();

@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "fs";
 
 import * as BYML from '../../byml.js';
 import { assert } from "../../util.js";
-import { Zlib, inflateRawSync } from "zlib";
+import { Zlib, gunzipSync, inflateRawSync } from "zlib";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -44,33 +44,69 @@ function main() {
     const ActorModelTableOffset = 0x8D3018;
     const TextureTableOffset = 0x118B638;
     const UncompressedTextureTableOffset = 0x981018;
+    const ScriptTableOffset = 0xD3B56C;
+    const CritterTableOffset = 0x1188BDC;
+    const GlobalASMCodeROMOffset = 0x113F0;
+    const GlobalASMDataROMOffset = 0xC29D4;
+    const GlobalASMDataCompressedSize = 0x949C;
+    const GlobalASMVirtualBase = 0x805FB300;
+    const SpritePointerTableOffset = 0x15A090;
+    const SpritePointerCount = 176;
+
+    function extractMapTable(tableOffset: number, fileCount = 0xD8): (ArrayBufferSlice | number)[] {
+        const files: (ArrayBufferSlice | number)[] = [];
+        for (let i = 0; i < fileCount; i++) {
+            const pointer = view.getUint32(tableOffset + i * 4);
+            const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
+            if (!!(pointer & 0x80000000))
+                files[i] = view.getUint16(offs);
+            else
+                files[i] = cutZlibBuffer(romData, offs);
+        }
+        return files;
+    }
 
     // Map data table.
-    const MapData: (ArrayBufferSlice | number)[] = [];
-    let mapTableIdx = MapTableOffset;
-    for (let i = 0; i < 0xD8; i++) {
-        const mapDataPtr = view.getUint32(mapTableIdx + 0x00);
+    const MapData = extractMapTable(MapTableOffset);
+    const SetupData = extractMapTable(SetupTableOffset);
+    const ScriptData = extractMapTable(ScriptTableOffset);
+    const CritterData = extractMapTable(CritterTableOffset, 0xB1);
 
-        const offs = (mapDataPtr & 0x7FFFFFFF) + PointerTableOffset;
-        if (!!(mapDataPtr & 0x80000000)) {
-            // Indirect reference to another map.
-            const otherMap = view.getUint16(offs);
-            MapData[i] = otherMap;
-        } else {
-            // TODO(jstpierre): Extract the proper size, and decompress on client.
-            MapData[i] = cutZlibBuffer(romData, offs);
-        }
-
-        mapTableIdx += 0x04;
+    // SpriteData is stored in the compressed global overlay. This table is
+    // the game's authoritative mapping from sprite IDs to texture frames,
+    // formats, dimensions, and sprite-sheet layout.
+    const globalASMCode = gunzipSync(romData.createTypedArray(Uint8Array, GlobalASMCodeROMOffset, GlobalASMDataROMOffset - GlobalASMCodeROMOffset));
+    const globalASMData = gunzipSync(romData.createTypedArray(Uint8Array, GlobalASMDataROMOffset, GlobalASMDataCompressedSize));
+    const globalASM = Buffer.concat([globalASMCode, globalASMData]);
+    const SpriteData = [];
+    for (let i = 0; i < SpritePointerCount; i++) {
+        const address = globalASM.readUInt32BE(SpritePointerTableOffset + i * 4);
+        const offs = address - GlobalASMVirtualBase;
+        const imageCount = globalASM.readUInt16BE(offs + 0x12);
+        const images = [];
+        for (let j = 0; j < imageCount; j++)
+            images.push(globalASM.readUInt16BE(offs + 0x14 + j * 2));
+        SpriteData.push({
+            id: globalASM.readUInt32BE(offs),
+            imagesPerFrameHorizontal: globalASM.readUInt8(offs + 4),
+            imagesPerFrameVertical: globalASM.readUInt8(offs + 5),
+            flags: globalASM.readUInt8(offs + 6),
+            codec: globalASM.readUInt8(offs + 7),
+            params: Array.from(globalASM.subarray(offs + 8, offs + 0x0D)),
+            table: globalASM.readUInt8(offs + 0x0D),
+            width: globalASM.readUInt16BE(offs + 0x0E),
+            height: globalASM.readUInt16BE(offs + 0x10),
+            images,
+        });
     }
 
     // Texture data table.
     const TexData: ArrayBufferSlice[] = [];
-    // Includes sprite frames used by environmental effects. In particular,
-    // waterfall spray sprite 0x26 uses entries 0x143C through 0x144A.
-    // TODO(jstpierre): Read the proper count from pointer-table metadata.
+    const textureCount = Math.max(...SpriteData
+        .filter((sprite) => sprite.table === 1)
+        .flatMap((sprite) => sprite.images)) + 1;
     let texTableIdx = TextureTableOffset;
-    for (let i = 0; i < 0x1450; i++) {
+    for (let i = 0; i < textureCount; i++) {
         const texDataPtr = view.getUint32(texTableIdx + 0x00);
 
         const offs = (texDataPtr & 0x7FFFFFFF) + PointerTableOffset;
@@ -83,8 +119,11 @@ function main() {
     // animated materials, swapping the texture bound to an RSP segment every
     // few game ticks.
     const AnimTexData: ArrayBufferSlice[] = [];
+    const uncompressedTextureCount = Math.max(0x3E1, Math.max(...SpriteData
+        .filter((sprite) => sprite.table === 0)
+        .flatMap((sprite) => sprite.images)) + 1);
     let animTexTableIdx = UncompressedTextureTableOffset;
-    for (let i = 0; i < 0x3E1; i++) {
+    for (let i = 0; i < uncompressedTextureCount; i++) {
         const offs = view.getUint32(animTexTableIdx + 0x00) + PointerTableOffset;
         const nextOffs = view.getUint32(animTexTableIdx + 0x04) + PointerTableOffset;
         AnimTexData[i] = romData.slice(offs, nextOffs);
@@ -93,6 +132,10 @@ function main() {
 
     const crg1 = {
         MapData,
+        SetupData,
+        ScriptData,
+        CritterData,
+        SpriteData,
         TexData,
         AnimTexData,
     };
