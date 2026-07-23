@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
 
 import * as BYML from '../../byml.js';
-import { assert } from "../../util.js";
+import { assert, hexzero } from "../../util.js";
 import { Zlib, gunzipSync, inflateRawSync } from "zlib";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
@@ -147,6 +147,18 @@ function main() {
     const ScriptData = extractCompressedTable(PointerTable.Scripts);
     const CritterData = extractCompressedTable(PointerTable.Critters);
 
+    function resolveTableEntry(table: (ArrayBufferSlice | number)[], index: number): ArrayBufferSlice {
+        let entry = table[index];
+        const visited = new Set<number>();
+        while (typeof entry === 'number') {
+            assert(!visited.has(entry));
+            visited.add(entry);
+            entry = table[entry];
+        }
+        assert(entry !== undefined);
+        return entry;
+    }
+
     // SpriteData is stored in the compressed global overlay. This table is
     // the game's authoritative mapping from sprite IDs to texture frames,
     // formats, dimensions, and sprite-sheet layout.
@@ -230,21 +242,593 @@ function main() {
         animTexTableIdx += 0x04;
     }
 
-    const crg1 = {
-        MapData,
-        PropGeometryData,
-        SetupData,
-        ScriptData,
-        CritterData,
+    interface TextureUsage {
+        geometry: Set<number>;
+        animated: Set<number>;
+    }
+
+    interface LevelSource {
+        MapData: ArrayBufferSlice;
+        SetupData: ArrayBufferSlice;
+        ScriptData: ArrayBufferSlice;
+        CritterData: ArrayBufferSlice | null;
+        PropGeometry: { Type: number, Data: ArrayBufferSlice }[];
+        EnvironmentParticleData: typeof EnvironmentParticleData;
+        textureUsage: TextureUsage;
+    }
+
+    function inflatePointerTableData(data: ArrayBufferSlice, description: string): Buffer {
+        try {
+            // Pointer-table slices intentionally omit the gzip footer; the
+            // runtime likewise inflates the raw DEFLATE payload after 0x0A.
+            return inflateRawSync(data.createTypedArray(Uint8Array, 0x0A));
+        } catch (e) {
+            throw new Error(`Could not decompress ${description}`, { cause: e });
+        }
+    }
+
+    function scanTextureCommands(data: Buffer, start: number, end: number, output: Set<number>, excluded = new Set<number>()): void {
+        assert(start >= 0 && start <= end && end <= data.byteLength);
+        for (let offs = start; offs + 8 <= end; offs += 8) {
+            if (data.readUInt8(offs) !== 0xFD)
+                continue;
+            const address = data.readUInt32BE(offs + 4);
+            // Segment zero is an index into pointer table 25. Other segments
+            // are supplied by map/prop animation descriptors handled below.
+            if ((address >>> 24) === 0 && !excluded.has(address))
+                output.add(address);
+        }
+    }
+
+    function scanMapTextureUsage(map: Buffer, usage: TextureUsage): void {
+        const dlStart = map.readUInt32BE(0x34);
+        const vertStart = map.readUInt32BE(0x38);
+        scanTextureCommands(map, dlStart, vertStart, usage.geometry);
+
+        const animatedStart = map.readUInt32BE(0x48);
+        const animatedCount = map.readUInt32BE(animatedStart);
+        for (let i = 0; i < animatedCount; i++) {
+            const offs = animatedStart + 4 + i * 0x7C;
+            const frameCount = map.readUInt8(offs + 3);
+            for (let frame = 0; frame < frameCount; frame++)
+                usage.animated.add(map.readUInt32BE(offs + 0x0C + frame * 4));
+        }
+
+        // Runtime-generated water materials use two fixed table-7 textures
+        // which do not appear in G_SETTIMG commands as table indices.
+        const waterStart = map.readUInt32BE(0x4C);
+        const waterCount = map.readUInt32BE(waterStart);
+        for (let i = 0; i < waterCount; i++) {
+            if (map.readUInt8(waterStart + 4 + i * 0x6C + 0x66) === 0) {
+                usage.animated.add(0x3C5);
+                break;
+            }
+        }
+
+        const rootNode = map.readUInt32BE(0x30);
+        const specialDisplayListCount = map.readUInt8(rootNode + 0xC5);
+        for (let i = 0; i < specialDisplayListCount; i++) {
+            const displayList = map.readInt32BE(rootNode + 0x1C + i * 4);
+            const material = map.readUInt16BE(rootNode + 0x70 + i * 2);
+            if (displayList >= 0 && material === 4) {
+                usage.animated.add(0x3E0);
+                break;
+            }
+        }
+    }
+
+    function scanPropTextureUsage(prop: Buffer, usage: TextureUsage): void {
+        const decalTexture = prop.readUInt16BE(0x28);
+        if (decalTexture !== 0xFFFF)
+            usage.geometry.add(decalTexture);
+
+        // Indexed prop animations leave their target IDs in segment zero,
+        // even though both the target and frames come from table 7. Exclude
+        // those placeholders from the table-25 command scan.
+        const animatedTargets = new Set<number>();
+        const descriptorStart = prop.readUInt32BE(0x6C);
+        if (descriptorStart + 4 <= prop.byteLength) {
+            const descriptorCount = prop.readUInt32BE(descriptorStart);
+            for (let i = 0; i < descriptorCount; i++) {
+                const offs = descriptorStart + 4 + i * 0x84;
+                if (offs + 0x84 > prop.byteLength)
+                    break;
+                const target = prop.readUInt32BE(offs);
+                const frameCount = prop.readUInt32BE(offs + 0x0C);
+                if (frameCount === 0 || frameCount > 0x1E)
+                    continue;
+                animatedTargets.add(target);
+                usage.animated.add(target);
+                for (let frame = 1; frame < frameCount; frame++)
+                    usage.animated.add(prop.readUInt32BE(offs + 0x0C + frame * 4));
+            }
+        }
+
+        // Layout 2 is runtime-generated model data and is not currently
+        // rendered as an F3DEX2 display-list range.
+        if (prop.readUInt8(0x1C) !== 1)
+            return;
+        const mainDisplayListStart = prop.readUInt32BE(0x40);
+        const secondaryDisplayListStart = prop.readUInt32BE(0x44);
+        const vertexStart = prop.readUInt32BE(0x48);
+        scanTextureCommands(prop, Math.min(mainDisplayListStart, secondaryDisplayListStart), vertexStart, usage.geometry, animatedTargets);
+    }
+
+    const spriteByAddress = new Map(SpriteData.map((sprite) => [sprite.address, sprite]));
+    function addSpriteTextureUsage(address: number, usage: TextureUsage): void {
+        const sprite = spriteByAddress.get(address);
+        if (sprite === undefined)
+            return;
+        const output = sprite.table === 0 ? usage.animated : usage.geometry;
+        for (const image of sprite.images)
+            output.add(image);
+    }
+
+    function scanScriptedSpriteUsage(setup: Buffer, scripts: Buffer, usage: TextureUsage): void {
+        const propIDs = new Set<number>();
+        const propCount = setup.readUInt32BE(0);
+        for (let i = 0; i < propCount; i++)
+            propIDs.add(setup.readUInt16BE(4 + i * 0x30 + 0x2A));
+
+        const scriptCount = scripts.readUInt16BE(0);
+        let offs = 2;
+        for (let script = 0; script < scriptCount; script++) {
+            const id = scripts.readUInt16BE(offs);
+            const blockCount = scripts.readUInt16BE(offs + 2);
+            offs += 6;
+            for (let block = 0; block < blockCount; block++) {
+                const conditionCount = scripts.readUInt16BE(offs);
+                const conditionOpcode = conditionCount === 1 ? scripts.readUInt16BE(offs + 2) : -1;
+                const conditionArg0 = conditionCount === 1 ? scripts.readInt16BE(offs + 4) : -1;
+                offs += 2 + conditionCount * 8;
+                const executionCount = scripts.readUInt16BE(offs);
+                offs += 2;
+                let resetsState = false;
+                let usesPointSprite = false;
+                for (let i = 0; i < executionCount; i++, offs += 8) {
+                    const opcode = scripts.readUInt16BE(offs);
+                    if (opcode === 1)
+                        resetsState = true;
+                    if (opcode === 7 && CustomScriptFunctionData[scripts.readInt16BE(offs + 2)] === 0x80644EC8)
+                        usesPointSprite = true;
+                }
+                if (propIDs.has(id) && conditionOpcode === 1 && conditionArg0 === 0 && !resetsState && usesPointSprite)
+                    addSpriteTextureUsage(0x80720A7C, usage);
+            }
+        }
+        assert(offs <= scripts.byteLength);
+    }
+
+    // Resolve aliases before writing so each map archive is self-contained.
+    // Prop geometry is selected from the setup file, avoiding geometry for
+    // every other level.
+    const levels: LevelSource[] = [];
+    for (let mapID = 0; mapID < MapData.length; mapID++) {
+        const mapData = resolveTableEntry(MapData, mapID);
+        const setupData = resolveTableEntry(SetupData, mapID);
+        const scriptData = resolveTableEntry(ScriptData, mapID);
+        const map = inflatePointerTableData(mapData, `map data for map ${hexzero(mapID, 2).toUpperCase()}`);
+        const setup = inflatePointerTableData(setupData, `setup data for map ${hexzero(mapID, 2).toUpperCase()}`);
+        const scripts = inflatePointerTableData(scriptData, `script data for map ${hexzero(mapID, 2).toUpperCase()}`);
+        const propCount = setup.readUInt32BE(0);
+        const propTypes = new Set<number>();
+        for (let i = 0; i < propCount; i++)
+            propTypes.add(setup.readUInt16BE(4 + i * 0x30 + 0x28));
+
+        const PropGeometry = [];
+        for (const type of propTypes) {
+            if (type < PropGeometryData.length)
+                PropGeometry.push({ Type: type, Data: resolveTableEntry(PropGeometryData, type) });
+        }
+
+        const environmentParticleData = EnvironmentParticleData.filter((entry) => entry.map === mapID);
+        const textureUsage: TextureUsage = { geometry: new Set(), animated: new Set() };
+        scanMapTextureUsage(map, textureUsage);
+        for (const prop of PropGeometry)
+            scanPropTextureUsage(inflatePointerTableData(prop.Data, `prop ${hexzero(prop.Type, 4)}`), textureUsage);
+        if (environmentParticleData.length > 0) {
+            addSpriteTextureUsage(0x8072140C, textureUsage);
+            addSpriteTextureUsage(0x8071FF18, textureUsage);
+        }
+        scanScriptedSpriteUsage(setup, scripts, textureUsage);
+
+        levels.push({
+            MapData: mapData,
+            SetupData: setupData,
+            ScriptData: scriptData,
+            CritterData: mapID < CritterData.length ? resolveTableEntry(CritterData, mapID) : null,
+            PropGeometry,
+            EnvironmentParticleData: environmentParticleData,
+            textureUsage,
+        });
+    }
+
+    function buildOwners(kind: keyof TextureUsage): Map<number, number[]> {
+        const owners = new Map<number, number[]>();
+        for (let mapID = 0; mapID < levels.length; mapID++) {
+            for (const textureID of levels[mapID].textureUsage[kind]) {
+                if (!owners.has(textureID))
+                    owners.set(textureID, []);
+                owners.get(textureID)!.push(mapID);
+            }
+        }
+        return owners;
+    }
+
+    function makeTextureEntries(data: ArrayBufferSlice[], predicate: (id: number) => boolean): { ID: number, Data: ArrayBufferSlice }[] {
+        const entries = [];
+        for (let id = 0; id < data.length; id++) {
+            if (predicate(id))
+                entries.push({ ID: id, Data: data[id] });
+        }
+        return entries;
+    }
+
+    const geometryOwners = buildOwners('geometry');
+    const animatedOwners = buildOwners('animated');
+    for (const textureID of geometryOwners.keys())
+        assert(textureID >= 0 && textureID < TexData.length);
+    for (const textureID of animatedOwners.keys())
+        assert(textureID >= 0 && textureID < AnimTexData.length);
+
+    interface SharedTextureResource {
+        kind: keyof TextureUsage;
+        id: number;
+        data: ArrayBufferSlice;
+        owners: number[];
+    }
+
+    interface CommonTextureGroup {
+        resources: SharedTextureResource[];
+        owners: Set<number>;
+        ownerRefCounts: number[];
+        byteLength: number;
+    }
+
+    interface TextureOwnerSubset {
+        key: string;
+        resources: SharedTextureResource[];
+        owners: number[];
+        byteLength: number;
+    }
+
+    // A texture only belongs in the always-loaded archive when every map uses
+    // it. All other shared textures are packed by map affinity to minimize
+    // aggregate bytes fetched across the complete scene list.
+    const universalTextureOwnerCount = levels.length;
+    const commonTextureGroupCountArg = process.argv.find((arg) => arg.startsWith('--common-texture-groups='));
+    const commonTextureGroupCount = commonTextureGroupCountArg !== undefined
+        ? Number.parseInt(commonTextureGroupCountArg.slice('--common-texture-groups='.length), 10)
+        : 0x10;
+    assert(Number.isInteger(commonTextureGroupCount) && commonTextureGroupCount >= 1 && commonTextureGroupCount <= 0x20);
+    const sharedResources: SharedTextureResource[] = [];
+    for (let id = 0; id < TexData.length; id++) {
+        const owners = geometryOwners.get(id) ?? [];
+        if (owners.length > 1 && owners.length < universalTextureOwnerCount)
+            sharedResources.push({ kind: 'geometry', id, data: TexData[id], owners });
+    }
+    for (let id = 0; id < AnimTexData.length; id++) {
+        const owners = animatedOwners.get(id) ?? [];
+        if (owners.length > 1 && owners.length < universalTextureOwnerCount)
+            sharedResources.push({ kind: 'animated', id, data: AnimTexData[id], owners });
+    }
+
+    // Canonicalize exact consumer subsets before packing. This both gives the
+    // seeding pass more useful units than individual textures and guarantees
+    // deterministic ordering independent of Map/Set iteration details.
+    const subsetByKey = new Map<string, TextureOwnerSubset>();
+    for (const resource of sharedResources) {
+        const key = resource.owners.join(',');
+        let subset = subsetByKey.get(key);
+        if (subset === undefined) {
+            subset = { key, resources: [], owners: resource.owners, byteLength: 0 };
+            subsetByKey.set(key, subset);
+        }
+        subset.resources.push(resource);
+        subset.byteLength += resource.data.byteLength;
+    }
+    const textureOwnerSubsets = [...subsetByKey.values()];
+    textureOwnerSubsets.sort((a, b) =>
+        b.byteLength - a.byteLength
+        || b.owners.length - a.owners.length
+        || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+    );
+
+    // Seed each pack with one of the largest exact-owner subsets, then pack
+    // the remaining subsets from largest to smallest. Adding a subset grows
+    // the group for its existing consumers and can also make new maps fetch
+    // every resource already in that group.
+    const commonTextureGroups: CommonTextureGroup[] = Array.from({ length: commonTextureGroupCount }, () => ({
+        resources: [],
+        owners: new Set<number>(),
+        ownerRefCounts: Array(levels.length).fill(0),
+        byteLength: 0,
+    }));
+    const subsetGroup = new Map<TextureOwnerSubset, number>();
+
+    function addSubsetToGroup(subset: TextureOwnerSubset, groupIndex: number): void {
+        const group = commonTextureGroups[groupIndex];
+        group.resources.push(...subset.resources);
+        group.byteLength += subset.byteLength;
+        subsetGroup.set(subset, groupIndex);
+        for (const owner of subset.owners) {
+            group.owners.add(owner);
+            group.ownerRefCounts[owner]++;
+        }
+    }
+
+    const seededSubsetCount = Math.min(commonTextureGroupCount, textureOwnerSubsets.length);
+    for (let subsetIndex = 0; subsetIndex < seededSubsetCount; subsetIndex++)
+        addSubsetToGroup(textureOwnerSubsets[subsetIndex], subsetIndex);
+
+    for (let subsetIndex = seededSubsetCount; subsetIndex < textureOwnerSubsets.length; subsetIndex++) {
+        const subset = textureOwnerSubsets[subsetIndex];
+        let bestGroup = 0;
+        let bestCost = Infinity;
+        let bestAddedOwners = Infinity;
+        for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
+            const group = commonTextureGroups[groupIndex];
+            let addedOwners = 0;
+            for (const owner of subset.owners) {
+                if (!group.owners.has(owner))
+                    addedOwners++;
+            }
+            const newOwnerCount = group.owners.size + addedOwners;
+            const incrementalCost = (group.byteLength + subset.byteLength) * newOwnerCount
+                - group.byteLength * group.owners.size;
+            if (incrementalCost < bestCost
+                || (incrementalCost === bestCost && addedOwners < bestAddedOwners)
+                || (incrementalCost === bestCost && addedOwners === bestAddedOwners
+                    && group.byteLength < commonTextureGroups[bestGroup].byteLength)) {
+                bestGroup = groupIndex;
+                bestCost = incrementalCost;
+                bestAddedOwners = addedOwners;
+            }
+        }
+        addSubsetToGroup(subset, bestGroup);
+    }
+
+    // The greedy pass gives every large subset a reasonable home. Revisit
+    // those choices until moving any complete owner subset no longer reduces
+    // total bytes fetched across all maps. The always-loaded archive is also
+    // a candidate: a broadly used subset can be cheaper there than the
+    // collateral over-fetch it causes inside a shard.
+    const baseTextureKeys = new Set<string>();
+    for (let pass = 0; pass < 0x20; pass++) {
+        let moveCount = 0;
+        for (const subset of textureOwnerSubsets) {
+            const sourceIndex = subsetGroup.get(subset)!;
+            if (sourceIndex < 0)
+                continue;
+            const source = commonTextureGroups[sourceIndex];
+            let removedOwners = 0;
+            for (const owner of subset.owners) {
+                if (source.ownerRefCounts[owner] === 1)
+                    removedOwners++;
+            }
+            const sourceOwnerCountAfterMove = source.owners.size - removedOwners;
+            const sourceBytesAfterMove = source.byteLength - subset.byteLength;
+            const oldSourceCost = source.byteLength * source.owners.size;
+            const newSourceCost = sourceBytesAfterMove * sourceOwnerCountAfterMove;
+
+            let bestDestination = sourceIndex;
+            let bestDelta = 0;
+            const moveToBaseDelta = newSourceCost
+                + subset.byteLength * levels.length
+                - oldSourceCost;
+            if (moveToBaseDelta < bestDelta) {
+                bestDelta = moveToBaseDelta;
+                bestDestination = -1;
+            }
+            for (let destinationIndex = 0; destinationIndex < commonTextureGroups.length; destinationIndex++) {
+                if (destinationIndex === sourceIndex)
+                    continue;
+                const destination = commonTextureGroups[destinationIndex];
+                let addedOwners = 0;
+                for (const owner of subset.owners) {
+                    if (destination.ownerRefCounts[owner] === 0)
+                        addedOwners++;
+                }
+                const oldDestinationCost = destination.byteLength * destination.owners.size;
+                const newDestinationCost = (destination.byteLength + subset.byteLength)
+                    * (destination.owners.size + addedOwners);
+                const delta = newSourceCost + newDestinationCost - oldSourceCost - oldDestinationCost;
+                if (delta < bestDelta) {
+                    bestDelta = delta;
+                    bestDestination = destinationIndex;
+                }
+            }
+            if (bestDestination === sourceIndex)
+                continue;
+
+            for (const resource of subset.resources)
+                source.resources.splice(source.resources.indexOf(resource), 1);
+            source.byteLength -= subset.byteLength;
+            for (const owner of subset.owners) {
+                source.ownerRefCounts[owner]--;
+                if (source.ownerRefCounts[owner] === 0)
+                    source.owners.delete(owner);
+            }
+            if (bestDestination < 0) {
+                for (const resource of subset.resources)
+                    baseTextureKeys.add(`${resource.kind}:${resource.id}`);
+                subsetGroup.set(subset, -1);
+                moveCount++;
+                continue;
+            }
+
+            const destination = commonTextureGroups[bestDestination];
+            destination.resources.push(...subset.resources);
+            destination.byteLength += subset.byteLength;
+            for (const owner of subset.owners) {
+                if (destination.ownerRefCounts[owner]++ === 0)
+                    destination.owners.add(owner);
+            }
+            subsetGroup.set(subset, bestDestination);
+            moveCount++;
+        }
+        if (moveCount === 0)
+            break;
+    }
+
+    const groupByTexture = new Map<string, number>();
+    for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
+        for (const resource of commonTextureGroups[groupIndex].resources)
+            groupByTexture.set(`${resource.kind}:${resource.id}`, groupIndex);
+    }
+    for (let mapID = 0; mapID < levels.length; mapID++) {
+        for (const kind of ['geometry', 'animated'] as const) {
+            const owners = kind === 'geometry' ? geometryOwners : animatedOwners;
+            for (const textureID of levels[mapID].textureUsage[kind]) {
+                const ownerCount = owners.get(textureID)!.length;
+                if (ownerCount === 1 || ownerCount === universalTextureOwnerCount)
+                    continue;
+                const key = `${kind}:${textureID}`;
+                if (baseTextureKeys.has(key))
+                    continue;
+                const groupIndex = groupByTexture.get(key);
+                assert(groupIndex !== undefined && commonTextureGroups[groupIndex].owners.has(mapID));
+            }
+        }
+    }
+
+    function resourcesToArchive(resources: SharedTextureResource[]): {
+        TexData: { ID: number, Data: ArrayBufferSlice }[],
+        AnimTexData: { ID: number, Data: ArrayBufferSlice }[],
+    } {
+        const sortedResources = [...resources].sort((a, b) =>
+            (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0)
+            || a.id - b.id,
+        );
+        return {
+            TexData: sortedResources
+                .filter((resource) => resource.kind === 'geometry')
+                .map((resource) => ({ ID: resource.id, Data: resource.data })),
+            AnimTexData: sortedResources
+                .filter((resource) => resource.kind === 'animated')
+                .map((resource) => ({ ID: resource.id, Data: resource.data })),
+        };
+    }
+
+    function writeArchive(filename: string, archive: any): number {
+        const data = BYML.write(archive, BYML.FileType.CRG1);
+        writeFileSync(`${pathBaseOut}/${filename}`, Buffer.from(data));
+        return data.byteLength;
+    }
+
+    const common = {
         SpriteData,
         CustomScriptFunctionData,
-        EnvironmentParticleData,
-        TexData,
-        AnimTexData,
+        TexData: makeTextureEntries(TexData, (id) =>
+            (geometryOwners.get(id)?.length ?? 0) === universalTextureOwnerCount
+            || baseTextureKeys.has(`geometry:${id}`)),
+        AnimTexData: makeTextureEntries(AnimTexData, (id) =>
+            (animatedOwners.get(id)?.length ?? 0) === universalTextureOwnerCount
+            || baseTextureKeys.has(`animated:${id}`)),
     };
+    const commonArchiveSize = writeArchive('common.crg1', common);
 
-    const data = BYML.write(crg1, BYML.FileType.CRG1);
-    writeFileSync(`${pathBaseOut}/ROM_arc.crg1`, Buffer.from(data));
+    const commonTextureGroupArchiveSizes: number[] = [];
+    for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
+        const suffix = hexzero(groupIndex, 2).toUpperCase();
+        const archive = resourcesToArchive(commonTextureGroups[groupIndex].resources);
+        commonTextureGroupArchiveSizes[groupIndex] = writeArchive(`common_${suffix}.crg1`, archive);
+    }
+
+    const unknown = {
+        TexData: makeTextureEntries(TexData, (id) => !geometryOwners.has(id)),
+        AnimTexData: makeTextureEntries(AnimTexData, (id) => !animatedOwners.has(id)),
+    };
+    const unknownArchiveSize = writeArchive('unknown.crg1', unknown);
+
+    const levelArchiveSizes: number[] = [];
+    const singleCommonLevelArchiveSizes: number[] = [];
+    const commonTextureGroupIDsByLevel: number[][] = [];
+    for (let mapID = 0; mapID < levels.length; mapID++) {
+        const source = levels[mapID];
+        const levelWithoutGroups = {
+            MapData: source.MapData,
+            SetupData: source.SetupData,
+            ScriptData: source.ScriptData,
+            CritterData: source.CritterData,
+            PropGeometry: source.PropGeometry,
+            EnvironmentParticleData: source.EnvironmentParticleData,
+            TexData: makeTextureEntries(TexData, (id) => geometryOwners.get(id)?.length === 1 && geometryOwners.get(id)![0] === mapID),
+            AnimTexData: makeTextureEntries(AnimTexData, (id) => animatedOwners.get(id)?.length === 1 && animatedOwners.get(id)![0] === mapID),
+            // Future rendering paths can set this when they deliberately
+            // reference data whose ownership is not yet understood.
+            UsesUnknownTextures: false,
+        };
+        const commonTextureGroupIDs = commonTextureGroups
+            .map((group, groupIndex) => group.owners.has(mapID) ? groupIndex : -1)
+            .filter((groupIndex) => groupIndex >= 0);
+        const level = {
+            ...levelWithoutGroups,
+            CommonTextureGroups: commonTextureGroupIDs,
+        };
+        const filename = `${hexzero(mapID, 2).toUpperCase()}.crg1`;
+        levelArchiveSizes[mapID] = writeArchive(filename, level);
+        singleCommonLevelArchiveSizes[mapID] = BYML.write(levelWithoutGroups, BYML.FileType.CRG1).byteLength;
+        commonTextureGroupIDsByLevel[mapID] = commonTextureGroupIDs;
+    }
+
+    const singleCommon = {
+        SpriteData,
+        CustomScriptFunctionData,
+        TexData: makeTextureEntries(TexData, (id) => (geometryOwners.get(id)?.length ?? 0) > 1),
+        AnimTexData: makeTextureEntries(AnimTexData, (id) => (animatedOwners.get(id)?.length ?? 0) > 1),
+    };
+    const singleCommonArchiveSize = BYML.write(singleCommon, BYML.FileType.CRG1).byteLength;
+
+    const shardedTextureCount = commonTextureGroups.reduce((sum, group) => sum + group.resources.length, 0);
+    const shardedTextureBytes = commonTextureGroups.reduce((sum, group) => sum + group.byteLength, 0);
+    const idealAggregateTextureBytes = sharedResources.reduce(
+        (sum, resource) => sum + resource.data.byteLength * resource.owners.length, 0,
+    );
+    const baseTextureBytes = sharedResources
+        .filter((resource) => baseTextureKeys.has(`${resource.kind}:${resource.id}`))
+        .reduce((sum, resource) => sum + resource.data.byteLength, 0);
+    const packedAggregateTextureBytes = commonTextureGroups.reduce(
+        (sum, group) => sum + group.byteLength * group.owners.size, 0,
+    ) + baseTextureBytes * levels.length;
+    const groupRequestsPerLevel = levels.map((_, mapID) =>
+        commonTextureGroups.filter((group) => group.owners.has(mapID)).length,
+    );
+    const fetchedBytesPerLevel = levels.map((_, mapID) =>
+        commonArchiveSize
+        + levelArchiveSizes[mapID]
+        + commonTextureGroupIDsByLevel[mapID].reduce(
+            (sum, groupIndex) => sum + commonTextureGroupArchiveSizes[groupIndex], 0,
+        ),
+    );
+    const singleCommonFetchedBytesPerLevel = levels.map((_, mapID) =>
+        singleCommonArchiveSize + singleCommonLevelArchiveSizes[mapID],
+    );
+    const average = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length;
+    const averageFetchedBytes = average(fetchedBytesPerLevel);
+    const averageSingleCommonFetchedBytes = average(singleCommonFetchedBytesPerLevel);
+    const fetchReduction = 1 - averageFetchedBytes / averageSingleCommonFetchedBytes;
+    const formatBytes = (bytes: number): string => bytes >= 0x100000
+        ? `${(bytes / 0x100000).toFixed(2)} MiB`
+        : `${(bytes / 0x400).toFixed(1)} KiB`;
+
+    console.log(`DK64 texture analysis (${levels.length} maps, minimizing aggregate fetched bytes):`);
+    console.log(`  sharded textures: ${shardedTextureCount} (${shardedTextureBytes} bytes)`);
+    console.log(`  optimizer promoted to always-loaded: ${baseTextureKeys.size} textures (${baseTextureBytes} bytes)`);
+    console.log(`  groups requested per map: min ${Math.min(...groupRequestsPerLevel)}, average ${(groupRequestsPerLevel.reduce((a, b) => a + b, 0) / levels.length).toFixed(2)}, max ${Math.max(...groupRequestsPerLevel)}`);
+    console.log(`  average shared-texture bytes: ideal ${(idealAggregateTextureBytes / levels.length).toFixed(0)}, packed ${(packedAggregateTextureBytes / levels.length).toFixed(0)} (${(packedAggregateTextureBytes / idealAggregateTextureBytes).toFixed(2)}x)`);
+    console.log(`DK64 archive fetch analysis:`);
+    console.log(`  common.crg1: ${formatBytes(commonArchiveSize)} (${commonArchiveSize} bytes)`);
+    console.log(`  common_00..${hexzero(commonTextureGroupCount - 1, 2).toUpperCase()}.crg1 combined: ${formatBytes(commonTextureGroupArchiveSizes.reduce((sum, size) => sum + size, 0))}`);
+    console.log(`  unknown.crg1: ${formatBytes(unknownArchiveSize)} (not loaded by current maps)`);
+    console.log(`  average first-level fetch: ${formatBytes(averageFetchedBytes)}`);
+    console.log(`  single-common baseline: ${formatBytes(averageSingleCommonFetchedBytes)}`);
+    console.log(`  average fetch reduction: ${(fetchReduction * 100).toFixed(1)}%`);
+    console.log(`  first-level fetch range: ${formatBytes(Math.min(...fetchedBytesPerLevel))} .. ${formatBytes(Math.max(...fetchedBytesPerLevel))}`);
+    for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
+        const group = commonTextureGroups[groupIndex];
+        console.log(`  common_${hexzero(groupIndex, 2).toUpperCase()}: ${group.resources.length} textures, ${formatBytes(commonTextureGroupArchiveSizes[groupIndex])}, ${group.owners.size} maps`);
+    }
 }
 
 main();

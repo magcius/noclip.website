@@ -7,7 +7,7 @@ import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTexture
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
-import { nArray, align, assert } from '../util.js';
+import { nArray, align, assert, hexzero } from '../util.js';
 import { DeviceProgram } from '../Program.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -1330,57 +1330,103 @@ function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
     return scripts;
 }
 
-class ROMData {
-    public MapData: (ArrayBufferSlice | number)[];
-    public PropGeometryData: (ArrayBufferSlice | number)[];
-    public SetupData: (ArrayBufferSlice | number)[];
-    public ScriptData: (ArrayBufferSlice | number)[];
-    public CritterData: (ArrayBufferSlice | number)[];
+class CommonData {
     public SpriteData: SpriteData[];
     public CustomScriptFunctionData: number[];
-    public EnvironmentParticleData: EnvironmentParticleData[];
-    public TexData: ArrayBufferSlice[];
-    public AnimTexData: ArrayBufferSlice[];
+    public TexData: ArrayBufferSlice[] = [];
+    public AnimTexData: ArrayBufferSlice[] = [];
 
     constructor(buffer: ArrayBufferSlice) {
         const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
 
-        this.MapData = obj.MapData;
-        this.PropGeometryData = obj.PropGeometryData ?? [];
-        this.SetupData = obj.SetupData ?? [];
-        this.ScriptData = obj.ScriptData ?? [];
-        this.CritterData = obj.CritterData ?? [];
         this.SpriteData = obj.SpriteData ?? [];
         this.CustomScriptFunctionData = obj.CustomScriptFunctionData ?? [];
-        this.EnvironmentParticleData = obj.EnvironmentParticleData ?? [];
-        this.TexData = obj.TexData.map((buffer: ArrayBufferSlice) => decompress(buffer));
+        applyTextureEntries(this.TexData, obj.TexData, true);
         if (obj.AnimTexData === undefined)
-            throw new Error('DK64 archive is missing animated textures; rerun npm run build:DonkeyKong64');
-        this.AnimTexData = obj.AnimTexData;
+            throw new Error('DK64 common archive is missing animated textures; rerun npm run build:DonkeyKong64');
+        applyTextureEntries(this.AnimTexData, obj.AnimTexData, false);
     }
 
-    private loadMapTableEntry(table: (ArrayBufferSlice | number)[], mapID: number): ArrayBufferSlice {
-        let entry = table[mapID];
-        const visited = new Set<number>();
-        while (typeof entry === 'number') {
-            assert(!visited.has(entry));
-            visited.add(entry);
-            entry = table[entry];
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+function applyTextureEntries(target: ArrayBufferSlice[], entries: any[] | undefined, compressed: boolean): void {
+    for (const entry of entries ?? [])
+        target[entry.ID] = compressed ? decompress(entry.Data) : entry.Data;
+}
+
+function overlayTextureData(target: ArrayBufferSlice[], source: ArrayBufferSlice[]): void {
+    for (let id = 0; id < source.length; id++) {
+        if (source[id] !== undefined)
+            target[id] = source[id];
+    }
+}
+
+class TextureData {
+    public TexData: ArrayBufferSlice[] = [];
+    public AnimTexData: ArrayBufferSlice[] = [];
+
+    constructor(buffer: ArrayBufferSlice) {
+        const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
+        applyTextureEntries(this.TexData, obj.TexData, true);
+        applyTextureEntries(this.AnimTexData, obj.AnimTexData, false);
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+class ROMData {
+    public MapData: ArrayBufferSlice;
+    public PropGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
+    public SetupData: ArrayBufferSlice;
+    public ScriptData: ArrayBufferSlice;
+    public CritterData: ArrayBufferSlice | null;
+    public EnvironmentParticleData: EnvironmentParticleData[];
+
+    public SpriteData: SpriteData[];
+    public CustomScriptFunctionData: number[];
+    public TexData: ArrayBufferSlice[];
+    public AnimTexData: ArrayBufferSlice[];
+
+    constructor(common: CommonData, level: any, commonTextureGroups: TextureData[], unknown: TextureData | null) {
+        this.MapData = level.MapData;
+        this.SetupData = level.SetupData;
+        this.ScriptData = level.ScriptData;
+        this.CritterData = level.CritterData;
+        this.EnvironmentParticleData = level.EnvironmentParticleData ?? [];
+        for (const prop of level.PropGeometry ?? [])
+            this.PropGeometryData.set(prop.Type, prop.Data);
+
+        this.SpriteData = common.SpriteData;
+        this.CustomScriptFunctionData = common.CustomScriptFunctionData;
+        this.TexData = common.TexData.slice();
+        this.AnimTexData = common.AnimTexData.slice();
+        for (const group of commonTextureGroups) {
+            overlayTextureData(this.TexData, group.TexData);
+            overlayTextureData(this.AnimTexData, group.AnimTexData);
         }
-        assert(entry !== undefined);
-        return decompress(entry);
+        if (unknown !== null) {
+            overlayTextureData(this.TexData, unknown.TexData);
+            overlayTextureData(this.AnimTexData, unknown.AnimTexData);
+        }
+        applyTextureEntries(this.TexData, level.TexData, true);
+        applyTextureEntries(this.AnimTexData, level.AnimTexData, false);
     }
 
-    public loadSetup(mapID: number): ArrayBufferSlice {
-        return this.loadMapTableEntry(this.SetupData, mapID);
+    public loadSetup(): ArrayBufferSlice {
+        return decompress(this.SetupData);
     }
 
     public loadPropGeometry(propType: number): ArrayBufferSlice {
-        return this.loadMapTableEntry(this.PropGeometryData, propType);
+        const data = this.PropGeometryData.get(propType);
+        assert(data !== undefined);
+        return decompress(data);
     }
 
-    public loadScripts(mapID: number): ArrayBufferSlice {
-        return this.loadMapTableEntry(this.ScriptData, mapID);
+    public loadScripts(): ArrayBufferSlice {
+        return decompress(this.ScriptData);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1592,7 +1638,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
 }
 
 function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], terrainTriangles: TerrainTriangle[]): void {
-    if (props.length === 0 || romData.PropGeometryData.length === 0)
+    if (props.length === 0 || romData.PropGeometryData.size === 0)
         return;
 
     const propsByType = new globalThis.Map<number, SetupProp[]>();
@@ -1789,9 +1835,9 @@ function interpolateEnvironmentParticle(entry: EnvironmentParticleData, offset: 
 }
 
 function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: Map, mapID: number): void {
-    const props = parseSetupProps(romData.loadSetup(mapID));
+    const props = parseSetupProps(romData.loadSetup());
     const propsByID = new globalThis.Map(props.map((prop) => [prop.id, prop]));
-    const scripts = parseInstanceScripts(romData.loadScripts(mapID));
+    const scripts = parseInstanceScripts(romData.loadScripts());
     const spriteByAddress = new globalThis.Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
     const loopTicks = 900;
 
@@ -1890,16 +1936,32 @@ class SceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const romData = await context.dataShare.ensureObject(`${pathBase}/ROMData`, async () => {
-            return new ROMData(await dataFetcher.fetchData(`${pathBase}/ROM_arc.crg1`)!);
-        });
-
         const sceneID = parseInt(this.id, 16);
-
-        let mapData = romData.MapData[sceneID];
-        if (typeof mapData === 'number')
-            mapData = romData.MapData[mapData];
-        const map = new Map(decompress(mapData as ArrayBufferSlice), romData.AnimTexData);
+        const [commonData, levelBuffer] = await Promise.all([
+            context.dataShare.ensureObject(`${pathBase}/CommonData`, async () => {
+                return new CommonData(await dataFetcher.fetchData(`${pathBase}/common.crg1`));
+            }),
+            dataFetcher.fetchData(`${pathBase}/${this.id}.crg1`),
+        ]);
+        const levelData: any = BYML.parse(levelBuffer, BYML.FileType.CRG1);
+        const commonTextureGroupIDs: number[] = levelData.CommonTextureGroups ?? [];
+        for (const groupID of commonTextureGroupIDs)
+            assert(Number.isInteger(groupID) && groupID >= 0 && groupID < 0x20);
+        const [commonTextureGroups, unknownData] = await Promise.all([
+            Promise.all(commonTextureGroupIDs.map((groupID) => {
+                const suffix = hexzero(groupID, 2).toUpperCase();
+                return context.dataShare.ensureObject(`${pathBase}/CommonTextureData/${suffix}`, async () => {
+                    return new TextureData(await dataFetcher.fetchData(`${pathBase}/common_${suffix}.crg1`));
+                });
+            })),
+            levelData.UsesUnknownTextures
+                ? context.dataShare.ensureObject(`${pathBase}/UnknownData`, async () => {
+                    return new TextureData(await dataFetcher.fetchData(`${pathBase}/unknown.crg1`));
+                })
+                : Promise.resolve(null),
+        ]);
+        const romData = new ROMData(commonData, levelData, commonTextureGroups, unknownData);
+        const map = new Map(decompress(romData.MapData), romData.AnimTexData);
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
@@ -2001,7 +2063,7 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
         }
 
-        const setupProps = parseSetupProps(romData.loadSetup(sceneID));
+        const setupProps = parseSetupProps(romData.loadSetup());
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, terrainTriangles);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
