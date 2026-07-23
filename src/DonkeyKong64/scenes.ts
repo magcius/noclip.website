@@ -12,9 +12,9 @@ import { DeviceProgram } from '../Program.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { TextureMapping, FakeTextureHolder } from '../TextureHolder.js';
-import { DrawCall, RSP_Geometry, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
+import { AnimatedTexture, DrawCall, RSP_Geometry, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
 import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
-import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera.js';
 import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { translateCM, Texture, OtherModeH_Layout, OtherModeH_CycleType } from '../Common/N64/RDP.js';
@@ -68,6 +68,8 @@ const viewMatrixScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 class DrawCallInstance {
     private textureEntry: Texture[] = [];
+    private animatedTextureEntries: Texture[][] = [];
+    private animatedTextureMappings: TextureMapping[][] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
@@ -76,6 +78,7 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
+    private isAnimated = false;
     public visible = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall) {
@@ -87,6 +90,20 @@ class DrawCallInstance {
                 this.textureEntry[i] = tex;
                 this.textureMappings[i].gfxTexture = translateTexture(device, tex);
                 this.textureMappings[i].gfxSampler = translateSampler(cache, tex);
+            }
+
+            const animationIndices = drawCall.textureAnimationIndices[i];
+            if (animationIndices !== undefined && animationIndices.length > 0) {
+                this.isAnimated = true;
+                this.animatedTextureEntries[i] = animationIndices.map((index) => sharedOutput.textureCache.textures[index]);
+                this.animatedTextureMappings[i] = this.animatedTextureEntries[i].map((entry, frame) => {
+                    if (frame === 0)
+                        return this.textureMappings[i];
+                    const mapping = new TextureMapping();
+                    mapping.gfxTexture = translateTexture(device, entry);
+                    mapping.gfxSampler = translateSampler(cache, entry);
+                    return mapping;
+                });
             }
         }
 
@@ -169,7 +186,19 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
+        for (let i = 0; i < this.animatedTextureMappings.length; i++) {
+            const mappings = this.animatedTextureMappings[i];
+            if (mappings === undefined)
+                continue;
+            // DK64 advances these counters once per 30 Hz game tick.
+            const frameDuration = Math.max(this.drawCall.textureAnimationFrameDurations[i], 1);
+            const frame = Math.floor(viewerInput.time / (1000 / 30) / frameDuration) % mappings.length;
+            this.textureMappings[i] = mappings[frame];
+        }
+
         const renderInst = renderInstManager.newRenderInst();
+        if (this.isAnimated)
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -194,15 +223,22 @@ class DrawCallInstance {
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillVec4(comb, offs, 0, 0, 0, 0); // primitive color
-        offs += fillVec4(comb, offs, 0, 0, 0, 0); // environment color
+        const primColor = this.drawCall.DP_PrimColor;
+        offs += fillVec4(comb, offs, primColor[0], primColor[1], primColor[2], primColor[3]); // primitive color
+        const envColor = this.drawCall.DP_EnvColor;
+        offs += fillVec4(comb, offs, envColor[0], envColor[1], envColor[2], envColor[3]); // environment color
         renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureMappings.length; i++)
-            if (this.textureMappings[i].gfxTexture !== null)
+            if (this.animatedTextureMappings[i] === undefined && this.textureMappings[i].gfxTexture !== null)
                 device.destroyTexture(this.textureMappings[i].gfxTexture!);
+        for (const mappings of this.animatedTextureMappings)
+            if (mappings !== undefined)
+                for (const mapping of mappings)
+                    if (mapping.gfxTexture !== null)
+                        device.destroyTexture(mapping.gfxTexture);
     }
 }
 
@@ -331,7 +367,7 @@ export class RootMeshRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
-    public sortKeyBase: number;
+    public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
     public modelMatrix = mat4.create();
 
     public objectFlags = 0;
@@ -539,6 +575,7 @@ export class DisplayListInfo {
     public ChunkID: number;
     public dlStartAddr: number;
     public VertStartIndex: number;
+    public textureAnimationGroup: number | null;
 }
 
 export class MapChunk {
@@ -572,12 +609,14 @@ export class MapChunk {
 
 export class MapSection {
     public meshID: number;
+    public textureAnimationGroup: number;
     public vertOffsets: number[] = [];
 
     static readonly size = 0x1C;
 
     constructor(bin: ArrayBufferSlice) {
         let view = bin.createDataView();
+        this.textureAnimationGroup = view.getUint16(0x00, false);
         this.meshID = view.getUint16(0x02, false);
         for (let i = 0; i < 8; i++)
             this.vertOffsets[i] = view.getUint16(0x08 + i*0x02);
@@ -592,6 +631,7 @@ export class Map {
     public chunks: MapChunk[] = [];
     public sections: MapSection[] = [];
     public displayLists: DisplayListInfo[] = [];
+    public animatedTextures: AnimatedTexture[] = [];
 
     // headerInfo
     private dlStart: number;
@@ -602,7 +642,7 @@ export class Map {
     private chunkCountOffset: number;
     private chunkStart: number;
 
-    constructor(buffer: ArrayBufferSlice) {
+    constructor(buffer: ArrayBufferSlice, animTexData: ArrayBufferSlice[]) {
         this.bin = buffer;
 
         const view = this.bin.createDataView();
@@ -613,6 +653,28 @@ export class Map {
         this.sectionEnd = view.getUint32(0x5C, false);
         this.chunkCountOffset = view.getUint32(0x64, false);
         this.chunkStart = view.getUint32(0x68, false);
+
+        const animatedTextureStart = view.getUint32(0x48, false);
+        const animatedTextureCount = view.getUint32(animatedTextureStart, false);
+        for (let i = 0; i < animatedTextureCount; i++) {
+            const offs = animatedTextureStart + 0x04 + i * 0x7C;
+            const frameCount = view.getUint8(offs + 0x03);
+            const frames: ArrayBufferSlice[] = [];
+            for (let j = 0; j < frameCount; j++) {
+                const textureIndex = view.getUint32(offs + 0x0C + j * 0x04, false);
+                const frame = animTexData[textureIndex];
+                if (frame !== undefined)
+                    frames.push(frame);
+            }
+            if (frames.length === 0)
+                continue;
+            this.animatedTextures.push({
+                segment: view.getUint8(offs + 0x00),
+                group: view.getUint8(offs + 0x01),
+                frameDuration: view.getUint8(offs + 0x02),
+                frames,
+            });
+        }
 
         this.f3dexBin = this.bin.slice(this.dlStart, this.vertStart);
         this.vertBin = this.bin.slice(this.vertStart, this.vertEnd);
@@ -654,6 +716,7 @@ export class Map {
                                         ChunkID: chunk.id,
                                         dlStartAddr: currf3dexOffset - this.dlStart,
                                         VertStartIndex: (chunk.vertOffset/0x10 + currSection.vertOffsets[iDL]),
+                                        textureAnimationGroup: currSection.textureAnimationGroup,
                                     });
                                 }
                             }
@@ -668,7 +731,8 @@ export class Map {
                             this.displayLists.push({
                                 ChunkID: chunk.id,
                                 dlStartAddr: chunk.dlOffsets[iDL],
-                                VertStartIndex: chunk.vertOffset/0x10
+                                VertStartIndex: chunk.vertOffset/0x10,
+                                textureAnimationGroup: null,
                             });
                         }
                     }
@@ -678,7 +742,8 @@ export class Map {
             this.displayLists.push({
                 ChunkID: 0,
                 dlStartAddr: 0,
-                VertStartIndex: 0
+                VertStartIndex: 0,
+                textureAnimationGroup: null,
             });
         }
 
@@ -696,12 +761,16 @@ function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
 class ROMData {
     public MapData: (ArrayBufferSlice | number)[];
     public TexData: ArrayBufferSlice[];
+    public AnimTexData: ArrayBufferSlice[];
 
     constructor(buffer: ArrayBufferSlice) {
         const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
 
         this.MapData = obj.MapData;
         this.TexData = obj.TexData.map((buffer: ArrayBufferSlice) => decompress(buffer));
+        if (obj.AnimTexData === undefined)
+            throw new Error('DK64 archive is missing animated textures; rerun npm run build:DonkeyKong64');
+        this.AnimTexData = obj.AnimTexData;
     }
 
     public destroy(device: GfxDevice): void {
@@ -723,7 +792,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let mapData = romData.MapData[sceneID];
         if (typeof mapData === 'number')
             mapData = romData.MapData[mapData];
-        const map = new Map(decompress(mapData as ArrayBufferSlice));
+        const map = new Map(decompress(mapData as ArrayBufferSlice), romData.AnimTexData);
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
@@ -734,7 +803,17 @@ class SceneDesc implements Viewer.SceneDesc {
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
             segmentBuffers[0x07] = map.f3dexBin;
-            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput);
+            // Segment bindings persist across DK64's material display lists.
+            // Put the section's own animation group first, but retain the
+            // other map bindings as fallbacks for lists which inherit state
+            // from a previous section.
+            const animatedTextures = dl.textureAnimationGroup !== null
+                ? [
+                    ...map.animatedTextures.filter((entry) => entry.group === dl.textureAnimationGroup),
+                    ...map.animatedTextures.filter((entry) => entry.group !== dl.textureAnimationGroup),
+                ]
+                : map.animatedTextures;
+            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             initDL(state, true);
             runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 

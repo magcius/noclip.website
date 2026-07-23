@@ -25,6 +25,15 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
+    public textureAnimationIndices: number[][] = [];
+    public textureAnimationFrameDurations: number[] = [];
+}
+
+export interface AnimatedTexture {
+    segment: number;
+    group: number;
+    frameDuration: number;
+    frames: ArrayBufferSlice[];
 }
 
 // same logic, just with the new type
@@ -70,7 +79,7 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
-    constructor(public textureBuffers: ArrayBufferSlice[], public segmentBuffers: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput) {
+    constructor(public textureBuffers: ArrayBufferSlice[], public segmentBuffers: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, private animatedTextures: AnimatedTexture[] = []) {
     }
 
     public finish(): RSPOutput | null {
@@ -122,7 +131,7 @@ export class RSPState {
         }
     }
 
-    private _translateTileTexture(tileIndex: number): number {
+    private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number } {
         const tile = this.DP_TileState[tileIndex];
         const cache = assertExists(this.DP_TMemUploadTracker.get(tile.tmem));
         const segment = (cache.addr >>> 24) & 0xFF;
@@ -148,14 +157,38 @@ export class RSPState {
             }
 
             const deinterleave = cache.dxt === 0;
-            return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile, deinterleave);
+            return {
+                textureIndex: this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile, deinterleave),
+                animationIndices: [],
+                frameDuration: 0,
+            };
         } else {
-            console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
-            return 0;
+            const animation = this.animatedTextures.find((entry) => entry.segment === segment);
+            if (animation === undefined) {
+                console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
+                return { textureIndex: 0, animationIndices: [], frameDuration: 0 };
+            }
+
+            const oldCacheKey = tile.cacheKey;
+            const textureIndices = animation.frames.map((frame, frameIndex) => {
+                const segmentBuffers: ArrayBufferSlice[] = [];
+                segmentBuffers[segment] = frame;
+                // The RDP cache normally keys textures by their DRAM address.
+                // Every animation frame intentionally has the same segmented
+                // address, so distinguish the source buffers explicitly.
+                tile.cacheKey = (segment << 24) | (animation.group << 16) | (frameIndex + 1);
+                return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, cache.addr, 0, tile, cache.dxt === 0);
+            });
+            tile.cacheKey = oldCacheKey;
+            return {
+                textureIndex: textureIndices[0],
+                animationIndices: textureIndices,
+                frameDuration: animation.frameDuration,
+            };
         }
     }
 
-    private _flushTextures(dc: F3DEX.DrawCall): void {
+    private _flushTextures(dc: DrawCall): void {
         // If textures are not on, then we have no textures.
         if (!this.SP_TextureState.on)
             return;
@@ -169,11 +202,17 @@ export class RSPState {
             const cycletype = RDP.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === RDP.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === RDP.OtherModeH_CycleType.G_CYC_2CYCLE);
 
-            dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
+            const texture0 = this._translateTileTexture(this.SP_TextureState.tile);
+            dc.textureIndices.push(texture0.textureIndex);
+            dc.textureAnimationIndices.push(texture0.animationIndices);
+            dc.textureAnimationFrameDurations.push(texture0.frameDuration);
 
             if (!lod_en && this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
-                dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
+                const texture1 = this._translateTileTexture(this.SP_TextureState.tile + 1);
+                dc.textureIndices.push(texture1.textureIndex);
+                dc.textureAnimationIndices.push(texture1.animationIndices);
+                dc.textureAnimationFrameDurations.push(texture1.frameDuration);
             }
         }
     }

@@ -43,6 +43,7 @@ function main() {
     const StructTableOffset = 0x82A06C;
     const ActorModelTableOffset = 0x8D3018;
     const TextureTableOffset = 0x118B638;
+    const UncompressedTextureTableOffset = 0x981018;
 
     // Map data table.
     const MapData: (ArrayBufferSlice | number)[] = [];
@@ -76,9 +77,22 @@ function main() {
         texTableIdx += 0x04;
     }
 
+    // Table 7 contains uncompressed textures. Map geometry uses these for
+    // animated materials, swapping the texture bound to an RSP segment every
+    // few game ticks.
+    const AnimTexData: ArrayBufferSlice[] = [];
+    let animTexTableIdx = UncompressedTextureTableOffset;
+    for (let i = 0; i < 0x3E1; i++) {
+        const offs = view.getUint32(animTexTableIdx + 0x00) + PointerTableOffset;
+        const nextOffs = view.getUint32(animTexTableIdx + 0x04) + PointerTableOffset;
+        AnimTexData[i] = romData.slice(offs, nextOffs);
+        animTexTableIdx += 0x04;
+    }
+
     const crg1 = {
         MapData,
         TexData,
+        AnimTexData,
     };
 
     const data = BYML.write(crg1, BYML.FileType.CRG1);
