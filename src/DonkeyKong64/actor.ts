@@ -59,6 +59,7 @@ export interface ActorRenderDefinition {
     renderer: 'skeletal';
     lightBone?: number;
     rotationYSpeed?: number;
+    positionYAmplitude?: number;
 }
 
 export function getActorRenderDefinition(type: number, model: number): ActorRenderDefinition | null {
@@ -77,9 +78,18 @@ export function getActorRenderDefinition(type: number, model: number): ActorRend
     // Setup actor 0x52 becomes the tag-barrel actor 0x62 after the engine's
     // +0x10 type lookup. World/Troff swap barrels 0x78 and 0x79 use thin
     // wrappers around the same behavior. func_global_asm_8068412C advances
-    // their 12-bit yaw by 0x32 every update while the barrel is not entered.
+    // their 12-bit yaw and vertical bob phase by 0x32 every update while the
+    // barrel is not entered. The bob is centered on its setup Y with an
+    // amplitude of five game units.
     if ((type === 0x52 || type === 0x78 || type === 0x79) && model !== 0)
-        return { model, animation: null, animationSpeed: 0, renderer: 'skeletal', rotationYSpeed: 0x32 };
+        return {
+            model,
+            animation: null,
+            animationSpeed: 0,
+            renderer: 'skeletal',
+            rotationYSpeed: 0x32,
+            positionYAmplitude: 5,
+        };
     if (model === 0)
         return null;
     return { model, animation: null, animationSpeed: 0, renderer: 'skeletal' };

@@ -645,7 +645,12 @@ export class RootMeshRenderer {
     public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
     public modelMatrix = mat4.create();
     public distanceFade: { origin: vec3; startDistance: number; endDistance: number } | null = null;
-    private rotationYAnimation: { baseMatrix: mat4; radiansPerTick: number } | null = null;
+    private rootTransformAnimation: {
+        baseMatrix: mat4;
+        rotationYRadiansPerTick: number;
+        positionYAmplitude: number;
+        positionYRadiansPerTick: number;
+    } | null = null;
     private computeLookAt = false;
     private objectLighting: ObjectLighting | null = null;
     private objectLightColor = vec3.create();
@@ -719,9 +724,24 @@ export class RootMeshRenderer {
     }
 
     public setRotationYAnimation(anglePerTick: number): void {
-        this.rotationYAnimation = {
+        this.ensureRootTransformAnimation();
+        this.rootTransformAnimation!.rotationYRadiansPerTick = anglePerTick / 0x1000 * Math.PI * 2;
+    }
+
+    public setPositionYAnimation(amplitude: number, anglePerTick: number): void {
+        this.ensureRootTransformAnimation();
+        this.rootTransformAnimation!.positionYAmplitude = amplitude;
+        this.rootTransformAnimation!.positionYRadiansPerTick = anglePerTick / 0x1000 * Math.PI * 2;
+    }
+
+    private ensureRootTransformAnimation(): void {
+        if (this.rootTransformAnimation !== null)
+            return;
+        this.rootTransformAnimation = {
             baseMatrix: mat4.clone(this.modelMatrix),
-            radiansPerTick: anglePerTick / 0x1000 * Math.PI * 2,
+            rotationYRadiansPerTick: 0,
+            positionYAmplitude: 0,
+            positionYRadiansPerTick: 0,
         };
     }
 
@@ -733,10 +753,13 @@ export class RootMeshRenderer {
         if (!this.visible)
             return;
 
-        if (this.rotationYAnimation !== null) {
-            mat4.copy(this.modelMatrix, this.rotationYAnimation.baseMatrix);
+        if (this.rootTransformAnimation !== null) {
+            const animation = this.rootTransformAnimation;
+            mat4.copy(this.modelMatrix, animation.baseMatrix);
             const tick = Math.floor(viewerInput.time / (1000 / 30));
-            mat4.rotateY(this.modelMatrix, this.modelMatrix, tick * this.rotationYAnimation.radiansPerTick);
+            mat4.rotateY(this.modelMatrix, this.modelMatrix, tick * animation.rotationYRadiansPerTick);
+            this.modelMatrix[13] += Math.sin(tick * animation.positionYRadiansPerTick)
+                * animation.positionYAmplitude;
         }
 
         let primAlphaMultiplier = 1;
@@ -1580,6 +1603,8 @@ function addSceneActors(
         )));
         if (definition.rotationYSpeed !== undefined)
             renderer.setRotationYAnimation(definition.rotationYSpeed);
+        if (definition.positionYAmplitude !== undefined)
+            renderer.setPositionYAnimation(definition.positionYAmplitude * worldScale, definition.rotationYSpeed ?? 0);
         sceneRenderer.meshRenderers.push(renderer);
     }
 }
