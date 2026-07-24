@@ -31,6 +31,8 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { buildDynamicLights, buildMapChunkLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLighting } from './light.js';
+import { actorModelScale, buildSkeletalActorMesh, getActorRenderDefinition, parseSetupActors, updateSkeletalActor } from './actor.js';
+import type { ActorRenderDefinition, SetupActor, SkeletalActorAnimation, SkeletalActorMesh } from './actor.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -278,9 +280,7 @@ class DrawCallInstance {
         if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
             program.defines.set('LIGHTING', '1');
 
-        // FIXME: Levels disable the SHADE flags. wtf?
-        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
-        if (this.vertexColorsEnabled && shade)
+        if (this.vertexColorsEnabled && this.drawCall.useVertexColors)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
@@ -480,6 +480,7 @@ export interface Mesh {
         vertexCount: number;
     };
     dynamicLighting?: DynamicLighting;
+    actorAnimation?: SkeletalActorAnimation;
     spriteBillboards?: {
         firstVertex: number;
         origin: vec3;
@@ -506,7 +507,7 @@ export class MeshData {
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined);
+        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined);
         this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
     }
 
@@ -521,7 +522,8 @@ export class MeshData {
         const animation = this.mesh.waterAnimation;
         const sprites = this.mesh.spriteBillboards;
         const lighting = this.mesh.dynamicLighting;
-        if (animation === undefined && sprites === undefined && lighting === undefined)
+        const actorAnimation = this.mesh.actorAnimation;
+        if (animation === undefined && sprites === undefined && lighting === undefined && actorAnimation === undefined)
             return;
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         if (tick === this.lastUpdateTick)
@@ -545,6 +547,8 @@ export class MeshData {
 
         if (lighting !== undefined)
             updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, viewerInput.camera.worldMatrix, tick, this.dynamicLightingEnabled);
+        if (actorAnimation !== undefined)
+            updateSkeletalActor(actorAnimation, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, tick);
 
         let spriteFade = 0;
         let hasSpriteFade = false;
@@ -1415,6 +1419,8 @@ class TextureData {
 class ROMData {
     public MapData: ArrayBufferSlice;
     public PropGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
+    public ActorGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
+    public AnimationData = new globalThis.Map<number, ArrayBufferSlice>();
     public SetupData: ArrayBufferSlice;
     public ScriptData: ArrayBufferSlice;
     public CritterData: ArrayBufferSlice | null;
@@ -1433,6 +1439,10 @@ class ROMData {
         this.EnvironmentParticleData = level.EnvironmentParticleData ?? [];
         for (const prop of level.PropGeometry ?? [])
             this.PropGeometryData.set(prop.Type, prop.Data);
+        for (const actor of level.ActorGeometry ?? [])
+            this.ActorGeometryData.set(actor.Model, actor.Data);
+        for (const animation of level.AnimationData ?? [])
+            this.AnimationData.set(animation.ID, animation.Data);
 
         this.SpriteData = common.SpriteData;
         this.CustomScriptFunctionData = common.CustomScriptFunctionData;
@@ -1458,6 +1468,19 @@ class ROMData {
         const data = this.PropGeometryData.get(propType);
         assert(data !== undefined);
         return decompress(data);
+    }
+
+    public loadActorGeometry(model: number): ArrayBufferSlice {
+        const data = this.ActorGeometryData.get(model);
+        assert(data !== undefined);
+        return decompress(data);
+    }
+
+    public loadAnimation(id: number): ArrayBufferSlice {
+        const data = this.AnimationData.get(id);
+        assert(data !== undefined);
+        // Pointer table 11 stores animation files uncompressed.
+        return data;
     }
 
     public loadScripts(): ArrayBufferSlice {
@@ -1852,9 +1875,9 @@ function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer:
         const secondaryDisplayListStart = view.getUint32(0x44, false);
         const vertexStart = view.getUint32(0x48, false);
         // Some props have a hierarchy driven by segment-9 matrices generated
-        // at runtime. Ignoring G_MTX collapses those parts into the wrong
-        // transforms, so leave them out until the hierarchy is decoded.
-        // TODO: parse the prop node/matrix data and implement G_MTX.
+        // at runtime. The interpreter retains G_MTX bindings for actor
+        // skinning, but these props still need their node transforms decoded.
+        // TODO: parse and apply the prop node/matrix data.
         if (propDisplayListUsesMatrices(view, mainDisplayListStart, secondaryDisplayListStart))
             continue;
         const segmentBuffers: ArrayBufferSlice[] = [];
@@ -1903,6 +1926,76 @@ function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer:
             ]);
             sceneRenderer.meshRenderers.push(renderer);
         }
+    }
+}
+
+function addSceneActors(
+    device: GfxDevice,
+    cache: GfxRenderCache,
+    sceneRenderer: DK64Renderer,
+    sharedOutput: RSPSharedOutput,
+    romData: ROMData,
+    setup: ArrayBufferSlice,
+): void {
+    const actors: { actor: SetupActor, definition: ActorRenderDefinition }[] = [];
+    for (const actor of parseSetupActors(setup)) {
+        const definition = getActorRenderDefinition(actor.type);
+        if (definition !== null)
+            actors.push({ actor, definition });
+    }
+    if (actors.length === 0)
+        return;
+
+    if (romData.ActorGeometryData.size === 0) {
+        console.warn(
+            `[DK64 actor] level archive has no ActorGeometry. `
+            + `Regenerate the DK64 data archives to render actors.`,
+        );
+        return;
+    }
+
+    for (const { actor, definition } of actors) {
+        if (!romData.ActorGeometryData.has(definition.model)) {
+            console.warn(`[DK64 actor] model 0x${definition.model.toString(16).padStart(2, '0')} is missing from the level archive`);
+            continue;
+        }
+        if (!romData.AnimationData.has(definition.animation)) {
+            console.warn(`[DK64 actor] animation 0x${definition.animation.toString(16)} is missing from the level archive`);
+            continue;
+        }
+        let actorMesh: SkeletalActorMesh | null = null;
+        switch (definition.renderer) {
+        case 'skeletal':
+            actorMesh = buildSkeletalActorMesh(
+                romData.loadActorGeometry(definition.model),
+                romData.loadAnimation(definition.animation),
+                definition.animation,
+                actor,
+                romData.TexData,
+                sharedOutput,
+            );
+            break;
+        }
+        if (actorMesh === null)
+            continue;
+        const mesh: Mesh = {
+            sharedOutput,
+            rspState: actorMesh.rspState,
+            rspOutput: actorMesh.rspOutput,
+            actorAnimation: actorMesh.animation,
+        };
+        const meshData = new MeshData(device, cache, mesh);
+        sceneRenderer.meshDatas.push(meshData);
+        const renderer = new RootMeshRenderer(device, cache, meshData);
+        mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
+            actor.position[0] * 3,
+            actor.position[1] * 3,
+            actor.position[2] * 3,
+        ]);
+        mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, actor.rotationY / 0x1000 * Math.PI * 2);
+        const scale = actor.scale * actorModelScale * 3;
+        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
+        sceneRenderer.meshRenderers.push(renderer);
     }
 }
 
@@ -2143,7 +2236,14 @@ class SceneDesc implements Viewer.SceneDesc {
         const map = new Map(decompress(romData.MapData), romData.AnimTexData);
         const setup = romData.loadSetup();
         const setupProps = parseSetupProps(setup);
-        const dynamicLights = buildDynamicLights(setup, (type) => romData.loadPropGeometry(type).createDataView());
+        const dynamicLights = buildDynamicLights(
+            setup,
+            (type) => romData.loadPropGeometry(type).createDataView(),
+            {
+                loadActorGeometry: (model) => romData.ActorGeometryData.has(model) ? romData.loadActorGeometry(model) : null,
+                loadAnimation: (animation) => romData.AnimationData.has(animation) ? romData.loadAnimation(animation) : null,
+            },
+        );
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
@@ -2257,6 +2357,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, terrainTriangles);
+        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)

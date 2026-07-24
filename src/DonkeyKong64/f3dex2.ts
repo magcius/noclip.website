@@ -25,6 +25,9 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
+    // Level geometry historically relies on vertex colors even when G_SHADE
+    // is absent. Actor wrappers can opt out to preserve their unlit materials.
+    public useVertexColors = true;
     public textureAnimationIndices: number[][] = [];
     public textureAnimationFrameDurations: number[] = [];
     public textureAnimationFrameOffsets: number[] = [];
@@ -65,6 +68,7 @@ export class RSPState {
     private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
     private vertexCacheSourceAddresses = nArray(64, () => 0);
     public vertexSourceAddresses: number[] = [];
+    public vertexMatrixIndices: number[] = [];
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new F3DEX.TextureState();
@@ -147,6 +151,14 @@ export class RSPState {
             this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
             this.vertexCacheSourceAddresses[v0 + i] = dramAddr + i * 0x10;
         }
+    }
+
+    public gSPMatrix(dramAddr: number): void {
+        // Actor matrices are an array of 0x40-byte Mtx records in segment 4.
+        // The renderer skins the decoded vertices on the CPU, but retaining
+        // the selected record preserves the display list's bone binding.
+        if ((dramAddr >>> 24) === 0x04)
+            this.SP_MatrixIndex = (dramAddr & 0x00FFFFFF) >>> 6;
     }
 
     private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number, frameOffset: number } {
@@ -287,6 +299,9 @@ export class RSPState {
         this.vertexSourceAddresses[this.vertexCache[i0].outputIndex] = this.vertexCacheSourceAddresses[i0];
         this.vertexSourceAddresses[this.vertexCache[i1].outputIndex] = this.vertexCacheSourceAddresses[i1];
         this.vertexSourceAddresses[this.vertexCache[i2].outputIndex] = this.vertexCacheSourceAddresses[i2];
+        this.vertexMatrixIndices[this.vertexCache[i0].outputIndex] = this.vertexCache[i0].matrixIndex;
+        this.vertexMatrixIndices[this.vertexCache[i1].outputIndex] = this.vertexCache[i1].matrixIndex;
+        this.vertexMatrixIndices[this.vertexCache[i2].outputIndex] = this.vertexCache[i2].matrixIndex;
         this.sharedOutput.indices.push(
             this.vertexCache[i0].outputIndex,
             this.vertexCache[i1].outputIndex,
@@ -482,6 +497,10 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
                 const v0 = v0w - n;
                 state.gSPVertex(w1, n, v0);
             } break;
+
+            case F3DEX2_GBI.G_MTX:
+                state.gSPMatrix(w1);
+                break;
 
             case F3DEX2_GBI.G_TRI1: {
                 const i0 = ((w0 >>> 16) & 0xFF) / 2;

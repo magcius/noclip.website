@@ -47,7 +47,8 @@ function main() {
     // 03 map floors: TODO: not extracted or interpreted (floor collision).
     // 04 prop geometry: extracted as PropGeometryData; TODO: interpret every
     //    prop header/display-list variant, animation, and LOD path.
-    // 05 actor geometry: TODO: not extracted or rendered.
+    // 05 actor geometry: supported skeletal actors are extracted for maps
+    //    which place them; TODO: render the remaining actor model families.
     // 06 unused: TODO: verify that no retail map references this table.
     // 07 uncompressed textures: partially extracted as AnimTexData; TODO:
     //    archive the complete table instead of only known map/sprite frames.
@@ -57,7 +58,8 @@ function main() {
     //    actor/model1 entries and all remaining model2 behaviors.
     // 10 instance scripts: extracted raw as ScriptData; TODO: interpret the
     //    complete condition/action language and stateful object behavior.
-    // 11 animations: TODO: not extracted or interpreted.
+    // 11 animations: maps archive the animation files required by the actors
+    //    we support; TODO: generically interpret every animation channel.
     // 12 text: TODO: not extracted or interpreted.
     // 13 animation code: TODO: not extracted or interpreted.
     // 14 HUD textures: TODO: not extracted; not map geometry.
@@ -93,9 +95,11 @@ function main() {
     const PointerTable = {
         MapGeometry: 1,
         PropGeometry: 4,
+        ActorGeometry: 5,
         TexturesUncompressed: 7,
         Setup: 9,
         Scripts: 10,
+        Animations: 11,
         Critters: 22,
         TexturesGeometry: 25,
     } as const;
@@ -141,8 +145,23 @@ function main() {
         return files;
     }
 
+    function extractRawTableEntry(table: number, index: number): ArrayBufferSlice {
+        const tableOffset = getTableOffset(table);
+        const fileCount = getTableCount(table);
+        assert(index >= 0 && index < fileCount);
+        const pointer = view.getUint32(tableOffset + index * 4);
+        const nextPointer = view.getUint32(tableOffset + (index + 1) * 4);
+        assert(!(pointer & 0x80000000));
+        assert(!(nextPointer & 0x80000000));
+        const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
+        const nextOffs = (nextPointer & 0x7FFFFFFF) + PointerTableOffset;
+        assert(nextOffs >= offs);
+        return romData.subarray(offs, nextOffs - offs);
+    }
+
     const MapData = extractCompressedTable(PointerTable.MapGeometry);
     const PropGeometryData = extractCompressedTable(PointerTable.PropGeometry);
+    const ActorGeometryData = extractCompressedTable(PointerTable.ActorGeometry);
     const SetupData = extractCompressedTable(PointerTable.Setup);
     const ScriptData = extractCompressedTable(PointerTable.Scripts);
     const CritterData = extractCompressedTable(PointerTable.Critters);
@@ -253,6 +272,8 @@ function main() {
         ScriptData: ArrayBufferSlice;
         CritterData: ArrayBufferSlice | null;
         PropGeometry: { Type: number, Data: ArrayBufferSlice }[];
+        ActorGeometry: { Model: number, Data: ArrayBufferSlice }[];
+        AnimationData: { ID: number, Data: ArrayBufferSlice }[];
         EnvironmentParticleData: typeof EnvironmentParticleData;
         textureUsage: TextureUsage;
     }
@@ -373,6 +394,35 @@ function main() {
         scanTextureCommands(prop, Math.min(mainDisplayListStart, secondaryDisplayListStart), vertexStart, usage.geometry, animatedTargets);
     }
 
+    function scanActorTextureUsage(actor: Buffer, usage: TextureUsage): void {
+        const runtimeBase = actor.readUInt32BE(0);
+        const displayListTable = actor.readUInt32BE(4) - runtimeBase + 0x28;
+        const displayListCount = actor.readUInt8(0x21);
+        const visited = new Set<number>();
+        const scanDisplayList = (address: number): void => {
+            if ((address >>> 24) !== 0x03)
+                return;
+            let offs = (address & 0x00FFFFFF) + 0x28;
+            if (visited.has(offs))
+                return;
+            visited.add(offs);
+            for (; offs + 8 <= actor.byteLength; offs += 8) {
+                const opcode = actor.readUInt8(offs);
+                const target = actor.readUInt32BE(offs + 4);
+                if (opcode === 0xFD && (target >>> 24) === 0)
+                    usage.geometry.add(target);
+                else if (opcode === 0xDE)
+                    scanDisplayList(target);
+                else if (opcode === 0xDF)
+                    return;
+            }
+        };
+        for (let i = 0; i < displayListCount; i++) {
+            const pointer = actor.readUInt32BE(displayListTable + i * 4);
+            scanDisplayList(0x03000000 | (pointer - runtimeBase));
+        }
+    }
+
     const spriteByAddress = new Map(SpriteData.map((sprite) => [sprite.address, sprite]));
     function addSpriteTextureUsage(address: number, usage: TextureUsage): void {
         const sprite = spriteByAddress.get(address);
@@ -440,11 +490,46 @@ function main() {
                 PropGeometry.push({ Type: type, Data: resolveTableEntry(PropGeometryData, type) });
         }
 
+        let actorOffs = 4 + propCount * 0x30;
+        const mysteryCount = setup.readUInt32BE(actorOffs);
+        actorOffs += 4 + mysteryCount * 0x24;
+        const actorCount = setup.readUInt32BE(actorOffs);
+        actorOffs += 4;
+        const actorModels = new Set<number>();
+        const actorAnimations = new Set<number>();
+        for (let i = 0; i < actorCount; i++, actorOffs += 0x38) {
+            const type = setup.readUInt16BE(actorOffs + 0x32);
+            if (type === 0x10) {
+                actorModels.add(0x81);
+                actorAnimations.add(0x402);
+            } else if (type === 0x2A) {
+                actorModels.add(0x97);
+                actorAnimations.add(0x402);
+            }
+        }
+        const ActorGeometry = [];
+        for (const model of actorModels) {
+            // Actor model IDs are one-based; pointer-table slot zero is model 1.
+            const tableIndex = model - 1;
+            if (tableIndex < ActorGeometryData.length)
+                ActorGeometry.push({ Model: model, Data: resolveTableEntry(ActorGeometryData, tableIndex) });
+        }
+        const animations = [...actorAnimations].map((id) => ({
+            ID: id,
+            // Unlike the geometry tables, table 11 stores animation files
+            // uncompressed. Preserve the exact pointer-bounded file.
+            Data: extractRawTableEntry(PointerTable.Animations, id),
+        }));
+
         const environmentParticleData = EnvironmentParticleData.filter((entry) => entry.map === mapID);
         const textureUsage: TextureUsage = { geometry: new Set(), animated: new Set() };
         scanMapTextureUsage(map, textureUsage);
         for (const prop of PropGeometry)
             scanPropTextureUsage(inflatePointerTableData(prop.Data, `prop ${hexzero(prop.Type, 4)}`), textureUsage);
+        for (const actor of ActorGeometry) {
+            const actorData = inflatePointerTableData(actor.Data, `actor model ${hexzero(actor.Model, 4)}`);
+            scanActorTextureUsage(actorData, textureUsage);
+        }
         if (environmentParticleData.length > 0) {
             addSpriteTextureUsage(0x8072140C, textureUsage);
             addSpriteTextureUsage(0x8071FF18, textureUsage);
@@ -457,6 +542,8 @@ function main() {
             ScriptData: scriptData,
             CritterData: mapID < CritterData.length ? resolveTableEntry(CritterData, mapID) : null,
             PropGeometry,
+            ActorGeometry,
+            AnimationData: animations,
             EnvironmentParticleData: environmentParticleData,
             textureUsage,
         });
@@ -771,6 +858,8 @@ function main() {
             ScriptData: source.ScriptData,
             CritterData: source.CritterData,
             PropGeometry: source.PropGeometry,
+            ActorGeometry: source.ActorGeometry,
+            AnimationData: source.AnimationData,
             EnvironmentParticleData: source.EnvironmentParticleData,
             TexData: makeTextureEntries(TexData, (id) => geometryOwners.get(id)?.length === 1 && geometryOwners.get(id)![0] === mapID),
             AnimTexData: makeTextureEntries(AnimTexData, (id) => animatedOwners.get(id)?.length === 1 && animatedOwners.get(id)![0] === mapID),

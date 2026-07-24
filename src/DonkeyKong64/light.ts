@@ -2,21 +2,14 @@ import { vec3 } from 'gl-matrix';
 
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
+import { actorModelScale, getActorRenderDefinition, parseActorAnimation, parseActorSkeleton, parseSetupActors, sampleActorBonePosition } from './actor.js';
+import type { ActorAnimation, ActorSkeleton } from './actor.js';
 
 interface LightSetupProp {
     type: number;
     position: vec3;
     lightAnimation: number;
     setupIndex: number;
-}
-
-interface SetupActor {
-    type: number;
-    position: vec3;
-    rotationY: number;
-    lightSpeed: number;
-    lightColor: readonly [number, number, number];
-    lightCone: readonly [number, number];
 }
 
 interface LightAnimationKeyframe {
@@ -43,6 +36,10 @@ interface DynamicSpotLight {
     speed: number;
     rotationY: number;
     maxDistance: number;
+    animation: ActorAnimation;
+    skeleton: ActorSkeleton;
+    scale: number;
+    targetBone: number;
 }
 
 export type DynamicLight = DynamicPointLight | DynamicSpotLight;
@@ -77,15 +74,10 @@ interface ActiveLight {
     outerConeCos?: number;
 }
 
-// Rotation channel from actor animation 0x402.
-const swingingLightAnimation = [15, 53, 108, 171, 233, 288, 325, 341, 325, 289, 234, 171, 109, 53, 15, 0] as const;
-const swingingLightAnimationCenter = (Math.min(...swingingLightAnimation) + Math.max(...swingingLightAnimation)) / 2;
-// func_global_asm_80613CA8 uses AnimFile::unk12 - 1 as the final frame.
-// Animation 0x402 has unk12 == 0x10.
-const swingingLightFrameCount = 0x10;
-// AnimFile::unk0, copied to AnimationStateUnk0::unk24 by
-// func_global_asm_80613CA8 and multiplied into the frame advance.
-const swingingLightPlaybackRate = 0.1;
+interface ActorLightResources {
+    loadActorGeometry: (model: number) => ArrayBufferSlice | null;
+    loadAnimation: (animation: number) => ArrayBufferSlice | null;
+}
 
 // D_global_asm_80748430, consumed by func_global_asm_8065EB10. Entry zero is
 // the "no light" setup value; the remaining indices are the game's keyframes.
@@ -120,40 +112,6 @@ const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
     [{ intensity: .4, color: [255, 255, 255], radius: 250, duration: 20 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 20 }],
 ];
 
-function parseSetupActors(data: ArrayBufferSlice): SetupActor[] {
-    const view = data.createDataView();
-    let offs = 4 + view.getUint32(0, false) * 0x30;
-    const mysteryCount = view.getUint32(offs, false);
-    offs += 4 + mysteryCount * 0x24;
-    const actorCount = view.getUint32(offs, false);
-    offs += 4;
-    const actors: SetupActor[] = [];
-    for (let i = 0; i < actorCount; i++, offs += 0x38) {
-        actors.push({
-            type: view.getUint16(offs + 0x32, false),
-            position: vec3.fromValues(
-                view.getFloat32(offs + 0x00, false),
-                view.getFloat32(offs + 0x04, false),
-                view.getFloat32(offs + 0x08, false),
-            ),
-            rotationY: view.getInt16(offs + 0x30, false),
-            lightSpeed: view.getFloat32(offs + 0x10, false),
-            // The actor behavior loads these s32 fields through u16
-            // temporaries and createLight finally truncates them to u8.
-            lightColor: [
-                view.getInt32(offs + 0x14, false) & 0xFF,
-                view.getInt32(offs + 0x18, false) & 0xFF,
-                view.getInt32(offs + 0x1C, false) & 0xFF,
-            ],
-            lightCone: [
-                view.getFloat32(offs + 0x20, false),
-                view.getFloat32(offs + 0x24, false),
-            ],
-        });
-    }
-    return actors;
-}
-
 function parseSetupProps(data: ArrayBufferSlice): LightSetupProp[] {
     const view = data.createDataView();
     const count = view.getUint32(0, false);
@@ -174,7 +132,11 @@ function parseSetupProps(data: ArrayBufferSlice): LightSetupProp[] {
     return props;
 }
 
-export function buildDynamicLights(setup: ArrayBufferSlice, loadPropGeometry: (type: number) => DataView): DynamicLight[] {
+export function buildDynamicLights(
+    setup: ArrayBufferSlice,
+    loadPropGeometry: (type: number) => DataView,
+    actorResources: ActorLightResources,
+): DynamicLight[] {
     const lights: DynamicLight[] = [];
     for (const prop of parseSetupProps(setup)) {
         // Every model-two setup entry can select one of
@@ -204,10 +166,14 @@ export function buildDynamicLights(setup: ArrayBufferSlice, loadPropGeometry: (t
         // 0x10 is ACTOR_SWINGING_LIGHT and 0x2A is the otherwise easy to
         // miss ACTOR_SWINGING_LIGHT_2 ("Cave light", model 0x97). Both use
         // func_global_asm_8069AB74 and animation 0x402.
-        // TODO: Extract and render the swinging-light actor geometry (models
-        // 0x81 and 0x97), including its animated bone matrices.
-        if (actor.type !== 0x10 && actor.type !== 0x2A)
+        const definition = getActorRenderDefinition(actor.type);
+        if (definition === null || definition.lightBone === undefined)
             continue;
+        const actorGeometry = actorResources.loadActorGeometry(definition.model);
+        const animationData = actorResources.loadAnimation(definition.animation);
+        if (actorGeometry === null || animationData === null)
+            continue;
+        const skeleton = parseActorSkeleton(actorGeometry);
         lights.push({
             kind: 'spot',
             // The original uses x_position + 0.3 as the cone source.
@@ -224,6 +190,10 @@ export function buildDynamicLights(setup: ArrayBufferSlice, loadPropGeometry: (t
             // createLight's default visibility distance; this behavior does
             // not override it.
             maxDistance: 700,
+            animation: parseActorAnimation(animationData, skeleton.offsets.length, definition.animation),
+            skeleton,
+            scale: actor.scale * actorModelScale,
+            targetBone: definition.lightBone,
         });
     }
     return lights;
@@ -310,6 +280,7 @@ export function buildMapChunkLighting(
 
 function sampleActiveLights(lights: readonly DynamicLight[], camera: ArrayLike<number>, tick: number): ActiveLight[] {
     const activeLights: ActiveLight[] = [];
+    const bonePosition = vec3.create();
     for (const light of lights) {
         const cameraDistance = Math.hypot(
             camera[12] - light.origin[0],
@@ -321,22 +292,17 @@ function sampleActiveLights(lights: readonly DynamicLight[], camera: ArrayLike<n
         if (cameraFade === 0)
             continue;
         if (light.kind === 'spot') {
-            // Animation 0x402 is a 16-frame pendulum curve.
-            // func_global_asm_8061421C advances the animation by the actor
-            // multiplier times the animation file's own rate.
-            const animationFrame = ((tick * light.speed * swingingLightPlaybackRate) % swingingLightFrameCount + swingingLightFrameCount) % swingingLightFrameCount;
-            const samplePosition = animationFrame / swingingLightFrameCount * swingingLightAnimation.length;
-            const sampleIndex = Math.floor(samplePosition);
-            const nextSampleIndex = (sampleIndex + 1) % swingingLightAnimation.length;
-            const sampleT = samplePosition - sampleIndex;
-            const sample = swingingLightAnimation[sampleIndex]
-                + (swingingLightAnimation[nextSampleIndex] - swingingLightAnimation[sampleIndex]) * sampleT;
-            const swing = (sample - swingingLightAnimationCenter) * 0.1 * Math.PI / 180;
-            const localX = Math.sin(swing);
+            // func_global_asm_8069AB74 targets getBonePosition(actor, 2).
+            // Evaluate that bone from the archived model skeleton and 0x402
+            // instead of assuming a particular segment length.
+            sampleActorBonePosition(bonePosition, light.skeleton, light.animation, light.speed, tick, light.targetBone);
+            vec3.scale(bonePosition, bonePosition, light.scale);
+            const sinY = Math.sin(light.rotationY);
+            const cosY = Math.cos(light.rotationY);
             const direction = vec3.fromValues(
-                Math.cos(light.rotationY) * localX,
-                -Math.cos(swing),
-                -Math.sin(light.rotationY) * localX,
+                cosY * bonePosition[0] + sinY * bonePosition[2] - 0.3,
+                bonePosition[1],
+                -sinY * bonePosition[0] + cosY * bonePosition[2],
             );
             vec3.normalize(direction, direction);
             activeLights.push({
