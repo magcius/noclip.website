@@ -51,6 +51,20 @@ export interface AnimatedTexture {
     frames: ArrayBufferSlice[];
 }
 
+const animatedTextureSourceIDs = new WeakMap<ArrayBufferSlice, number>();
+let nextAnimatedTextureSourceID = 1;
+
+function getAnimatedTextureCacheKey(frame: ArrayBufferSlice): number {
+    let sourceID = animatedTextureSourceIDs.get(frame);
+    if (sourceID === undefined) {
+        sourceID = nextAnimatedTextureSourceID++;
+        animatedTextureSourceIDs.set(frame, sourceID);
+    }
+
+    // All ordinary RDP addresses and existing synthetic keys are uint32s.
+    return 0x100000000 + sourceID;
+}
+
 // same logic, just with the new type
 export class RSPOutput extends F3DEX.RSPOutput {
     public override drawCalls: DrawCall[] = [];
@@ -203,12 +217,10 @@ export class RSPState {
             const animation = this.indexedTextures.find((entry) => entry.group === cache.addr);
             if (animation !== undefined) {
                 const oldCacheKey = tile.cacheKey;
-                const textureIndices = animation.frames.map((frame, frameIndex) => {
+                const textureIndices = animation.frames.map((frame) => {
                     const segmentBuffers: ArrayBufferSlice[] = [];
                     segmentBuffers[0x01] = frame;
-                    // Indexed animations use table-7 data but retain the
-                    // segment-zero placeholder ID stored in the display list.
-                    tile.cacheKey = 0x40000000 | ((animation.group & 0xFFFF) << 8) | (frameIndex + 1);
+                    tile.cacheKey = getAnimatedTextureCacheKey(frame);
                     return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, 0, tile, cache.dxt === 0);
                 });
                 tile.cacheKey = oldCacheKey;
@@ -253,13 +265,10 @@ export class RSPState {
             }
 
             const oldCacheKey = tile.cacheKey;
-            const textureIndices = animation.frames.map((frame, frameIndex) => {
+            const textureIndices = animation.frames.map((frame) => {
                 const segmentBuffers: ArrayBufferSlice[] = [];
                 segmentBuffers[segment] = frame;
-                // The RDP cache normally keys textures by their DRAM address.
-                // Every animation frame intentionally has the same segmented
-                // address, so distinguish the source buffers explicitly.
-                tile.cacheKey = (segment << 24) | (animation.group << 16) | (frameIndex + 1);
+                tile.cacheKey = getAnimatedTextureCacheKey(frame);
                 return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, cache.addr, 0, tile, cache.dxt === 0);
             });
             tile.cacheKey = oldCacheKey;

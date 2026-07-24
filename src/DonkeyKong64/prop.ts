@@ -8,7 +8,6 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
-import { Vec3UnitY } from '../MathHelpers.js';
 import { assert, hexzero, nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { initDL } from './material.js';
@@ -26,6 +25,81 @@ export interface TerrainTriangle {
 interface TerrainSurface {
     y: number;
     normal: vec3;
+}
+
+class TerrainTriangleGrid {
+    private cells = new Map<string, TerrainTriangle[]>();
+    private cellSize: number;
+
+    constructor(triangles: readonly TerrainTriangle[]) {
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+        for (const triangle of triangles) {
+            for (const vertex of triangle.vertices) {
+                minX = Math.min(minX, vertex[0]);
+                maxX = Math.max(maxX, vertex[0]);
+                minZ = Math.min(minZ, vertex[2]);
+                maxZ = Math.max(maxZ, vertex[2]);
+            }
+        }
+
+        // Size cells for about eight triangles apiece on uniformly covered
+        // terrain. Deriving this from the scene bounds also handles the 3x
+        // coordinate scale used by streamed maps.
+        const targetCellCount = Math.max(1, Math.ceil(triangles.length / 8));
+        const terrainArea = (maxX - minX) * (maxZ - minZ);
+        this.cellSize = triangles.length > 0 && terrainArea > 0
+            ? Math.max(1, Math.sqrt(terrainArea / targetCellCount))
+            : 1;
+
+        for (const triangle of triangles) {
+            const [a, b, c] = triangle.vertices;
+            const minCellX = this.getCellCoordinate(Math.min(a[0], b[0], c[0]));
+            const maxCellX = this.getCellCoordinate(Math.max(a[0], b[0], c[0]));
+            const minCellZ = this.getCellCoordinate(Math.min(a[2], b[2], c[2]));
+            const maxCellZ = this.getCellCoordinate(Math.max(a[2], b[2], c[2]));
+            for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+                for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+                    const key = this.getCellKey(cellX, cellZ);
+                    let cell = this.cells.get(key);
+                    if (cell === undefined) {
+                        cell = [];
+                        this.cells.set(key, cell);
+                    }
+                    cell.push(triangle);
+                }
+            }
+        }
+    }
+
+    private getCellCoordinate(position: number): number {
+        return Math.floor(position / this.cellSize);
+    }
+
+    private getCellKey(cellX: number, cellZ: number): string {
+        return `${cellX},${cellZ}`;
+    }
+
+    public getTrianglesAt(x: number, z: number): readonly TerrainTriangle[] {
+        const cellX = this.getCellCoordinate(x);
+        const cellZ = this.getCellCoordinate(z);
+        return this.cells.get(this.getCellKey(cellX, cellZ)) ?? [];
+    }
+
+    public getTrianglesInBounds(minX: number, minZ: number, maxX: number, maxZ: number): TerrainTriangle[] {
+        const triangles = new Set<TerrainTriangle>();
+        const minCellX = this.getCellCoordinate(minX);
+        const maxCellX = this.getCellCoordinate(maxX);
+        const minCellZ = this.getCellCoordinate(minZ);
+        const maxCellZ = this.getCellCoordinate(maxZ);
+        for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++)
+            for (let cellX = minCellX; cellX <= maxCellX; cellX++)
+                for (const triangle of this.cells.get(this.getCellKey(cellX, cellZ)) ?? [])
+                    triangles.add(triangle);
+        return [...triangles];
+    }
 }
 
 export function buildTerrainTriangles(sharedOutput: RSPSharedOutput): TerrainTriangle[] {
@@ -52,9 +126,9 @@ export function buildTerrainTriangles(sharedOutput: RSPSharedOutput): TerrainTri
     return triangles;
 }
 
-function findTerrainSurface(triangles: TerrainTriangle[], x: number, z: number, rayStartY: number): TerrainSurface | null {
+function findTerrainSurface(grid: TerrainTriangleGrid, x: number, z: number, rayStartY: number): TerrainSurface | null {
     let result: TerrainSurface | null = null;
-    for (const triangle of triangles) {
+    for (const triangle of grid.getTrianglesAt(x, z)) {
         const [a, b, c] = triangle.vertices;
         const denominator = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
         if (Math.abs(denominator) < 0.0001)
@@ -539,28 +613,127 @@ function decodePropMatrixAnimation(
     return animation;
 }
 
-function createPropDecalVertexBuffer(halfWidth: number, halfHeight: number, textureWidth: number, textureHeight: number): ArrayBufferSlice {
-    const buffer = new ArrayBuffer(4 * 0x10);
+interface ProjectedDecalVertex {
+    x: number;
+    y: number;
+    z: number;
+    u: number;
+    v: number;
+}
+
+interface DecalClipVertex {
+    x: number;
+    z: number;
+    u: number;
+    v: number;
+}
+
+function clipDecalPolygon(polygon: DecalClipVertex[], coordinate: 'u' | 'v', limit: number, keepGreater: boolean): DecalClipVertex[] {
+    const output: DecalClipVertex[] = [];
+    for (let i = 0; i < polygon.length; i++) {
+        const current = polygon[i];
+        const previous = polygon[(i + polygon.length - 1) % polygon.length];
+        const currentInside = keepGreater ? current[coordinate] >= limit : current[coordinate] <= limit;
+        const previousInside = keepGreater ? previous[coordinate] >= limit : previous[coordinate] <= limit;
+        if (currentInside !== previousInside) {
+            const amount = (limit - previous[coordinate]) / (current[coordinate] - previous[coordinate]);
+            output.push({
+                x: previous.x + (current.x - previous.x) * amount,
+                z: previous.z + (current.z - previous.z) * amount,
+                u: previous.u + (current.u - previous.u) * amount,
+                v: previous.v + (current.v - previous.v) * amount,
+            });
+        }
+        if (currentInside)
+            output.push(current);
+    }
+    return output;
+}
+
+function getTriangleHeight(triangle: TerrainTriangle, x: number, z: number): number {
+    const [a] = triangle.vertices;
+    return a[1] - (triangle.normal[0] * (x - a[0]) + triangle.normal[2] * (z - a[2])) / triangle.normal[1];
+}
+
+function buildProjectedDecalVertices(grid: TerrainTriangleGrid, x: number, y: number, z: number, rayStartY: number, halfWidth: number, halfHeight: number, yaw: number): ProjectedDecalVertex[] {
+    const surfaceOffset = 1;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    const extentX = Math.abs(cos * halfWidth) + Math.abs(sin * halfHeight);
+    const extentZ = Math.abs(sin * halfWidth) + Math.abs(cos * halfHeight);
+    const vertices: ProjectedDecalVertex[] = [];
+    const projectedTerrain = new Set<string>();
+
+    for (const triangle of grid.getTrianglesInBounds(x - extentX, z - extentZ, x + extentX, z + extentZ)) {
+        const triangleKey = triangle.vertices
+            .map((vertex) => `${vertex[0]},${vertex[1]},${vertex[2]}`)
+            .sort()
+            .join('/');
+        if (projectedTerrain.has(triangleKey))
+            continue;
+        projectedTerrain.add(triangleKey);
+
+        let polygon: DecalClipVertex[] = triangle.vertices.map((vertex) => {
+            const dx = vertex[0] - x;
+            const dz = vertex[2] - z;
+            return {
+                x: vertex[0],
+                z: vertex[2],
+                u: dx * cos - dz * sin,
+                v: dx * sin + dz * cos,
+            };
+        });
+        polygon = clipDecalPolygon(polygon, 'u', -halfWidth, true);
+        polygon = clipDecalPolygon(polygon, 'u', halfWidth, false);
+        polygon = clipDecalPolygon(polygon, 'v', -halfHeight, true);
+        polygon = clipDecalPolygon(polygon, 'v', halfHeight, false);
+        if (polygon.length < 3)
+            continue;
+
+        const centroidX = polygon.reduce((sum, vertex) => sum + vertex.x, 0) / polygon.length;
+        const centroidZ = polygon.reduce((sum, vertex) => sum + vertex.z, 0) / polygon.length;
+        const surface = findTerrainSurface(grid, centroidX, centroidZ, rayStartY);
+        const triangleY = getTriangleHeight(triangle, centroidX, centroidZ);
+        if (surface === null || Math.abs(surface.y - triangleY) > 0.5)
+            continue;
+
+        for (let i = 1; i + 1 < polygon.length; i++) {
+            for (const vertex of [polygon[0], polygon[i], polygon[i + 1]]) {
+                vertices.push({
+                    x: vertex.x - x,
+                    y: getTriangleHeight(triangle, vertex.x, vertex.z) + surfaceOffset - y,
+                    z: vertex.z - z,
+                    u: vertex.u / (halfWidth * 2) + 0.5,
+                    v: vertex.v / (halfHeight * 2) + 0.5,
+                });
+            }
+        }
+    }
+    return vertices;
+}
+
+function createPropDecalVertexBuffer(vertices: readonly ProjectedDecalVertex[], textureWidth: number, textureHeight: number): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(vertices.length * 0x10);
     const view = new DataView(buffer);
-    const positions = [
-        -halfWidth, 0, -halfHeight,
-         halfWidth, 0, -halfHeight,
-         halfWidth, 0,  halfHeight,
-        -halfWidth, 0,  halfHeight,
-    ];
-    const textureCoordinates = [
-        0, 0,
-        textureWidth << 5, 0,
-        textureWidth << 5, textureHeight << 5,
-        0, textureHeight << 5,
-    ];
-    for (let i = 0; i < 4; i++) {
+    const weldedHeights = new Map<string, number>();
+    for (let i = 0; i < vertices.length; i++) {
+        const vertex = vertices[i];
         const offs = i * 0x10;
-        view.setInt16(offs + 0x00, positions[i * 3]);
-        view.setInt16(offs + 0x02, positions[i * 3 + 1]);
-        view.setInt16(offs + 0x04, positions[i * 3 + 2]);
-        view.setInt16(offs + 0x08, textureCoordinates[i * 2]);
-        view.setInt16(offs + 0x0A, textureCoordinates[i * 2 + 1]);
+        const x = Math.round(vertex.x);
+        const z = Math.round(vertex.z);
+        const s = Math.round(vertex.u * textureWidth * 0x20);
+        const t = Math.round(vertex.v * textureHeight * 0x20);
+        const weldKey = `${x},${z},${s},${t}`;
+        let y = weldedHeights.get(weldKey);
+        if (y === undefined) {
+            y = Math.round(vertex.y);
+            weldedHeights.set(weldKey, y);
+        }
+        view.setInt16(offs + 0x00, x);
+        view.setInt16(offs + 0x02, y);
+        view.setInt16(offs + 0x04, z);
+        view.setInt16(offs + 0x08, s);
+        view.setInt16(offs + 0x0A, t);
         view.setUint8(offs + 0x0C, 0xFF);
         view.setUint8(offs + 0x0D, 0xFF);
         view.setUint8(offs + 0x0E, 0xFF);
@@ -663,7 +836,7 @@ function applyInitialModel2TextureScripts(textures: AnimatedTexture[], scripts: 
     });
 }
 
-function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, geometryView: DataView, instances: SetupProp[], terrainTriangles: TerrainTriangle[], worldScale: number): void {
+function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, geometryView: DataView, instances: SetupProp[], terrainGrid: TerrainTriangleGrid, worldScale: number): void {
     const textureID = geometryView.getUint16(0x28, false);
     if (textureID === 0xFFFF)
         return;
@@ -686,74 +859,63 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
     const dxt = Math.max(1, Math.ceil(0x0800 / line));
     const maskS = Math.ceil(Math.log2(textureWidth));
     const maskT = Math.ceil(Math.log2(textureHeight));
-    const segmentBuffers: ArrayBufferSlice[] = [];
-    segmentBuffers[0x08] = createPropDecalVertexBuffer(halfWidth, halfHeight, textureWidth, textureHeight);
     const decalTexture: AnimatedTexture[] = [{
         segment: 0x0E,
         group: textureID,
         frameDuration: 0,
         frames: [romData.TexData[textureID]],
     }];
-    const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, decalTexture);
-    initDL(state, false);
-    state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    state.gSPClearGeometryMode(0xFFFFFFFF);
-    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
-    state.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
-    state.gDPSetOtherModeL(0, 29, 0x00504DD8);
-    state.gDPSetCombine(0x00119623, 0xFF2FFFFF);
-    state.gSPSetPrimColor(0, 0x00, 0x00, 0x00, alpha);
     const loadSize = size === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
-    state.gDPSetTextureImage(format, loadSize, 1, 0x0E000000);
-    state.gDPSetTile(format, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
-    state.gDPLoadBlock(7, 0, 0, loadCount, dxt);
-    state.gDPSetTile(format, size, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
-    state.gDPSetTileSize(0, 0, 0, (textureWidth - 1) << 2, (textureHeight - 1) << 2);
-    state.gSPVertex(0x08000000, 4, 0);
-    state.gSPTri(0, 1, 2);
-    state.gSPTri(0, 2, 3);
-    const output = state.finish();
-    if (output === null)
-        return;
-
-    const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
-    const meshData = sceneRenderer.addMeshData(device, cache, mesh);
     for (const prop of instances) {
-        const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
         const worldX = prop.position[0] * worldScale;
         const worldY = prop.position[1] * worldScale;
         const worldZ = prop.position[2] * worldScale;
-        // func_global_asm_80632FCC performs the same floor query with a ray
-        // beginning 20 game units above the prop, then 8063A968 rotates the
-        // generated quad to the returned ground angles. ZMODE_DEC supplies
-        // polygon offset, so the decal can remain coplanar with the floor.
-        const surface = findTerrainSurface(terrainTriangles, worldX, worldZ, worldY + 20 * worldScale);
-        const normal = surface?.normal ?? Vec3UnitY;
         const yaw = prop.rotation[1] * Math.PI / 180;
-        const tangentZ = vec3.fromValues(Math.sin(yaw), 0, Math.cos(yaw));
-        vec3.scaleAndAdd(tangentZ, tangentZ, normal, -vec3.dot(tangentZ, normal));
-        if (vec3.squaredLength(tangentZ) < 0.0001)
-            vec3.set(tangentZ, Math.cos(yaw), 0, -Math.sin(yaw));
-        vec3.normalize(tangentZ, tangentZ);
-        const tangentX = vec3.normalize(vec3.create(), vec3.cross(vec3.create(), normal, tangentZ));
-        const modelMatrix = renderer.modelMatrix;
-        modelMatrix[0] = tangentX[0];
-        modelMatrix[1] = tangentX[1];
-        modelMatrix[2] = tangentX[2];
-        modelMatrix[4] = normal[0];
-        modelMatrix[5] = normal[1];
-        modelMatrix[6] = normal[2];
-        modelMatrix[8] = tangentZ[0];
-        modelMatrix[9] = tangentZ[1];
-        modelMatrix[10] = tangentZ[2];
-        modelMatrix[12] = worldX;
-        modelMatrix[13] = surface?.y ?? worldY;
-        modelMatrix[14] = worldZ;
-        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [
-            prop.scale * worldScale,
-            prop.scale * worldScale,
-            prop.scale * worldScale,
-        ]);
+        const projectedVertices = buildProjectedDecalVertices(
+            terrainGrid,
+            worldX,
+            worldY,
+            worldZ,
+            worldY + 20 * worldScale,
+            halfWidth * prop.scale * worldScale,
+            halfHeight * prop.scale * worldScale,
+            yaw,
+        );
+        if (projectedVertices.length === 0)
+            continue;
+
+        const segmentBuffers: ArrayBufferSlice[] = [];
+        segmentBuffers[0x08] = createPropDecalVertexBuffer(projectedVertices, textureWidth, textureHeight);
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, decalTexture);
+        initDL(state, false);
+        state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+        state.gSPClearGeometryMode(0xFFFFFFFF);
+        state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+        state.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+        state.gDPSetOtherModeL(0, 29, 0x00504DD8);
+        state.gDPSetCombine(0x00119623, 0xFF2FFFFF);
+        state.gSPSetPrimColor(0, 0x00, 0x00, 0x00, alpha);
+        state.gDPSetTextureImage(format, loadSize, 1, 0x0E000000);
+        state.gDPSetTile(format, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
+        state.gDPLoadBlock(7, 0, 0, loadCount, dxt);
+        state.gDPSetTile(format, size, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
+        state.gDPSetTileSize(0, 0, 0, (textureWidth - 1) << 2, (textureHeight - 1) << 2);
+        for (let vertexBase = 0; vertexBase < projectedVertices.length; vertexBase += 30) {
+            const vertexCount = Math.min(30, projectedVertices.length - vertexBase);
+            state.gSPVertex(0x08000000 + vertexBase * 0x10, vertexCount, 0);
+            for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3)
+                state.gSPTri(vertex, vertex + 1, vertex + 2);
+        }
+        const output = state.finish();
+        if (output === null)
+            continue;
+
+        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
+        const meshData = sceneRenderer.addMeshData(device, cache, mesh);
+        const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
+        renderer.modelMatrix[12] = worldX;
+        renderer.modelMatrix[13] = worldY;
+        renderer.modelMatrix[14] = worldZ;
         sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
         if (fadeEndDistance > fadeStartDistance) {
             renderer.distanceFade = {
@@ -919,6 +1081,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         return;
 
     const propsByType = new Map<number, SetupProp[]>();
+    const terrainGrid = new TerrainTriangleGrid(terrainTriangles);
     for (const prop of props) {
         if (!propsByType.has(prop.type))
             propsByType.set(prop.type, []);
@@ -938,7 +1101,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         // Keep this decoded for diagnostics and future family-specific
         // behavior, but do not use it to restrict generic prop rendering.
         void assetFamilyName;
-        addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainTriangles, worldScale);
+        addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainGrid, worldScale);
         if (view.getUint8(0x1C) === 2) {
             addRuntimeModel2Props(device, cache, sceneRenderer, sharedOutput, romData, view, instances, worldScale, lightingEnvironment);
             continue;

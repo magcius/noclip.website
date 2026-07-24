@@ -58,6 +58,25 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     return gfxTexture;
 }
 
+class GPUTextureCache {
+    private textures = new Map<Texture, GfxTexture>();
+
+    public getTexture(device: GfxDevice, texture: Texture): GfxTexture {
+        let gfxTexture = this.textures.get(texture);
+        if (gfxTexture === undefined) {
+            gfxTexture = translateTexture(device, texture);
+            this.textures.set(texture, gfxTexture);
+        }
+        return gfxTexture;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const texture of this.textures.values())
+            device.destroyTexture(texture);
+        this.textures.clear();
+    }
+}
+
 function translateSampler(cache: GfxRenderCache, texture: Texture, linear: boolean): GfxSampler {
     return cache.createSampler({
         wrapS: translateCM(texture.tile.cms),
@@ -176,7 +195,7 @@ class DrawCallInstance {
     private crossfadeDuration = 0;
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, gpuTextureCache: GPUTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const binding = drawCall.textureBindings[i];
@@ -186,7 +205,7 @@ class DrawCallInstance {
 
             if (tex) {
                 this.textureEntry[i] = tex;
-                this.textureMappings[i].gfxTexture = translateTexture(device, tex);
+                this.textureMappings[i].gfxTexture = gpuTextureCache.getTexture(device, tex);
                 this.textureMappings[i].gfxSampler = translateSampler(cache, tex, linearFiltering);
             }
 
@@ -197,7 +216,7 @@ class DrawCallInstance {
                     if (frame === 0)
                         return this.textureMappings[i];
                     const mapping = new TextureMapping();
-                    mapping.gfxTexture = translateTexture(device, entry);
+                    mapping.gfxTexture = gpuTextureCache.getTexture(device, entry);
                     mapping.gfxSampler = translateSampler(cache, entry, linearFiltering);
                     return mapping;
                 });
@@ -300,7 +319,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, spriteFades: readonly number[] | null = null): void {
         if (!this.visible)
             return;
 
@@ -319,13 +338,24 @@ class DrawCallInstance {
             const frame = (Math.floor(animationTick / frameDuration) + frameOffset) % mappings.length;
             this.textureMappings[i] = mappings[frame];
         }
+        if (spriteFades !== null) {
+            for (let i = 0; i < spriteFades.length; i++) {
+                if (spriteFades[i] > 0)
+                    this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier * spriteFades[i], primColorMultiplier, 6, this.firstIndex + i * 6);
+            }
+        } else {
+            this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, this.drawCall.indexCount, this.firstIndex);
+        }
+    }
+
+    private prepareSingleRenderInst(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier: number, primColorMultiplier: vec3 | null, indexCount: number, firstIndex: number): void {
         const renderInst = renderInstManager.newRenderInst();
         if (this.isTranslucent)
             renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.setDrawCount(this.drawCall.indexCount, this.firstIndex);
+        renderInst.setDrawCount(indexCount, firstIndex);
 
         const usesFog = this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG) !== 0;
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2 + (usesFog ? 8 : 0));
@@ -365,6 +395,7 @@ class DrawCallInstance {
             // The game writes its integer animation counter to PRIM_LOD_FRAC.
             // Retain its 30 Hz frame boundaries, but interpolate the fraction
             // continuously so the fade stays smooth at the viewer frame rate.
+            const animationTick = viewerInput.time / (1000 / 30);
             const blend = (animationTick % this.crossfadeDuration) / this.crossfadeDuration;
             offs += fillVec4(comb, offs, blend, 0, 0, 0); // primitive LOD fraction
         }
@@ -372,14 +403,6 @@ class DrawCallInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.textureMappings.length; i++)
-            if (this.animatedTextureMappings[i] === undefined && this.textureMappings[i].gfxTexture !== null)
-                device.destroyTexture(this.textureMappings[i].gfxTexture!);
-        for (const mappings of this.animatedTextureMappings)
-            if (mappings !== undefined)
-                for (const mapping of mappings)
-                    if (mapping.gfxTexture !== null)
-                        device.destroyTexture(mapping.gfxTexture);
     }
 }
 
@@ -524,11 +547,11 @@ export class MeshData {
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
     public dynamicLightingEnabled = true;
-    private spritePrimAlphas: number[];
+    public spriteFades: number[] | null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
         this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propMatrixAnimation !== undefined);
-        this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
+        this.spriteFades = mesh.spriteBillboards !== undefined ? nArray(mesh.spriteBillboards.length, () => 1) : null;
         this.lightingDirty = mesh.dynamicLighting !== undefined;
 
         const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
@@ -618,9 +641,8 @@ export class MeshData {
         if (propMatrixAnimation !== undefined)
             updatePropMatrixAnimation(propMatrixAnimation, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
-        let spriteFade = 0;
-        let hasSpriteFade = false;
-        for (const sprite of sprites ?? []) {
+        for (let spriteIndex = 0; spriteIndex < (sprites?.length ?? 0); spriteIndex++) {
+            const sprite = sprites![spriteIndex];
             const age = sprite.spawnTick === undefined
                 ? 0
                 : ((tick - sprite.spawnTick + sprite.loopTicks!) % sprite.loopTicks!);
@@ -631,14 +653,13 @@ export class MeshData {
             const withinDistance = sprite.maxDistance === undefined
                 || distance <= sprite.maxDistance;
             const active = withinDistance && (sprite.spawnTick === undefined || age < sprite.lifetime!);
+            let fade = active ? 1 : 0;
             if (sprite.fadeStartDistance !== undefined) {
-                hasSpriteFade = true;
-                const fade = distance < sprite.fadeStartDistance
+                fade = !active ? 0 : distance < sprite.fadeStartDistance
                     ? 1
                     : Math.max(0, Math.min(1, (sprite.maxDistance! - distance) / (sprite.maxDistance! - sprite.fadeStartDistance)));
-                if (active)
-                    spriteFade = Math.max(spriteFade, fade);
             }
+            this.spriteFades![spriteIndex] = fade;
             const rightScale = sprite.centerX;
             const upScale = sprite.centerY;
             const centerX = sprite.origin[0]
@@ -676,11 +697,6 @@ export class MeshData {
                     + viewerInput.camera.worldMatrix[10] * forwardOffset;
             }
         }
-        if (hasSpriteFade) {
-            for (let i = 0; i < this.spritePrimAlphas.length; i++)
-                this.mesh.rspOutput!.drawCalls[i].DP_PrimColor[3] = this.spritePrimAlphas[i] * spriteFade;
-        }
-
         if (this.dirtyVertexRange !== null) {
             const byteOffset = this.dirtyVertexRange.start * 10 * 4;
             const byteLength = (this.dirtyVertexRange.end - this.dirtyVertexRange.start) * 10 * 4;
@@ -708,9 +724,9 @@ enum SceneRenderLayer {
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, spriteFades: readonly number[] | null = null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, spriteFades);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -781,6 +797,7 @@ export class RootMeshRenderer {
         private geometryData: MeshData,
         public renderLayer: SceneRenderLayer,
         private fogParams: FogParams,
+        private gpuTextureCache: GPUTextureCache,
         sharedRenderer: RootMeshRenderer | null = null,
     ) {
         this.megaStateFlags = {};
@@ -812,7 +829,7 @@ export class RootMeshRenderer {
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
                 const drawCall = node.rspOutput.drawCalls[i];
-                const drawCallInstance = new DrawCallInstance(device, cache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams);
+                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -963,7 +980,7 @@ export class RootMeshRenderer {
         const objectLightColor = this.objectLighting !== null
             ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.spriteFades);
 
         renderInstManager.popTemplate();
     }
@@ -984,6 +1001,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     private backdropRenderer: BackdropRenderer | null;
     private sceneCuller = new SceneCuller();
     private activeLightCache: ActiveLightCache;
+    public gpuTextureCache = new GPUTextureCache();
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -998,7 +1016,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     public addPropMeshRenderer(device: GfxDevice, cache: GfxRenderCache, meshData: MeshData, sharedRenderer: RootMeshRenderer | null = null): RootMeshRenderer {
-        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams, sharedRenderer);
+        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
         this.meshRenderers.push(renderer);
         return renderer;
     }
@@ -1175,6 +1193,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
             this.meshRenderers[i].destroy(device);
         for (let i = 0; i < this.meshDatas.length; i++)
             this.meshDatas[i].destroy(device);
+        this.gpuTextureCache.destroy(device);
     }
 }
 
@@ -1431,7 +1450,7 @@ function addSceneActors(
         if (meshData === null)
             continue;
         const rendererScale = actor.scale * actorModelScale * worldScale;
-        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Actors, sceneRenderer.fogParams);
+        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Actors, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
         const origin = vec3.fromValues(
             actor.position[0] * worldScale,
             actor.position[1] * worldScale,
@@ -1530,7 +1549,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
-            const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Effects, sceneRenderer.fogParams);
+            const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Effects, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             renderer.setBackfaceCullingEnabled(false);
             sceneRenderer.meshRenderers.push(renderer);
@@ -1756,7 +1775,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const renderLayer = dl.materialIndex === null
                 ? SceneRenderLayer.MapGeometry
                 : SceneRenderLayer.Surfaces;
-            const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams);
+            const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
             if (dl.ChunkID >= 0) {
                 const boundingBox = meshData.getLocalBoundingBox();
                 if (boundingBox !== null) {
@@ -1818,7 +1837,7 @@ class SceneDesc implements Viewer.SceneDesc {
             };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
-            sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Surfaces, sceneRenderer.fogParams));
+            sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Surfaces, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache));
         }
 
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
