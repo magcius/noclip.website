@@ -22,7 +22,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { TextFilt } from "../Common/N64/Image.js";
 import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { Vec3UnitY, Vec3Zero, scaleMatrix, setMatrixTranslation } from '../MathHelpers.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as Deflate from '../Common/Compression/Deflate.js';
@@ -713,11 +713,13 @@ export class RootMeshRenderer {
         positionYRadiansPerTick: number;
     } | null = null;
     private computeLookAt = false;
+    private cameraBillboard: { origin: vec3; scale: number } | null = null;
     private objectLighting: ObjectLighting | null = null;
     private objectLightColor = vec3.create();
 
     public objectFlags = 0;
     private rootNodeRenderer: MeshRenderer;
+    private ownsRootNodeRenderer: boolean;
 
     constructor(
         device: GfxDevice,
@@ -725,6 +727,7 @@ export class RootMeshRenderer {
         private geometryData: MeshData,
         public renderLayer: SceneRenderLayer,
         private fogParams: FogParams,
+        sharedRenderer: RootMeshRenderer | null = null,
     ) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
@@ -739,8 +742,15 @@ export class RootMeshRenderer {
             return (drawCall.SP_GeometryMode & requiredModes) === requiredModes;
         }) ?? false;
 
-        // Traverse the node tree.
-        this.rootNodeRenderer = this.buildGeoNodeRenderer(device, cache, geo);
+        if (sharedRenderer !== null) {
+            assert(sharedRenderer.geometryData === geometryData);
+            this.rootNodeRenderer = sharedRenderer.rootNodeRenderer;
+            this.ownsRootNodeRenderer = false;
+        } else {
+            // Traverse the node tree.
+            this.rootNodeRenderer = this.buildGeoNodeRenderer(device, cache, geo);
+            this.ownsRootNodeRenderer = true;
+        }
     }
 
     private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, node: Mesh): MeshRenderer {
@@ -814,6 +824,10 @@ export class RootMeshRenderer {
         this.rootTransformAnimation!.positionYRadiansPerTick = anglePerTick / 0x1000 * Math.PI * 2;
     }
 
+    public setCameraBillboard(origin: vec3, scale: number): void {
+        this.cameraBillboard = { origin, scale };
+    }
+
     private ensureRootTransformAnimation(): void {
         if (this.rootTransformAnimation !== null)
             return;
@@ -845,6 +859,10 @@ export class RootMeshRenderer {
             mat4.rotateY(this.modelMatrix, this.modelMatrix, tick * animation.rotationYRadiansPerTick);
             this.modelMatrix[13] += Math.sin(tick * animation.positionYRadiansPerTick)
                 * animation.positionYAmplitude;
+        } else if (this.cameraBillboard !== null) {
+            const billboard = this.cameraBillboard;
+            scaleMatrix(this.modelMatrix, viewerInput.camera.worldMatrix, billboard.scale);
+            setMatrixTranslation(this.modelMatrix, billboard.origin);
         }
 
         let primAlphaMultiplier = 1;
@@ -898,7 +916,8 @@ export class RootMeshRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        this.rootNodeRenderer.destroy(device);
+        if (this.ownsRootNodeRenderer)
+            this.rootNodeRenderer.destroy(device);
     }
 }
 
@@ -924,8 +943,8 @@ export class DK64Renderer implements Viewer.SceneGfx {
         return meshData;
     }
 
-    public addPropMeshRenderer(device: GfxDevice, cache: GfxRenderCache, meshData: MeshData): RootMeshRenderer {
-        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams);
+    public addPropMeshRenderer(device: GfxDevice, cache: GfxRenderCache, meshData: MeshData, sharedRenderer: RootMeshRenderer | null = null): RootMeshRenderer {
+        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams, sharedRenderer);
         this.meshRenderers.push(renderer);
         return renderer;
     }

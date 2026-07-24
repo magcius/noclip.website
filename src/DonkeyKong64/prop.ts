@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { RSPSharedOutput } from '../BanjoKazooie/f3dex.js';
-import { ImageFormat, ImageSize } from '../Common/N64/Image.js';
+import { ImageFormat, ImageSize, TexCM } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -14,7 +14,7 @@ import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.
 import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
-import type { DK64Renderer, InstanceScript, Mesh, ROMData } from './scenes.js';
+import type { DK64Renderer, InstanceScript, Mesh, ROMData, RootMeshRenderer } from './scenes.js';
 import { computeBillboardBoundingBox, computeMatrixAnimationBoundingBox } from './cull.js';
 
 export interface SetupProp {
@@ -839,19 +839,20 @@ function parseRuntimePropQuads(view: DataView): RuntimePropQuad[] {
     return quads;
 }
 
-function createRuntimePropVertexBuffer(quad: RuntimePropQuad, instanceCount: number): ArrayBufferSlice {
-    const buffer = new ArrayBuffer(instanceCount * 4 * 0x10);
+function createRuntimePropVertexBuffer(quad: RuntimePropQuad): ArrayBufferSlice {
+    const buffer = new ArrayBuffer(4 * 0x10);
     const view = new DataView(buffer);
-    for (let instance = 0; instance < instanceCount; instance++) {
-        for (let i = 0; i < 4; i++) {
-            const offs = (instance * 4 + i) * 0x10;
-            view.setInt16(offs + 0x08, quad.s[i]);
-            view.setInt16(offs + 0x0A, quad.t[i]);
-            view.setUint8(offs + 0x0C, 0xFF);
-            view.setUint8(offs + 0x0D, 0xFF);
-            view.setUint8(offs + 0x0E, 0xFF);
-            view.setUint8(offs + 0x0F, 0xFF);
-        }
+    for (let i = 0; i < 4; i++) {
+        const offs = i * 0x10;
+        view.setInt16(offs + 0x00, quad.x[i]);
+        view.setInt16(offs + 0x02, quad.y[i]);
+        view.setInt16(offs + 0x04, quad.z[i]);
+        view.setInt16(offs + 0x08, quad.s[i]);
+        view.setInt16(offs + 0x0A, quad.t[i]);
+        view.setUint8(offs + 0x0C, 0xFF);
+        view.setUint8(offs + 0x0D, 0xFF);
+        view.setUint8(offs + 0x0E, 0xFF);
+        view.setUint8(offs + 0x0F, 0xFF);
     }
     return new ArrayBufferSlice(buffer);
 }
@@ -888,55 +889,51 @@ function initRuntimePropMaterial(state: RSPState, quad: RuntimePropQuad): void {
     state.gDPSetTextureImage(quad.format, loadSize, 1, quad.textureID);
     state.gDPSetTile(quad.format, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
     state.gDPLoadBlock(7, 0, 0, loadCount, dxt);
-    state.gDPSetTile(quad.format, quad.size, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
+    state.gDPSetTile(quad.format, quad.size, line, 0, 0, 0, TexCM.CLAMP, maskT, 0, TexCM.CLAMP, maskS, 0);
     state.gDPSetTileSize(0, 0, 0, (quad.width - 1) << 2, (quad.height - 1) << 2);
 }
 
 function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, view: DataView, instances: SetupProp[], worldScale: number, lightingEnvironment: ObjectLightingEnvironment): void {
+    // Pickup-style layout-2 props use the same segment-zero placeholder IDs
+    // and table-7 animation descriptors as regular model2 geometry.
+    const indexedTextures = parseModel2IndexedTextures(view, romData);
     for (const quad of parseRuntimePropQuads(view)) {
         if (quad.width === 0 || quad.height === 0 || quad.size > ImageSize.G_IM_SIZ_32b)
             continue;
+
+        const segmentBuffers: ArrayBufferSlice[] = [];
+        segmentBuffers[0x08] = createRuntimePropVertexBuffer(quad);
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
+        initRuntimePropMaterial(state, quad);
+        state.gSPVertex(0x08000000, 4, 0);
+        state.gSPTri(0, 1, 2);
+        state.gSPTri(0, 2, 3);
+        const output = state.finish();
+        if (output === null)
+            continue;
+
+        // Geometry, textures, programs, and GPU buffers are identical for
+        // every setup instance. Keep individual renderers for object culling
+        // and lighting, but have them share all immutable draw resources.
+        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
+        const meshData = sceneRenderer.addMeshData(device, cache, mesh);
+        let sharedRenderer: RootMeshRenderer | null = null;
         for (const prop of instances) {
-            const segmentBuffers: ArrayBufferSlice[] = [];
-            segmentBuffers[0x08] = createRuntimePropVertexBuffer(quad, 1);
-            // Pickup-style layout-2 props use the same segment-zero
-            // placeholder IDs and table-7 animation descriptors as regular
-            // model2 geometry.
-            const indexedTextures = parseModel2IndexedTextures(view, romData);
-            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
-            initRuntimePropMaterial(state, quad);
-            const firstVertex = sharedOutput.vertices.length;
-            state.gSPVertex(0x08000000, 4, 0);
-            state.gSPTri(0, 1, 2);
-            state.gSPTri(0, 2, 3);
             const scale = prop.scale * worldScale;
             const origin = vec3.fromValues(
                 prop.position[0] * worldScale,
                 prop.position[1] * worldScale,
                 prop.position[2] * worldScale,
             );
-            const billboards: NonNullable<Mesh['spriteBillboards']> = [{
-                firstVertex,
-                origin,
-                centerX: 0,
-                centerY: 0,
-                halfWidth: 0,
-                halfHeight: 0,
-                rightOffsets: quad.x.map((x) => x * scale),
-                upOffsets: quad.y.map((y) => y * scale),
-                forwardOffsets: quad.z.map((z) => z * scale),
-            }];
-            const output = state.finish();
-            if (output === null)
-                continue;
-            const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, spriteBillboards: billboards };
-            const meshData = sceneRenderer.addMeshData(device, cache, mesh);
-            const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
+            const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData, sharedRenderer);
+            if (sharedRenderer === null)
+                sharedRenderer = renderer;
+            renderer.setCameraBillboard(origin, scale);
             sceneRenderer.setObjectCullBoundingBox(renderer, computeBillboardBoundingBox(
                 origin,
-                billboards[0].rightOffsets!,
-                billboards[0].upOffsets!,
-                billboards[0].forwardOffsets!,
+                quad.x.map((x) => x * scale),
+                quad.y.map((y) => y * scale),
+                quad.z.map((z) => z * scale),
             ));
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
