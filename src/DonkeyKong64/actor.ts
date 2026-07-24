@@ -4,7 +4,9 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
+import type { AABB } from '../Geometry.js';
 import { assert } from '../util.js';
+import { computeSkeletalAnimationBoundingBox } from './cull.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 
 export interface SetupActor {
@@ -43,6 +45,7 @@ export interface SkeletalActorAnimation {
     boneOffsets: vec3[];
     boneParents: number[];
     sourceAnimation: ActorAnimation;
+    boundingBox: AABB;
 }
 
 export interface SkeletalActorMesh {
@@ -446,6 +449,9 @@ export function buildSkeletalActorMesh(
             boneOffsets: skeleton.offsets,
             boneParents: skeleton.parents,
             sourceAnimation,
+            boundingBox: computeSkeletalAnimationBoundingBox(
+                sourcePositions, matrixIndices, skeleton.offsets, skeleton.parents,
+            ),
         },
     };
 }
@@ -486,7 +492,7 @@ export function sampleActorBonePosition(
 export function updateSkeletalActor(
     animation: SkeletalActorAnimation,
     vertices: Vertex[],
-    vertexBufferData: Float32Array,
+    vertexBufferData: Float32Array | null,
     tick: number,
 ): void {
     const pose = sampleActorAnimationPose(animation.sourceAnimation, animation.speed, tick);
@@ -510,8 +516,10 @@ export function updateSkeletalActor(
         vertices[vertexIndex].x = skinnedPosition[0];
         vertices[vertexIndex].y = skinnedPosition[1];
         vertices[vertexIndex].z = skinnedPosition[2];
-        vertexBufferData[vertexIndex * 10 + 0] = skinnedPosition[0];
-        vertexBufferData[vertexIndex * 10 + 1] = skinnedPosition[1];
-        vertexBufferData[vertexIndex * 10 + 2] = skinnedPosition[2];
+        if (vertexBufferData !== null) {
+            vertexBufferData[vertexIndex * 10 + 0] = skinnedPosition[0];
+            vertexBufferData[vertexIndex * 10 + 1] = skinnedPosition[1];
+            vertexBufferData[vertexIndex * 10 + 2] = skinnedPosition[2];
+        }
     }
 }

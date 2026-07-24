@@ -7,6 +7,7 @@ import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
+import { AABB } from '../Geometry.js';
 import { Vec3UnitY } from '../MathHelpers.js';
 import { assert, hexzero, nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.js';
@@ -14,6 +15,7 @@ import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
 import type { DK64Renderer, InstanceScript, Mesh, ROMData } from './scenes.js';
+import { computeBillboardBoundingBox, computeMatrixAnimationBoundingBox } from './cull.js';
 
 export interface SetupProp {
     id: number;
@@ -129,12 +131,13 @@ export interface PropMatrixAnimation {
     sourcePositions: Float32Array;
     vertexMatrixChains: number[][];
     initialMatrices: Map<number, mat4>;
+    boundingBox: AABB;
 }
 
 const animationComponent = mat4.create();
 const animationPosition = vec3.create();
 
-export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertexBufferData: Float32Array, tick: number): void {
+function samplePropMatrixAnimation(animation: PropMatrixAnimation, tick: number): void {
     for (const track of animation.tracks) {
         const frameCount = track.timings.length;
         if (track.triggeredPlaybackPositions !== null) {
@@ -203,9 +206,14 @@ export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertex
             mat4.multiply(node.outputMatrix, node.postMatrix, node.outputMatrix);
         }
     }
+}
+
+function forEachPropMatrixAnimationVertex(
+    animation: PropMatrixAnimation,
+    callback: (vertexIndex: number, position: vec3) => void,
+): void {
     for (let i = 0; i < animation.vertexOffsets.length; i++) {
         const source = i * 3;
-        const target = (animation.firstVertex + animation.vertexOffsets[i]) * 10;
         vec3.set(animationPosition,
             animation.sourcePositions[source + 0],
             animation.sourcePositions[source + 1],
@@ -217,10 +225,18 @@ export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertex
             if (matrix !== undefined)
                 vec3.transformMat4(animationPosition, animationPosition, matrix);
         }
-        vertexBufferData[target + 0] = animationPosition[0];
-        vertexBufferData[target + 1] = animationPosition[1];
-        vertexBufferData[target + 2] = animationPosition[2];
+        callback(animation.firstVertex + animation.vertexOffsets[i], animationPosition);
     }
+}
+
+export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertexBufferData: Float32Array, tick: number): void {
+    samplePropMatrixAnimation(animation, tick);
+    forEachPropMatrixAnimationVertex(animation, (vertexIndex, position) => {
+        const target = vertexIndex * 10;
+        vertexBufferData[target + 0] = position[0];
+        vertexBufferData[target + 1] = position[1];
+        vertexBufferData[target + 2] = position[2];
+    });
 }
 
 function findHighDetailPropDisplayList(view: DataView, mainDisplayListStart: number): number {
@@ -271,7 +287,7 @@ function findPropAnimationScripts(scripts: InstanceScript[], propID: number): { 
     const script = scripts.find((entry) => entry.id === propID);
     if (script === undefined)
         return [];
-    const channelSpeeds = new globalThis.Map<number, number>();
+    const channelSpeeds = new Map<number, number>();
     const starts: { channel: number; speed: number; holdEndpoints: boolean }[] = [];
     for (const block of script.blocks) {
         for (const command of block.executions) {
@@ -359,7 +375,7 @@ function applyInitialPropMatrices(
         return;
     const matrixBuffer = matrixData + 8;
     const initialMatrixDataSize = view.getUint32(matrixData + 4, false);
-    const matrices = new globalThis.Map<number, mat4>();
+    const matrices = new Map<number, mat4>();
     for (let i = 0; i < vertexCount; i++) {
         const vertex = sharedOutput.vertices[firstVertex + i];
         vec3.set(animationPosition, vertex.x, vertex.y, vertex.z);
@@ -537,7 +553,7 @@ function decodePropMatrixAnimation(
     // are overwritten from their raw source positions every update, walking
     // the same load/multiply matrix chain that the display list selected.
     applyInitialPropMatrices(view, state, sharedOutput, firstVertex, vertexCount);
-    return {
+    const animation: PropMatrixAnimation = {
         firstVertex,
         tracks,
         nodesByMatrixIndex,
@@ -545,7 +561,14 @@ function decodePropMatrixAnimation(
         sourcePositions: new Float32Array(sourcePositions),
         vertexMatrixChains,
         initialMatrices,
+        boundingBox: new AABB(),
     };
+    animation.boundingBox = computeMatrixAnimationBoundingBox(
+        animation,
+        (tick) => samplePropMatrixAnimation(animation, tick),
+        (callback) => forEachPropMatrixAnimationVertex(animation, (_vertexIndex, position) => callback(position)),
+    );
+    return animation;
 }
 
 function createPropDecalVertexBuffer(halfWidth: number, halfHeight: number, textureWidth: number, textureHeight: number): ArrayBufferSlice {
@@ -763,6 +786,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
             prop.scale * worldScale,
             prop.scale * worldScale,
         ]);
+        sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
         if (fadeEndDistance > fadeStartDistance) {
             renderer.distanceFade = {
                 origin: vec3.fromValues(worldX, worldY, worldZ),
@@ -908,6 +932,12 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, spriteBillboards: billboards };
             const meshData = sceneRenderer.addMeshData(device, cache, mesh);
             const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
+            sceneRenderer.setObjectCullBoundingBox(renderer, computeBillboardBoundingBox(
+                origin,
+                billboards[0].rightOffsets!,
+                billboards[0].upOffsets!,
+                billboards[0].forwardOffsets!,
+            ));
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
             // The game sorts this object list far-to-near. At minimum these
@@ -923,7 +953,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
     if (props.length === 0 || romData.PropGeometryData.size === 0)
         return;
 
-    const propsByType = new globalThis.Map<number, SetupProp[]>();
+    const propsByType = new Map<number, SetupProp[]>();
     for (const prop of props) {
         if (!propsByType.has(prop.type))
             propsByType.set(prop.type, []);
@@ -1028,6 +1058,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             // visible example).
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
+            sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
         }
     }
 }

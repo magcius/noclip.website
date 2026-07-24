@@ -44,6 +44,8 @@ import {
 import type { AnimatedMaterialTextureBinding } from './material.js';
 import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
+import { AABB } from '../Geometry.js';
+import { SceneCuller, computeMeshLocalBoundingBox, computeMeshWorldBoundingBox } from './cull.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -464,19 +466,58 @@ export interface Mesh {
 
 export class MeshData {
     public renderData: RenderData;
+    private localBoundingBox: AABB | null | undefined;
     private lastUpdateTick = -1;
+    private lightingDirty: boolean;
+    private dirtyVertexRange: { start: number, end: number } | null = null;
     public dynamicLightingEnabled = true;
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
         this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propMatrixAnimation !== undefined);
         this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
+        this.lightingDirty = mesh.dynamicLighting !== undefined;
+
+        const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
+            if (vertexCount <= 0)
+                return;
+            if (this.dirtyVertexRange === null) {
+                this.dirtyVertexRange = { start: firstVertex, end: firstVertex + vertexCount };
+            } else {
+                this.dirtyVertexRange.start = Math.min(this.dirtyVertexRange.start, firstVertex);
+                this.dirtyVertexRange.end = Math.max(this.dirtyVertexRange.end, firstVertex + vertexCount);
+            }
+        };
+        if (mesh.generatedSurfaceAnimation !== undefined)
+            includeVertexRange(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
+        if (mesh.actorAnimation !== undefined)
+            includeVertexRange(mesh.actorAnimation.firstVertex, mesh.actorAnimation.vertexCount);
+        if (mesh.propMatrixAnimation !== undefined) {
+            for (const vertexOffset of mesh.propMatrixAnimation.vertexOffsets)
+                includeVertexRange(mesh.propMatrixAnimation.firstVertex + vertexOffset, 1);
+        }
+        for (const sprite of mesh.spriteBillboards ?? [])
+            includeVertexRange(sprite.firstVertex, 4);
+        for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
+            includeVertexRange(vertexIndex, 1);
+    }
+
+    public getLocalBoundingBox(): AABB | null {
+        if (this.localBoundingBox === undefined) {
+            this.localBoundingBox = this.mesh.rspOutput === null ? null : computeMeshLocalBoundingBox(
+                this.mesh.sharedOutput,
+                this.mesh.rspOutput,
+                [this.mesh.propMatrixAnimation?.boundingBox, this.mesh.actorAnimation?.boundingBox],
+            );
+        }
+        return this.localBoundingBox;
     }
 
     public setDynamicLightingEnabled(enabled: boolean): void {
         if (this.dynamicLightingEnabled === enabled)
             return;
         this.dynamicLightingEnabled = enabled;
+        this.lightingDirty = true;
         this.lastUpdateTick = -1;
     }
 
@@ -490,6 +531,11 @@ export class MeshData {
             return;
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         if (tick === this.lastUpdateTick)
+            return;
+        const lightingIsDynamic = lighting !== undefined && lighting.lights.length > 0 && this.dynamicLightingEnabled;
+        const hasPerTickUpdate = animation !== undefined || sprites !== undefined || actorAnimation !== undefined
+            || propMatrixAnimation !== undefined || lightingIsDynamic;
+        if (!hasPerTickUpdate && !this.lightingDirty)
             return;
         this.lastUpdateTick = tick;
 
@@ -508,8 +554,10 @@ export class MeshData {
             }
         }
 
-        if (lighting !== undefined)
+        if (lighting !== undefined && (lightingIsDynamic || this.lightingDirty)) {
             updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, viewerInput.camera.worldMatrix, tick, this.dynamicLightingEnabled);
+            this.lightingDirty = false;
+        }
         if (actorAnimation !== undefined)
             updateSkeletalActor(actorAnimation, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, tick);
         if (propMatrixAnimation !== undefined)
@@ -578,7 +626,15 @@ export class MeshData {
                 this.mesh.rspOutput!.drawCalls[i].DP_PrimColor[3] = this.spritePrimAlphas[i] * spriteFade;
         }
 
-        device.uploadBufferData(this.renderData.vertexBuffer, 0, new Uint8Array(this.renderData.vertexBufferData.buffer));
+        if (this.dirtyVertexRange !== null) {
+            const byteOffset = this.dirtyVertexRange.start * 10 * 4;
+            const byteLength = (this.dirtyVertexRange.end - this.dirtyVertexRange.start) * 10 * 4;
+            device.uploadBufferData(
+                this.renderData.vertexBuffer,
+                byteOffset,
+                new Uint8Array(this.renderData.vertexBufferData.buffer, byteOffset, byteLength),
+            );
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -642,6 +698,8 @@ const lookatScratch = vec3.create();
 const modelViewScratch = mat4.create();
 export class RootMeshRenderer {
     private visible = true;
+    private frustumCullingEnabled = true;
+    private cullBoundingBox: AABB | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
@@ -725,6 +783,25 @@ export class RootMeshRenderer {
         this.visible = v;
     }
 
+    public setFrustumCullingEnabled(v: boolean): void {
+        this.frustumCullingEnabled = v;
+    }
+
+    public setCullBoundingBox(boundingBox: AABB): void {
+        this.cullBoundingBox = boundingBox;
+    }
+
+    public computeWorldBoundingBox(): AABB | null {
+        const localBoundingBox = this.geometryData.getLocalBoundingBox();
+        if (localBoundingBox === null)
+            return null;
+        return computeMeshWorldBoundingBox(
+            localBoundingBox,
+            this.modelMatrix,
+            this.rootTransformAnimation,
+        );
+    }
+
     public setRotationYAnimation(anglePerTick: number): void {
         this.ensureRootTransformAnimation();
         this.rootTransformAnimation!.rotationYRadiansPerTick = anglePerTick / 0x1000 * Math.PI * 2;
@@ -753,6 +830,9 @@ export class RootMeshRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
+            return;
+        if (this.frustumCullingEnabled && this.cullBoundingBox !== null
+            && !viewerInput.camera.frustum.contains(this.cullBoundingBox))
             return;
 
         if (this.rootTransformAnimation !== null) {
@@ -827,6 +907,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private backdropRenderer: BackdropRenderer | null;
+    private sceneCuller = new SceneCuller();
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -844,6 +925,14 @@ export class DK64Renderer implements Viewer.SceneGfx {
         const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams);
         this.meshRenderers.push(renderer);
         return renderer;
+    }
+
+    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): AABB {
+        return this.sceneCuller.addChunkBoundingBox(chunkID, boundingBox);
+    }
+
+    public setObjectCullBoundingBox(renderer: RootMeshRenderer, objectBoundingBox: AABB | null): void {
+        this.sceneCuller.setObjectCullBoundingBox(renderer, objectBoundingBox);
     }
 
     constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null) {
@@ -873,12 +962,19 @@ export class DK64Renderer implements Viewer.SceneGfx {
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
 
-        const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
+        const enableCullingCheckbox = new UI.Checkbox('Enable Backface Culling', true);
         enableCullingCheckbox.onchanged = () => {
             for (const meshRenderer of this.meshRenderers)
                 meshRenderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
+
+        const enableChunkFrustumCullingCheckbox = new UI.Checkbox('Enable Chunk Frustum Culling', true);
+        enableChunkFrustumCullingCheckbox.onchanged = () => {
+            for (const meshRenderer of this.meshRenderers)
+                meshRenderer.setFrustumCullingEnabled(enableChunkFrustumCullingCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableChunkFrustumCullingCheckbox.elem);
 
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
@@ -938,6 +1034,12 @@ export class DK64Renderer implements Viewer.SceneGfx {
         addVisibilityCheckbox('Show Surfaces', SceneRenderLayer.Surfaces);
         addVisibilityCheckbox('Show Effects', SceneRenderLayer.Effects);
 
+        const showChunkBoundsCheckbox = new UI.Checkbox('Show Chunk Bounds', false);
+        showChunkBoundsCheckbox.onchanged = () => {
+            this.sceneCuller.showBounds = showChunkBoundsCheckbox.checked;
+        };
+        renderHacksPanel.contents.appendChild(showChunkBoundsCheckbox.elem);
+
         return [renderHacksPanel];
     }
 
@@ -957,8 +1059,18 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const debugDraw = this.renderHelper.debugDraw;
+        const showChunkBounds = this.sceneCuller.showBounds;
+        if (showChunkBounds) {
+            debugDraw.beginFrame(
+                viewerInput.camera.projectionMatrix,
+                viewerInput.camera.viewMatrix,
+                viewerInput.backbufferWidth,
+                viewerInput.backbufferHeight,
+            );
+            this.sceneCuller.drawBounds(debugDraw);
+        }
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -973,6 +1085,8 @@ export class DK64Renderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
+        if (showChunkBounds)
+            debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
@@ -1075,7 +1189,7 @@ export class MapSection {
     }
 }
 
-export class Map {
+export class DK64Map {
     public bin: ArrayBufferSlice;
     public vertBin: ArrayBufferSlice;
     public f3dexBin: ArrayBufferSlice;
@@ -1434,10 +1548,10 @@ class TextureData {
 export class ROMData {
     public MapData: ArrayBufferSlice;
     public Backdrop: BackdropData | null;
-    public PropGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
-    public ActorDefinitions = new globalThis.Map<number, number>();
-    public ActorGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
-    public AnimationData = new globalThis.Map<number, ArrayBufferSlice>();
+    public PropGeometryData = new Map<number, ArrayBufferSlice>();
+    public ActorDefinitions = new Map<number, number>();
+    public ActorGeometryData = new Map<number, ArrayBufferSlice>();
+    public AnimationData = new Map<number, ArrayBufferSlice>();
     public SetupData: ArrayBufferSlice;
     public ScriptData: ArrayBufferSlice;
     public CritterData: ArrayBufferSlice | null;
@@ -1546,7 +1660,7 @@ function addSceneActors(
         return;
     }
 
-    const meshDataByDefinition = new globalThis.Map<string, MeshData | null>();
+    const meshDataByDefinition = new Map<string, MeshData | null>();
     const warnedModels = new Set<number>();
     for (const { actor, definition } of actors) {
         if (!romData.ActorGeometryData.has(definition.model)) {
@@ -1588,11 +1702,14 @@ function addSceneActors(
                 }
             }
             if (actorMesh !== null) {
+                const actorAnimation = definition.animation !== null ? actorMesh.animation : undefined;
+                if (actorAnimation === undefined)
+                    updateSkeletalActor(actorMesh.animation, sharedOutput.vertices, null, 0);
                 const mesh: Mesh = {
                     sharedOutput,
                     rspState: actorMesh.rspState,
                     rspOutput: actorMesh.rspOutput,
-                    actorAnimation: actorMesh.animation,
+                    actorAnimation,
                 };
                 meshData = new MeshData(device, cache, mesh);
                 sceneRenderer.meshDatas.push(meshData);
@@ -1605,22 +1722,24 @@ function addSceneActors(
             continue;
         const rendererScale = actor.scale * actorModelScale * worldScale;
         const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Actors, sceneRenderer.fogParams);
-        mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
+        const origin = vec3.fromValues(
             actor.position[0] * worldScale,
             actor.position[1] * worldScale,
             actor.position[2] * worldScale,
+        );
+        mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
+            origin[0],
+            origin[1],
+            origin[2],
         ]);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, actor.rotationY / 0x1000 * Math.PI * 2);
         mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [rendererScale, rendererScale, rendererScale]);
-        renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, vec3.fromValues(
-            actor.position[0] * worldScale,
-            actor.position[1] * worldScale,
-            actor.position[2] * worldScale,
-        )));
+        renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
         if (definition.rotationYSpeed !== undefined)
             renderer.setRotationYAnimation(definition.rotationYSpeed);
         if (definition.positionYAmplitude !== undefined)
             renderer.setPositionYAnimation(definition.positionYAmplitude * worldScale, definition.rotationYSpeed ?? 0);
+        sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
         sceneRenderer.meshRenderers.push(renderer);
     }
 }
@@ -1732,11 +1851,11 @@ function interpolateEnvironmentParticle(entry: EnvironmentParticleData, offset: 
     );
 }
 
-function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: Map, mapID: number): void {
+function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: DK64Map, mapID: number): void {
     const props = parseSetupProps(romData.loadSetup());
-    const propsByID = new globalThis.Map(props.map((prop) => [prop.id, prop]));
+    const propsByID = new Map(props.map((prop) => [prop.id, prop]));
     const scripts = parseInstanceScripts(romData.loadScripts());
-    const spriteByAddress = new globalThis.Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
+    const spriteByAddress = new Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
     const loopTicks = 900;
 
     // func_global_asm_80664CB0 / func_global_asm_80664D20: map-keyed
@@ -1859,7 +1978,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 : Promise.resolve(null),
         ]);
         const romData = new ROMData(commonData, levelData, commonTextureGroups, unknownData);
-        const map = new Map(decompress(romData.MapData), romData.AnimTexData);
+        const map = new DK64Map(decompress(romData.MapData), romData.AnimTexData);
         const setup = romData.loadSetup();
         const setupProps = parseSetupProps(setup);
         const scripts = parseInstanceScripts(romData.loadScripts());
@@ -1931,6 +2050,11 @@ class SceneDesc implements Viewer.SceneDesc {
                 ? SceneRenderLayer.MapGeometry
                 : SceneRenderLayer.Surfaces;
             const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams);
+            if (dl.ChunkID >= 0) {
+                const boundingBox = meshData.getLocalBoundingBox();
+                if (boundingBox !== null)
+                    meshRenderer.setCullBoundingBox(sceneRenderer.addChunkBoundingBox(dl.ChunkID, boundingBox));
+            }
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 
@@ -1991,7 +2115,6 @@ class SceneDesc implements Viewer.SceneDesc {
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
         addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup, setupWorldScale, objectLightingEnvironment);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
-
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
         //     sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
 
