@@ -1,28 +1,5 @@
 import { readFileSync } from 'fs';
-import { gunzipSync, inflateRawSync } from 'zlib';
-
-const pointerTableOffset = 0x101C50;
-const mapTableOffset = 0x15232C;
-const propGeometryTableOffset = 0x82A06C;
-const actorGeometryTableOffset = 0x8D3018;
-const setupTableOffset = 0xD0E86C;
-const scriptTableOffset = 0xD3B56C;
-const spawnerTableOffset = 0x1170D44;
-const critterTableOffset = 0x1188BDC;
-const globalASMCodeROMOffset = 0x113F0;
-const globalASMDataROMOffset = 0xC29D4;
-const globalASMDataCompressedSize = 0x949C;
-const spritePointerTableOffset = 0x15A090;
-const spritePointerCount = 176;
-const globalASMVirtualBase = 0x805FB300;
-const customScriptFunctionTableOffset = 0x14CB70;
-const environmentParticleTableOffset = 0x14D8A0;
-const environmentParticleCount = 13;
-const lightAnimationTableAddress = 0x80748430;
-const lightAnimationCount = 27;
-const actorDefinitionTableAddress = 0x8074E8B0;
-const actorDefinitionCount = 0x80;
-const actorBehaviorTableAddress = 0x8074C0A0;
+import { DK64Extractor } from './extractor.js';
 
 function parseNumber(s: string): number {
     if (s.startsWith('0x'))
@@ -32,26 +9,6 @@ function parseNumber(s: string): number {
 
 function hex(n: number, width = 0): string {
     return `0x${n.toString(16).padStart(width, '0')}`;
-}
-
-function getPointerTableData(rom: Buffer, tableOffset: number, fileID: number, name: string): Buffer {
-    const pointer = rom.readUInt32BE(tableOffset + fileID * 4);
-    const romOffset = (pointer & 0x7FFFFFFF) + pointerTableOffset;
-    if ((pointer & 0x80000000) !== 0) {
-        const targetMapID = rom.readUInt16BE(romOffset);
-        console.log(`${name} ${hex(fileID, 2)} redirects to ${hex(targetMapID, 2)}`);
-        return getPointerTableData(rom, tableOffset, targetMapID, name);
-    }
-
-    if (rom.readUInt32BE(romOffset) === 0x1F8B0800)
-        return inflateRawSync(rom.subarray(romOffset + 0x0A));
-    const nextPointer = rom.readUInt32BE(tableOffset + (fileID + 1) * 4);
-    const nextROMOffset = (nextPointer & 0x7FFFFFFF) + pointerTableOffset;
-    return rom.subarray(romOffset, nextROMOffset);
-}
-
-function getMapData(rom: Buffer, mapID: number): Buffer {
-    return getPointerTableData(rom, mapTableOffset, mapID, 'Map');
 }
 
 const opcodeNames = new Map<number, string>([
@@ -113,68 +70,40 @@ function disassembleDisplayList(map: Buffer, dlStart: number, relativeOffset: nu
     }
 }
 
-function inspectPropGeometry(prop: Buffer, propType: number, disassemble: boolean): void {
-    const name = prop.subarray(0x0C, 0x20).toString('ascii').split('\0')[0];
-    const mainDisplayListStart = prop.readUInt32BE(0x40);
-    const secondaryDisplayListStart = prop.readUInt32BE(0x44);
-    const vertexStart = prop.readUInt32BE(0x48);
+function inspectPropGeometry(extractor: DK64Extractor, prop: Buffer, propType: number, disassemble: boolean): void {
+    const parsed = extractor.parsePropGeometry(prop);
+    const { mainDisplayListStart, secondaryDisplayListStart, vertexStart } = parsed;
     console.log(`\nProp geometry ${hex(propType, 4)}, decompressed size ${hex(prop.length)}`);
-    console.log(`name                     ${JSON.stringify(name)}`);
+    console.log(`name                     ${JSON.stringify(parsed.name)}`);
     for (let offs = 0; offs < 0x78; offs += 4)
         console.log(`header[${hex(offs, 2)}]               ${hex(prop.readUInt32BE(offs), 8)}`);
-    if (prop.readUInt8(0x1C) === 2) {
-        const runtimeDescriptorStart = prop.readUInt32BE(0x70);
-        const runtimeDescriptorCount = runtimeDescriptorStart + 4 <= prop.length
-            ? prop.readUInt32BE(runtimeDescriptorStart) : 0;
-        console.log(`runtime quad descriptors (${runtimeDescriptorCount}):`);
-        for (let i = 0; i < runtimeDescriptorCount; i++) {
-            const offs = runtimeDescriptorStart + 4 + i * 0x30;
-            if (offs + 0x30 > prop.length)
-                break;
-            const values = (base: number, stride: number) => Array.from({ length: 4 }, (_, j) => prop.readInt16BE(offs + base + j * stride));
-            console.log(`  ${i}: texture=${hex(prop.readUInt16BE(offs))} palette=${hex(prop.readUInt16BE(offs + 2))}`
-                + ` dimensions=${prop.readUInt8(offs + 0x2C)}x${prop.readUInt8(offs + 0x2D)}`
-                + ` format/size=${prop.readUInt8(offs + 0x2F)}/${prop.readUInt8(offs + 0x2E)}`);
-            console.log(`     x=${values(0x04, 2).join(',')} y=${values(0x0C, 2).join(',')} z=${values(0x14, 2).join(',')}`);
-            console.log(`     s=${values(0x1C, 4).join(',')} t=${values(0x1E, 4).join(',')}`);
+    if (parsed.layout === 2) {
+        console.log(`runtime quad descriptors (${parsed.runtimeQuads.length}):`);
+        for (const [i, quad] of parsed.runtimeQuads.entries()) {
+            console.log(`  ${i}: texture=${hex(quad.texture)} palette=${hex(quad.palette)}`
+                + ` dimensions=${quad.dimensions.join('x')} format/size=${quad.format}/${quad.size}`);
+            console.log(`     x=${quad.x.join(',')} y=${quad.y.join(',')} z=${quad.z.join(',')}`);
+            console.log(`     s=${quad.s.join(',')} t=${quad.t.join(',')}`);
         }
     }
-    const decalTexture = prop.readUInt16BE(0x28);
-    if (decalTexture !== 0xFFFF) {
+    if (parsed.decal !== null) {
+        const decal = parsed.decal;
         console.log('prop decal:');
-        console.log(`  texture                ${hex(decalTexture)}`);
-        console.log(`  rotationStep           ${prop.readInt16BE(0x2C)}`);
-        console.log(`  footprint              ${prop.readInt16BE(0x2E)} x ${prop.readInt16BE(0x30)}`);
-        console.log(`  textureSize            ${prop.readUInt8(0x32)} x ${prop.readUInt8(0x33)}`);
-        console.log(`  format/size            ${prop.readUInt8(0x34) & 0x07}/${prop.readUInt8(0x35)}`);
-        console.log(`  fade                   ${prop.readUInt8(0x36) * 10} .. ${prop.readUInt8(0x37) * 10}`);
-        console.log(`  alpha/flags            ${hex(prop.readUInt8(0x38), 2)}/${hex(prop.readUInt8(0x39), 2)}`);
+        console.log(`  texture                ${hex(decal.texture)}`);
+        console.log(`  rotationStep           ${decal.rotationStep}`);
+        console.log(`  footprint              ${decal.footprint.join(' x ')}`);
+        console.log(`  textureSize            ${decal.textureSize.join(' x ')}`);
+        console.log(`  format/size            ${decal.format}/${decal.size}`);
+        console.log(`  fade                   ${decal.fade.join(' .. ')}`);
+        console.log(`  alpha/flags            ${hex(decal.alpha, 2)}/${hex(decal.flags, 2)}`);
     }
-    const textureDescriptorStart = prop.readUInt32BE(0x6C);
-    if (textureDescriptorStart + 4 <= prop.length) {
-        const textureDescriptorCount = prop.readUInt32BE(textureDescriptorStart);
-        console.log(`indexed texture descriptors (${textureDescriptorCount}):`);
-        for (let i = 0; i < textureDescriptorCount; i++) {
-            const offs = textureDescriptorStart + 4 + i * 0x84;
-            if (offs + 0x84 > prop.length) {
-                console.log(`  ${i}: truncated @${hex(offs)}`);
-                break;
-            }
-            const target = prop.readUInt32BE(offs);
-            const crossfade = prop.readUInt32BE(offs + 4);
-            const duration = prop.readUInt32BE(offs + 8);
-            const frameCount = prop.readUInt32BE(offs + 0x0C);
-            const frames = [target];
-            for (let frame = 1; frame < frameCount && frame < 0x1E; frame++)
-                frames.push(prop.readUInt32BE(offs + 0x0C + frame * 4));
-            console.log(`  ${i}: target=${hex(target)} crossfade=${crossfade} duration=${duration} frames=[${frames.map((frame) => hex(frame)).join(', ')}]`);
-        }
-    }
+    console.log(`indexed texture descriptors (${parsed.indexedTextures.length}):`);
+    for (const [i, texture] of parsed.indexedTextures.entries())
+        console.log(`  ${i}: target=${hex(texture.target)} crossfade=${texture.crossfade} duration=${texture.duration} frames=[${texture.frames.map((frame) => hex(frame)).join(', ')}]`);
     console.log(`mainDisplayListStart     ${hex(mainDisplayListStart)}`);
     console.log(`secondaryDisplayListStart ${hex(secondaryDisplayListStart)}`);
     console.log(`vertexStart              ${hex(vertexStart)}`);
-    const matrixAnimationStart = prop.readUInt32BE(0x64);
-    const matrixDataStart = prop.readUInt32BE(0x68);
+    const { matrixAnimationStart, matrixDataStart } = parsed;
     if (matrixAnimationStart !== matrixDataStart) {
         console.log(`matrixAnimationStart     ${hex(matrixAnimationStart)}`);
         console.log(`matrixDataStart          ${hex(matrixDataStart)}`);
@@ -225,41 +154,28 @@ function inspectPropGeometry(prop: Buffer, propType: number, disassemble: boolea
     disassembleDisplayList(prop, secondaryDisplayListStart, 0, vertexStart, 0x08);
 }
 
-function inspectActorGeometry(actor: Buffer, model: number, disassemble: boolean): void {
-    const runtimeBase = actor.readUInt32BE(0);
-    const displayListTable = actor.readUInt32BE(4) - runtimeBase + 0x28;
-    const boneCount = actor.readUInt8(0x20);
-    const displayListCount = actor.readUInt8(0x21);
-    const localOffset = (address: number) => address - runtimeBase + 0x28;
+function inspectActorGeometry(extractor: DK64Extractor, actor: Buffer, model: number, disassemble: boolean): void {
+    const parsed = extractor.parseActorGeometry(actor);
     console.log(`\nActor geometry ${hex(model, 4)}, decompressed size ${hex(actor.length)}`);
-    console.log(`runtimeBase=${hex(runtimeBase, 8)} bones=${boneCount} displayLists=${displayListCount}`);
+    console.log(`runtimeBase=${hex(parsed.runtimeBase, 8)} bones=${parsed.boneCount} displayLists=${parsed.displayLists.length}`);
     for (let offs = 0; offs < 0x28; offs += 4)
         console.log(`header[${hex(offs, 2)}] ${hex(actor.readUInt32BE(offs), 8)}`);
-    for (let i = 0; i < displayListCount; i++) {
-        const pointer = actor.readUInt32BE(displayListTable + i * 4);
-        console.log(`displayList[${i}] ${hex(pointer, 8)} local=${hex(localOffset(pointer))}`);
+    for (const [i, displayList] of parsed.displayLists.entries()) {
+        console.log(`displayList[${i}] ${hex(displayList.pointer, 8)} local=${hex(displayList.localOffset)}`);
         if (disassemble)
-            disassembleDisplayList(actor, localOffset(pointer), 0, 0x28, 0x03);
+            disassembleDisplayList(actor, displayList.localOffset, 0, 0x28, 0x03);
     }
-    console.log(`skeleton=${actor.subarray(localOffset(actor.readUInt32BE(8))).toString('hex').match(/.{1,32}/g)?.join(' ')}`);
-    const auxiliaryPointers = [0x0C, 0x10, 0x14]
-        .map((headerOffset) => ({ headerOffset, pointer: actor.readUInt32BE(headerOffset) }))
-        .filter((entry) => entry.pointer >= runtimeBase && localOffset(entry.pointer) < actor.length)
-        .sort((a, b) => a.pointer - b.pointer);
-    for (let i = 0; i < auxiliaryPointers.length; i++) {
-        const entry = auxiliaryPointers[i];
-        const start = localOffset(entry.pointer);
-        const end = i + 1 < auxiliaryPointers.length ? localOffset(auxiliaryPointers[i + 1].pointer) : actor.length;
+    console.log(`skeleton=${actor.subarray(parsed.skeletonOffset).toString('hex').match(/.{1,32}/g)?.join(' ')}`);
+    for (const entry of parsed.auxiliaryData) {
         console.log(
-            `header[${hex(entry.headerOffset, 2)}] data local=${hex(start)}..${hex(end)} `
-            + actor.subarray(start, end).toString('hex').match(/.{1,32}/g)?.join(' '),
+            `header[${hex(entry.headerOffset, 2)}] data local=${hex(entry.start)}..${hex(entry.end)} `
+            + actor.subarray(entry.start, entry.end).toString('hex').match(/.{1,32}/g)?.join(' '),
         );
     }
 }
 
-function inspectAnimation(rom: Buffer, animation: number): void {
-    const animationTableOffset = pointerTableOffset + rom.readUInt32BE(pointerTableOffset + 11 * 4);
-    const data = getPointerTableData(rom, animationTableOffset, animation, 'Animation');
+function inspectAnimation(extractor: DK64Extractor, animation: number): void {
+    const data = extractor.getAnimation(animation);
     console.log(`\nAnimation ${hex(animation, 4)}, decompressed size ${hex(data.length)}`);
     console.log(data.toString('hex').match(/.{1,32}/g)?.join('\n'));
 }
@@ -405,129 +321,66 @@ function inspectEffectPoints(map: Buffer, mapID: number): void {
     }
 }
 
-function inspectSetup(setup: Buffer, mapID: number): void {
-    const propCount = setup.readUInt32BE(0);
-    let offs = 4;
+function inspectSetup(extractor: DK64Extractor, setup: Buffer, mapID: number): void {
+    const parsed = extractor.parseSetup(setup);
     console.log(`\nSetup ${hex(mapID, 2)}, decompressed size ${hex(setup.length)}`);
-    console.log(`Props (${propCount}):`);
-    for (let i = 0; i < propCount; i++, offs += 0x30) {
-        const type = setup.readUInt16BE(offs + 0x28);
-        const lightAnimation = setup.readUInt8(offs + 0x2E);
-        const light = lightAnimation !== 0 ? ` lightAnimation=${hex(lightAnimation, 2)}` : '';
+    console.log(`Props (${parsed.props.length}):`);
+    for (const [i, prop] of parsed.props.entries()) {
+        const light = prop.lightAnimation !== 0 ? ` lightAnimation=${hex(prop.lightAnimation, 2)}` : '';
         console.log(
-            `${i.toString().padStart(3)} @${hex(offs, 4)} `
-            + `type=${hex(type, 4)} id=${hex(setup.readUInt16BE(offs + 0x2A), 4)} `
-            + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
-            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} `
-            + `rot=(${setup.readFloatBE(offs + 0x18).toFixed(1)},${setup.readFloatBE(offs + 0x1C).toFixed(1)},${setup.readFloatBE(offs + 0x20).toFixed(1)})${light}`,
+            `${i.toString().padStart(3)} @${hex(prop.offset, 4)} type=${hex(prop.type, 4)} id=${hex(prop.id, 4)} `
+            + `pos=(${Array.from(prop.position, (value) => value.toFixed(1)).join(', ')}) scale=${prop.scale.toFixed(3)} `
+            + `rot=(${Array.from(prop.rotation, (value) => value.toFixed(1)).join(',')})${light}`,
         );
     }
 
-    const mysteryCount = setup.readUInt32BE(offs);
-    offs += 4;
-    console.log(`Mystery entries (${mysteryCount}):`);
-    for (let i = 0; i < mysteryCount; i++, offs += 0x24) {
-        const words: string[] = [];
-        for (let j = 0; j < 9; j++)
-            words.push(hex(setup.readUInt32BE(offs + j * 4), 8));
-        console.log(`${i.toString().padStart(3)} @${hex(offs, 4)} ${words.join(' ')}`);
-    }
+    console.log(`Mystery entries (${parsed.mystery.length}):`);
+    for (const [i, entry] of parsed.mystery.entries())
+        console.log(`${i.toString().padStart(3)} @${hex(entry.offset, 4)} ${entry.words.map((word) => hex(word, 8)).join(' ')}`);
 
-    const actorCount = setup.readUInt32BE(offs);
-    offs += 4;
-    console.log(`Actors (${actorCount}):`);
-    for (let i = 0; i < actorCount; i++, offs += 0x38) {
-        const type = setup.readUInt16BE(offs + 0x32);
-        const light = type === 0x0010 || type === 0x002A
-            ? ` speed=${setup.readFloatBE(offs + 0x10).toFixed(3)}`
-                + ` color=(${setup.readInt32BE(offs + 0x14)},${setup.readInt32BE(offs + 0x18)},${setup.readInt32BE(offs + 0x1C)})`
-                + ` cone=(${setup.readFloatBE(offs + 0x20).toFixed(1)},${setup.readFloatBE(offs + 0x24).toFixed(1)})`
+    console.log(`Actors (${parsed.actors.length}):`);
+    for (const [i, actor] of parsed.actors.entries()) {
+        const light = actor.type === 0x0010 || actor.type === 0x002A
+            ? ` speed=${setup.readFloatBE(actor.offset + 0x10).toFixed(3)}`
+                + ` color=(${setup.readInt32BE(actor.offset + 0x14)},${setup.readInt32BE(actor.offset + 0x18)},${setup.readInt32BE(actor.offset + 0x1C)})`
+                + ` cone=(${setup.readFloatBE(actor.offset + 0x20).toFixed(1)},${setup.readFloatBE(actor.offset + 0x24).toFixed(1)})`
             : '';
         console.log(
-            `${i.toString().padStart(3)} @${hex(offs, 4)} `
-            + `type=${hex(type, 4)} id=${hex(setup.readUInt16BE(offs + 0x34), 4)} `
-            + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
-            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} rotY=${setup.readInt16BE(offs + 0x30)}${light}`,
+            `${i.toString().padStart(3)} @${hex(actor.offset, 4)} type=${hex(actor.type, 4)} id=${hex(actor.id, 4)} `
+            + `pos=(${Array.from(actor.position, (value) => value.toFixed(1)).join(', ')}) `
+            + `scale=${actor.scale.toFixed(3)} rotY=${actor.rotationY}${light}`,
         );
     }
 }
 
-function inspectScripts(scripts: Buffer, mapID: number): void {
+function formatCommand(command: { opcode: number; args: number[] }): string {
+    return `${hex(command.opcode, 4)}(${command.args.join(',')})`;
+}
+
+function inspectScripts(extractor: DK64Extractor, scripts: Buffer, mapID: number): void {
     console.log(`\nScripts ${hex(mapID, 2)}, decompressed size ${hex(scripts.length)}`);
-    const scriptCount = scripts.readUInt16BE(0);
-    let offs = 2;
-    console.log(`Script entries (${scriptCount}):`);
-    for (let scriptIndex = 0; scriptIndex < scriptCount; scriptIndex++) {
-        const id = scripts.readUInt16BE(offs);
-        const blockCount = scripts.readUInt16BE(offs + 2);
-        const behavior = scripts.readUInt16BE(offs + 4);
-        console.log(`${scriptIndex}: id=${hex(id, 4)} blocks=${blockCount} behavior=${hex(behavior, 4)} @${hex(offs, 4)}`);
-        offs += 6;
-        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
-            const conditionCount = scripts.readUInt16BE(offs);
-            offs += 2;
-            const conditions: string[] = [];
-            for (let i = 0; i < conditionCount; i++, offs += 8) {
-                conditions.push(
-                    `${hex(scripts.readUInt16BE(offs), 4)}(`
-                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
-                );
-            }
-            const executionCount = scripts.readUInt16BE(offs);
-            offs += 2;
-            const executions: string[] = [];
-            for (let i = 0; i < executionCount; i++, offs += 8) {
-                executions.push(
-                    `${hex(scripts.readUInt16BE(offs), 4)}(`
-                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
-                );
-            }
-            console.log(`  block ${blockIndex}: if [${conditions.join(', ')}] exec [${executions.join(', ')}]`);
-        }
+    const parsed = extractor.parseScripts(scripts);
+    console.log(`Script entries (${parsed.length}):`);
+    for (const [scriptIndex, script] of parsed.entries()) {
+        console.log(`${scriptIndex}: id=${hex(script.id, 4)} blocks=${script.blocks.length} behavior=${hex(script.behavior, 4)} @${hex(script.offset, 4)}`);
+        for (const [blockIndex, block] of script.blocks.entries())
+            console.log(`  block ${blockIndex}: if [${block.conditions.map(formatCommand).join(', ')}] exec [${block.executions.map(formatCommand).join(', ')}]`);
     }
-    console.log(`Parsed through ${hex(offs)} of ${hex(scripts.length)}`);
 }
 
-function collectScriptExecutions(scripts: Buffer): Map<number, string[]> {
-    const result = new Map<number, string[]>();
-    const scriptCount = scripts.readUInt16BE(0);
-    let offs = 2;
-    for (let scriptIndex = 0; scriptIndex < scriptCount; scriptIndex++) {
-        const id = scripts.readUInt16BE(offs);
-        const blockCount = scripts.readUInt16BE(offs + 2);
-        offs += 6;
-        const executions: string[] = [];
-        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
-            const conditionCount = scripts.readUInt16BE(offs);
-            offs += 2 + conditionCount * 8;
-            const executionCount = scripts.readUInt16BE(offs);
-            offs += 2;
-            for (let i = 0; i < executionCount; i++, offs += 8) {
-                const opcode = scripts.readUInt16BE(offs);
-                if (opcode < 0x11 || opcode > 0x1A)
-                    continue;
-                executions.push(
-                    `${hex(opcode, 4)}(`
-                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
-                );
-            }
-        }
-        result.set(id, executions);
-    }
-    return result;
-}
-
-function inspectMatrixProps(rom: Buffer, setup: Buffer, scripts: Buffer, mapID: number): void {
-    const scriptExecutions = collectScriptExecutions(scripts);
-    const propCount = setup.readUInt32BE(0);
+function inspectMatrixProps(extractor: DK64Extractor, setup: Buffer, scripts: Buffer, mapID: number): void {
+    const scriptExecutions = new Map(extractor.parseScripts(scripts).map((script) => [
+        script.id,
+        script.blocks.flatMap((block) => block.executions)
+            .filter(({ opcode }) => opcode >= 0x11 && opcode <= 0x1A)
+            .map(formatCommand),
+    ]));
     const geometryCache = new Map<number, { matrixCommands: string[]; animated: boolean }>();
     console.log(`\nMatrix-driven props ${hex(mapID, 2)}:`);
-    for (let i = 0; i < propCount; i++) {
-        const offs = 4 + i * 0x30;
-        const type = setup.readUInt16BE(offs + 0x28);
-        let geometryInfo = geometryCache.get(type);
+    for (const [i, prop] of extractor.parseSetup(setup).props.entries()) {
+        let geometryInfo = geometryCache.get(prop.type);
         if (geometryInfo === undefined) {
-            const geometry = getPointerTableData(rom, propGeometryTableOffset, type, 'Prop geometry');
+            const geometry = extractor.getPropGeometry(prop.type);
             const matrixCommands: string[] = [];
             if (geometry.readUInt8(0x1C) === 1) {
                 const start = geometry.readUInt32BE(0x40);
@@ -541,66 +394,35 @@ function inspectMatrixProps(rom: Buffer, setup: Buffer, scripts: Buffer, mapID: 
                 matrixCommands,
                 animated: geometry.readUInt32BE(0x64) !== geometry.readUInt32BE(0x68),
             };
-            geometryCache.set(type, geometryInfo);
+            geometryCache.set(prop.type, geometryInfo);
         }
         if (geometryInfo.matrixCommands.length === 0)
             continue;
-        const id = setup.readUInt16BE(offs + 0x2A);
         console.log(
-            `  setup=${i} type=${hex(type, 4)} id=${hex(id, 4)} animated=${geometryInfo.animated} `
+            `  setup=${i} type=${hex(prop.type, 4)} id=${hex(prop.id, 4)} animated=${geometryInfo.animated} `
             + `matrices=[${geometryInfo.matrixCommands.join(', ')}] `
-            + `animationExec=[${(scriptExecutions.get(id) ?? []).join(', ')}]`,
+            + `animationExec=[${(scriptExecutions.get(prop.id) ?? []).join(', ')}]`,
         );
     }
 }
 
-function inspectEffectCalls(rom: Buffer, setup: Buffer, scripts: Buffer, mapID: number): void {
-    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
-    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
-    const globalASM = Buffer.concat([code, data]);
-    const propCount = setup.readUInt32BE(0);
-    const props = new Map<number, { type: number, x: number, y: number, z: number }>();
-    for (let i = 0; i < propCount; i++) {
-        const offs = 4 + i * 0x30;
-        props.set(setup.readUInt16BE(offs + 0x2A), {
-            type: setup.readUInt16BE(offs + 0x28),
-            x: setup.readFloatBE(offs),
-            y: setup.readFloatBE(offs + 4),
-            z: setup.readFloatBE(offs + 8),
-        });
-    }
+function inspectEffectCalls(extractor: DK64Extractor, setup: Buffer, scripts: Buffer, mapID: number): void {
+    const props = new Map(extractor.parseSetup(setup).props.map((prop) => [prop.id, prop]));
 
     console.log(`\nCustom effect calls ${hex(mapID, 2)}:`);
-    const scriptCount = scripts.readUInt16BE(0);
-    let offs = 2;
-    for (let scriptIndex = 0; scriptIndex < scriptCount; scriptIndex++) {
-        const id = scripts.readUInt16BE(offs);
-        const blockCount = scripts.readUInt16BE(offs + 2);
-        offs += 6;
-        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
-            const conditionCount = scripts.readUInt16BE(offs);
-            offs += 2;
-            const conditions: string[] = [];
-            for (let i = 0; i < conditionCount; i++, offs += 8) {
-                conditions.push(
-                    `${hex(scripts.readUInt16BE(offs), 4)}(`
-                    + `${scripts.readInt16BE(offs + 2)},${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)})`,
-                );
-            }
-            const executionCount = scripts.readUInt16BE(offs);
-            offs += 2;
-            for (let i = 0; i < executionCount; i++, offs += 8) {
-                if (scripts.readUInt16BE(offs) !== 7)
+    for (const script of extractor.parseScripts(scripts)) {
+        for (const [blockIndex, block] of script.blocks.entries()) {
+            for (const execution of block.executions) {
+                if (execution.opcode !== 7)
                     continue;
-                const functionIndex = scripts.readInt16BE(offs + 2);
-                const functionAddress = globalASM.readUInt32BE(customScriptFunctionTableOffset + functionIndex * 4);
-                const prop = props.get(id);
+                const [functionIndex, arg0, arg1] = execution.args;
+                const functionAddress = extractor.getCustomScriptFunctionAddress(functionIndex);
+                const prop = props.get(script.id);
                 console.log(
-                    `  script=${hex(id, 4)} block=${blockIndex} function=${functionIndex} address=${hex(functionAddress, 8)} `
-                    + `args=(${scripts.readInt16BE(offs + 4)},${scripts.readInt16BE(offs + 6)}) `
-                    + `conditions=[${conditions.join(', ')}] `
+                    `  script=${hex(script.id, 4)} block=${blockIndex} function=${functionIndex} address=${hex(functionAddress, 8)} `
+                    + `args=(${arg0},${arg1}) conditions=[${block.conditions.map(formatCommand).join(', ')}] `
                     + (prop !== undefined
-                        ? `propType=${hex(prop.type, 4)} pos=(${prop.x.toFixed(1)},${prop.y.toFixed(1)},${prop.z.toFixed(1)})`
+                        ? `propType=${hex(prop.type, 4)} pos=(${Array.from(prop.position, (value) => value.toFixed(1)).join(',')})`
                         : 'prop=missing'),
                 );
             }
@@ -608,25 +430,19 @@ function inspectEffectCalls(rom: Buffer, setup: Buffer, scripts: Buffer, mapID: 
     }
 }
 
-function inspectEnvironmentParticles(rom: Buffer, mapID: number): void {
-    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
-    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
-    const globalASM = Buffer.concat([code, data]);
+function inspectEnvironmentParticles(extractor: DK64Extractor, mapID: number): void {
     console.log(`\nEnvironmental particle definitions ${hex(mapID, 2)}:`);
-    let matches = 0;
-    for (let i = 0; i < environmentParticleCount; i++) {
-        const offs = environmentParticleTableOffset + i * 0x20;
-        if (globalASM.readUInt8(offs) !== mapID)
-            continue;
-        matches++;
+    const matches = extractor.getEnvironmentParticles()
+        .map((particle, index) => ({ particle, index }))
+        .filter(({ particle }) => particle.map === mapID);
+    for (const { particle, index } of matches) {
         console.log(
-            `  entry=${i} start=(${globalASM.readInt16BE(offs + 2)},${globalASM.readInt16BE(offs + 4)},${globalASM.readInt16BE(offs + 6)})`
-            + ` end=(${globalASM.readInt16BE(offs + 8)},${globalASM.readInt16BE(offs + 10)},${globalASM.readInt16BE(offs + 12)})`
-            + ` gap=${globalASM.readFloatBE(offs + 0x10)} distance=${globalASM.readInt16BE(offs + 0x14)}`
-            + ` baseScale=${globalASM.readFloatBE(offs + 0x18)} risingScale=${globalASM.readFloatBE(offs + 0x1C)}`,
+            `  entry=${index} start=(${particle.start.join(',')}) end=(${particle.end.join(',')})`
+            + ` gap=${particle.gap} distance=${particle.distance}`
+            + ` baseScale=${particle.baseScale} risingScale=${particle.risingScale}`,
         );
     }
-    if (matches === 0)
+    if (matches.length === 0)
         console.log('  none');
 }
 
@@ -694,126 +510,74 @@ function inspectCritters(critters: Buffer, mapID: number): void {
     console.log(`Parsed through ${hex(offs)} of ${hex(critters.length)}`);
 }
 
-function inspectSprites(rom: Buffer, spriteID: number | null): void {
-    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
-    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
-    const globalASM = Buffer.concat([code, data]);
+function inspectSprites(extractor: DK64Extractor, spriteID: number | null): void {
     console.log('\nGlobal sprite definitions:');
-    for (let index = 0; index < spritePointerCount; index++) {
-        const address = globalASM.readUInt32BE(spritePointerTableOffset + index * 4);
-        const offs = address - globalASMVirtualBase;
-        const id = globalASM.readUInt32BE(offs);
-        if (spriteID !== null && id !== spriteID)
+    for (const [index, sprite] of extractor.getSpriteDefinitions().entries()) {
+        if (spriteID !== null && sprite.id !== spriteID)
             continue;
-        const imageCount = globalASM.readUInt16BE(offs + 0x12);
-        const images: string[] = [];
-        for (let i = 0; i < imageCount; i++)
-            images.push(hex(globalASM.readUInt16BE(offs + 0x14 + i * 2), 4));
-        const params = Array.from(globalASM.subarray(offs + 8, offs + 0x0D), (value) => hex(value, 2));
         console.log(
-            `  index=${index} id=${hex(id, 2)} address=${hex(address, 8)} `
-            + `grid=${globalASM.readUInt8(offs + 4)}x${globalASM.readUInt8(offs + 5)} `
-            + `flags=${hex(globalASM.readUInt8(offs + 6), 2)} codec=${globalASM.readUInt8(offs + 7)} `
-            + `params=[${params.join(', ')}] table=${globalASM.readUInt8(offs + 0x0D)} `
-            + `dimensions=${globalASM.readUInt16BE(offs + 0x0E)}x${globalASM.readUInt16BE(offs + 0x10)} `
-            + `images=[${images.join(', ')}]`,
+            `  index=${index} id=${hex(sprite.id, 2)} address=${hex(sprite.address, 8)} `
+            + `grid=${sprite.imagesPerFrameHorizontal}x${sprite.imagesPerFrameVertical} `
+            + `flags=${hex(sprite.flags, 2)} codec=${sprite.codec} `
+            + `params=[${sprite.params.map((value) => hex(value, 2)).join(', ')}] table=${sprite.table} `
+            + `dimensions=${sprite.width}x${sprite.height} `
+            + `images=[${sprite.images.map((image) => hex(image, 4)).join(', ')}]`,
         );
     }
 }
 
-function inspectLightAnimations(rom: Buffer): void {
-    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
-    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
-    const globalASM = Buffer.concat([code, data]);
-    const table = lightAnimationTableAddress - globalASMVirtualBase;
+function inspectLightAnimations(extractor: DK64Extractor): void {
     console.log('\nDynamic light animations:');
-    for (let animation = 0; animation < lightAnimationCount; animation++) {
-        const keyframes: string[] = [];
-        for (let keyframe = 0; keyframe < 5; keyframe++) {
-            const offs = table + animation * 0x3C + keyframe * 0x0C;
-            const duration = globalASM.readInt16BE(offs + 0x0A);
-            if (duration === 0)
-                break;
-            keyframes.push(
-                `{intensity=${globalASM.readFloatBE(offs).toFixed(3)}`
-                + ` color=(${globalASM.readUInt8(offs + 4)},${globalASM.readUInt8(offs + 5)},${globalASM.readUInt8(offs + 6)})`
-                + ` radius=${globalASM.readInt16BE(offs + 8)} duration=${duration}}`,
-            );
-        }
-        console.log(`  ${hex(animation + 1, 2)}: ${keyframes.join(' ')}`);
+    for (const [animation, keyframes] of extractor.getLightAnimations().entries()) {
+        const formatted = keyframes.map((keyframe) =>
+            `{intensity=${keyframe.intensity.toFixed(3)} color=(${keyframe.color.join(',')})`
+            + ` radius=${keyframe.radius} duration=${keyframe.duration}}`);
+        console.log(`  ${hex(animation + 1, 2)}: ${formatted.join(' ')}`);
     }
 }
 
-function inspectActorDefinition(rom: Buffer, actorType: number): void {
-    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
-    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
-    const globalASM = Buffer.concat([code, data]);
-    const table = actorDefinitionTableAddress - globalASMVirtualBase;
-    for (let i = 0; i < actorDefinitionCount; i++) {
-        const offs = table + i * 0x30;
-        if (globalASM.readUInt16BE(offs) !== actorType)
-            continue;
-        const words: string[] = [];
-        for (let field = 4; field < 0x30; field += 4)
-            words.push(hex(globalASM.readUInt32BE(offs + field), 8));
+function inspectActorDefinition(extractor: DK64Extractor, actorType: number): void {
+    const definition = extractor.getActorDefinitions().find(({ type }) => type === actorType);
+    if (definition !== undefined) {
         console.log(
-            `\nActor definition ${hex(actorType, 4)}: tableIndex=${i} `
-            + `model=${hex(globalASM.readUInt16BE(offs + 2), 4)} `
-            + `behavior=${hex(globalASM.readUInt32BE(actorBehaviorTableAddress - globalASMVirtualBase + actorType * 4), 8)} `
-            + `words=[${words.join(', ')}]`,
+            `\nActor definition ${hex(actorType, 4)}: tableIndex=${definition.tableIndex} `
+            + `model=${hex(definition.model, 4)} behavior=${hex(definition.behavior, 8)} `
+            + `words=[${definition.words.map((word) => hex(word, 8)).join(', ')}]`,
         );
         return;
     }
     console.log(`\nActor definition ${hex(actorType, 4)} not found`);
 }
 
-function auditSceneSetups(rom: Buffer, mapIDs: number[]): void {
-    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
-    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
-    const globalASM = Buffer.concat([code, data]);
-    const definitionTable = actorDefinitionTableAddress - globalASMVirtualBase;
-    const actorDefinitions = new Map<number, { model: number; name: string }>();
-    for (let i = 0; i < actorDefinitionCount; i++) {
-        const offs = definitionTable + i * 0x30;
-        actorDefinitions.set(globalASM.readUInt16BE(offs), {
-            model: globalASM.readUInt16BE(offs + 2),
-            name: globalASM.subarray(offs + 0x14, offs + 0x2C).toString('ascii').split('\0')[0],
-        });
-    }
+function auditSceneSetups(extractor: DK64Extractor, mapIDs: number[]): void {
+    const actorDefinitions = new Map(extractor.getActorDefinitions()
+        .map(({ type, model, name }) => [type, { model, name }] as const));
 
     const propUsage = new Map<number, { count: number; maps: Set<number>; layout: number; animated: boolean }>();
     const actorUsage = new Map<number, { count: number; maps: Set<number>; model: number; name: string }>();
     for (const mapID of mapIDs) {
-        const setup = getPointerTableData(rom, setupTableOffset, mapID, 'Setup');
-        const propCount = setup.readUInt32BE(0);
-        let offs = 4;
-        for (let i = 0; i < propCount; i++, offs += 0x30) {
-            const type = setup.readUInt16BE(offs + 0x28);
-            let usage = propUsage.get(type);
+        const setup = extractor.getParsedSetup(mapID);
+        for (const prop of setup.props) {
+            let usage = propUsage.get(prop.type);
             if (usage === undefined) {
-                const geometry = getPointerTableData(rom, propGeometryTableOffset, type, 'Prop geometry');
+                const geometry = extractor.getPropGeometry(prop.type);
                 usage = {
                     count: 0,
                     maps: new Set(),
                     layout: geometry.readUInt8(0x1C),
                     animated: geometry.readUInt32BE(0x64) !== geometry.readUInt32BE(0x68),
                 };
-                propUsage.set(type, usage);
+                propUsage.set(prop.type, usage);
             }
             usage.count++;
             usage.maps.add(mapID);
         }
-        const mysteryCount = setup.readUInt32BE(offs);
-        offs += 4 + mysteryCount * 0x24;
-        const actorCount = setup.readUInt32BE(offs);
-        offs += 4;
-        for (let i = 0; i < actorCount; i++, offs += 0x38) {
-            const setupType = setup.readUInt16BE(offs + 0x32);
-            let usage = actorUsage.get(setupType);
+        for (const actor of setup.actors) {
+            let usage = actorUsage.get(actor.type);
             if (usage === undefined) {
-                const definition = actorDefinitions.get(setupType + 0x10);
+                const definition = actorDefinitions.get(actor.type + 0x10);
                 usage = { count: 0, maps: new Set(), model: definition?.model ?? 0, name: definition?.name ?? '' };
-                actorUsage.set(setupType, usage);
+                actorUsage.set(actor.type, usage);
             }
             usage.count++;
             usage.maps.add(mapID);
@@ -841,13 +605,13 @@ function main(): void {
     const romPath = args.find((arg) => arg.startsWith('--rom='))?.slice('--rom='.length) ?? 'data/DonkeyKong64_Raw/rom.z64';
     const dlArg = args.find((arg) => arg.startsWith('--dl='));
     const vertexBaseArg = args.find((arg) => arg.startsWith('--vertex-base='));
-    const rom = readFileSync(romPath);
+    const extractor = new DK64Extractor(readFileSync(romPath));
     const auditScenesArg = args.find((arg) => arg.startsWith('--audit-scenes='));
     if (auditScenesArg !== undefined) {
-        auditSceneSetups(rom, auditScenesArg.slice('--audit-scenes='.length).split(',').map(parseNumber));
+        auditSceneSetups(extractor, auditScenesArg.slice('--audit-scenes='.length).split(',').map(parseNumber));
         return;
     }
-    const map = getMapData(rom, mapID);
+    const map = extractor.getMap(mapID);
     inspectMap(map, mapID);
     if (dlArg !== undefined) {
         const vertexStart = map.readUInt32BE(0x38)
@@ -857,12 +621,12 @@ function main(): void {
     const propGeometryArg = args.find((arg) => arg.startsWith('--prop-geometry='));
     if (propGeometryArg !== undefined) {
         const propType = parseNumber(propGeometryArg.slice('--prop-geometry='.length));
-        inspectPropGeometry(getPointerTableData(rom, propGeometryTableOffset, propType, 'Prop geometry'), propType, args.includes('--prop-dl'));
+        inspectPropGeometry(extractor, extractor.getPropGeometry(propType), propType, args.includes('--prop-dl'));
     }
     const textureArg = args.find((arg) => arg.startsWith('--texture='));
     if (textureArg !== undefined) {
         const textureID = parseNumber(textureArg.slice('--texture='.length));
-        const texture = getPointerTableData(rom, pointerTableOffset + rom.readUInt32BE(pointerTableOffset + 25 * 4), textureID, 'Texture');
+        const texture = extractor.getGeometryTexture(textureID);
         console.log(`\nTexture ${hex(textureID)}, decompressed size ${hex(texture.length)}`);
         console.log(`first 32 bytes: ${texture.subarray(0, 0x20).toString('hex').match(/../g)?.join(' ')}`);
         console.log(`last 32 bytes:  ${texture.subarray(Math.max(0, texture.length - 0x20)).toString('hex').match(/../g)?.join(' ')}`);
@@ -870,49 +634,50 @@ function main(): void {
     if (args.includes('--effect-points'))
         inspectEffectPoints(map, mapID);
     if (args.includes('--setup'))
-        inspectSetup(getPointerTableData(rom, setupTableOffset, mapID, 'Setup'), mapID);
+        inspectSetup(extractor, extractor.getSetup(mapID), mapID);
     if (args.includes('--scripts'))
-        inspectScripts(getPointerTableData(rom, scriptTableOffset, mapID, 'Scripts'), mapID);
+        inspectScripts(extractor, extractor.getScripts(mapID), mapID);
     if (args.includes('--matrix-props'))
         inspectMatrixProps(
-            rom,
-            getPointerTableData(rom, setupTableOffset, mapID, 'Setup'),
-            getPointerTableData(rom, scriptTableOffset, mapID, 'Scripts'),
+            extractor,
+            extractor.getSetup(mapID),
+            extractor.getScripts(mapID),
             mapID,
         );
     if (args.includes('--effects'))
         inspectEffectCalls(
-            rom,
-            getPointerTableData(rom, setupTableOffset, mapID, 'Setup'),
-            getPointerTableData(rom, scriptTableOffset, mapID, 'Scripts'),
+            extractor,
+            extractor.getSetup(mapID),
+            extractor.getScripts(mapID),
             mapID,
         );
     if (args.includes('--environment-particles'))
-        inspectEnvironmentParticles(rom, mapID);
+        inspectEnvironmentParticles(extractor, mapID);
     if (args.includes('--light-animations'))
-        inspectLightAnimations(rom);
+        inspectLightAnimations(extractor);
     const actorDefinitionArg = args.find((arg) => arg.startsWith('--actor-definition='));
     if (actorDefinitionArg !== undefined)
-        inspectActorDefinition(rom, parseNumber(actorDefinitionArg.slice('--actor-definition='.length)));
+        inspectActorDefinition(extractor, parseNumber(actorDefinitionArg.slice('--actor-definition='.length)));
     const actorModelArg = args.find((arg) => arg.startsWith('--actor-model='));
     if (actorModelArg !== undefined) {
         const actorModel = parseNumber(actorModelArg.slice('--actor-model='.length));
         inspectActorGeometry(
-            getPointerTableData(rom, actorGeometryTableOffset, actorModel - 1, 'Actor geometry'),
+            extractor,
+            extractor.getActorGeometry(actorModel),
             actorModel,
             args.includes('--actor-dl'),
         );
     }
     const animationArg = args.find((arg) => arg.startsWith('--animation='));
     if (animationArg !== undefined)
-        inspectAnimation(rom, parseNumber(animationArg.slice('--animation='.length)));
+        inspectAnimation(extractor, parseNumber(animationArg.slice('--animation='.length)));
     if (args.includes('--spawners'))
-        inspectSpawners(getPointerTableData(rom, spawnerTableOffset, mapID, 'Spawners'), mapID);
+        inspectSpawners(extractor.getSpawners(mapID), mapID);
     if (args.includes('--critters'))
-        inspectCritters(getPointerTableData(rom, critterTableOffset, mapID, 'Critters'), mapID);
+        inspectCritters(extractor.getCritters(mapID), mapID);
     const spritesArg = args.find((arg) => arg === '--sprites' || arg.startsWith('--sprites='));
     if (spritesArg !== undefined)
-        inspectSprites(rom, spritesArg.includes('=') ? parseNumber(spritesArg.slice(spritesArg.indexOf('=') + 1)) : null);
+        inspectSprites(extractor, spritesArg.includes('=') ? parseNumber(spritesArg.slice(spritesArg.indexOf('=') + 1)) : null);
 }
 
 main();

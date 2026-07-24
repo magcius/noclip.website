@@ -9,6 +9,7 @@ import {
 
 export interface SetupProp {
     setupIndex: number;
+    offset: number;
     position: vec3;
     scale: number;
     unknown10: number;
@@ -23,11 +24,13 @@ export interface SetupProp {
 }
 
 export interface SetupMystery {
+    offset: number;
     words: readonly number[];
 }
 
 export interface SetupActor {
     setupIndex: number;
+    offset: number;
     position: vec3;
     scale: number;
     lightSpeed: number;
@@ -57,6 +60,7 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
     for (let i = 0; i < propCount; i++, offs += 0x30) {
         props.push({
             setupIndex: i,
+            offset: offs,
             position: vec3.fromValues(
                 view.getFloat32(offs + 0x00, false),
                 view.getFloat32(offs + 0x04, false),
@@ -86,7 +90,7 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
         const words: number[] = [];
         for (let j = 0; j < 9; j++)
             words.push(view.getUint32(offs + j * 4, false));
-        mystery.push({ words });
+        mystery.push({ offset: offs, words });
     }
 
     const actorCount = view.getUint32(offs, false);
@@ -95,6 +99,7 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
     for (let i = 0; i < actorCount; i++, offs += 0x38) {
         actors.push({
             setupIndex: i,
+            offset: offs,
             position: vec3.fromValues(
                 view.getFloat32(offs + 0x00, false),
                 view.getFloat32(offs + 0x04, false),
@@ -136,6 +141,7 @@ export interface ScriptBlock {
 }
 
 export interface InstanceScript {
+    offset: number;
     id: number;
     behavior: number;
     blocks: ScriptBlock[];
@@ -158,6 +164,7 @@ export function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
     const scripts: InstanceScript[] = [];
     let offs = 2;
     for (let scriptIndex = 0; scriptIndex < count; scriptIndex++) {
+        const offset = offs;
         const id = view.getUint16(offs, false);
         const blockCount = view.getUint16(offs + 2, false);
         const behavior = view.getUint16(offs + 4, false);
@@ -176,7 +183,7 @@ export function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
                 executions.push(parseScriptCommand(view, offs));
             blocks.push({ conditions, executions });
         }
-        scripts.push({ id, behavior, blocks });
+        scripts.push({ offset, id, behavior, blocks });
     }
     return scripts;
 }
