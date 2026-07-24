@@ -493,6 +493,7 @@ export function updateSkeletalActor(
     animation: SkeletalActorAnimation,
     vertices: Vertex[],
     vertexBufferData: Float32Array | null,
+    vertexBufferFirstVertex: number,
     tick: number,
 ): void {
     const pose = sampleActorAnimationPose(animation.sourceAnimation, animation.speed, tick);
@@ -517,9 +518,10 @@ export function updateSkeletalActor(
         vertices[vertexIndex].y = skinnedPosition[1];
         vertices[vertexIndex].z = skinnedPosition[2];
         if (vertexBufferData !== null) {
-            vertexBufferData[vertexIndex * 10 + 0] = skinnedPosition[0];
-            vertexBufferData[vertexIndex * 10 + 1] = skinnedPosition[1];
-            vertexBufferData[vertexIndex * 10 + 2] = skinnedPosition[2];
+            const localVertex = (vertexIndex - vertexBufferFirstVertex) * 10;
+            vertexBufferData[localVertex + 0] = skinnedPosition[0];
+            vertexBufferData[localVertex + 1] = skinnedPosition[1];
+            vertexBufferData[localVertex + 2] = skinnedPosition[2];
         }
     }
 }

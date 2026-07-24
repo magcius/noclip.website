@@ -446,11 +446,11 @@ export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, camera
     return dst;
 }
 
-export function updateDynamicLighting(lighting: DynamicLighting, vertices: readonly Vertex[], vertexBufferData: Float32Array, camera: ArrayLike<number>, tick: number, enabled: boolean): void {
+export function updateDynamicLighting(lighting: DynamicLighting, vertices: readonly Vertex[], vertexBufferData: Float32Array, vertexBufferFirstVertex: number, camera: ArrayLike<number>, tick: number, enabled: boolean): void {
     if (!enabled) {
         for (const vertexIndex of lighting.vertexIndices) {
             const vertex = vertices[vertexIndex];
-            const dst = vertexIndex * 10 + 6;
+            const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
             vertexBufferData[dst + 0] = vertex.c0;
             vertexBufferData[dst + 1] = vertex.c1;
             vertexBufferData[dst + 2] = vertex.c2;
@@ -490,7 +490,7 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
         // func_global_asm_80655410 relights the complete copied vertex
         // buffer of each flagged map chunk. Props and actors use the separate
         // object-origin sample implemented by sampleObjectLighting.
-        const dst = vertexIndex * 10 + 6;
+        const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
         const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
         const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;

@@ -168,7 +168,7 @@ class DrawCallInstance {
     private crossfadeDuration = 0;
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private fogParams: FogParams) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const textureIndex = drawCall.textureIndices[i];
@@ -314,7 +314,7 @@ class DrawCallInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.setDrawCount(this.drawCall.indexCount, this.drawCall.firstIndex);
+        renderInst.setDrawCount(this.drawCall.indexCount, this.firstIndex);
 
         const usesFog = this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG) !== 0;
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2 + (usesFog ? 8 : 0));
@@ -372,7 +372,7 @@ class DrawCallInstance {
     }
 }
 
-function makeVertexBufferData(v: Vertex[]): Float32Array {
+function makeVertexBufferData(v: readonly Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
@@ -399,13 +399,54 @@ export class RenderData {
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
+    public vertexStart: number;
+    public indexStart: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
-        assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
-        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
+    constructor(device: GfxDevice, cache: GfxRenderCache, mesh: Mesh, dynamic = false) {
+        const sharedOutput = mesh.sharedOutput;
+        const drawCalls = mesh.rspOutput?.drawCalls ?? [];
+        this.indexStart = drawCalls.reduce(
+            (start, drawCall) => Math.min(start, drawCall.firstIndex),
+            sharedOutput.indices.length,
+        );
+        const indexEnd = drawCalls.reduce(
+            (end, drawCall) => Math.max(end, drawCall.firstIndex + drawCall.indexCount),
+            this.indexStart,
+        );
+        const sharedIndices = sharedOutput.indices.slice(this.indexStart, indexEnd);
+        let vertexStart = sharedIndices.reduce(
+            (start, vertexIndex) => Math.min(start, vertexIndex),
+            sharedOutput.vertices.length,
+        );
+        let vertexEnd = sharedIndices.reduce(
+            (end, vertexIndex) => Math.max(end, vertexIndex + 1),
+            vertexStart,
+        );
+        const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
+            if (vertexCount <= 0)
+                return;
+            vertexStart = Math.min(vertexStart, firstVertex);
+            vertexEnd = Math.max(vertexEnd, firstVertex + vertexCount);
+        };
+        if (mesh.generatedSurfaceAnimation !== undefined)
+            includeVertexRange(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
+        if (mesh.actorAnimation !== undefined)
+            includeVertexRange(mesh.actorAnimation.firstVertex, mesh.actorAnimation.vertexCount);
+        if (mesh.propMatrixAnimation !== undefined) {
+            for (const vertexOffset of mesh.propMatrixAnimation.vertexOffsets)
+                includeVertexRange(mesh.propMatrixAnimation.firstVertex + vertexOffset, 1);
+        }
+        for (const sprite of mesh.spriteBillboards ?? [])
+            includeVertexRange(sprite.firstVertex, 4);
+        for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
+            includeVertexRange(vertexIndex, 1);
+        this.vertexStart = vertexStart;
+
+        assert(vertexEnd - this.vertexStart <= 0xFFFFFFFF);
+        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd));
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
 
-        const indexBufferData = new Uint32Array(sharedOutput.indices);
+        const indexBufferData = Uint32Array.from(sharedIndices, (vertexIndex) => vertexIndex - this.vertexStart);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -475,18 +516,19 @@ export class MeshData {
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propMatrixAnimation !== undefined);
+        this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propMatrixAnimation !== undefined);
         this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
         this.lightingDirty = mesh.dynamicLighting !== undefined;
 
         const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
             if (vertexCount <= 0)
                 return;
+            const localFirstVertex = firstVertex - this.renderData.vertexStart;
             if (this.dirtyVertexRange === null) {
-                this.dirtyVertexRange = { start: firstVertex, end: firstVertex + vertexCount };
+                this.dirtyVertexRange = { start: localFirstVertex, end: localFirstVertex + vertexCount };
             } else {
-                this.dirtyVertexRange.start = Math.min(this.dirtyVertexRange.start, firstVertex);
-                this.dirtyVertexRange.end = Math.max(this.dirtyVertexRange.end, firstVertex + vertexCount);
+                this.dirtyVertexRange.start = Math.min(this.dirtyVertexRange.start, localFirstVertex);
+                this.dirtyVertexRange.end = Math.max(this.dirtyVertexRange.end, localFirstVertex + vertexCount);
             }
         };
         if (mesh.generatedSurfaceAnimation !== undefined)
@@ -550,19 +592,20 @@ export class MeshData {
                 const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
                     ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
                 )));
-                this.renderData.vertexBufferData[vertexIndex * 10 + 1] = Math.trunc(y * 3);
-                this.renderData.vertexBufferData[vertexIndex * 10 + 9] = alpha / 0xFF;
+                const localVertex = (vertexIndex - this.renderData.vertexStart) * 10;
+                this.renderData.vertexBufferData[localVertex + 1] = Math.trunc(y * 3);
+                this.renderData.vertexBufferData[localVertex + 9] = alpha / 0xFF;
             }
         }
 
         if (lighting !== undefined && (lightingIsDynamic || this.lightingDirty)) {
-            updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, viewerInput.camera.worldMatrix, tick, this.dynamicLightingEnabled);
+            updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, viewerInput.camera.worldMatrix, tick, this.dynamicLightingEnabled);
             this.lightingDirty = false;
         }
         if (actorAnimation !== undefined)
-            updateSkeletalActor(actorAnimation, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, tick);
+            updateSkeletalActor(actorAnimation, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
         if (propMatrixAnimation !== undefined)
-            updatePropMatrixAnimation(propMatrixAnimation, this.renderData.vertexBufferData, tick);
+            updatePropMatrixAnimation(propMatrixAnimation, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
         let spriteFade = 0;
         let hasSpriteFade = false;
@@ -598,7 +641,7 @@ export class MeshData {
                 + viewerInput.camera.worldMatrix[6] * upScale;
             const signs = [-1, 1, 1, 1, 1, -1, -1, -1];
             for (let i = 0; i < 4; i++) {
-                const vertex = (sprite.firstVertex + i) * 10;
+                const vertex = (sprite.firstVertex + i - this.renderData.vertexStart) * 10;
                 if (!active) {
                     this.renderData.vertexBufferData[vertex + 0] = sprite.origin[0];
                     this.renderData.vertexBufferData[vertex + 1] = sprite.origin[1];
@@ -758,7 +801,8 @@ export class RootMeshRenderer {
 
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                const drawCallInstance = new DrawCallInstance(device, cache, node.sharedOutput, node.rspOutput.drawCalls[i], this.fogParams);
+                const drawCall = node.rspOutput.drawCalls[i];
+                const drawCallInstance = new DrawCallInstance(device, cache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -1720,7 +1764,7 @@ function addSceneActors(
             if (actorMesh !== null) {
                 const actorAnimation = definition.animation !== null ? actorMesh.animation : undefined;
                 if (actorAnimation === undefined)
-                    updateSkeletalActor(actorMesh.animation, sharedOutput.vertices, null, 0);
+                    updateSkeletalActor(actorMesh.animation, sharedOutput.vertices, null, 0, 0);
                 const mesh: Mesh = {
                     sharedOutput,
                     rspState: actorMesh.rspState,

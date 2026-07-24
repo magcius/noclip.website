@@ -229,10 +229,10 @@ function forEachPropMatrixAnimationVertex(
     }
 }
 
-export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertexBufferData: Float32Array, tick: number): void {
+export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertexBufferData: Float32Array, vertexBufferFirstVertex: number, tick: number): void {
     samplePropMatrixAnimation(animation, tick);
     forEachPropMatrixAnimationVertex(animation, (vertexIndex, position) => {
-        const target = vertexIndex * 10;
+        const target = (vertexIndex - vertexBufferFirstVertex) * 10;
         vertexBufferData[target + 0] = position[0];
         vertexBufferData[target + 1] = position[1];
         vertexBufferData[target + 2] = position[2];
