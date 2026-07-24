@@ -4,6 +4,7 @@ import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { actorModelScale, getActorRenderDefinition, parseActorAnimation, parseActorSkeleton, parseSetupActors, sampleActorBonePosition } from './actor.js';
 import type { ActorAnimation, ActorSkeleton } from './actor.js';
+import type { DrawTextureBinding } from './f3dex2.js';
 
 interface LightSetupProp {
     type: number;
@@ -76,7 +77,7 @@ interface RelitMapChunk {
 interface RelitDrawCall {
     firstIndex: number;
     indexCount: number;
-    textureAnimationIndices: readonly (readonly number[])[];
+    textureBindings: readonly DrawTextureBinding[];
 }
 
 interface ActiveLight {
@@ -304,7 +305,7 @@ export function buildMapChunkLighting(
 
     const animatedMaterialVertices = new Set<number>();
     for (const drawCall of drawCalls) {
-        if (!drawCall.textureAnimationIndices.some((indices) => indices.length > 0))
+        if (!drawCall.textureBindings.some((binding) => binding.animation !== undefined))
             continue;
         const indexEnd = drawCall.firstIndex + drawCall.indexCount;
         for (let index = drawCall.firstIndex; index < indexEnd; index++)

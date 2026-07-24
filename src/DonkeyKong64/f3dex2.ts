@@ -21,6 +21,17 @@ export enum RSP_Geometry {
     G_CLIPPING           = 1 << 23,
 }
 
+export interface DrawTextureBinding {
+    textureIndex: number;
+    animation?: {
+        textureIndices: number[];
+        frameDuration: number;
+        frameOffset: number;
+        crossfadeGroup: number | null;
+    };
+    scrollSpeed: number;
+}
+
 export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
@@ -28,11 +39,7 @@ export class DrawCall extends F3DEX.DrawCall {
     // Level geometry historically relies on vertex colors even when G_SHADE
     // is absent. Actor wrappers can opt out to preserve their unlit materials.
     public useVertexColors = true;
-    public textureAnimationIndices: number[][] = [];
-    public textureAnimationFrameDurations: number[] = [];
-    public textureAnimationFrameOffsets: number[] = [];
-    public textureAnimationCrossfadeGroups: (number | null)[] = [];
-    public textureScrollSpeeds: number[] = [];
+    public textureBindings: DrawTextureBinding[] = [];
 }
 
 export interface AnimatedTexture {
@@ -186,7 +193,7 @@ export class RSPState {
         this.SP_MatrixIndex = this.SP_MatrixChain[this.SP_MatrixChain.length - 1] ?? 0;
     }
 
-    private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number, frameOffset: number, crossfadeGroup: number | null } {
+    private _translateTileTexture(tileIndex: number): Omit<DrawTextureBinding, 'scrollSpeed'> {
         const tile = this.DP_TileState[tileIndex];
         const cache = assertExists(this.DP_TMemUploadTracker.get(tile.tmem));
         const segment = (cache.addr >>> 24) & 0xFF;
@@ -207,10 +214,12 @@ export class RSPState {
                 tile.cacheKey = oldCacheKey;
                 return {
                     textureIndex: textureIndices[0],
-                    animationIndices: textureIndices.length > 1 ? textureIndices : [],
-                    frameDuration: animation.frameDuration,
-                    frameOffset: animation.frameOffset ?? 0,
-                    crossfadeGroup: animation.crossfade ? animation.group : null,
+                    animation: textureIndices.length > 1 ? {
+                        textureIndices,
+                        frameDuration: animation.frameDuration,
+                        frameOffset: animation.frameOffset ?? 0,
+                        crossfadeGroup: animation.crossfade ? animation.group : null,
+                    } : undefined,
                 };
             }
 
@@ -235,16 +244,12 @@ export class RSPState {
             const deinterleave = cache.dxt === 0;
             return {
                 textureIndex: this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile, deinterleave),
-                animationIndices: [],
-                frameDuration: 0,
-                frameOffset: 0,
-                crossfadeGroup: null,
             };
         } else {
             const animation = this.animatedTextures.find((entry) => entry.segment === segment);
             if (animation === undefined) {
                 console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
-                return { textureIndex: 0, animationIndices: [], frameDuration: 0, frameOffset: 0, crossfadeGroup: null };
+                return { textureIndex: 0 };
             }
 
             const oldCacheKey = tile.cacheKey;
@@ -260,10 +265,12 @@ export class RSPState {
             tile.cacheKey = oldCacheKey;
             return {
                 textureIndex: textureIndices[0],
-                animationIndices: textureIndices,
-                frameDuration: animation.frameDuration,
-                frameOffset: animation.frameOffset ?? 0,
-                crossfadeGroup: null,
+                animation: {
+                    textureIndices,
+                    frameDuration: animation.frameDuration,
+                    frameOffset: animation.frameOffset ?? 0,
+                    crossfadeGroup: null,
+                },
             };
         }
     }
@@ -286,24 +293,23 @@ export class RSPState {
             assert(cycletype === RDP.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === RDP.OtherModeH_CycleType.G_CYC_2CYCLE);
 
             const texture0 = this._translateTileTexture(this.SP_TextureState.tile);
-            dc.textureIndices.push(texture0.textureIndex);
-            dc.textureAnimationIndices.push(texture0.animationIndices);
-            dc.textureAnimationFrameDurations.push(texture0.frameDuration);
-            dc.textureAnimationFrameOffsets.push(texture0.frameOffset);
-            dc.textureAnimationCrossfadeGroups.push(texture0.crossfadeGroup);
-            dc.textureScrollSpeeds.push(this.textureScrollSpeeds[0] ?? 0);
+            dc.textureBindings.push({
+                ...texture0,
+                scrollSpeed: this.textureScrollSpeeds[0] ?? 0,
+            });
 
             if (!lod_en && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 const texture1 = this._translateTileTexture(this.SP_TextureState.tile + 1);
-                if (texture0.crossfadeGroup !== null && texture1.crossfadeGroup === texture0.crossfadeGroup)
-                    texture1.frameOffset++;
-                dc.textureIndices.push(texture1.textureIndex);
-                dc.textureAnimationIndices.push(texture1.animationIndices);
-                dc.textureAnimationFrameDurations.push(texture1.frameDuration);
-                dc.textureAnimationFrameOffsets.push(texture1.frameOffset);
-                dc.textureAnimationCrossfadeGroups.push(texture1.crossfadeGroup);
-                dc.textureScrollSpeeds.push(this.textureScrollSpeeds[1] ?? 0);
+                const crossfadeGroup = texture0.animation?.crossfadeGroup;
+                const animation1 = texture1.animation;
+                if (crossfadeGroup !== null && crossfadeGroup !== undefined
+                    && animation1?.crossfadeGroup === crossfadeGroup)
+                    animation1.frameOffset++;
+                dc.textureBindings.push({
+                    ...texture1,
+                    scrollSpeed: this.textureScrollSpeeds[1] ?? 0,
+                });
             }
         }
     }

@@ -171,8 +171,10 @@ class DrawCallInstance {
     constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
-            const textureIndex = drawCall.textureIndices[i];
-            const tex = sharedOutput.textureCache.textures[textureIndex];
+            const binding = drawCall.textureBindings[i];
+            if (binding === undefined)
+                continue;
+            const tex = sharedOutput.textureCache.textures[binding.textureIndex];
 
             if (tex) {
                 this.textureEntry[i] = tex;
@@ -180,10 +182,10 @@ class DrawCallInstance {
                 this.textureMappings[i].gfxSampler = translateSampler(cache, tex, linearFiltering);
             }
 
-            const animationIndices = drawCall.textureAnimationIndices[i];
-            if (animationIndices !== undefined && animationIndices.length > 0) {
+            const animation = binding.animation;
+            if (animation !== undefined) {
                 this.isAnimated = true;
-                this.animatedTextureEntries[i] = animationIndices.map((index) => sharedOutput.textureCache.textures[index]);
+                this.animatedTextureEntries[i] = animation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
                 this.animatedTextureMappings[i] = this.animatedTextureEntries[i].map((entry, frame) => {
                     if (frame === 0)
                         return this.textureMappings[i];
@@ -194,10 +196,10 @@ class DrawCallInstance {
                 });
             }
         }
-        const crossfade0 = drawCall.textureAnimationCrossfadeGroups[0];
-        const crossfade1 = drawCall.textureAnimationCrossfadeGroups[1];
+        const crossfade0 = drawCall.textureBindings[0]?.animation?.crossfadeGroup;
+        const crossfade1 = drawCall.textureBindings[1]?.animation?.crossfadeGroup;
         if (crossfade0 !== null && crossfade0 !== undefined && crossfade0 === crossfade1)
-            this.crossfadeDuration = Math.max(drawCall.textureAnimationFrameDurations[0], 1);
+            this.crossfadeDuration = Math.max(drawCall.textureBindings[0].animation!.frameDuration, 1);
 
         this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
         this.setBackfaceCullingEnabled(true);
@@ -276,7 +278,7 @@ class DrawCallInstance {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
             calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
-            const speed = this.drawCall.textureScrollSpeeds[textureEntryIndex] ?? 0;
+            const speed = this.drawCall.textureBindings[textureEntryIndex]?.scrollSpeed ?? 0;
             if (speed !== 0) {
                 const ticks = Math.floor(time / (1000 / 30));
                 if (ticks > 0) {
@@ -303,8 +305,9 @@ class DrawCallInstance {
             if (mappings === undefined)
                 continue;
             // DK64 advances these counters once per 30 Hz game tick.
-            const frameDuration = Math.max(this.drawCall.textureAnimationFrameDurations[i], 1);
-            const frameOffset = this.drawCall.textureAnimationFrameOffsets[i] ?? 0;
+            const animation = this.drawCall.textureBindings[i].animation!;
+            const frameDuration = Math.max(animation.frameDuration, 1);
+            const frameOffset = animation.frameOffset;
             const frame = (Math.floor(animationTick / frameDuration) + frameOffset) % mappings.length;
             this.textureMappings[i] = mappings[frame];
         }
