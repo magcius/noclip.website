@@ -29,8 +29,8 @@ import * as Deflate from '../Common/Compression/Deflate.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
-import { buildDynamicLights, buildMapChunkLighting, updateDynamicLighting } from './light.js';
-import type { DynamicLighting } from './light.js';
+import { buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
+import type { DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
 import { actorModelScale, buildSkeletalActorMesh, getActorRenderDefinition, parseSetupActors, updateSkeletalActor } from './actor.js';
 import type { ActorRenderDefinition, SetupActor, SkeletalActorAnimation, SkeletalActorMesh } from './actor.js';
 import { addModel2Props, buildTerrainTriangles, parseSetupProps, updatePropMatrixAnimation } from './prop.js';
@@ -285,7 +285,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null): void {
         if (!this.visible)
             return;
 
@@ -338,7 +338,11 @@ class DrawCallInstance {
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, this.crossfadeDuration > 0 ? 12 : 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         const primColor = this.drawCall.DP_PrimColor;
-        offs += fillVec4(comb, offs, primColor[0], primColor[1], primColor[2], primColor[3] * primAlphaMultiplier); // primitive color
+        offs += fillVec4(comb, offs,
+            primColor[0] * (primColorMultiplier?.[0] ?? 1),
+            primColor[1] * (primColorMultiplier?.[1] ?? 1),
+            primColor[2] * (primColorMultiplier?.[2] ?? 1),
+            primColor[3] * primAlphaMultiplier); // primitive color
         const envColor = this.drawCall.DP_EnvColor;
         offs += fillVec4(comb, offs, envColor[0], envColor[1], envColor[2], envColor[3]); // environment color
         if (this.crossfadeDuration > 0) {
@@ -459,7 +463,7 @@ export interface Mesh {
 export class MeshData {
     public renderData: RenderData;
     private lastUpdateTick = -1;
-    private dynamicLightingEnabled = true;
+    public dynamicLightingEnabled = true;
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
@@ -591,9 +595,9 @@ enum SceneRenderLayer {
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -643,6 +647,8 @@ export class RootMeshRenderer {
     public distanceFade: { origin: vec3; startDistance: number; endDistance: number } | null = null;
     private rotationYAnimation: { baseMatrix: mat4; radiansPerTick: number } | null = null;
     private computeLookAt = false;
+    private objectLighting: ObjectLighting | null = null;
+    private objectLightColor = vec3.create();
 
     public objectFlags = 0;
     private rootNodeRenderer: MeshRenderer;
@@ -719,6 +725,10 @@ export class RootMeshRenderer {
         };
     }
 
+    public setObjectLighting(lighting: ObjectLighting): void {
+        this.objectLighting = lighting;
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
@@ -770,7 +780,11 @@ export class RootMeshRenderer {
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier);
+        const tick = Math.floor(viewerInput.time / (1000 / 30));
+        const objectLightColor = this.objectLighting !== null
+            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, viewerInput.camera.worldMatrix, tick, this.geometryData.dynamicLightingEnabled)
+            : null;
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor);
 
         renderInstManager.popTemplate();
     }
@@ -1474,6 +1488,7 @@ function addSceneActors(
     romData: ROMData,
     setup: ArrayBufferSlice,
     worldScale: number,
+    lightingEnvironment: ObjectLightingEnvironment,
 ): void {
     const actors: { actor: SetupActor, definition: ActorRenderDefinition }[] = [];
     for (const actor of parseSetupActors(setup)) {
@@ -1558,6 +1573,11 @@ function addSceneActors(
         ]);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, actor.rotationY / 0x1000 * Math.PI * 2);
         mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [rendererScale, rendererScale, rendererScale]);
+        renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, vec3.fromValues(
+            actor.position[0] * worldScale,
+            actor.position[1] * worldScale,
+            actor.position[2] * worldScale,
+        )));
         if (definition.rotationYSpeed !== undefined)
             renderer.setRotationYAnimation(definition.rotationYSpeed);
         sceneRenderer.meshRenderers.push(renderer);
@@ -1810,6 +1830,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 loadAnimation: (animation) => romData.AnimationData.has(animation) ? romData.loadAnimation(animation) : null,
             },
         );
+        const objectLightingEnvironment = buildObjectLightingEnvironment(map.vertBin, map.chunks, dynamicLights);
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device, sceneID, map.clipNear, map.clipFar);
@@ -1925,8 +1946,8 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Surfaces, sceneRenderer.fogParams));
         }
 
-        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, scripts, terrainTriangles, setupWorldScale, map.fogEnabled);
-        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup, setupWorldScale);
+        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
+        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup, setupWorldScale, objectLightingEnvironment);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)

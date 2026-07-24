@@ -51,6 +51,21 @@ export interface DynamicLighting {
     lights: readonly DynamicLight[];
 }
 
+export interface ObjectLighting {
+    origin: vec3;
+    ambientColor: vec3;
+    lights: readonly DynamicLight[];
+}
+
+export interface ObjectLightingEnvironment {
+    chunks: readonly {
+        min: vec3;
+        max: vec3;
+        ambientColor: vec3;
+    }[];
+    lights: readonly DynamicLight[];
+}
+
 interface RelitMapChunk {
     ambientColor: vec3;
     modulateVertexColors: boolean;
@@ -77,6 +92,53 @@ interface ActiveLight {
 interface ActorLightResources {
     loadActorGeometry: (model: number) => ArrayBufferSlice | null;
     loadAnimation: (animation: number) => ArrayBufferSlice | null;
+}
+
+export function buildObjectLightingEnvironment(
+    vertexData: ArrayBufferSlice,
+    chunks: readonly RelitMapChunk[],
+    lights: readonly DynamicLight[],
+): ObjectLightingEnvironment {
+    const view = vertexData.createDataView();
+    return {
+        chunks: chunks.map((chunk) => {
+            const min = vec3.fromValues(Infinity, Infinity, Infinity);
+            const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
+            const end = Math.min(view.byteLength, chunk.vertOffset + chunk.vertSize);
+            for (let offs = chunk.vertOffset; offs + 6 <= end; offs += 0x10) {
+                for (let axis = 0; axis < 3; axis++) {
+                    const value = view.getInt16(offs + axis * 2, false);
+                    min[axis] = Math.min(min[axis], value);
+                    max[axis] = Math.max(max[axis], value);
+                }
+            }
+            return { min, max, ambientColor: chunk.ambientColor };
+        }),
+        lights,
+    };
+}
+
+export function buildObjectLighting(environment: ObjectLightingEnvironment, origin: vec3): ObjectLighting {
+    let bestChunk = environment.chunks[0];
+    let bestDistanceSquared = Infinity;
+    for (const chunk of environment.chunks) {
+        let distanceSquared = 0;
+        for (let axis = 0; axis < 3; axis++) {
+            const delta = origin[axis] < chunk.min[axis]
+                ? chunk.min[axis] - origin[axis]
+                : origin[axis] > chunk.max[axis] ? origin[axis] - chunk.max[axis] : 0;
+            distanceSquared += delta * delta;
+        }
+        if (distanceSquared < bestDistanceSquared) {
+            bestChunk = chunk;
+            bestDistanceSquared = distanceSquared;
+        }
+    }
+    return {
+        origin,
+        ambientColor: bestChunk?.ambientColor ?? vec3.fromValues(1, 1, 1),
+        lights: environment.lights,
+    };
 }
 
 // D_global_asm_80748430, consumed by func_global_asm_8065EB10. Entry zero is
@@ -352,6 +414,38 @@ function sampleActiveLights(lights: readonly DynamicLight[], camera: ArrayLike<n
     return activeLights;
 }
 
+export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, camera: ArrayLike<number>, tick: number, enabled: boolean): vec3 {
+    if (!enabled)
+        return vec3.set(dst, 1, 1, 1);
+
+    vec3.copy(dst, lighting.ambientColor);
+    for (const light of sampleActiveLights(lighting.lights, camera, tick)) {
+        const dx = lighting.origin[0] - light.origin[0];
+        const dy = lighting.origin[1] - light.origin[1];
+        const dz = lighting.origin[2] - light.origin[2];
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (distance >= light.outerRadius)
+            continue;
+        let falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
+        if (light.direction !== undefined) {
+            if (distance === 0)
+                continue;
+            const coneDot = (dx * light.direction[0] + dy * light.direction[1] + dz * light.direction[2]) / distance;
+            if (coneDot < light.outerConeCos!)
+                continue;
+            if (coneDot < light.innerConeCos!)
+                falloff *= (coneDot - light.outerConeCos!) / (light.innerConeCos! - light.outerConeCos!);
+        }
+        dst[0] += light.color[0] * falloff;
+        dst[1] += light.color[1] * falloff;
+        dst[2] += light.color[2] * falloff;
+    }
+    dst[0] = Math.min(1, dst[0]);
+    dst[1] = Math.min(1, dst[1]);
+    dst[2] = Math.min(1, dst[2]);
+    return dst;
+}
+
 export function updateDynamicLighting(lighting: DynamicLighting, vertices: readonly Vertex[], vertexBufferData: Float32Array, camera: ArrayLike<number>, tick: number, enabled: boolean): void {
     if (!enabled) {
         for (const vertexIndex of lighting.vertexIndices) {
@@ -394,8 +488,8 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
             blue += light.color[2] * falloff;
         }
         // func_global_asm_80655410 relights the complete copied vertex
-        // buffer of each flagged map chunk. Props and actors are separate
-        // buffers and are not affected by this pass.
+        // buffer of each flagged map chunk. Props and actors use the separate
+        // object-origin sample implemented by sampleObjectLighting.
         const dst = vertexIndex * 10 + 6;
         const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;

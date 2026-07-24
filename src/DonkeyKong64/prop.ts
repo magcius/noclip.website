@@ -11,6 +11,8 @@ import { Vec3UnitY } from '../MathHelpers.js';
 import { assert, hexzero, nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { initDL } from './material.js';
+import { buildObjectLighting } from './light.js';
+import type { ObjectLightingEnvironment } from './light.js';
 import type { DK64Renderer, InstanceScript, Mesh, ROMData } from './scenes.js';
 
 export interface SetupProp {
@@ -866,32 +868,32 @@ function initRuntimePropMaterial(state: RSPState, quad: RuntimePropQuad): void {
     state.gDPSetTileSize(0, 0, 0, (quad.width - 1) << 2, (quad.height - 1) << 2);
 }
 
-function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, view: DataView, instances: SetupProp[], worldScale: number): void {
+function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, view: DataView, instances: SetupProp[], worldScale: number, lightingEnvironment: ObjectLightingEnvironment): void {
     for (const quad of parseRuntimePropQuads(view)) {
         if (quad.width === 0 || quad.height === 0 || quad.size > ImageSize.G_IM_SIZ_32b)
             continue;
-        const segmentBuffers: ArrayBufferSlice[] = [];
-        segmentBuffers[0x08] = createRuntimePropVertexBuffer(quad, instances.length);
-        // Pickup-style layout-2 props use the same segment-zero placeholder
-        // IDs and table-7 animation descriptors as regular model2 geometry.
-        const indexedTextures = parseModel2IndexedTextures(view, romData);
-        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
-        initRuntimePropMaterial(state, quad);
-        const billboards: NonNullable<Mesh['spriteBillboards']> = [];
-        for (let i = 0; i < instances.length; i++) {
+        for (const prop of instances) {
+            const segmentBuffers: ArrayBufferSlice[] = [];
+            segmentBuffers[0x08] = createRuntimePropVertexBuffer(quad, 1);
+            // Pickup-style layout-2 props use the same segment-zero
+            // placeholder IDs and table-7 animation descriptors as regular
+            // model2 geometry.
+            const indexedTextures = parseModel2IndexedTextures(view, romData);
+            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
+            initRuntimePropMaterial(state, quad);
             const firstVertex = sharedOutput.vertices.length;
-            state.gSPVertex(0x08000000 + i * 4 * 0x10, 4, 0);
+            state.gSPVertex(0x08000000, 4, 0);
             state.gSPTri(0, 1, 2);
             state.gSPTri(0, 2, 3);
-            const prop = instances[i];
             const scale = prop.scale * worldScale;
-            billboards.push({
+            const origin = vec3.fromValues(
+                prop.position[0] * worldScale,
+                prop.position[1] * worldScale,
+                prop.position[2] * worldScale,
+            );
+            const billboards: NonNullable<Mesh['spriteBillboards']> = [{
                 firstVertex,
-                origin: vec3.fromValues(
-                    prop.position[0] * worldScale,
-                    prop.position[1] * worldScale,
-                    prop.position[2] * worldScale,
-                ),
+                origin,
                 centerX: 0,
                 centerY: 0,
                 halfWidth: 0,
@@ -899,23 +901,25 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
                 rightOffsets: quad.x.map((x) => x * scale),
                 upOffsets: quad.y.map((y) => y * scale),
                 forwardOffsets: quad.z.map((z) => z * scale),
-            });
+            }];
+            const output = state.finish();
+            if (output === null)
+                continue;
+            const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, spriteBillboards: billboards };
+            const meshData = sceneRenderer.addMeshData(device, cache, mesh);
+            const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
+            if (view.getUint8(0x1D) === 0)
+                renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
+            // The game sorts this object list far-to-near. At minimum these
+            // must follow translucent map surfaces; leaving the default opaque
+            // sort key lets water submitted later blend over the plants.
+            renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            renderer.setBackfaceCullingEnabled(false);
         }
-        const output = state.finish();
-        if (output === null)
-            continue;
-        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, spriteBillboards: billboards };
-        const meshData = sceneRenderer.addMeshData(device, cache, mesh);
-        const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
-        // The game sorts this object list far-to-near. At minimum these must
-        // follow translucent map surfaces; leaving the default opaque sort key
-        // lets water submitted later blend over the plants.
-        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-        renderer.setBackfaceCullingEnabled(false);
     }
 }
 
-export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], scripts: InstanceScript[], terrainTriangles: TerrainTriangle[], worldScale: number, fogEnabled: boolean): void {
+export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], scripts: InstanceScript[], terrainTriangles: TerrainTriangle[], worldScale: number, fogEnabled: boolean, lightingEnvironment: ObjectLightingEnvironment): void {
     if (props.length === 0 || romData.PropGeometryData.size === 0)
         return;
 
@@ -941,7 +945,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         void assetFamilyName;
         addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainTriangles, worldScale);
         if (view.getUint8(0x1C) === 2) {
-            addRuntimeModel2Props(device, cache, sceneRenderer, sharedOutput, romData, view, instances, worldScale);
+            addRuntimeModel2Props(device, cache, sceneRenderer, sharedOutput, romData, view, instances, worldScale, lightingEnvironment);
             continue;
         }
         // Header layout 1 stores an F3DEX2 display-list range followed by its
@@ -1000,10 +1004,15 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const meshData = sceneRenderer.addMeshData(device, cache, mesh);
         for (const prop of instances) {
             const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
-            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
+            const origin = vec3.fromValues(
                 prop.position[0] * worldScale,
                 prop.position[1] * worldScale,
                 prop.position[2] * worldScale,
+            );
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
+                origin[0],
+                origin[1],
+                origin[2],
             ]);
             mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[0] * Math.PI / 180);
             mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[1] * Math.PI / 180);
@@ -1013,6 +1022,12 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
                 prop.scale * worldScale,
                 prop.scale * worldScale,
             ]);
+            // func_global_asm_80636FFC samples one light color for the whole
+            // model2 object. Header byte 0x1D becomes runtime unkC2; nonzero
+            // values deliberately bypass the sample (self-lit torches are a
+            // visible example).
+            if (view.getUint8(0x1D) === 0)
+                renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
         }
     }
 }
