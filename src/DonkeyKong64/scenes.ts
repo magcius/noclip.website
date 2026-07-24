@@ -698,7 +698,6 @@ const lookatScratch = vec3.create();
 const modelViewScratch = mat4.create();
 export class RootMeshRenderer {
     private visible = true;
-    private frustumCullingEnabled = true;
     private cullBoundingBox: AABB | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
@@ -783,10 +782,6 @@ export class RootMeshRenderer {
         this.visible = v;
     }
 
-    public setFrustumCullingEnabled(v: boolean): void {
-        this.frustumCullingEnabled = v;
-    }
-
     public setCullBoundingBox(boundingBox: AABB): void {
         this.cullBoundingBox = boundingBox;
     }
@@ -831,7 +826,7 @@ export class RootMeshRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
-        if (this.frustumCullingEnabled && this.cullBoundingBox !== null
+        if (this.cullBoundingBox !== null
             && !viewerInput.camera.frustum.contains(this.cullBoundingBox))
             return;
 
@@ -968,13 +963,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
                 meshRenderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
-
-        const enableChunkFrustumCullingCheckbox = new UI.Checkbox('Enable Chunk Frustum Culling', true);
-        enableChunkFrustumCullingCheckbox.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setFrustumCullingEnabled(enableChunkFrustumCullingCheckbox.checked);
-        };
-        renderHacksPanel.contents.appendChild(enableChunkFrustumCullingCheckbox.elem);
 
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
