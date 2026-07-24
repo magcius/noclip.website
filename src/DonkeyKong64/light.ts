@@ -2,16 +2,10 @@ import { vec3 } from 'gl-matrix';
 
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
-import { actorModelScale, getActorRenderDefinition, parseActorAnimation, parseActorSkeleton, parseSetupActors, sampleActorBonePosition } from './actor.js';
+import { actorModelScale, getActorRenderDefinition, parseActorAnimation, parseActorSkeleton, sampleActorBonePosition } from './actor.js';
 import type { ActorAnimation, ActorSkeleton } from './actor.js';
 import type { DrawTextureBinding } from './f3dex2.js';
-
-interface LightSetupProp {
-    type: number;
-    position: vec3;
-    lightAnimation: number;
-    setupIndex: number;
-}
+import type { Setup } from './parse.js';
 
 interface LightAnimationKeyframe {
     intensity: number;
@@ -201,33 +195,13 @@ const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
     [{ intensity: .4, color: [255, 255, 255], radius: 250, duration: 20 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 20 }],
 ];
 
-function parseSetupProps(data: ArrayBufferSlice): LightSetupProp[] {
-    const view = data.createDataView();
-    const count = view.getUint32(0, false);
-    const props: LightSetupProp[] = [];
-    for (let i = 0; i < count; i++) {
-        const offs = 4 + i * 0x30;
-        props.push({
-            type: view.getUint16(offs + 0x28, false),
-            position: vec3.fromValues(
-                view.getFloat32(offs + 0x00, false),
-                view.getFloat32(offs + 0x04, false),
-                view.getFloat32(offs + 0x08, false),
-            ),
-            lightAnimation: view.getUint8(offs + 0x2E),
-            setupIndex: i,
-        });
-    }
-    return props;
-}
-
 export function buildDynamicLights(
-    setup: ArrayBufferSlice,
+    setup: Setup,
     loadPropGeometry: (type: number) => DataView,
     actorResources: ActorLightResources,
 ): DynamicLight[] {
     const lights: DynamicLight[] = [];
-    for (const prop of parseSetupProps(setup)) {
+    for (const prop of setup.props) {
         // Every model-two setup entry can select one of
         // D_global_asm_80748430's light animations through byte 0x2E.
         // func_global_asm_80663FCC's smaller flame/torch type list belongs to
@@ -250,7 +224,7 @@ export function buildDynamicLights(
             maxDistance: maxDistance > 0 ? maxDistance : 700,
         });
     }
-    for (const actor of parseSetupActors(setup)) {
+    for (const actor of setup.actors) {
         // Setup actor types are the runtime Actors enum minus 0x10.
         // 0x10 is ACTOR_SWINGING_LIGHT and 0x2A is the otherwise easy to
         // miss ACTOR_SWINGING_LIGHT_2 ("Cave light", model 0x97). Both use

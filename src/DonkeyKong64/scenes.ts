@@ -31,17 +31,18 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLight, DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
-import { actorModelScale, buildSkeletalActorMesh, getActorRenderDefinition, parseSetupActors, updateSkeletalActor } from './actor.js';
-import type { ActorRenderDefinition, SetupActor, SkeletalActorAnimation, SkeletalActorMesh } from './actor.js';
-import { addModel2Props, buildTerrainTriangles, parseSetupProps, updatePropMatrixAnimation } from './prop.js';
+import { actorModelScale, buildSkeletalActorMesh, getActorRenderDefinition, updateSkeletalActor } from './actor.js';
+import type { ActorRenderDefinition, SkeletalActorAnimation, SkeletalActorMesh } from './actor.js';
+import { addModel2Props, buildTerrainTriangles, updatePropMatrixAnimation } from './prop.js';
 import type { PropMatrixAnimation } from './prop.js';
 import {
-    GeneratedSurfaceMaterial, SceneNodeMaterial, getGeneratedSurfaceAnimatedTextureBindings,
+    getGeneratedSurfaceAnimatedTextureBindings,
     getSceneNodeAnimatedTextureBindings, initDL, initGeneratedSurfaceMaterial,
-    initSceneNodeMaterial, initSpriteMaterial, isGeneratedSurfaceMaterial,
-    isSceneNodeMaterial,
+    initSceneNodeMaterial, initSpriteMaterial,
 } from './material.js';
 import type { AnimatedMaterialTextureBinding } from './material.js';
+import { DK64Map, parseInstanceScripts, parseSetup } from './parse.js';
+import type { GeneratedSurface, InstanceScript, ScriptBlock, SetupActor, SetupProp } from './parse.js';
 import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import { AABB } from '../Geometry.js';
@@ -1178,312 +1179,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 }
 
-export class DisplayListInfo {
-    public ChunkID: number;
-    public dlStartAddr: number;
-    public VertStartIndex: number;
-    public textureAnimationGroup: number | null;
-    public materialIndex: SceneNodeMaterial | null;
-}
-
-interface GeneratedSurface {
-    textureScale: number;
-    frequencyS: number;
-    frequencyT: number;
-    amplitudeS: number;
-    amplitudeT: number;
-    phaseSpeedS: number;
-    phaseSpeedT: number;
-    scrollSpeedS: number;
-    scrollSpeedT: number;
-    step: number;
-    minX: number;
-    minZ: number;
-    maxX: number;
-    maxZ: number;
-    baseY: number;
-    colorR: number;
-    colorG: number;
-    colorB: number;
-    alphaBase: number;
-    alphaRange: number;
-    materialIndex: GeneratedSurfaceMaterial;
-    columns: number;
-    rows: number;
-}
-
-export class MapChunk {
-    public ambientColor: vec3;
-    public modulateVertexColors: boolean;
-
-    public dlOffsets: number[] = [];
-    public dlSizes: number[] = [];
-    public vertOffset: number;
-    public vertSize: number;
-
-    static readonly size = 0x34;
-
-    constructor(bin: ArrayBufferSlice, public id: number) {
-        let view = bin.createDataView();
-        // func_global_asm_80650ECC copies these bytes into the per-chunk
-        // ambient arrays used by func_global_asm_8065C990.
-        this.ambientColor = vec3.fromValues(
-            view.getUint8(0x00) / 0xFF,
-            view.getUint8(0x01) / 0xFF,
-            view.getUint8(0x02) / 0xFF,
-        );
-        this.modulateVertexColors = view.getUint32(0x08, false) === 1;
-
-        let dlTableIdx = 0x0C;
-        for (let i = 0; i < 4; i++) {
-            this.dlOffsets[i] = view.getInt32(dlTableIdx + 0x00);
-            this.dlSizes[i] = view.getUint32(dlTableIdx + 0x04);
-            dlTableIdx += 0x08;
-        }
-
-        this.vertOffset = view.getInt32(0x2C);
-        this.vertSize = view.getUint32(0x30);
-    }
-}
-
-export class MapSection {
-    public meshID: number;
-    public textureAnimationGroup: number;
-    public vertOffsets: number[] = [];
-
-    static readonly size = 0x1C;
-
-    constructor(bin: ArrayBufferSlice) {
-        let view = bin.createDataView();
-        this.textureAnimationGroup = view.getUint16(0x00, false);
-        this.meshID = view.getUint16(0x02, false);
-        for (let i = 0; i < 8; i++)
-            this.vertOffsets[i] = view.getUint16(0x08 + i*0x02);
-    }
-}
-
-export class DK64Map {
-    public bin: ArrayBufferSlice;
-    public vertBin: ArrayBufferSlice;
-    public f3dexBin: ArrayBufferSlice;
-    public chunkCount: number;
-    public chunks: MapChunk[] = [];
-    public sections: MapSection[] = [];
-    public displayLists: DisplayListInfo[] = [];
-    public animatedTextures: AnimatedTexture[] = [];
-    public generatedSurfaces: GeneratedSurface[] = [];
-    public effectPointSets: vec3[][] = [];
-    public fogEnabled: boolean;
-    public clipNear = 10;
-    public clipFar: number;
-
-    // headerInfo
-    private dlStart: number;
-    private vertStart: number;
-    private vertEnd: number;
-    private sectionStart: number;
-    private sectionEnd: number;
-    private chunkCountOffset: number;
-    private chunkStart: number;
-
-    constructor(buffer: ArrayBufferSlice, animTexData: ArrayBufferSlice[]) {
-        this.bin = buffer;
-
-        const view = this.bin.createDataView();
-        this.fogEnabled = (view.getUint8(0x08) & 1) !== 0;
-        this.clipFar = view.getInt16(0x0A, false);
-        this.dlStart = view.getUint32(0x34, false);
-        this.vertStart = view.getUint32(0x38, false);
-        this.vertEnd = view.getUint32(0x40, false);
-        this.sectionStart = view.getUint32(0x58, false);
-        this.sectionEnd = view.getUint32(0x5C, false);
-        this.chunkCountOffset = view.getUint32(0x64, false);
-        this.chunkStart = view.getUint32(0x68, false);
-
-        // MapGeometryHeader::unk40 is the point-set table used by generic
-        // prop-script effects (D_global_asm_807F5FD4 in the game). Its first
-        // word is the highest set index, followed by relative start pointers
-        // and one sentinel end pointer.
-        const effectPointStart = view.getUint32(0x40, false);
-        const effectPointSetMax = view.getInt32(effectPointStart, false);
-        const effectPointSetCount = effectPointSetMax + 1;
-        for (let set = 0; set < effectPointSetCount; set++) {
-            const start = effectPointStart + view.getUint32(effectPointStart + 4 + set * 4, false);
-            const end = effectPointStart + view.getUint32(effectPointStart + 8 + set * 4, false);
-            const points: vec3[] = [];
-            for (let offs = start; offs + 12 <= end; offs += 12) {
-                points.push(vec3.fromValues(
-                    view.getFloat32(offs + 0, false),
-                    view.getFloat32(offs + 4, false),
-                    view.getFloat32(offs + 8, false),
-                ));
-            }
-            this.effectPointSets.push(points);
-        }
-
-        const animatedTextureStart = view.getUint32(0x48, false);
-        const animatedTextureCount = view.getUint32(animatedTextureStart, false);
-        for (let i = 0; i < animatedTextureCount; i++) {
-            const offs = animatedTextureStart + 0x04 + i * 0x7C;
-            const frameCount = view.getUint8(offs + 0x03);
-            const frames: ArrayBufferSlice[] = [];
-            for (let j = 0; j < frameCount; j++) {
-                const textureIndex = view.getUint32(offs + 0x0C + j * 0x04, false);
-                const frame = animTexData[textureIndex];
-                if (frame !== undefined)
-                    frames.push(frame);
-            }
-            if (frames.length === 0)
-                continue;
-            this.animatedTextures.push({
-                segment: view.getUint8(offs + 0x00),
-                group: view.getUint8(offs + 0x01),
-                frameDuration: view.getUint8(offs + 0x02),
-                frames,
-            });
-        }
-
-        const generatedSurfaceStart = view.getUint32(0x4C, false);
-        const generatedSurfaceCount = view.getUint32(generatedSurfaceStart, false);
-        for (let i = 0; i < generatedSurfaceCount; i++) {
-            const offs = generatedSurfaceStart + 0x04 + i * 0x6C;
-            const step = view.getInt16(offs + 0x44, false);
-            const minX = view.getInt16(offs + 0x46, false);
-            const minZ = view.getInt16(offs + 0x48, false);
-            const maxX = view.getInt16(offs + 0x4A, false);
-            const maxZ = view.getInt16(offs + 0x4C, false);
-            const materialIndex = view.getUint8(offs + 0x66);
-            // These materials share the generated, sine-deformed surface mesh.
-            // Their runtime RDP handlers differ.
-            if (!isGeneratedSurfaceMaterial(materialIndex))
-                continue;
-            this.generatedSurfaces.push({
-                textureScale: view.getFloat32(offs + 0x00, false),
-                frequencyS: view.getFloat32(offs + 0x04, false),
-                frequencyT: view.getFloat32(offs + 0x08, false),
-                amplitudeS: view.getFloat32(offs + 0x0C, false),
-                amplitudeT: view.getFloat32(offs + 0x10, false),
-                phaseSpeedS: view.getInt32(offs + 0x14, false),
-                phaseSpeedT: view.getInt32(offs + 0x18, false),
-                scrollSpeedS: view.getFloat32(offs + 0x34, false),
-                scrollSpeedT: view.getFloat32(offs + 0x38, false),
-                step,
-                minX,
-                minZ,
-                maxX,
-                maxZ,
-                baseY: view.getInt16(offs + 0x4E, false),
-                colorR: view.getUint8(offs + 0x61),
-                colorG: view.getUint8(offs + 0x62),
-                colorB: view.getUint8(offs + 0x63),
-                alphaBase: view.getUint8(offs + 0x64),
-                alphaRange: view.getUint8(offs + 0x65),
-                materialIndex,
-                columns: Math.trunc((maxX - minX) / step) + 2,
-                rows: Math.trunc((maxZ - minZ) / step) + 2,
-            });
-        }
-
-        this.f3dexBin = this.bin.slice(this.dlStart, this.vertStart);
-        this.vertBin = this.bin.slice(this.vertStart, this.vertEnd);
-
-        this.chunkCount = view.getUint32(this.chunkCountOffset, false);
-
-        if (this.chunkCount > 0) {
-            for (let i = 0; i < this.chunkCount; i++) {
-                const chunkBuffer = this.bin.subarray(this.chunkStart + MapChunk.size * i, MapChunk.size);
-                this.chunks[i] = new MapChunk(chunkBuffer, i);
-            }
-        }
-
-        for (let i = 0; (i * MapSection.size) < (this.sectionEnd - this.sectionStart); i++) {
-            const sectionBuffer = this.bin.subarray(this.sectionStart + i * MapSection.size + 4, MapSection.size);
-            this.sections[i] = new MapSection(sectionBuffer);
-        }
-
-        console.log(`${this.chunkCount} CHUNKS PARSED FOR MAP`);
-
-        if (this.chunkCount > 0) {
-            this.chunks.forEach(chunk => {
-                for (let iDL = 0; iDL < 4; iDL++) {
-                    if (chunk.dlOffsets[iDL] !== -1 && chunk.dlSizes[iDL] !== 0){
-                        let snoopPresent = false;
-                        let currf3dexCnt = chunk.dlSizes[iDL];
-                        let currf3dexOffset = this.dlStart + chunk.dlOffsets[iDL];
-                        do {
-                            let command = view.getUint8(currf3dexOffset);
-
-                            // Load vertex segment buffer?
-                            if (command === 0x00) {
-                                snoopPresent = true;
-                                const sectionID = view.getUint32(currf3dexOffset + 0x04, false);
-                                const currSection = this.sections.find((section) => section.meshID === sectionID);
-
-                                if (currSection !== undefined) {
-                                    this.displayLists.push({
-                                        ChunkID: chunk.id,
-                                        dlStartAddr: currf3dexOffset - this.dlStart,
-                                        VertStartIndex: (chunk.vertOffset/0x10 + currSection.vertOffsets[iDL]),
-                                        textureAnimationGroup: currSection.textureAnimationGroup,
-                                        materialIndex: null,
-                                    });
-                                }
-                            }
-
-                            currf3dexOffset = currf3dexOffset + 8;
-                            currf3dexCnt = currf3dexCnt - 8;
-                        } while (currf3dexCnt > 0);
-
-                        if (!snoopPresent) {
-                            // More than 5 segments to chunk
-                            // Include Start as DL
-                            this.displayLists.push({
-                                ChunkID: chunk.id,
-                                dlStartAddr: chunk.dlOffsets[iDL],
-                                VertStartIndex: chunk.vertOffset/0x10,
-                                textureAnimationGroup: null,
-                                materialIndex: null,
-                            });
-                        }
-                    }
-                }
-            });
-        } else {
-            this.displayLists.push({
-                ChunkID: -1,
-                dlStartAddr: 0,
-                VertStartIndex: 0,
-                textureAnimationGroup: null,
-                materialIndex: null,
-            });
-        }
-
-        // Scene nodes can reference geometry-only display lists which the game
-        // surrounds with one of eight runtime-generated material handlers.
-        // These lists are independent of the normal map chunk table.
-        const rootNode = view.getUint32(0x30, false);
-        const specialDisplayListCount = view.getUint8(rootNode + 0xC5);
-        for (let i = 0; i < specialDisplayListCount; i++) {
-            const dlStartAddr = view.getInt32(rootNode + 0x1C + i * 0x04, false);
-            if (dlStartAddr < 0)
-                continue;
-            const materialIndex = view.getUint16(rootNode + 0x70 + i * 0x02, false);
-            // The remaining runtime handlers need their own exact RDP setup.
-            if (!isSceneNodeMaterial(materialIndex))
-                continue;
-            this.displayLists.push({
-                ChunkID: -1,
-                dlStartAddr,
-                VertStartIndex: 0,
-                textureAnimationGroup: null,
-                materialIndex,
-            });
-        }
-
-        console.log(`${this.displayLists.length} DISPLAY LISTS FOUND IN MAP MODEL`);
-    }
-}
-
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const view = buffer.createDataView();
     assert(view.getUint32(0x00) === 0x1F8B0800);
@@ -1513,62 +1208,6 @@ interface EnvironmentParticleData {
     distance: number;
     baseScale: number;
     risingScale: number;
-}
-
-interface ScriptCommand {
-    opcode: number;
-    args: [number, number, number];
-}
-
-interface ScriptBlock {
-    conditions: ScriptCommand[];
-    executions: ScriptCommand[];
-}
-
-export interface InstanceScript {
-    id: number;
-    behavior: number;
-    blocks: ScriptBlock[];
-}
-
-function parseScriptCommand(view: DataView, offs: number): ScriptCommand {
-    return {
-        opcode: view.getUint16(offs, false),
-        args: [
-            view.getInt16(offs + 2, false),
-            view.getInt16(offs + 4, false),
-            view.getInt16(offs + 6, false),
-        ],
-    };
-}
-
-function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
-    const view = data.createDataView();
-    const count = view.getUint16(0, false);
-    const scripts: InstanceScript[] = [];
-    let offs = 2;
-    for (let scriptIndex = 0; scriptIndex < count; scriptIndex++) {
-        const id = view.getUint16(offs, false);
-        const blockCount = view.getUint16(offs + 2, false);
-        const behavior = view.getUint16(offs + 4, false);
-        offs += 6;
-        const blocks: ScriptBlock[] = [];
-        for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
-            const conditionCount = view.getUint16(offs, false);
-            offs += 2;
-            const conditions: ScriptCommand[] = [];
-            for (let i = 0; i < conditionCount; i++, offs += 8)
-                conditions.push(parseScriptCommand(view, offs));
-            const executionCount = view.getUint16(offs, false);
-            offs += 2;
-            const executions: ScriptCommand[] = [];
-            for (let i = 0; i < executionCount; i++, offs += 8)
-                executions.push(parseScriptCommand(view, offs));
-            blocks.push({ conditions, executions });
-        }
-        scripts.push({ id, behavior, blocks });
-    }
-    return scripts;
 }
 
 class CommonData {
@@ -1712,12 +1351,12 @@ function addSceneActors(
     sceneRenderer: DK64Renderer,
     sharedOutput: RSPSharedOutput,
     romData: ROMData,
-    setup: ArrayBufferSlice,
+    setupActors: readonly SetupActor[],
     worldScale: number,
     lightingEnvironment: ObjectLightingEnvironment,
 ): void {
     const actors: { actor: SetupActor, definition: ActorRenderDefinition }[] = [];
-    for (const actor of parseSetupActors(setup)) {
+    for (const actor of setupActors) {
         const definition = getActorRenderDefinition(actor.type, romData.ActorDefinitions.get(actor.type) ?? 0);
         if (definition !== null)
             actors.push({ actor, definition });
@@ -1924,10 +1563,8 @@ function interpolateEnvironmentParticle(entry: EnvironmentParticleData, offset: 
     );
 }
 
-function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: DK64Map, mapID: number): void {
-    const props = parseSetupProps(romData.loadSetup());
+function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: DK64Map, mapID: number, props: readonly SetupProp[], scripts: InstanceScript[]): void {
     const propsByID = new Map(props.map((prop) => [prop.id, prop]));
-    const scripts = parseInstanceScripts(romData.loadScripts());
     const spriteByAddress = new Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
     const loopTicks = 900;
 
@@ -2052,8 +1689,7 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
         const romData = new ROMData(commonData, levelData, commonTextureGroups, unknownData);
         const map = new DK64Map(decompress(romData.MapData), romData.AnimTexData);
-        const setup = romData.loadSetup();
-        const setupProps = parseSetupProps(setup);
+        const setup = parseSetup(romData.loadSetup());
         const scripts = parseInstanceScripts(romData.loadScripts());
         const dynamicLights = buildDynamicLights(
             setup,
@@ -2187,9 +1823,9 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Surfaces, sceneRenderer.fogParams));
         }
 
-        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
-        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup, setupWorldScale, objectLightingEnvironment);
-        addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
+        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
+        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup.actors, setupWorldScale, objectLightingEnvironment);
+        addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID, setup.props, scripts);
         // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
         //     sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
 

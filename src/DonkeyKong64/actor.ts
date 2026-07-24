@@ -8,16 +8,7 @@ import type { AABB } from '../Geometry.js';
 import { assert } from '../util.js';
 import { computeSkeletalAnimationBoundingBox } from './cull.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
-
-export interface SetupActor {
-    type: number;
-    position: vec3;
-    scale: number;
-    rotationY: number;
-    lightSpeed: number;
-    lightColor: readonly [number, number, number];
-    lightCone: readonly [number, number];
-}
+import type { SetupActor } from './parse.js';
 
 export interface ActorAnimationPose {
     boneAngles: readonly number[];
@@ -228,41 +219,6 @@ export function sampleActorAnimationPose(animation: ActorAnimation, speed: numbe
         boneAngles.push((a + (b - a) * t) * Math.PI * 2 / 0x10000);
     }
     return { boneAngles };
-}
-
-export function parseSetupActors(data: ArrayBufferSlice): SetupActor[] {
-    const view = data.createDataView();
-    let offs = 4 + view.getUint32(0, false) * 0x30;
-    const mysteryCount = view.getUint32(offs, false);
-    offs += 4 + mysteryCount * 0x24;
-    const actorCount = view.getUint32(offs, false);
-    offs += 4;
-    const actors: SetupActor[] = [];
-    for (let i = 0; i < actorCount; i++, offs += 0x38) {
-        actors.push({
-            type: view.getUint16(offs + 0x32, false),
-            position: vec3.fromValues(
-                view.getFloat32(offs + 0x00, false),
-                view.getFloat32(offs + 0x04, false),
-                view.getFloat32(offs + 0x08, false),
-            ),
-            scale: view.getFloat32(offs + 0x0C, false),
-            rotationY: view.getInt16(offs + 0x30, false),
-            lightSpeed: view.getFloat32(offs + 0x10, false),
-            // The behavior passes these s32 fields through u16 temporaries,
-            // and createLight finally truncates them to u8.
-            lightColor: [
-                view.getInt32(offs + 0x14, false) & 0xFF,
-                view.getInt32(offs + 0x18, false) & 0xFF,
-                view.getInt32(offs + 0x1C, false) & 0xFF,
-            ],
-            lightCone: [
-                view.getFloat32(offs + 0x20, false),
-                view.getFloat32(offs + 0x24, false),
-            ],
-        });
-    }
-    return actors;
 }
 
 function initializeActorDL(state: RSPState): void {

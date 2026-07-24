@@ -14,16 +14,9 @@ import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.
 import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
-import type { DK64Renderer, InstanceScript, Mesh, ROMData, RootMeshRenderer } from './scenes.js';
+import type { InstanceScript, SetupProp } from './parse.js';
+import type { DK64Renderer, Mesh, ROMData, RootMeshRenderer } from './scenes.js';
 import { computeBillboardBoundingBox, computeMatrixAnimationBoundingBox } from './cull.js';
-
-export interface SetupProp {
-    id: number;
-    type: number;
-    position: vec3;
-    scale: number;
-    rotation: vec3;
-}
 
 export interface TerrainTriangle {
     vertices: [vec3, vec3, vec3];
@@ -33,31 +26,6 @@ export interface TerrainTriangle {
 interface TerrainSurface {
     y: number;
     normal: vec3;
-}
-
-export function parseSetupProps(data: ArrayBufferSlice): SetupProp[] {
-    const view = data.createDataView();
-    const count = view.getUint32(0, false);
-    const props: SetupProp[] = [];
-    for (let i = 0; i < count; i++) {
-        const offs = 4 + i * 0x30;
-        props.push({
-            id: view.getUint16(offs + 0x2A, false),
-            type: view.getUint16(offs + 0x28, false),
-            position: vec3.fromValues(
-                view.getFloat32(offs + 0x00, false),
-                view.getFloat32(offs + 0x04, false),
-                view.getFloat32(offs + 0x08, false),
-            ),
-            scale: view.getFloat32(offs + 0x0C, false),
-            rotation: vec3.fromValues(
-                view.getFloat32(offs + 0x18, false),
-                view.getFloat32(offs + 0x1C, false),
-                view.getFloat32(offs + 0x20, false),
-            ),
-        });
-    }
-    return props;
 }
 
 export function buildTerrainTriangles(sharedOutput: RSPSharedOutput): TerrainTriangle[] {
@@ -946,7 +914,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
     }
 }
 
-export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], scripts: InstanceScript[], terrainTriangles: TerrainTriangle[], worldScale: number, fogEnabled: boolean, lightingEnvironment: ObjectLightingEnvironment): void {
+export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: readonly SetupProp[], scripts: InstanceScript[], terrainTriangles: TerrainTriangle[], worldScale: number, fogEnabled: boolean, lightingEnvironment: ObjectLightingEnvironment): void {
     if (props.length === 0 || romData.PropGeometryData.size === 0)
         return;
 
