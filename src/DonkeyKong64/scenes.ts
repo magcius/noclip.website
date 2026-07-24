@@ -1161,7 +1161,7 @@ export class Map {
             });
         } else {
             this.displayLists.push({
-                ChunkID: 0,
+                ChunkID: -1,
                 dlStartAddr: 0,
                 VertStartIndex: 0,
                 textureAnimationGroup: null,
@@ -2286,7 +2286,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 continue;
             }
 
-            const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] : null;
+            const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] ?? null : null;
             const mesh: Mesh = {
                 sharedOutput,
                 rspState: state,
