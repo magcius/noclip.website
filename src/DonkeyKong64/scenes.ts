@@ -68,6 +68,13 @@ function translateSampler(cache: GfxRenderCache, texture: Texture, linear: boole
     });
 }
 
+function renderModeIsTranslucent(megaStateFlags: Partial<GfxMegaStateDescriptor>): boolean {
+    const blendState = megaStateFlags.attachmentsState?.[0]?.rgbBlendState;
+    return blendState !== undefined
+        && (blendState.blendSrcFactor !== GfxBlendFactor.One
+            || blendState.blendDstFactor !== GfxBlendFactor.Zero);
+}
+
 function resolveAnimatedMaterialTextures(bindings: readonly AnimatedMaterialTextureBinding[], textures: ArrayBufferSlice[]): AnimatedTexture[] {
     return bindings.map((binding) => ({
         segment: binding.segment,
@@ -164,7 +171,7 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
-    private isAnimated = false;
+    private isTranslucent = false;
     private crossfadeDuration = 0;
     public visible = true;
 
@@ -184,7 +191,6 @@ class DrawCallInstance {
 
             const animation = binding.animation;
             if (animation !== undefined) {
-                this.isAnimated = true;
                 this.animatedTextureEntries[i] = animation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
                 this.animatedTextureMappings[i] = this.animatedTextureEntries[i].map((entry, frame) => {
                     if (frame === 0)
@@ -202,6 +208,7 @@ class DrawCallInstance {
             this.crossfadeDuration = Math.max(drawCall.textureBindings[0].animation!.frameDuration, 1);
 
         this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
+        this.isTranslucent = this.crossfadeDuration > 0 || renderModeIsTranslucent(this.megaStateFlags);
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }
@@ -312,7 +319,7 @@ class DrawCallInstance {
             this.textureMappings[i] = mappings[frame];
         }
         const renderInst = renderInstManager.newRenderInst();
-        if (this.isAnimated)
+        if (this.isTranslucent)
             renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
