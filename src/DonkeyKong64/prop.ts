@@ -951,9 +951,6 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const mainDisplayListStart = view.getUint32(0x40, false);
         const secondaryDisplayListStart = view.getUint32(0x44, false);
         const vertexStart = view.getUint32(0x48, false);
-        // Some props have a hierarchy driven by segment-9 matrices generated
-        // at runtime. Supported tracks are decoded below; other matrix
-        // features opt out with a one-time warning.
         const usesRuntimeMatrices = propDisplayListUsesMatrices(view, mainDisplayListStart, secondaryDisplayListStart);
         // Matrix-driven props are accepted by capability, not type. The
         // decoder below opts out when a track uses channels we do not yet

@@ -159,9 +159,7 @@ export function initDL(rspState: RSPState, opaque: boolean, fogEnabled = false):
         rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
     }
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
-    // Initially 2-cycle, though this can change.
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    // Some objects assume this gets set and might rely on stage rendering first.
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
 }
 
@@ -578,8 +576,6 @@ function getSpriteImageFormat(sprite: SpriteMaterialDefinition): ImageFormat {
 }
 
 function getSpriteImageSize(sprite: SpriteMaterialDefinition): ImageSize {
-    // The four branches in func_global_asm_80715E94 are the N64's four
-    // texel sizes in order.
     assert(sprite.codec >= 0 && sprite.codec <= 3);
     return sprite.codec as ImageSize;
 }

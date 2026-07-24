@@ -57,24 +57,14 @@ export interface ActorRenderDefinition {
 }
 
 export function getActorRenderDefinition(type: number, model: number): ActorRenderDefinition | null {
-    // Behavior-specific animation overrides. Actors without an override still
-    // render in their neutral skeletal pose, so new setup types opt in by
-    // default as soon as the extractor can resolve a nonzero model.
     if (type === 0x10)
         return { model: 0x81, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
     if (type === 0x2A)
         return { model: 0x97, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
-    // Setup actor 0x77 becomes ACTOR_BOOMBOX (0x87) after the engine adds
-    // 0x10. func_global_asm_806A1F64 selects animation 0x63F during normal
-    // gameplay (0x640 in cutscenes) and passes an 8.0 speed multiplier.
+    // ACTOR_BOOMBOX uses animation 0x63F at 8x in func_global_asm_806A1F64.
     if (type === 0x77)
         return { model: 0x64, animation: 0x63F, animationSpeed: 8.0, renderer: 'skeletal' };
-    // Setup actor 0x52 becomes the tag-barrel actor 0x62 after the engine's
-    // +0x10 type lookup. World/Troff swap barrels 0x78 and 0x79 use thin
-    // wrappers around the same behavior. func_global_asm_8068412C advances
-    // their 12-bit yaw and vertical bob phase by 0x32 every update while the
-    // barrel is not entered. The bob is centered on its setup Y with an
-    // amplitude of five game units.
+    // func_global_asm_8068412C advances tag barrels' yaw and bob phase by 0x32.
     if ((type === 0x52 || type === 0x78 || type === 0x79) && model !== 0)
         return {
             model,
@@ -140,8 +130,6 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
             `unsupported header flags 0x${(flags & ~0x0002).toString(16)} are set`,
         );
     }
-    // The frame stride lets us safely ignore rotations for bones absent from
-    // the model, but they are not available to attachments or effects.
     // TODO: Retain extra animation bones when actor attachments require them.
     if (animationBoneCount > boneCount) {
         warnAnimationFeatureOnce(
@@ -222,17 +210,12 @@ export function sampleActorAnimationPose(animation: ActorAnimation, speed: numbe
 }
 
 function initializeActorDL(state: RSPState): void {
-    // func_global_asm_80630DCC emits D9FFFFFF 00200001 before the actor:
-    // Z-buffer and smooth shading are enabled, but G_SHADE/G_LIGHTING are not.
-    // The lantern's TEXEL0 * SHADE combiner consequently receives white SHADE,
-    // which is what makes the texture appear self-lit.
+    // func_global_asm_80630DCC leaves G_SHADE and G_LIGHTING disabled.
     state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADING_SMOOTH);
     state.gDPSetOtherModeL(0, 29, 0x0C192078);
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     state.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
-    // func_global_asm_80630DCC emits an opaque primitive color before the
-    // actor's display list. Without it this combiner starts from black.
     state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
 }
 
@@ -378,10 +361,7 @@ export function buildSkeletalActorMesh(
     }
     const skeleton = parseActorSkeleton(geometry);
     if (skeleton.offsets.length === 0) {
-        // Static actor models still select segment-4 matrix zero in their
-        // display lists. The engine supplies the actor's identity/root matrix
-        // there; use a synthetic root so the shared CPU skinning path applies
-        // the same no-op local transform.
+        // Static actors still select an identity matrix from segment 4.
         skeleton.offsets.push(vec3.create());
         skeleton.parents.push(-1);
     }
@@ -465,9 +445,6 @@ export function updateSkeletalActor(
             animation.sourcePositions[i * 3 + 1],
             animation.sourcePositions[i * 3 + 2],
         );
-        // Actor display lists select a segment-4 matrix before loading
-        // bone-local vertices. The game's generated bone matrix is therefore
-        // applied directly; there is no inverse-bind correction.
         vec3.transformMat4(skinnedPosition, sourcePosition, currentBoneMatrices[bone]);
         const vertexIndex = animation.firstVertex + i;
         vertices[vertexIndex].x = skinnedPosition[0];

@@ -484,58 +484,6 @@ function main() {
     // relative to PointerTableOffset, and the next 32 words are slot counts.
     // Some sparse tables pad their final slots with the next table's start;
     // extractCompressedTable stops at that sentinel.
-    //
-    // Extraction inventory (names match `pointertable_e` in the DK64 decomp):
-    // 00 MIDI: TODO: not extracted; audio playback is not implemented.
-    // 01 map geometry: extracted as MapData; TODO: interpret every map-header
-    //    section, scene-node variant, and runtime material handler.
-    // 02 map walls: TODO: not extracted or interpreted (wall collision).
-    // 03 map floors: TODO: not extracted or interpreted (floor collision).
-    // 04 prop geometry: extracted as PropGeometryData; TODO: interpret every
-    //    prop header/display-list variant, animation, and LOD path.
-    // 05 actor geometry: every nonzero model referenced by a map's setup
-    //    actors is extracted; unsupported model families opt out at runtime.
-    // 06 unused: TODO: verify that no retail map references this table.
-    // 07 uncompressed textures: partially extracted as AnimTexData; TODO:
-    //    archive the complete table instead of only known map/sprite frames.
-    // 08 cutscenes: TODO: not extracted or interpreted.
-    // 09 setup: extracted raw as SetupData; model2 props are partially
-    //    interpreted; TODO: identify the 0x24-byte middle records and render
-    //    actor/model1 entries and all remaining model2 behaviors.
-    // 10 instance scripts: extracted raw as ScriptData; TODO: interpret the
-    //    complete condition/action language and stateful object behavior.
-    // 11 animations: maps archive behavior-specific animations whose
-    //    selection is understood; other actors render in their neutral pose.
-    // 12 text: TODO: not extracted or interpreted.
-    // 13 animation code: TODO: not extracted or interpreted.
-    // 14 HUD textures: the pre-map panorama renderer uses entries 0x2D and
-    //    0x2E on the maps selected by func_global_asm_80707980. Other HUD
-    //    textures are not extracted until their rendering paths are handled.
-    // 15 paths: TODO: not extracted or interpreted.
-    // 16 spawners/fences: TODO: not extracted or rendered.
-    // 17 DKTV: TODO: not extracted; not map geometry.
-    // 18 triggers/loading zones: TODO: not extracted or visualized.
-    // 19 unknown: TODO: identify, inventory references, and extract if needed.
-    // 20 unknown per-map data: TODO: identify, extract, and interpret.
-    // 21 autowalks: TODO: not extracted or visualized.
-    // 22 ambient critters: extracted raw as CritterData; TODO: interpret all
-    //    region fields and render the critters.
-    // 23 exits: TODO: not extracted or visualized.
-    // 24 race checkpoints: TODO: not extracted or visualized.
-    // 25 compressed geometry textures: partially extracted as TexData; TODO:
-    //    archive all entries rather than only the range reached by sprites.
-    // 26 uncompressed sizes: TODO: not extracted; retain when generic pointer
-    //    table extraction needs the game's authoritative decompressed sizes.
-    // 27 unused: TODO: verify that no retail map/runtime path uses it.
-    // 28 unused: TODO: verify that no retail map/runtime path uses it.
-    // 29 unused: TODO: verify that no retail map/runtime path uses it.
-    // 30 unused: TODO: verify that no retail map/runtime path uses it.
-    // 31 unused: TODO: verify that no retail map/runtime path uses it.
-    //
-    // Data outside the pointer tables which is currently archived:
-    // SpriteData, CustomScriptFunctionData, and EnvironmentParticleData come
-    // from the global overlay. TODO: inventory other map-rendering tables in
-    // overlays as they are discovered instead of leaving implicit constants.
     // TODO: locate this directory by ROM revision/signature; all addresses and
     // overlay offsets below currently describe only the USA ROM.
     // func_global_asm_80707980's current_map jump table. These are the only
@@ -591,7 +539,6 @@ function main() {
     const actorModelByType = new Map(extractor.getActorDefinitions()
         .map(({ type, model }) => [type, model] as const));
 
-    // Texture data table.
     const TexData: ArrayBufferSlice[] = [];
     const textureCount = Math.max(...SpriteData
         .filter((sprite) => sprite.table === 1)
@@ -926,8 +873,6 @@ function main() {
             textureUsage.geometry.add(backdropTextureIndex);
         levels.push({
             MapData: mapData,
-            // Both panorama branches use the same 320x240 source rectangle
-            // and are rendered before map geometry.
             Backdrop: backdropTextureID !== undefined
                 ? { TextureID: backdropTextureID, TextureIndex: backdropTextureIndex! }
                 : null,
@@ -1260,8 +1205,6 @@ function main() {
             EnvironmentParticleData: source.EnvironmentParticleData,
             TexData: makeTextureEntries(TexData, (id) => geometryOwners.get(id)?.length === 1 && geometryOwners.get(id)![0] === mapID),
             AnimTexData: makeTextureEntries(AnimTexData, (id) => animatedOwners.get(id)?.length === 1 && animatedOwners.get(id)![0] === mapID),
-            // Future rendering paths can set this when they deliberately
-            // reference data whose ownership is not yet understood.
             UsesUnknownTextures: false,
         };
         const commonTextureGroupIDs = commonTextureGroups

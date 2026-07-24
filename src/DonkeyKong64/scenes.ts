@@ -801,7 +801,6 @@ export class RootMeshRenderer {
             this.rootNodeRenderer = sharedRenderer.rootNodeRenderer;
             this.ownsRootNodeRenderer = false;
         } else {
-            // Traverse the node tree.
             this.rootNodeRenderer = this.buildGeoNodeRenderer(device, cache, geo);
             this.ownsRootNodeRenderer = true;
         }
@@ -1332,7 +1331,6 @@ export class ROMData {
     public loadAnimation(id: number): ArrayBufferSlice {
         const data = this.AnimationData.get(id);
         assert(data !== undefined);
-        // Pointer table 11 stores animation files uncompressed.
         return data;
     }
 
@@ -1826,9 +1824,6 @@ class SceneDesc implements Viewer.SceneDesc {
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
         addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup.actors, setupWorldScale, objectLightingEnvironment);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID, setup.props, scripts);
-        // for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
-        //     sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
-
         return sceneRenderer;
     }
 
