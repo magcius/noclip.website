@@ -63,6 +63,8 @@ export class RSPState {
 
     private stateChanged: boolean = false;
     private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
+    private vertexCacheSourceAddresses = nArray(64, () => 0);
+    public vertexSourceAddresses: number[] = [];
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new F3DEX.TextureState();
@@ -143,6 +145,7 @@ export class RSPState {
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
             this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
+            this.vertexCacheSourceAddresses[v0 + i] = dramAddr + i * 0x10;
         }
     }
 
@@ -281,6 +284,9 @@ export class RSPState {
         this.sharedOutput.loadVertex(this.vertexCache[i0]);
         this.sharedOutput.loadVertex(this.vertexCache[i1]);
         this.sharedOutput.loadVertex(this.vertexCache[i2]);
+        this.vertexSourceAddresses[this.vertexCache[i0].outputIndex] = this.vertexCacheSourceAddresses[i0];
+        this.vertexSourceAddresses[this.vertexCache[i1].outputIndex] = this.vertexCacheSourceAddresses[i1];
+        this.vertexSourceAddresses[this.vertexCache[i2].outputIndex] = this.vertexCacheSourceAddresses[i2];
         this.sharedOutput.indices.push(
             this.vertexCache[i0].outputIndex,
             this.vertexCache[i1].outputIndex,

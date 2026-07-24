@@ -4,6 +4,7 @@ import { gunzipSync, inflateRawSync } from 'zlib';
 const pointerTableOffset = 0x101C50;
 const mapTableOffset = 0x15232C;
 const propGeometryTableOffset = 0x82A06C;
+const actorGeometryTableOffset = 0x8D3018;
 const setupTableOffset = 0xD0E86C;
 const scriptTableOffset = 0xD3B56C;
 const spawnerTableOffset = 0x1170D44;
@@ -17,6 +18,11 @@ const globalASMVirtualBase = 0x805FB300;
 const customScriptFunctionTableOffset = 0x14CB70;
 const environmentParticleTableOffset = 0x14D8A0;
 const environmentParticleCount = 13;
+const lightAnimationTableAddress = 0x80748430;
+const lightAnimationCount = 27;
+const actorDefinitionTableAddress = 0x8074E8B0;
+const actorDefinitionCount = 0x80;
+const actorBehaviorTableAddress = 0x8074C0A0;
 
 function parseNumber(s: string): number {
     if (s.startsWith('0x'))
@@ -37,9 +43,11 @@ function getPointerTableData(rom: Buffer, tableOffset: number, fileID: number, n
         return getPointerTableData(rom, tableOffset, targetMapID, name);
     }
 
-    if (rom.readUInt32BE(romOffset) !== 0x1F8B0800)
-        throw new Error(`${name} ${hex(fileID, 2)} does not point to a DK64 gzip stream`);
-    return inflateRawSync(rom.subarray(romOffset + 0x0A));
+    if (rom.readUInt32BE(romOffset) === 0x1F8B0800)
+        return inflateRawSync(rom.subarray(romOffset + 0x0A));
+    const nextPointer = rom.readUInt32BE(tableOffset + (fileID + 1) * 4);
+    const nextROMOffset = (nextPointer & 0x7FFFFFFF) + pointerTableOffset;
+    return rom.subarray(romOffset, nextROMOffset);
 }
 
 function getMapData(rom: Buffer, mapID: number): Buffer {
@@ -184,6 +192,32 @@ function inspectPropGeometry(prop: Buffer, propType: number, disassemble: boolea
     disassembleDisplayList(prop, secondaryDisplayListStart, 0, vertexStart, 0x08);
 }
 
+function inspectActorGeometry(actor: Buffer, model: number, disassemble: boolean): void {
+    const runtimeBase = actor.readUInt32BE(0);
+    const displayListTable = actor.readUInt32BE(4) - runtimeBase + 0x28;
+    const boneCount = actor.readUInt8(0x20);
+    const displayListCount = actor.readUInt8(0x21);
+    const localOffset = (address: number) => address - runtimeBase + 0x28;
+    console.log(`\nActor geometry ${hex(model, 4)}, decompressed size ${hex(actor.length)}`);
+    console.log(`runtimeBase=${hex(runtimeBase, 8)} bones=${boneCount} displayLists=${displayListCount}`);
+    for (let offs = 0; offs < 0x28; offs += 4)
+        console.log(`header[${hex(offs, 2)}] ${hex(actor.readUInt32BE(offs), 8)}`);
+    for (let i = 0; i < displayListCount; i++) {
+        const pointer = actor.readUInt32BE(displayListTable + i * 4);
+        console.log(`displayList[${i}] ${hex(pointer, 8)} local=${hex(localOffset(pointer))}`);
+        if (disassemble)
+            disassembleDisplayList(actor, localOffset(pointer), 0, 0x28, 0x03);
+    }
+    console.log(`skeleton=${actor.subarray(localOffset(actor.readUInt32BE(8))).toString('hex').match(/.{1,32}/g)?.join(' ')}`);
+}
+
+function inspectAnimation(rom: Buffer, animation: number): void {
+    const animationTableOffset = pointerTableOffset + rom.readUInt32BE(pointerTableOffset + 11 * 4);
+    const data = getPointerTableData(rom, animationTableOffset, animation, 'Animation');
+    console.log(`\nAnimation ${hex(animation, 4)}, decompressed size ${hex(data.length)}`);
+    console.log(data.toString('hex').match(/.{1,32}/g)?.join('\n'));
+}
+
 function inspectMap(map: Buffer, mapID: number): void {
     const headerFields = [
         ['treeStart', 0x30],
@@ -222,9 +256,13 @@ function inspectMap(map: Buffer, mapID: number): void {
 
     const sectionStart = map.readUInt32BE(0x58);
     const sectionEnd = map.readUInt32BE(0x5C);
-    const sections = new Map<number, number>();
-    for (let offs = sectionStart + 4; offs < sectionEnd; offs += 0x1C)
-        sections.set(map.readUInt16BE(offs + 2), map.readUInt16BE(offs));
+    const sections = new Map<number, { group: number, vertexOffsets: number[] }>();
+    for (let offs = sectionStart + 4; offs < sectionEnd; offs += 0x1C) {
+        sections.set(map.readUInt16BE(offs + 2), {
+            group: map.readUInt16BE(offs),
+            vertexOffsets: Array.from({ length: 8 }, (_, i) => map.readUInt16BE(offs + 0x08 + i * 2)),
+        });
+    }
 
     const chunkCount = map.readUInt32BE(map.readUInt32BE(0x64));
     const chunkStart = map.readUInt32BE(0x68);
@@ -233,8 +271,23 @@ function inspectMap(map: Buffer, mapID: number): void {
     for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
         const chunkOffs = chunkStart + chunkIndex * 0x34;
         const vertOffset = map.readInt32BE(chunkOffs + 0x2C);
+        const vertSize = map.readUInt32BE(chunkOffs + 0x30);
+        const vertexDataStart = map.readUInt32BE(0x38) + vertOffset;
+        const bounds = [
+            [0x7FFF, -0x8000],
+            [0x7FFF, -0x8000],
+            [0x7FFF, -0x8000],
+        ];
+        for (let vertex = vertexDataStart; vertex < vertexDataStart + vertSize; vertex += 0x10) {
+            for (let axis = 0; axis < 3; axis++) {
+                const value = map.readInt16BE(vertex + axis * 2);
+                bounds[axis][0] = Math.min(bounds[axis][0], value);
+                bounds[axis][1] = Math.max(bounds[axis][1], value);
+            }
+        }
         console.log(
-            `chunk ${chunkIndex}: vertOffset=${hex(vertOffset)} `
+            `chunk ${chunkIndex}: vertOffset=${hex(vertOffset)} vertSize=${hex(vertSize)} `
+            + `bounds=(${bounds[0].join('..')},${bounds[1].join('..')},${bounds[2].join('..')}) `
             + `ambient=(${map.readUInt8(chunkOffs)},${map.readUInt8(chunkOffs + 1)},${map.readUInt8(chunkOffs + 2)}) `
             + `modulateVertexColors=${map.readUInt32BE(chunkOffs + 0x08) === 1}`,
         );
@@ -247,7 +300,9 @@ function inspectMap(map: Buffer, mapID: number): void {
             for (let offs = dlStart + relativeOffset; offs < dlStart + relativeOffset + size; offs += 8) {
                 if (map.readUInt8(offs) === 0x00) {
                     const sectionID = map.readUInt32BE(offs + 4);
-                    snoops.push(`${hex(sectionID)}(group ${sections.get(sectionID) ?? '?'})@${hex(offs - dlStart)}`);
+                    const section = sections.get(sectionID);
+                    const vertexBase = section === undefined ? '?' : hex(vertOffset + section.vertexOffsets[slot] * 0x10);
+                    snoops.push(`${hex(sectionID)}(group ${section?.group ?? '?'}, vertices ${vertexBase})@${hex(offs - dlStart)}`);
                 }
             }
             console.log(`  slot ${slot}: dl=${hex(relativeOffset)} size=${hex(size)} snoops=[${snoops.join(', ')}]`);
@@ -274,16 +329,14 @@ function inspectEffectPoints(map: Buffer, mapID: number): void {
 }
 
 function inspectSetup(setup: Buffer, mapID: number): void {
-    const lightPropTypes = new Set([0x0001, 0x000C, 0x0010, 0x00F3, 0x0134, 0x0135, 0x0138]);
     const propCount = setup.readUInt32BE(0);
     let offs = 4;
     console.log(`\nSetup ${hex(mapID, 2)}, decompressed size ${hex(setup.length)}`);
     console.log(`Props (${propCount}):`);
     for (let i = 0; i < propCount; i++, offs += 0x30) {
         const type = setup.readUInt16BE(offs + 0x28);
-        const light = lightPropTypes.has(type)
-            ? ` lightAnimation=${hex(setup.readUInt8(offs + 0x2E), 2)}`
-            : '';
+        const lightAnimation = setup.readUInt8(offs + 0x2E);
+        const light = lightAnimation !== 0 ? ` lightAnimation=${hex(lightAnimation, 2)}` : '';
         console.log(
             `${i.toString().padStart(3)} @${hex(offs, 4)} `
             + `type=${hex(type, 4)} id=${hex(setup.readUInt16BE(offs + 0x2A), 4)} `
@@ -307,11 +360,17 @@ function inspectSetup(setup: Buffer, mapID: number): void {
     offs += 4;
     console.log(`Actors (${actorCount}):`);
     for (let i = 0; i < actorCount; i++, offs += 0x38) {
+        const type = setup.readUInt16BE(offs + 0x32);
+        const light = type === 0x0010 || type === 0x002A
+            ? ` speed=${setup.readFloatBE(offs + 0x10).toFixed(3)}`
+                + ` color=(${setup.readInt32BE(offs + 0x14)},${setup.readInt32BE(offs + 0x18)},${setup.readInt32BE(offs + 0x1C)})`
+                + ` cone=(${setup.readFloatBE(offs + 0x20).toFixed(1)},${setup.readFloatBE(offs + 0x24).toFixed(1)})`
+            : '';
         console.log(
             `${i.toString().padStart(3)} @${hex(offs, 4)} `
-            + `type=${hex(setup.readUInt16BE(offs + 0x32), 4)} id=${hex(setup.readUInt16BE(offs + 0x34), 4)} `
+            + `type=${hex(type, 4)} id=${hex(setup.readUInt16BE(offs + 0x34), 4)} `
             + `pos=(${setup.readFloatBE(offs).toFixed(1)}, ${setup.readFloatBE(offs + 4).toFixed(1)}, ${setup.readFloatBE(offs + 8).toFixed(1)}) `
-            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} rotY=${setup.readInt16BE(offs + 0x30)}`,
+            + `scale=${setup.readFloatBE(offs + 0x0C).toFixed(3)} rotY=${setup.readInt16BE(offs + 0x30)}${light}`,
         );
     }
 }
@@ -519,10 +578,56 @@ function inspectSprites(rom: Buffer, spriteID: number | null): void {
     }
 }
 
+function inspectLightAnimations(rom: Buffer): void {
+    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
+    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
+    const globalASM = Buffer.concat([code, data]);
+    const table = lightAnimationTableAddress - globalASMVirtualBase;
+    console.log('\nDynamic light animations:');
+    for (let animation = 0; animation < lightAnimationCount; animation++) {
+        const keyframes: string[] = [];
+        for (let keyframe = 0; keyframe < 5; keyframe++) {
+            const offs = table + animation * 0x3C + keyframe * 0x0C;
+            const duration = globalASM.readInt16BE(offs + 0x0A);
+            if (duration === 0)
+                break;
+            keyframes.push(
+                `{intensity=${globalASM.readFloatBE(offs).toFixed(3)}`
+                + ` color=(${globalASM.readUInt8(offs + 4)},${globalASM.readUInt8(offs + 5)},${globalASM.readUInt8(offs + 6)})`
+                + ` radius=${globalASM.readInt16BE(offs + 8)} duration=${duration}}`,
+            );
+        }
+        console.log(`  ${hex(animation + 1, 2)}: ${keyframes.join(' ')}`);
+    }
+}
+
+function inspectActorDefinition(rom: Buffer, actorType: number): void {
+    const code = gunzipSync(rom.subarray(globalASMCodeROMOffset, globalASMDataROMOffset));
+    const data = gunzipSync(rom.subarray(globalASMDataROMOffset, globalASMDataROMOffset + globalASMDataCompressedSize));
+    const globalASM = Buffer.concat([code, data]);
+    const table = actorDefinitionTableAddress - globalASMVirtualBase;
+    for (let i = 0; i < actorDefinitionCount; i++) {
+        const offs = table + i * 0x30;
+        if (globalASM.readUInt16BE(offs) !== actorType)
+            continue;
+        const words: string[] = [];
+        for (let field = 4; field < 0x30; field += 4)
+            words.push(hex(globalASM.readUInt32BE(offs + field), 8));
+        console.log(
+            `\nActor definition ${hex(actorType, 4)}: tableIndex=${i} `
+            + `model=${hex(globalASM.readUInt16BE(offs + 2), 4)} `
+            + `behavior=${hex(globalASM.readUInt32BE(actorBehaviorTableAddress - globalASMVirtualBase + actorType * 4), 8)} `
+            + `words=[${words.join(', ')}]`,
+        );
+        return;
+    }
+    console.log(`\nActor definition ${hex(actorType, 4)} not found`);
+}
+
 function main(): void {
     const args = process.argv.slice(2);
     if (args.length < 1) {
-        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--texture=<id-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
+        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--dl=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--actor-model=<model-hex>] [--actor-dl] [--animation=<id-hex>] [--texture=<id-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--light-animations] [--actor-definition=<type-hex>] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
         console.error('Example: npm run inspect:DonkeyKong64 -- B0 --dl=9778');
         process.exit(1);
     }
@@ -563,6 +668,23 @@ function main(): void {
         );
     if (args.includes('--environment-particles'))
         inspectEnvironmentParticles(rom, mapID);
+    if (args.includes('--light-animations'))
+        inspectLightAnimations(rom);
+    const actorDefinitionArg = args.find((arg) => arg.startsWith('--actor-definition='));
+    if (actorDefinitionArg !== undefined)
+        inspectActorDefinition(rom, parseNumber(actorDefinitionArg.slice('--actor-definition='.length)));
+    const actorModelArg = args.find((arg) => arg.startsWith('--actor-model='));
+    if (actorModelArg !== undefined) {
+        const actorModel = parseNumber(actorModelArg.slice('--actor-model='.length));
+        inspectActorGeometry(
+            getPointerTableData(rom, actorGeometryTableOffset, actorModel - 1, 'Actor geometry'),
+            actorModel,
+            args.includes('--actor-dl'),
+        );
+    }
+    const animationArg = args.find((arg) => arg.startsWith('--animation='));
+    if (animationArg !== undefined)
+        inspectAnimation(rom, parseNumber(animationArg.slice('--animation='.length)));
     if (args.includes('--spawners'))
         inspectSpawners(getPointerTableData(rom, spawnerTableOffset, mapID, 'Spawners'), mapID);
     if (args.includes('--critters'))

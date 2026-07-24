@@ -29,6 +29,8 @@ import * as Deflate from '../Common/Compression/Deflate.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { buildDynamicLights, buildMapChunkLighting, updateDynamicLighting } from './light.js';
+import type { DynamicLighting } from './light.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -477,13 +479,7 @@ export interface Mesh {
         firstVertex: number;
         vertexCount: number;
     };
-    dynamicLighting?: {
-        ambientColor: vec3;
-        modulateVertexColors: boolean;
-        firstVertex: number;
-        vertexCount: number;
-        lights: readonly DynamicPointLight[];
-    };
+    dynamicLighting?: DynamicLighting;
     spriteBillboards?: {
         firstVertex: number;
         origin: vec3;
@@ -506,11 +502,19 @@ export interface Mesh {
 export class MeshData {
     public renderData: RenderData;
     private lastUpdateTick = -1;
+    private dynamicLightingEnabled = true;
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
         this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined);
         this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
+    }
+
+    public setDynamicLightingEnabled(enabled: boolean): void {
+        if (this.dynamicLightingEnabled === enabled)
+            return;
+        this.dynamicLightingEnabled = enabled;
+        this.lastUpdateTick = -1;
     }
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -539,77 +543,8 @@ export class MeshData {
             }
         }
 
-        if (lighting !== undefined) {
-            const camera = viewerInput.camera.worldMatrix;
-            const activeLights: {
-                origin: vec3;
-                innerRadius: number;
-                outerRadius: number;
-                color: [number, number, number];
-            }[] = [];
-            for (const light of lighting.lights) {
-                const cameraDistance = Math.hypot(
-                    camera[12] - light.origin[0],
-                    camera[13] - light.origin[1],
-                    camera[14] - light.origin[2],
-                ) / 3;
-                const distanceRatio = cameraDistance / light.maxDistance;
-                const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
-                if (cameraFade === 0)
-                    continue;
-                const keyframes = light.animation;
-                const totalDuration = keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0);
-                let animationTick = (tick + light.phase) % totalDuration;
-                let keyframeIndex = 0;
-                while (animationTick >= keyframes[keyframeIndex].duration) {
-                    animationTick -= keyframes[keyframeIndex].duration;
-                    keyframeIndex++;
-                }
-                const current = keyframes[keyframeIndex];
-                const next = keyframes[(keyframeIndex + 1) % keyframes.length];
-                const t = animationTick / current.duration;
-                const radius = current.radius + (next.radius - current.radius) * t;
-                const intensity = (current.intensity + (next.intensity - current.intensity) * t) * cameraFade;
-                activeLights.push({
-                    origin: light.origin,
-                    innerRadius: radius,
-                    outerRadius: radius * 3,
-                    color: [
-                        (current.color[0] + (next.color[0] - current.color[0]) * t) / 0xFF * intensity,
-                        (current.color[1] + (next.color[1] - current.color[1]) * t) / 0xFF * intensity,
-                        (current.color[2] + (next.color[2] - current.color[2]) * t) / 0xFF * intensity,
-                    ],
-                });
-            }
-            for (let i = 0; i < lighting.vertexCount; i++) {
-                const vertexIndex = lighting.firstVertex + i;
-                const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
-                let red = lighting.ambientColor[0];
-                let green = lighting.ambientColor[1];
-                let blue = lighting.ambientColor[2];
-                for (const light of activeLights) {
-                    const dx = vertex.x - light.origin[0];
-                    const dy = vertex.y - light.origin[1];
-                    const dz = vertex.z - light.origin[2];
-                    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                    if (distance >= light.outerRadius)
-                        continue;
-                    const falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
-                    red += light.color[0] * falloff;
-                    green += light.color[1] * falloff;
-                    blue += light.color[2] * falloff;
-                }
-                // The chunk flag selects whether the game modulates the
-                // accumulated light by the original material tint bytes.
-                const dst = vertexIndex * 10 + 6;
-                const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
-                const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
-                const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;
-                this.renderData.vertexBufferData[dst + 0] = Math.min(1, red) * baseRed;
-                this.renderData.vertexBufferData[dst + 1] = Math.min(1, green) * baseGreen;
-                this.renderData.vertexBufferData[dst + 2] = Math.min(1, blue) * baseBlue;
-            }
-        }
+        if (lighting !== undefined)
+            updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, viewerInput.camera.worldMatrix, tick, this.dynamicLightingEnabled);
 
         let spriteFade = 0;
         let hasSpriteFade = false;
@@ -876,6 +811,13 @@ class DK64Renderer implements Viewer.SceneGfx {
                 meshRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
+        const enableDynamicLightingCheckbox = new UI.Checkbox('Enable Dynamic Lighting', true);
+        enableDynamicLightingCheckbox.onchanged = () => {
+            for (const meshData of this.meshDatas)
+                meshData.setDynamicLightingEnabled(enableDynamicLightingCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableDynamicLightingCheckbox.elem);
 
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
@@ -1286,58 +1228,7 @@ interface SetupProp {
     position: vec3;
     scale: number;
     rotation: vec3;
-    lightAnimation: number;
-    setupIndex: number;
 }
-
-interface LightAnimationKeyframe {
-    intensity: number;
-    color: readonly [number, number, number];
-    radius: number;
-    duration: number;
-}
-
-interface DynamicPointLight {
-    origin: vec3;
-    animation: readonly LightAnimationKeyframe[];
-    phase: number;
-    maxDistance: number;
-}
-
-// D_global_asm_80748430, consumed by func_global_asm_8065EB10. Entry zero is
-// the "no light" setup value; the remaining indices are the game's keyframes.
-const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
-    [],
-    [{ intensity: .4, color: [255, 0, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 255], radius: 150, duration: 15 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }],
-    [{ intensity: .4, color: [0, 0, 255], radius: 150, duration: 15 }, { intensity: 1, color: [0, 0, 255], radius: 150, duration: 15 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 0], radius: 150, duration: 15 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 100, 100], radius: 110, duration: 15 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 300, duration: 25 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 25 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 0], radius: 110, duration: 15 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 500, duration: 8 }, { intensity: 1, color: [255, 100, 100], radius: 470, duration: 2 }],
-    [{ intensity: 1, color: [200, 200, 200], radius: 500, duration: 4 }, { intensity: 1, color: [150, 50, 50], radius: 350, duration: 2 }],
-    [{ intensity: 1, color: [0, 100, 255], radius: 150, duration: 15 }, { intensity: 1, color: [0, 250, 255], radius: 150, duration: 15 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 8 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 8 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 20, duration: 15 }, { intensity: 1, color: [255, 0, 0], radius: 110, duration: 15 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 1 }, { intensity: 1, color: [0, 0, 0], radius: 150, duration: 14 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 1 }, { intensity: 1, color: [0, 0, 0], radius: 150, duration: 14 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 100, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 100, duration: 15 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [120, 255, 255], radius: 120, duration: 15 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 100, duration: 5 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 120, duration: 25 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 25 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 25 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 25 }],
-    [{ intensity: 1, color: [255, 255, 255], radius: 150, duration: 25 }, { intensity: 1, color: [255, 0, 0], radius: 150, duration: 25 }],
-    [{ intensity: 1, color: [0, 150, 255], radius: 300, duration: 25 }, { intensity: 1, color: [0, 150, 255], radius: 120, duration: 25 }],
-    [{ intensity: .4, color: [255, 100, 100], radius: 180, duration: 15 }, { intensity: 1, color: [255, 100, 100], radius: 225, duration: 15 }],
-    [{ intensity: .4, color: [100, 170, 100], radius: 180, duration: 15 }, { intensity: 1, color: [100, 170, 100], radius: 225, duration: 15 }],
-    [{ intensity: .4, color: [255, 200, 120], radius: 180, duration: 15 }, { intensity: 1, color: [255, 200, 120], radius: 225, duration: 15 }],
-    [{ intensity: .4, color: [130, 70, 255], radius: 180, duration: 15 }, { intensity: 1, color: [130, 70, 255], radius: 225, duration: 15 }],
-    [{ intensity: .4, color: [0, 80, 255], radius: 180, duration: 15 }, { intensity: 1, color: [0, 80, 255], radius: 225, duration: 15 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 180, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 225, duration: 15 }],
-    [{ intensity: .4, color: [255, 255, 255], radius: 250, duration: 20 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 20 }],
-];
-
-const lightPropTypes = new Set([0x0001, 0x000C, 0x0010, 0x00F3, 0x0134, 0x0135, 0x0138]);
 
 interface TerrainTriangle {
     vertices: [vec3, vec3, vec3];
@@ -1429,8 +1320,6 @@ function parseSetupProps(data: ArrayBufferSlice): SetupProp[] {
                 view.getFloat32(offs + 0x1C, false),
                 view.getFloat32(offs + 0x20, false),
             ),
-            lightAnimation: view.getUint8(offs + 0x2E),
-            setupIndex: i,
         });
     }
     return props;
@@ -1823,55 +1712,6 @@ function parseRuntimePropQuads(view: DataView): RuntimePropQuad[] {
         });
     }
     return quads;
-}
-
-function buildDynamicPointLights(props: readonly SetupProp[], romData: ROMData): DynamicPointLight[] {
-    const lights: DynamicPointLight[] = [];
-    for (const prop of props) {
-        if (!lightPropTypes.has(prop.type) || prop.lightAnimation === 0)
-            continue;
-        const animation = lightAnimations[prop.lightAnimation];
-        if (animation === undefined || animation.length === 0)
-            continue;
-        const geometry = romData.loadPropGeometry(prop.type).createDataView();
-        const maxDistance = geometry.getUint16(0x1E, false);
-        lights.push({
-            origin: vec3.fromValues(prop.position[0] * 3, prop.position[1] * 3, prop.position[2] * 3),
-            animation,
-            // func_global_asm_8065EB10 adds the model instance index to
-            // object_timer so nearby flames do not pulse in lockstep.
-            phase: prop.setupIndex,
-            maxDistance: maxDistance > 0 ? maxDistance : 700,
-        });
-    }
-    return lights;
-}
-
-function filterDynamicLightsForVertices(sharedOutput: RSPSharedOutput, firstVertex: number, vertexCount: number, lights: readonly DynamicPointLight[]): DynamicPointLight[] {
-    if (vertexCount === 0)
-        return [];
-    const min = vec3.fromValues(Infinity, Infinity, Infinity);
-    const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
-    for (let i = 0; i < vertexCount; i++) {
-        const vertex = sharedOutput.vertices[firstVertex + i];
-        min[0] = Math.min(min[0], vertex.x);
-        min[1] = Math.min(min[1], vertex.y);
-        min[2] = Math.min(min[2], vertex.z);
-        max[0] = Math.max(max[0], vertex.x);
-        max[1] = Math.max(max[1], vertex.y);
-        max[2] = Math.max(max[2], vertex.z);
-    }
-    return lights.filter((light) => {
-        const radius = Math.max(...light.animation.map((keyframe) => keyframe.radius)) * 3;
-        let distanceSquared = 0;
-        for (let axis = 0; axis < 3; axis++) {
-            const delta = light.origin[axis] < min[axis]
-                ? min[axis] - light.origin[axis]
-                : light.origin[axis] > max[axis] ? light.origin[axis] - max[axis] : 0;
-            distanceSquared += delta * delta;
-        }
-        return distanceSquared < radius * radius;
-    });
 }
 
 function createRuntimePropVertexBuffer(quad: RuntimePropQuad, instanceCount: number): ArrayBufferSlice {
@@ -2301,8 +2141,9 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
         const romData = new ROMData(commonData, levelData, commonTextureGroups, unknownData);
         const map = new Map(decompress(romData.MapData), romData.AnimTexData);
-        const setupProps = parseSetupProps(romData.loadSetup());
-        const dynamicLights = buildDynamicPointLights(setupProps, romData);
+        const setup = romData.loadSetup();
+        const setupProps = parseSetupProps(setup);
+        const dynamicLights = buildDynamicLights(setup, (type) => romData.loadPropGeometry(type).createDataView());
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
@@ -2345,22 +2186,16 @@ class SceneDesc implements Viewer.SceneDesc {
                 continue;
             }
 
+            const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] : null;
             const mesh: Mesh = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
-                dynamicLighting: dl.ChunkID >= 0 ? {
-                    ambientColor: map.chunks[dl.ChunkID].ambientColor,
-                    modulateVertexColors: map.chunks[dl.ChunkID].modulateVertexColors,
-                    firstVertex,
-                    vertexCount: sharedOutput.vertices.length - firstVertex,
-                    lights: filterDynamicLightsForVertices(
-                        sharedOutput,
-                        firstVertex,
-                        sharedOutput.vertices.length - firstVertex,
-                        dynamicLights,
-                    ),
-                } : undefined,
+                dynamicLighting: buildMapChunkLighting(
+                    sharedOutput, output.drawCalls, firstVertex,
+                    state.vertexSourceAddresses, dl.VertStartIndex * 0x10,
+                    chunk, dynamicLights,
+                ),
             };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
