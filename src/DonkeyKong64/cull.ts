@@ -4,11 +4,18 @@ import type { ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
 import type { RSPSharedOutput } from '../BanjoKazooie/f3dex.js';
 import { Cyan } from '../Color.js';
 import { AABB } from '../Geometry.js';
+import type { Frustum } from '../Geometry.js';
 import type { DebugDraw } from '../gfx/helpers/DebugDraw.js';
 import type { RSPOutput } from './f3dex2.js';
 
+export interface CullGroup {
+    boundingBox: AABB;
+    visible: boolean;
+}
+
 interface CullableRenderer {
     setCullBoundingBox(boundingBox: AABB): void;
+    setCullParent(cullGroup: CullGroup): void;
 }
 
 interface RootTransformCullAnimation {
@@ -265,27 +272,31 @@ export function computeSkeletalAnimationBoundingBox(
 export class SceneCuller {
     public showBounds = false;
 
-    private chunkBoundingBoxes: (AABB | undefined)[] = [];
+    private chunkCullGroups: (CullGroup | undefined)[] = [];
 
-    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): AABB {
-        let chunkBoundingBox = this.chunkBoundingBoxes[chunkID];
-        if (chunkBoundingBox === undefined) {
-            chunkBoundingBox = boundingBox.clone();
-            this.chunkBoundingBoxes[chunkID] = chunkBoundingBox;
+    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): CullGroup {
+        let cullGroup = this.chunkCullGroups[chunkID];
+        if (cullGroup === undefined) {
+            cullGroup = { boundingBox: boundingBox.clone(), visible: true };
+            this.chunkCullGroups[chunkID] = cullGroup;
         } else {
-            chunkBoundingBox.union(chunkBoundingBox, boundingBox);
+            cullGroup.boundingBox.union(cullGroup.boundingBox, boundingBox);
         }
-        return chunkBoundingBox;
+        return cullGroup;
     }
 
     public setObjectCullBoundingBox(renderer: CullableRenderer, objectBoundingBox: AABB | null): void {
         if (objectBoundingBox === null)
             return;
-        let bestBoundingBox: AABB | null = null;
+        renderer.setCullBoundingBox(objectBoundingBox);
+
+        let bestCullGroup: CullGroup | null = null;
         let bestVolume = Infinity;
-        for (const boundingBox of this.chunkBoundingBoxes) {
-            if (boundingBox === undefined
-                || objectBoundingBox.min[0] < boundingBox.min[0] || objectBoundingBox.max[0] > boundingBox.max[0]
+        for (const cullGroup of this.chunkCullGroups) {
+            if (cullGroup === undefined)
+                continue;
+            const boundingBox = cullGroup.boundingBox;
+            if (objectBoundingBox.min[0] < boundingBox.min[0] || objectBoundingBox.max[0] > boundingBox.max[0]
                 || objectBoundingBox.min[1] < boundingBox.min[1] || objectBoundingBox.max[1] > boundingBox.max[1]
                 || objectBoundingBox.min[2] < boundingBox.min[2] || objectBoundingBox.max[2] > boundingBox.max[2])
                 continue;
@@ -293,19 +304,27 @@ export class SceneCuller {
                 * (boundingBox.max[1] - boundingBox.min[1])
                 * (boundingBox.max[2] - boundingBox.min[2]);
             if (volume < bestVolume) {
-                bestBoundingBox = boundingBox;
+                bestCullGroup = cullGroup;
                 bestVolume = volume;
             }
         }
-        renderer.setCullBoundingBox(bestBoundingBox ?? objectBoundingBox);
+        if (bestCullGroup !== null)
+            renderer.setCullParent(bestCullGroup);
+    }
+
+    public prepareToRender(frustum: Frustum): void {
+        for (const cullGroup of this.chunkCullGroups) {
+            if (cullGroup !== undefined)
+                cullGroup.visible = frustum.contains(cullGroup.boundingBox);
+        }
     }
 
     public drawBounds(debugDraw: DebugDraw): void {
         if (!this.showBounds)
             return;
-        for (const boundingBox of this.chunkBoundingBoxes) {
-            if (boundingBox !== undefined)
-                debugDraw.drawBoxLine(boundingBox, identityMatrix, Cyan);
+        for (const cullGroup of this.chunkCullGroups) {
+            if (cullGroup !== undefined)
+                debugDraw.drawBoxLine(cullGroup.boundingBox, identityMatrix, Cyan);
         }
     }
 }

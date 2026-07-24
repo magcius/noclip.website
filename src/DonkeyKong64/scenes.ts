@@ -46,6 +46,7 @@ import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import { AABB } from '../Geometry.js';
 import { SceneCuller, computeMeshLocalBoundingBox, computeMeshWorldBoundingBox } from './cull.js';
+import type { CullGroup } from './cull.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -698,6 +699,7 @@ const lookatScratch = vec3.create();
 const modelViewScratch = mat4.create();
 export class RootMeshRenderer {
     private visible = true;
+    private cullParent: CullGroup | null = null;
     private cullBoundingBox: AABB | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
@@ -786,6 +788,10 @@ export class RootMeshRenderer {
         this.cullBoundingBox = boundingBox;
     }
 
+    public setCullParent(cullGroup: CullGroup): void {
+        this.cullParent = cullGroup;
+    }
+
     public computeWorldBoundingBox(): AABB | null {
         const localBoundingBox = this.geometryData.getLocalBoundingBox();
         if (localBoundingBox === null)
@@ -825,6 +831,8 @@ export class RootMeshRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
+            return;
+        if (this.cullParent !== null && !this.cullParent.visible)
             return;
         if (this.cullBoundingBox !== null
             && !viewerInput.camera.frustum.contains(this.cullBoundingBox))
@@ -922,7 +930,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
         return renderer;
     }
 
-    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): AABB {
+    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): CullGroup {
         return this.sceneCuller.addChunkBoundingBox(chunkID, boundingBox);
     }
 
@@ -1039,6 +1047,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
         template.setBindingLayouts(bindingLayouts);
 
+        this.sceneCuller.prepareToRender(viewerInput.camera.frustum);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
@@ -2040,8 +2049,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams);
             if (dl.ChunkID >= 0) {
                 const boundingBox = meshData.getLocalBoundingBox();
-                if (boundingBox !== null)
-                    meshRenderer.setCullBoundingBox(sceneRenderer.addChunkBoundingBox(dl.ChunkID, boundingBox));
+                if (boundingBox !== null) {
+                    meshRenderer.setCullBoundingBox(boundingBox);
+                    meshRenderer.setCullParent(sceneRenderer.addChunkBoundingBox(dl.ChunkID, boundingBox));
+                }
             }
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
