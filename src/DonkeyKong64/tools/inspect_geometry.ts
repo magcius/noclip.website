@@ -317,6 +317,20 @@ function inspectMap(map: Buffer, mapID: number): void {
         console.log(`${i}: segment=${hex(map.readUInt8(offs), 2)} group=${map.readUInt8(offs + 1)} delay=${map.readUInt8(offs + 2)} frames=[${frames.join(', ')}]`);
     }
 
+    const generatedSurfaceStart = map.readUInt32BE(0x4C);
+    const generatedSurfaceCount = map.readUInt32BE(generatedSurfaceStart);
+    console.log(`\nGenerated surfaces (${generatedSurfaceCount}):`);
+    for (let i = 0; i < generatedSurfaceCount; i++) {
+        const offs = generatedSurfaceStart + 4 + i * 0x6C;
+        console.log(
+            `${i}: material=${map.readUInt8(offs + 0x66)} flags=${hex(map.readUInt8(offs + 0x67), 2)} `
+            + `step=${map.readInt16BE(offs + 0x44)} `
+            + `bounds=(${map.readInt16BE(offs + 0x46)},${map.readInt16BE(offs + 0x48)})`
+            + `..(${map.readInt16BE(offs + 0x4A)},${map.readInt16BE(offs + 0x4C)}) `
+            + `baseY=${map.readInt16BE(offs + 0x4E)}`,
+        );
+    }
+
     const sectionStart = map.readUInt32BE(0x58);
     const sectionEnd = map.readUInt32BE(0x5C);
     const sections = new Map<number, { group: number, vertexOffsets: number[] }>();

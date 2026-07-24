@@ -17,9 +17,9 @@ import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js'
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera.js';
 import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { translateCM, Texture, OtherModeH_Layout, OtherModeH_CycleType } from '../Common/N64/RDP.js';
+import { translateCM, Texture, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image.js";
+import { TextFilt } from "../Common/N64/Image.js";
 import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
@@ -35,6 +35,13 @@ import { actorModelScale, buildSkeletalActorMesh, getActorRenderDefinition, pars
 import type { ActorRenderDefinition, SetupActor, SkeletalActorAnimation, SkeletalActorMesh } from './actor.js';
 import { addModel2Props, buildTerrainTriangles, parseSetupProps, updatePropMatrixAnimation } from './prop.js';
 import type { PropMatrixAnimation } from './prop.js';
+import {
+    GeneratedSurfaceMaterial, SceneNodeMaterial, getGeneratedSurfaceAnimatedTextureBindings,
+    getSceneNodeAnimatedTextureBindings, initDL, initGeneratedSurfaceMaterial,
+    initSceneNodeMaterial, initSpriteMaterial, isGeneratedSurfaceMaterial,
+    isSceneNodeMaterial,
+} from './material.js';
+import type { AnimatedMaterialTextureBinding } from './material.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -56,110 +63,13 @@ function translateSampler(cache: GfxRenderCache, texture: Texture, linear: boole
     });
 }
 
-function initDL(rspState: RSPState, opaque: boolean): void {
-    rspState.gSPSetGeometryMode(RSP_Geometry.G_SHADE);
-    if (opaque) {
-        rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
-        rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING);
-    } else
-        rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
-    // initially 2-cycle, though this can change
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    // some objects seem to assume this gets set, might rely on stage rendering first
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
-}
-
-// D_global_asm_80747D80[4], used by map scene nodes for water. The game
-// generates this material display list at runtime, before submitting the
-// geometry-only display list stored in the map file.
-function initWaterMaterial(rspState: RSPState): void {
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    rspState.gSPClearGeometryMode(0xFFFFFFFF);
-    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 0);
-    rspState.gSPTexture(true, 1, 1, 0xFFFF, 0xFFFF);
-    rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
-    rspState.gDPSetCombine(0x00FF9441, 0xFF13FFFF);
-
-    // Handler 4 loads table-7 texture 0x3E0 once, then interprets the same
-    // TMEM contents through two independently scrolling IA8 render tiles.
-    rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 1, 0x0C000000);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 6, 0, 0, 6, 0);
-    rspState.gDPLoadBlock(7, 0, 0, 2047, 256);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 0, 0, 0, 6, 0, 0, 6, 0);
-    rspState.gDPSetTileSize(0, 0, 0, 0x0FC, 0x0FC);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 1, 0, 0, 6, 1, 0, 6, 1);
-    rspState.gDPSetTileSize(1, 0, 0, 0x0FC, 0x0FC);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 2, 0, 0, 6, 1, 0, 6, 1);
-    rspState.gDPSetTileSize(2, 0, 0, 0x0FC, 0x0FC);
-    rspState.setTextureScrollSpeeds([5, 2]);
-}
-
-function initWaterSurfaceMaterial(rspState: RSPState, scrollS: number, scrollT: number): void {
-    rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 1, 0x0D000000);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 0, 0, 7, 0, 0, 5, 14, 0, 5, 14);
-    rspState.gDPLoadBlock(7, 0, 0, 1023, 128);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 8, 0, 0, 0, 0, 5, 14, 0, 5, 14);
-    rspState.gDPSetTileSize(0, 0, 0, 0x07C, 0x07C);
-    rspState.gDPSetCombine(0x0020FE04, 0xFF13F3FF);
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    rspState.gSPClearGeometryMode(0xFFFFFFFF);
-    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 0);
-    rspState.gSPTexture(true, 1, 1, 0xFFFF, 0xFFFF);
-    rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 8, 0, 1, 0, 0, 5, 14, 0, 5, 14);
-    rspState.gDPSetTileSize(1, 0, 0, 0x07C, 0x07C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 8, 0, 2, 0, 0, 5, 13, 0, 5, 13);
-    rspState.gDPSetTileSize(2, 0, 0, 0x07C, 0x07C);
-    rspState.setTextureScrollSpeeds([scrollS, scrollT]);
-}
-
-function getSpriteImageFormat(sprite: SpriteData): ImageFormat {
-    // func_global_asm_80714778 copies SpriteData::unk6 to the runtime
-    // descriptor's unkA. func_global_asm_80715E94 then uses unkA & 7 as
-    // G_IM_FMT for every texture command.
-    return sprite.flags & 0x07;
-}
-
-function getSpriteImageSize(sprite: SpriteData): ImageSize {
-    // The four branches in func_global_asm_80715E94 are the N64's four
-    // texel sizes in order.
-    assert(sprite.codec >= 0 && sprite.codec <= 3);
-    return sprite.codec as ImageSize;
-}
-
-function initSpriteMaterial(rspState: RSPState, sprite: SpriteData, segment: number, color: readonly number[]): void {
-    const fmt = getSpriteImageFormat(sprite);
-    const siz = getSpriteImageSize(sprite);
-    const bitsPerPixel = 4 << siz;
-    const texelCount = sprite.width * sprite.height;
-    const loadCount = Math.min(0x07FF, Math.ceil(texelCount * bitsPerPixel / 16) - 1);
-    const line = Math.max(1, Math.ceil(sprite.width * bitsPerPixel / 64));
-    // G_TX_DXT_FRAC is 11: CALC_DXT rounds 2^11 / words-per-line up.
-    // Using 0x07FF here is one short for exact divisors (including both
-    // waterfall sprites), which shears the texture as it is loaded to TMEM.
-    const dxt = Math.max(1, Math.ceil(0x0800 / line));
-    const maskS = Math.ceil(Math.log2(sprite.width));
-    const maskT = Math.ceil(Math.log2(sprite.height));
-
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    rspState.gSPClearGeometryMode(0xFFFFFFFF);
-    rspState.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
-    rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
-    rspState.gDPSetOtherModeL(0, 29, 0x005049D8);
-    rspState.gDPSetCombine(0x00119623, 0xFF2FFFFF); // G_CC_MODULATEIA_PRIM
-    rspState.gSPSetPrimColor(0, color[0], color[1], color[2], color[3]);
-
-    // The game loads through a 16-bit tile for 4/8/16-bit sprites and a
-    // 32-bit tile for RGBA32, then renders using the definition's real size.
-    const loadSize = siz === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
-    rspState.gDPSetTextureImage(fmt, loadSize, 1, segment << 24);
-    rspState.gDPSetTile(fmt, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);
-    rspState.gDPLoadBlock(7, 0, 0, loadCount, dxt);
-    rspState.gDPSetTile(fmt, siz, line, 0, 0, 0, 0, maskT, 0, 0, maskS, 0);
-    rspState.gDPSetTileSize(0, 0, 0, (sprite.width - 1) << 2, (sprite.height - 1) << 2);
+function resolveAnimatedMaterialTextures(bindings: readonly AnimatedMaterialTextureBinding[], textures: ArrayBufferSlice[]): AnimatedTexture[] {
+    return bindings.map((binding) => ({
+        segment: binding.segment,
+        group: 0,
+        frameDuration: 0,
+        frames: [textures[binding.textureID]],
+    }));
 }
 
 function createSpriteVertexBuffer(sprite: SpriteData, quadCount = 1): ArrayBufferSlice {
@@ -185,7 +95,7 @@ function createSpriteVertexBuffer(sprite: SpriteData, quadCount = 1): ArrayBuffe
     return new ArrayBufferSlice(buffer);
 }
 
-function waterSurfaceHeight(surface: WaterSurface, x: number, z: number, tick: number): number {
+function generatedSurfaceHeight(surface: GeneratedSurface, x: number, z: number, tick: number): number {
     const phaseS = tick * surface.phaseSpeedS;
     const phaseT = tick * surface.phaseSpeedT;
     const angleS = (phaseS + Math.trunc(surface.frequencyS * x)) % 0x0FFF;
@@ -195,7 +105,7 @@ function waterSurfaceHeight(surface: WaterSurface, x: number, z: number, tick: n
         + Math.sin(angleT * Math.PI * 2 / 0x1000) * surface.amplitudeT;
 }
 
-function createWaterSurfaceVertexBuffer(surface: WaterSurface): ArrayBufferSlice {
+function createGeneratedSurfaceVertexBuffer(surface: GeneratedSurface): ArrayBufferSlice {
     const buffer = new ArrayBuffer(surface.columns * surface.rows * 0x10);
     const view = new DataView(buffer);
     let offs = 0;
@@ -203,7 +113,7 @@ function createWaterSurfaceVertexBuffer(surface: WaterSurface): ArrayBufferSlice
         const z = Math.min(surface.minZ + row * surface.step, surface.maxZ);
         for (let column = 0; column < surface.columns; column++) {
             const x = Math.min(surface.minX + column * surface.step, surface.maxX);
-            const y = waterSurfaceHeight(surface, x, z, 0);
+            const y = generatedSurfaceHeight(surface, x, z, 0);
             const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
                 ((y - surface.baseY) / (surface.amplitudeS + surface.amplitudeT))
                 * surface.alphaRange + surface.alphaBase,
@@ -225,6 +135,17 @@ function createWaterSurfaceVertexBuffer(surface: WaterSurface): ArrayBufferSlice
 
 const viewMatrixScratch = mat4.create();
 const texMatrixScratch = mat4.create();
+interface FogParams {
+    near: number;
+    far: number;
+    color: readonly [number, number, number, number];
+}
+
+function fogPositionToViewDistance(position: number, clipNear: number, clipFar: number): number {
+    const normalizedPosition = position / 1000;
+    return clipNear * clipFar / (clipFar - normalizedPosition * (clipFar - clipNear));
+}
+
 class DrawCallInstance {
     private textureEntry: Texture[] = [];
     private animatedTextureEntries: Texture[][] = [];
@@ -233,6 +154,7 @@ class DrawCallInstance {
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
     private alphaVisualizerEnabled = false;
+    private fogEnabled = false;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
@@ -241,7 +163,7 @@ class DrawCallInstance {
     private crossfadeDuration = 0;
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private fogParams: FogParams) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const textureIndex = drawCall.textureIndices[i];
@@ -298,6 +220,10 @@ class DrawCallInstance {
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN_LINEAR)
             program.defines.set('TEXTURE_GEN_LINEAR', '1');
 
+        if (this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG)) {
+            program.defines.set('USE_FOG', '1');
+        }
+
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
 
@@ -323,6 +249,11 @@ class DrawCallInstance {
 
     public setTexturesEnabled(v: boolean): void {
         this.texturesEnabled = v;
+        this.createProgram();
+    }
+
+    public setFogEnabled(v: boolean): void {
+        this.fogEnabled = v;
         this.createProgram();
     }
 
@@ -380,7 +311,8 @@ class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setDrawCount(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2);
+        const usesFog = this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG) !== 0;
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2 + (usesFog ? 8 : 0));
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         if (isSkybox)
@@ -396,6 +328,12 @@ class DrawCallInstance {
 
         this.computeTextureMatrix(texMatrixScratch, 1, viewerInput.time);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[1]
+
+        if (usesFog) {
+            offs += fillVec4(mappedF32, offs, this.fogParams.near, this.fogParams.far, 0, 0);
+            const fogColor = this.fogParams.color;
+            offs += fillVec4(mappedF32, offs, fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
+        }
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, this.crossfadeDuration > 0 ? 12 : 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
@@ -491,8 +429,8 @@ export interface Mesh {
     sharedOutput: RSPSharedOutput;
     rspState: RSPState;
     rspOutput: RSPOutput | null;
-    waterAnimation?: {
-        surface: WaterSurface;
+    generatedSurfaceAnimation?: {
+        surface: GeneratedSurface;
         firstVertex: number;
         vertexCount: number;
     };
@@ -525,7 +463,7 @@ export class MeshData {
     private spritePrimAlphas: number[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.waterAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propMatrixAnimation !== undefined);
+        this.renderData = new RenderData(device, cache, mesh.sharedOutput, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propMatrixAnimation !== undefined);
         this.spritePrimAlphas = mesh.rspOutput?.drawCalls.map((drawCall) => drawCall.DP_PrimColor[3]) ?? [];
     }
 
@@ -537,7 +475,7 @@ export class MeshData {
     }
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const animation = this.mesh.waterAnimation;
+        const animation = this.mesh.generatedSurfaceAnimation;
         const sprites = this.mesh.spriteBillboards;
         const lighting = this.mesh.dynamicLighting;
         const actorAnimation = this.mesh.actorAnimation;
@@ -555,7 +493,7 @@ export class MeshData {
             for (let i = 0; i < animation.vertexCount; i++) {
                 const vertexIndex = animation.firstVertex + i;
                 const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
-                const y = waterSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
+                const y = generatedSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
                 const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
                     ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
                 )));
@@ -642,6 +580,14 @@ export class MeshData {
     }
 }
 
+enum SceneRenderLayer {
+    MapGeometry,
+    Props,
+    Actors,
+    Surfaces,
+    Effects,
+}
+
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
@@ -663,6 +609,11 @@ class MeshRenderer {
     public setTexturesEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setTexturesEnabled(v);
+    }
+
+    public setFogEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setFogEnabled(v);
     }
 
     public setMonochromeVertexColorsEnabled(v: boolean): void {
@@ -696,7 +647,13 @@ export class RootMeshRenderer {
     public objectFlags = 0;
     private rootNodeRenderer: MeshRenderer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private geometryData: MeshData) {
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        private geometryData: MeshData,
+        public renderLayer: SceneRenderLayer,
+        private fogParams: FogParams,
+    ) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
@@ -719,7 +676,7 @@ export class RootMeshRenderer {
 
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                const drawCallInstance = new DrawCallInstance(device, cache, node.sharedOutput, node.rspOutput.drawCalls[i]);
+                const drawCallInstance = new DrawCallInstance(device, cache, node.sharedOutput, node.rspOutput.drawCalls[i], this.fogParams);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -739,12 +696,20 @@ export class RootMeshRenderer {
         this.rootNodeRenderer.setTexturesEnabled(v);
     }
 
+    public setFogEnabled(v: boolean): void {
+        this.rootNodeRenderer.setFogEnabled(v);
+    }
+
     public setMonochromeVertexColorsEnabled(v: boolean): void {
         this.rootNodeRenderer.setMonochromeVertexColorsEnabled(v);
     }
 
     public setAlphaVisualizerEnabled(v: boolean): void {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
+    }
+
+    public setVisible(v: boolean): void {
+        this.visible = v;
     }
 
     public setRotationYAnimation(anglePerTick: number): void {
@@ -825,6 +790,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
+    public fogParams: FogParams;
 
     public textureHolder = new FakeTextureHolder([]);
 
@@ -834,14 +800,27 @@ export class DK64Renderer implements Viewer.SceneGfx {
         return meshData;
     }
 
-    public addMeshRenderer(device: GfxDevice, cache: GfxRenderCache, meshData: MeshData): RootMeshRenderer {
-        const renderer = new RootMeshRenderer(device, cache, meshData);
+    public addPropMeshRenderer(device: GfxDevice, cache: GfxRenderCache, meshData: MeshData): RootMeshRenderer {
+        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams);
         this.meshRenderers.push(renderer);
         return renderer;
     }
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number) {
         this.renderHelper = new GfxRenderHelper(device);
+        // func_global_asm_80648C84 overrides Aztec's generic 990 start with
+        // 995 while its map-specific fog animation is idle. The animation can
+        // temporarily lower it toward 970 during gameplay.
+        const fogNearPosition = sceneID === 0x26 ? 995 : 990;
+        this.fogParams = {
+            // gSPFogPosition is expressed in projected-depth units. Convert
+            // through DK64's map projection instead of noclip's projection.
+            near: fogPositionToViewDistance(fogNearPosition, clipNear, clipFar),
+            far: fogPositionToViewDistance(999, clipNear, clipFar),
+            color: sceneID === 0x26
+                ? [0x8A / 0xFF, 0x52 / 0xFF, 0x16 / 0xFF, 0]
+                : [0, 0, 0, 0],
+        };
     }
 
     public adjustCameraController(c: CameraController) {
@@ -881,6 +860,13 @@ export class DK64Renderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
+        const enableFog = new UI.Checkbox('Enable Fog', false);
+        enableFog.onchanged = () => {
+            for (const meshRenderer of this.meshRenderers)
+                meshRenderer.setFogEnabled(enableFog.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableFog.elem);
+
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
             for (const meshRenderer of this.meshRenderers)
@@ -894,6 +880,22 @@ export class DK64Renderer implements Viewer.SceneGfx {
                 meshRenderer.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
+
+        const addVisibilityCheckbox = (label: string, layer: SceneRenderLayer): void => {
+            const checkbox = new UI.Checkbox(label, true);
+            checkbox.onchanged = () => {
+                for (const meshRenderer of this.meshRenderers) {
+                    if (meshRenderer.renderLayer === layer)
+                        meshRenderer.setVisible(checkbox.checked);
+                }
+            };
+            renderHacksPanel.contents.appendChild(checkbox.elem);
+        };
+        addVisibilityCheckbox('Show Map Geometry', SceneRenderLayer.MapGeometry);
+        addVisibilityCheckbox('Show Actors', SceneRenderLayer.Actors);
+        addVisibilityCheckbox('Show Props', SceneRenderLayer.Props);
+        addVisibilityCheckbox('Show Surfaces', SceneRenderLayer.Surfaces);
+        addVisibilityCheckbox('Show Effects', SceneRenderLayer.Effects);
 
         return [renderHacksPanel];
     }
@@ -950,10 +952,10 @@ export class DisplayListInfo {
     public dlStartAddr: number;
     public VertStartIndex: number;
     public textureAnimationGroup: number | null;
-    public materialIndex: number | null;
+    public materialIndex: SceneNodeMaterial | null;
 }
 
-interface WaterSurface {
+interface GeneratedSurface {
     textureScale: number;
     frequencyS: number;
     frequencyT: number;
@@ -974,7 +976,7 @@ interface WaterSurface {
     colorB: number;
     alphaBase: number;
     alphaRange: number;
-    materialIndex: number;
+    materialIndex: GeneratedSurfaceMaterial;
     columns: number;
     rows: number;
 }
@@ -1038,8 +1040,11 @@ export class Map {
     public sections: MapSection[] = [];
     public displayLists: DisplayListInfo[] = [];
     public animatedTextures: AnimatedTexture[] = [];
-    public waterSurfaces: WaterSurface[] = [];
+    public generatedSurfaces: GeneratedSurface[] = [];
     public effectPointSets: vec3[][] = [];
+    public fogEnabled: boolean;
+    public clipNear = 10;
+    public clipFar: number;
 
     // headerInfo
     private dlStart: number;
@@ -1054,6 +1059,8 @@ export class Map {
         this.bin = buffer;
 
         const view = this.bin.createDataView();
+        this.fogEnabled = (view.getUint8(0x08) & 1) !== 0;
+        this.clipFar = view.getInt16(0x0A, false);
         this.dlStart = view.getUint32(0x34, false);
         this.vertStart = view.getUint32(0x38, false);
         this.vertEnd = view.getUint32(0x40, false);
@@ -1105,21 +1112,21 @@ export class Map {
             });
         }
 
-        const waterSurfaceStart = view.getUint32(0x4C, false);
-        const waterSurfaceCount = view.getUint32(waterSurfaceStart, false);
-        for (let i = 0; i < waterSurfaceCount; i++) {
-            const offs = waterSurfaceStart + 0x04 + i * 0x6C;
+        const generatedSurfaceStart = view.getUint32(0x4C, false);
+        const generatedSurfaceCount = view.getUint32(generatedSurfaceStart, false);
+        for (let i = 0; i < generatedSurfaceCount; i++) {
+            const offs = generatedSurfaceStart + 0x04 + i * 0x6C;
             const step = view.getInt16(offs + 0x44, false);
             const minX = view.getInt16(offs + 0x46, false);
             const minZ = view.getInt16(offs + 0x48, false);
             const maxX = view.getInt16(offs + 0x4A, false);
             const maxZ = view.getInt16(offs + 0x4C, false);
             const materialIndex = view.getUint8(offs + 0x66);
-            // Material zero is the two-layer, sine-deformed water surface.
-            // Other entries in this table drive different generated effects.
-            if (materialIndex !== 0)
+            // These materials share the generated, sine-deformed surface mesh.
+            // Their runtime RDP handlers differ.
+            if (!isGeneratedSurfaceMaterial(materialIndex))
                 continue;
-            this.waterSurfaces.push({
+            this.generatedSurfaces.push({
                 textureScale: view.getFloat32(offs + 0x00, false),
                 frequencyS: view.getFloat32(offs + 0x04, false),
                 frequencyT: view.getFloat32(offs + 0x08, false),
@@ -1231,7 +1238,7 @@ export class Map {
                 continue;
             const materialIndex = view.getUint16(rootNode + 0x70 + i * 0x02, false);
             // The remaining runtime handlers need their own exact RDP setup.
-            if (materialIndex !== 4)
+            if (!isSceneNodeMaterial(materialIndex))
                 continue;
             this.displayLists.push({
                 ChunkID: -1,
@@ -1543,7 +1550,7 @@ function addSceneActors(
         if (meshData === null)
             continue;
         const rendererScale = actor.scale * actorModelScale * worldScale;
-        const renderer = new RootMeshRenderer(device, cache, meshData);
+        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Actors, sceneRenderer.fogParams);
         mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
             actor.position[0] * worldScale,
             actor.position[1] * worldScale,
@@ -1633,7 +1640,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
-            const renderer = new RootMeshRenderer(device, cache, meshData);
+            const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Effects, sceneRenderer.fogParams);
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             renderer.setBackfaceCullingEnabled(false);
             sceneRenderer.meshRenderers.push(renderer);
@@ -1805,7 +1812,7 @@ class SceneDesc implements Viewer.SceneDesc {
         );
 
         const sharedOutput = new RSPSharedOutput();
-        const sceneRenderer = new DK64Renderer(device);
+        const sceneRenderer = new DK64Renderer(device, sceneID, map.clipNear, map.clipFar);
         const cache = sceneRenderer.renderHelper.renderCache;
         for (let i = 0; i < map.displayLists.length; i++) {
             const dl = map.displayLists[i];
@@ -1823,18 +1830,16 @@ class SceneDesc implements Viewer.SceneDesc {
                     ...map.animatedTextures.filter((entry) => entry.group !== dl.textureAnimationGroup),
                 ]
                 : [...map.animatedTextures];
-            if (dl.materialIndex === 4) {
-                animatedTextures.unshift({
-                    segment: 0x0C,
-                    group: 0,
-                    frameDuration: 0,
-                    frames: [romData.AnimTexData[0x3E0]],
-                });
-            }
+            animatedTextures.unshift(...resolveAnimatedMaterialTextures(
+                getSceneNodeAnimatedTextureBindings(dl.materialIndex),
+                romData.AnimTexData,
+            ));
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
-            initDL(state, true);
-            if (dl.materialIndex === 4)
-                initWaterMaterial(state);
+            // func_global_asm_806592B4 applies global fog before ordinary
+            // map display lists are submitted.
+            initDL(state, true, map.fogEnabled);
+            if (dl.materialIndex !== null)
+                initSceneNodeMaterial(state, dl.materialIndex, map.fogEnabled, sceneID);
             const firstVertex = sharedOutput.vertices.length;
             runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
@@ -1859,7 +1864,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
 
-            const meshRenderer = new RootMeshRenderer(device, cache, meshData);
+            const renderLayer = dl.materialIndex === null
+                ? SceneRenderLayer.MapGeometry
+                : SceneRenderLayer.Surfaces;
+            const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams);
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 
@@ -1873,19 +1881,17 @@ class SceneDesc implements Viewer.SceneDesc {
         // vertices and setup objects in the same coordinate space.
         const setupWorldScale = map.chunkCount > 0 ? 3 : 1;
 
-        for (const surface of map.waterSurfaces) {
-            const vertexBuffer = createWaterSurfaceVertexBuffer(surface);
+        for (const surface of map.generatedSurfaces) {
+            const vertexBuffer = createGeneratedSurfaceVertexBuffer(surface);
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x08] = vertexBuffer;
-            const materialTextures: AnimatedTexture[] = [{
-                segment: 0x0D,
-                group: 0,
-                frameDuration: 0,
-                frames: [romData.AnimTexData[0x3C5]],
-            }];
+            const materialTextures = resolveAnimatedMaterialTextures(
+                getGeneratedSurfaceAnimatedTextureBindings(surface.materialIndex),
+                romData.AnimTexData,
+            );
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, materialTextures);
             initDL(state, false);
-            initWaterSurfaceMaterial(state, surface.scrollSpeedS, surface.scrollSpeedT);
+            initGeneratedSurfaceMaterial(state, surface.materialIndex, surface);
 
             const firstVertex = sharedOutput.vertices.length;
             for (let row = 0; row < surface.rows - 1; row++) {
@@ -1908,7 +1914,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
-                waterAnimation: {
+                generatedSurfaceAnimation: {
                     surface,
                     firstVertex,
                     vertexCount: sharedOutput.vertices.length - firstVertex,
@@ -1916,10 +1922,10 @@ class SceneDesc implements Viewer.SceneDesc {
             };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
-            sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData));
+            sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Surfaces, sceneRenderer.fogParams));
         }
 
-        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, scripts, terrainTriangles, setupWorldScale);
+        addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setupProps, scripts, terrainTriangles, setupWorldScale, map.fogEnabled);
         addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup, setupWorldScale);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID);
 

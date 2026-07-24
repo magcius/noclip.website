@@ -283,8 +283,52 @@ function main() {
         ActorGeometry: { Model: number, Data: ArrayBufferSlice }[];
         AnimationData: { ID: number, Data: ArrayBufferSlice }[];
         EnvironmentParticleData: typeof EnvironmentParticleData;
+        UnhandledMapFeatures: UnhandledMapFeature[];
         textureUsage: TextureUsage;
     }
+
+    interface UnhandledMapFeature {
+        Kind: string;
+        Material: number;
+        Count: number;
+    }
+
+    // Keep these in sync with material.ts. The extraction summary makes new
+    // runtime material IDs visible instead of letting them silently disappear.
+    const GeneratedSurfaceMaterial = {
+        Water: 0,
+        Lava: 1,
+        Meadow: 2,
+        WaterFog: 3,
+        Dirt: 4,
+        LavaBright: 5,
+        Acid: 6,
+        WaterFire: 7,
+        DirtCave: 8,
+    } as const;
+    const supportedGeneratedSurfaceMaterials = new Set<number>([
+        GeneratedSurfaceMaterial.Water,
+        GeneratedSurfaceMaterial.Lava,
+        GeneratedSurfaceMaterial.Meadow,
+        GeneratedSurfaceMaterial.WaterFog,
+        GeneratedSurfaceMaterial.Dirt,
+        GeneratedSurfaceMaterial.LavaBright,
+        GeneratedSurfaceMaterial.Acid,
+        GeneratedSurfaceMaterial.WaterFire,
+        GeneratedSurfaceMaterial.DirtCave,
+    ]);
+    const SceneNodeMaterial = {
+        Sand: 2,
+        WaterStream: 3,
+        Water: 4,
+        GroundFog: 7,
+    } as const;
+    const supportedSceneNodeMaterials = new Set<number>([
+        SceneNodeMaterial.Sand,
+        SceneNodeMaterial.WaterStream,
+        SceneNodeMaterial.Water,
+        SceneNodeMaterial.GroundFog,
+    ]);
 
     function inflatePointerTableData(data: ArrayBufferSlice, description: string): Buffer {
         try {
@@ -323,13 +367,41 @@ function main() {
                 usage.animated.add(map.readUInt32BE(offs + 0x0C + frame * 4));
         }
 
-        // Runtime-generated water materials use two fixed table-7 textures
-        // which do not appear in G_SETTIMG commands as table indices.
-        const waterStart = map.readUInt32BE(0x4C);
-        const waterCount = map.readUInt32BE(waterStart);
-        for (let i = 0; i < waterCount; i++) {
-            if (map.readUInt8(waterStart + 4 + i * 0x6C + 0x66) === 0) {
+        // Runtime-generated surfaces use fixed textures which do not appear
+        // in G_SETTIMG commands as pointer-table indices.
+        const generatedSurfaceStart = map.readUInt32BE(0x4C);
+        const generatedSurfaceCount = map.readUInt32BE(generatedSurfaceStart);
+        for (let i = 0; i < generatedSurfaceCount; i++) {
+            const material = map.readUInt8(generatedSurfaceStart + 4 + i * 0x6C + 0x66);
+            switch (material) {
+            case GeneratedSurfaceMaterial.Water:
+            case GeneratedSurfaceMaterial.WaterFog:
                 usage.animated.add(0x3C5);
+                break;
+            case GeneratedSurfaceMaterial.Lava:
+                // func_global_asm_80661B84 loads the CI4 image and its
+                // RGBA16 palette for generated-surface material 1.
+                usage.geometry.add(0x2EE);
+                usage.geometry.add(0x2EF);
+                break;
+            case GeneratedSurfaceMaterial.Meadow:
+                usage.geometry.add(0xF0);
+                break;
+            case GeneratedSurfaceMaterial.Dirt:
+                usage.geometry.add(0x75C);
+                break;
+            case GeneratedSurfaceMaterial.LavaBright:
+                usage.animated.add(0x3B9);
+                break;
+            case GeneratedSurfaceMaterial.Acid:
+                usage.animated.add(0x3D2);
+                break;
+            case GeneratedSurfaceMaterial.WaterFire:
+                usage.animated.add(0x3BA);
+                usage.animated.add(0x3DB);
+                break;
+            case GeneratedSurfaceMaterial.DirtCave:
+                usage.geometry.add(0xAF4);
                 break;
             }
         }
@@ -339,11 +411,60 @@ function main() {
         for (let i = 0; i < specialDisplayListCount; i++) {
             const displayList = map.readInt32BE(rootNode + 0x1C + i * 4);
             const material = map.readUInt16BE(rootNode + 0x70 + i * 2);
-            if (displayList >= 0 && material === 4) {
+            if (displayList < 0)
+                continue;
+            switch (material) {
+            case SceneNodeMaterial.Sand:
+                // func_global_asm_8063C784 loads the complete RGBA16 mip
+                // chain used by scene-node sand material 2.
+                usage.geometry.add(0x565);
+                break;
+            case SceneNodeMaterial.WaterStream:
+                // func_global_asm_8063CADC loads both scrolling RGBA16 layers.
+                usage.animated.add(0x3B7);
+                usage.animated.add(0x3B8);
+                break;
+            case SceneNodeMaterial.Water:
                 usage.animated.add(0x3E0);
+                break;
+            case SceneNodeMaterial.GroundFog:
+                usage.geometry.add(0x1765);
                 break;
             }
         }
+    }
+
+    function inventoryUnhandledMapFeatures(map: Buffer): UnhandledMapFeature[] {
+        const counts = new Map<string, UnhandledMapFeature>();
+        const add = (kind: string, material: number): void => {
+            const key = `${kind}:${material}`;
+            const entry = counts.get(key);
+            if (entry !== undefined)
+                entry.Count++;
+            else
+                counts.set(key, { Kind: kind, Material: material, Count: 1 });
+        };
+
+        const generatedSurfaceStart = map.readUInt32BE(0x4C);
+        const generatedSurfaceCount = map.readUInt32BE(generatedSurfaceStart);
+        for (let i = 0; i < generatedSurfaceCount; i++) {
+            const material = map.readUInt8(generatedSurfaceStart + 4 + i * 0x6C + 0x66);
+            if (!supportedGeneratedSurfaceMaterials.has(material))
+                add('GeneratedSurfaceMaterial', material);
+        }
+
+        const rootNode = map.readUInt32BE(0x30);
+        const sceneNodeMaterialCount = map.readUInt8(rootNode + 0xC5);
+        for (let i = 0; i < sceneNodeMaterialCount; i++) {
+            const displayList = map.readInt32BE(rootNode + 0x1C + i * 4);
+            const material = map.readUInt16BE(rootNode + 0x70 + i * 2);
+            if (displayList >= 0 && !supportedSceneNodeMaterials.has(material))
+                add('SceneNodeMaterial', material);
+        }
+
+        return [...counts.values()].sort((a, b) =>
+            a.Kind.localeCompare(b.Kind) || a.Material - b.Material,
+        );
     }
 
     function scanPropTextureUsage(prop: Buffer, usage: TextureUsage): void {
@@ -565,6 +686,7 @@ function main() {
             addSpriteTextureUsage(0x8071FF18, textureUsage);
         }
         scanScriptedSpriteUsage(setup, scripts, textureUsage);
+        const UnhandledMapFeatures = inventoryUnhandledMapFeatures(map);
 
         levels.push({
             MapData: mapData,
@@ -576,6 +698,7 @@ function main() {
             ActorGeometry,
             AnimationData: animations,
             EnvironmentParticleData: environmentParticleData,
+            UnhandledMapFeatures,
             textureUsage,
         });
     }
@@ -951,6 +1074,32 @@ function main() {
     const formatBytes = (bytes: number): string => bytes >= 0x100000
         ? `${(bytes / 0x100000).toFixed(2)} MiB`
         : `${(bytes / 0x400).toFixed(1)} KiB`;
+
+    const unhandledFeatureOwners = new Map<string, { feature: UnhandledMapFeature, maps: number[] }>();
+    for (let mapID = 0; mapID < levels.length; mapID++) {
+        for (const feature of levels[mapID].UnhandledMapFeatures) {
+            const key = `${feature.Kind}:${feature.Material}`;
+            let entry = unhandledFeatureOwners.get(key);
+            if (entry === undefined) {
+                entry = {
+                    feature: { ...feature, Count: 0 },
+                    maps: [],
+                };
+                unhandledFeatureOwners.set(key, entry);
+            }
+            entry.feature.Count += feature.Count;
+            entry.maps.push(mapID);
+        }
+    }
+    console.log('DK64 unhandled map-rendering inventory:');
+    if (unhandledFeatureOwners.size === 0) {
+        console.log('  none');
+    } else {
+        for (const { feature, maps } of unhandledFeatureOwners.values()) {
+            const mapList = maps.map((mapID) => hexzero(mapID, 2).toUpperCase()).join(',');
+            console.log(`  ${feature.Kind} ${feature.Material}: ${feature.Count} entries in maps ${mapList}`);
+        }
+    }
 
     console.log(`DK64 texture analysis (${levels.length} maps, minimizing aggregate fetched bytes):`);
     console.log(`  sharded textures: ${shardedTextureCount} (${shardedTextureBytes} bytes)`);

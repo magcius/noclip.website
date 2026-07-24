@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { RSPSharedOutput } from '../BanjoKazooie/f3dex.js';
-import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
+import { ImageFormat, ImageSize } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -10,20 +10,8 @@ import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManage
 import { Vec3UnitY } from '../MathHelpers.js';
 import { assert, hexzero, nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import { initDL } from './material.js';
 import type { DK64Renderer, InstanceScript, Mesh, ROMData } from './scenes.js';
-
-function initPropDL(rspState: RSPState, opaque: boolean): void {
-    rspState.gSPSetGeometryMode(RSP_Geometry.G_SHADE);
-    if (opaque) {
-        rspState.gDPSetOtherModeL(0, 29, 0x0C192078);
-        rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING);
-    } else {
-        rspState.gDPSetOtherModeL(0, 29, 0x005049D8);
-    }
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
-}
 
 export interface SetupProp {
     id: number;
@@ -714,7 +702,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
         frames: [romData.TexData[textureID]],
     }];
     const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, decalTexture);
-    initPropDL(state, false);
+    initDL(state, false);
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     state.gSPClearGeometryMode(0xFFFFFFFF);
     state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
@@ -738,7 +726,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
     const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
     const meshData = sceneRenderer.addMeshData(device, cache, mesh);
     for (const prop of instances) {
-        const renderer = sceneRenderer.addMeshRenderer(device, cache, meshData);
+        const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
         const worldX = prop.position[0] * worldScale;
         const worldY = prop.position[1] * worldScale;
         const worldZ = prop.position[2] * worldScale;
@@ -918,7 +906,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             continue;
         const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, spriteBillboards: billboards };
         const meshData = sceneRenderer.addMeshData(device, cache, mesh);
-        const renderer = sceneRenderer.addMeshRenderer(device, cache, meshData);
+        const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
         // The game sorts this object list far-to-near. At minimum these must
         // follow translucent map surfaces; leaving the default opaque sort key
         // lets water submitted later blend over the plants.
@@ -927,7 +915,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
     }
 }
 
-export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], scripts: InstanceScript[], terrainTriangles: TerrainTriangle[], worldScale: number): void {
+export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, props: SetupProp[], scripts: InstanceScript[], terrainTriangles: TerrainTriangle[], worldScale: number, fogEnabled: boolean): void {
     if (props.length === 0 || romData.PropGeometryData.size === 0)
         return;
 
@@ -985,7 +973,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             instances[0].id,
         );
         const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
-        initPropDL(state, true);
+        initDL(state, true, fogEnabled);
         // func_global_asm_80636FFC installs this inherited state immediately
         // before submitting both prop display lists. Tree materials use
         // primitive color but do not set it inside their own lists.
@@ -1011,7 +999,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, propMatrixAnimation };
         const meshData = sceneRenderer.addMeshData(device, cache, mesh);
         for (const prop of instances) {
-            const renderer = sceneRenderer.addMeshRenderer(device, cache, meshData);
+            const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
                 prop.position[0] * worldScale,
                 prop.position[1] * worldScale,
