@@ -80,7 +80,7 @@ interface RelitDrawCall {
     textureBindings: readonly DrawTextureBinding[];
 }
 
-interface ActiveLight {
+export interface ActiveLight {
     origin: vec3;
     innerRadius: number;
     outerRadius: number;
@@ -88,6 +88,32 @@ interface ActiveLight {
     direction?: vec3;
     innerConeCos?: number;
     outerConeCos?: number;
+}
+
+export class ActiveLightCache {
+    private activeLights = new Map<DynamicLight, ActiveLight>();
+    private bonePosition = vec3.create();
+    private lastUpdateTick = -1;
+
+    constructor(private lights: readonly DynamicLight[]) {
+    }
+
+    public update(camera: ArrayLike<number>, tick: number): void {
+        if (tick === this.lastUpdateTick)
+            return;
+        this.lastUpdateTick = tick;
+        this.activeLights.clear();
+
+        for (const light of this.lights) {
+            const activeLight = sampleActiveLight(light, camera, tick, this.bonePosition);
+            if (activeLight !== null)
+                this.activeLights.set(light, activeLight);
+        }
+    }
+
+    public get(light: DynamicLight): ActiveLight | undefined {
+        return this.activeLights.get(light);
+    }
 }
 
 interface ActorLightResources {
@@ -341,102 +367,104 @@ export function buildMapChunkLighting(
     };
 }
 
-function sampleActiveLights(lights: readonly DynamicLight[], camera: ArrayLike<number>, tick: number): ActiveLight[] {
-    const activeLights: ActiveLight[] = [];
-    const bonePosition = vec3.create();
-    for (const light of lights) {
-        const cameraDistance = Math.hypot(
-            camera[12] - light.origin[0],
-            camera[13] - light.origin[1],
-            camera[14] - light.origin[2],
-        ) / 3;
-        const distanceRatio = cameraDistance / light.maxDistance;
-        const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
-        if (cameraFade === 0)
-            continue;
-        if (light.kind === 'spot') {
-            // func_global_asm_8069AB74 targets getBonePosition(actor, 2).
-            // Evaluate that bone from the archived model skeleton and 0x402
-            // instead of assuming a particular segment length.
-            sampleActorBonePosition(bonePosition, light.skeleton, light.animation, light.speed, tick, light.targetBone);
-            vec3.scale(bonePosition, bonePosition, light.scale);
-            const sinY = Math.sin(light.rotationY);
-            const cosY = Math.cos(light.rotationY);
-            const direction = vec3.fromValues(
-                cosY * bonePosition[0] + sinY * bonePosition[2] - 0.3,
-                bonePosition[1],
-                -sinY * bonePosition[0] + cosY * bonePosition[2],
-            );
-            vec3.normalize(direction, direction);
-            activeLights.push({
-                origin: light.origin,
-                // func_global_asm_8065C990 uses these literal distances
-                // against the map's three-times-scale vertex coordinates.
-                innerRadius: 300,
-                outerRadius: 1100,
-                color: [
-                    light.color[0] * cameraFade,
-                    light.color[1] * cameraFade,
-                    light.color[2] * cameraFade,
-                ],
-                direction,
-                innerConeCos: Math.cos(light.innerAngle * Math.PI / 180),
-                outerConeCos: Math.cos(light.outerAngle * Math.PI / 180),
-            });
-            continue;
-        }
-        const keyframes = light.animation;
-        const totalDuration = keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0);
-        let animationTick = (tick + light.phase) % totalDuration;
-        let keyframeIndex = 0;
-        while (animationTick >= keyframes[keyframeIndex].duration) {
-            animationTick -= keyframes[keyframeIndex].duration;
-            keyframeIndex++;
-        }
-        const current = keyframes[keyframeIndex];
-        const next = keyframes[(keyframeIndex + 1) % keyframes.length];
-        const t = animationTick / current.duration;
-        const radius = current.radius + (next.radius - current.radius) * t;
-        const intensity = (current.intensity + (next.intensity - current.intensity) * t) * cameraFade;
-        activeLights.push({
+function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick: number, bonePosition: vec3): ActiveLight | null {
+    const cameraDistance = Math.hypot(
+        camera[12] - light.origin[0],
+        camera[13] - light.origin[1],
+        camera[14] - light.origin[2],
+    ) / 3;
+    const distanceRatio = cameraDistance / light.maxDistance;
+    const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
+    if (cameraFade === 0)
+        return null;
+    if (light.kind === 'spot') {
+        // func_global_asm_8069AB74 targets getBonePosition(actor, 2).
+        // Evaluate that bone from the archived model skeleton and 0x402
+        // instead of assuming a particular segment length.
+        sampleActorBonePosition(bonePosition, light.skeleton, light.animation, light.speed, tick, light.targetBone);
+        vec3.scale(bonePosition, bonePosition, light.scale);
+        const sinY = Math.sin(light.rotationY);
+        const cosY = Math.cos(light.rotationY);
+        const direction = vec3.fromValues(
+            cosY * bonePosition[0] + sinY * bonePosition[2] - 0.3,
+            bonePosition[1],
+            -sinY * bonePosition[0] + cosY * bonePosition[2],
+        );
+        vec3.normalize(direction, direction);
+        return {
             origin: light.origin,
-            // func_global_asm_8065BAA0 converts createLight's radius R into
-            // an inner radius of R and an outer radius of 3R for the raw map
-            // vertices consumed by func_global_asm_8065C990.
-            innerRadius: radius,
-            outerRadius: radius * 3,
+            // func_global_asm_8065C990 uses these literal distances
+            // against the map's three-times-scale vertex coordinates.
+            innerRadius: 300,
+            outerRadius: 1100,
             color: [
-                (current.color[0] + (next.color[0] - current.color[0]) * t) / 0xFF * intensity,
-                (current.color[1] + (next.color[1] - current.color[1]) * t) / 0xFF * intensity,
-                (current.color[2] + (next.color[2] - current.color[2]) * t) / 0xFF * intensity,
+                light.color[0] * cameraFade,
+                light.color[1] * cameraFade,
+                light.color[2] * cameraFade,
             ],
-        });
+            direction,
+            innerConeCos: Math.cos(light.innerAngle * Math.PI / 180),
+            outerConeCos: Math.cos(light.outerAngle * Math.PI / 180),
+        };
     }
-    return activeLights;
+    const keyframes = light.animation;
+    const totalDuration = keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0);
+    let animationTick = (tick + light.phase) % totalDuration;
+    let keyframeIndex = 0;
+    while (animationTick >= keyframes[keyframeIndex].duration) {
+        animationTick -= keyframes[keyframeIndex].duration;
+        keyframeIndex++;
+    }
+    const current = keyframes[keyframeIndex];
+    const next = keyframes[(keyframeIndex + 1) % keyframes.length];
+    const t = animationTick / current.duration;
+    const radius = current.radius + (next.radius - current.radius) * t;
+    const intensity = (current.intensity + (next.intensity - current.intensity) * t) * cameraFade;
+    return {
+        origin: light.origin,
+        // func_global_asm_8065BAA0 converts createLight's radius R into
+        // an inner radius of R and an outer radius of 3R for the raw map
+        // vertices consumed by func_global_asm_8065C990.
+        innerRadius: radius,
+        outerRadius: radius * 3,
+        color: [
+            (current.color[0] + (next.color[0] - current.color[0]) * t) / 0xFF * intensity,
+            (current.color[1] + (next.color[1] - current.color[1]) * t) / 0xFF * intensity,
+            (current.color[2] + (next.color[2] - current.color[2]) * t) / 0xFF * intensity,
+        ],
+    };
 }
 
-export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, camera: ArrayLike<number>, tick: number, enabled: boolean): vec3 {
+function sampleLightAtPosition(light: ActiveLight, x: number, y: number, z: number): number {
+    const dx = x - light.origin[0];
+    const dy = y - light.origin[1];
+    const dz = z - light.origin[2];
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (distance >= light.outerRadius)
+        return 0;
+    let falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
+    if (light.direction !== undefined) {
+        if (distance === 0)
+            return 0;
+        const coneDot = (dx * light.direction[0] + dy * light.direction[1] + dz * light.direction[2]) / distance;
+        if (coneDot < light.outerConeCos!)
+            return 0;
+        if (coneDot < light.innerConeCos!)
+            falloff *= (coneDot - light.outerConeCos!) / (light.innerConeCos! - light.outerConeCos!);
+    }
+    return falloff;
+}
+
+export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, activeLightCache: ActiveLightCache, enabled: boolean): vec3 {
     if (!enabled)
         return vec3.set(dst, 1, 1, 1);
 
     vec3.copy(dst, lighting.ambientColor);
-    for (const light of sampleActiveLights(lighting.lights, camera, tick)) {
-        const dx = lighting.origin[0] - light.origin[0];
-        const dy = lighting.origin[1] - light.origin[1];
-        const dz = lighting.origin[2] - light.origin[2];
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (distance >= light.outerRadius)
+    for (const dynamicLight of lighting.lights) {
+        const light = activeLightCache.get(dynamicLight);
+        if (light === undefined)
             continue;
-        let falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
-        if (light.direction !== undefined) {
-            if (distance === 0)
-                continue;
-            const coneDot = (dx * light.direction[0] + dy * light.direction[1] + dz * light.direction[2]) / distance;
-            if (coneDot < light.outerConeCos!)
-                continue;
-            if (coneDot < light.innerConeCos!)
-                falloff *= (coneDot - light.outerConeCos!) / (light.innerConeCos! - light.outerConeCos!);
-        }
+        const falloff = sampleLightAtPosition(light, lighting.origin[0], lighting.origin[1], lighting.origin[2]);
         dst[0] += light.color[0] * falloff;
         dst[1] += light.color[1] * falloff;
         dst[2] += light.color[2] * falloff;
@@ -447,7 +475,7 @@ export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, camera
     return dst;
 }
 
-export function updateDynamicLighting(lighting: DynamicLighting, vertices: readonly Vertex[], vertexBufferData: Float32Array, vertexBufferFirstVertex: number, camera: ArrayLike<number>, tick: number, enabled: boolean): void {
+export function updateDynamicLighting(lighting: DynamicLighting, vertices: readonly Vertex[], vertexBufferData: Float32Array, vertexBufferFirstVertex: number, activeLightCache: ActiveLightCache, enabled: boolean): void {
     if (!enabled) {
         for (const vertexIndex of lighting.vertexIndices) {
             const vertex = vertices[vertexIndex];
@@ -459,29 +487,16 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
         return;
     }
 
-    const activeLights = sampleActiveLights(lighting.lights, camera, tick);
     for (const vertexIndex of lighting.vertexIndices) {
         const vertex = vertices[vertexIndex];
         let red = lighting.ambientColor[0];
         let green = lighting.ambientColor[1];
         let blue = lighting.ambientColor[2];
-        for (const light of activeLights) {
-            const dx = vertex.x - light.origin[0];
-            const dy = vertex.y - light.origin[1];
-            const dz = vertex.z - light.origin[2];
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (distance >= light.outerRadius)
+        for (const dynamicLight of lighting.lights) {
+            const light = activeLightCache.get(dynamicLight);
+            if (light === undefined)
                 continue;
-            let falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
-            if (light.direction !== undefined) {
-                if (distance === 0)
-                    continue;
-                const coneDot = (dx * light.direction[0] + dy * light.direction[1] + dz * light.direction[2]) / distance;
-                if (coneDot < light.outerConeCos!)
-                    continue;
-                if (coneDot < light.innerConeCos!)
-                    falloff *= (coneDot - light.outerConeCos!) / (light.innerConeCos! - light.outerConeCos!);
-            }
+            const falloff = sampleLightAtPosition(light, vertex.x, vertex.y, vertex.z);
             if (falloff <= 0)
                 continue;
             red += light.color[0] * falloff;

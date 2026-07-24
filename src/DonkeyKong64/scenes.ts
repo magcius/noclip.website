@@ -29,8 +29,8 @@ import * as Deflate from '../Common/Compression/Deflate.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
-import { buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
-import type { DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
+import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
+import type { DynamicLight, DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
 import { actorModelScale, buildSkeletalActorMesh, getActorRenderDefinition, parseSetupActors, updateSkeletalActor } from './actor.js';
 import type { ActorRenderDefinition, SetupActor, SkeletalActorAnimation, SkeletalActorMesh } from './actor.js';
 import { addModel2Props, buildTerrainTriangles, parseSetupProps, updatePropMatrixAnimation } from './prop.js';
@@ -574,7 +574,7 @@ export class MeshData {
         this.lastUpdateTick = -1;
     }
 
-    public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+    public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, activeLightCache: ActiveLightCache): void {
         const animation = this.mesh.generatedSurfaceAnimation;
         const sprites = this.mesh.spriteBillboards;
         const lighting = this.mesh.dynamicLighting;
@@ -609,7 +609,7 @@ export class MeshData {
         }
 
         if (lighting !== undefined && (lightingIsDynamic || this.lightingDirty)) {
-            updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, viewerInput.camera.worldMatrix, tick, this.dynamicLightingEnabled);
+            updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, activeLightCache, this.dynamicLightingEnabled);
             this.lightingDirty = false;
         }
         if (actorAnimation !== undefined)
@@ -897,7 +897,7 @@ export class RootMeshRenderer {
         this.objectLighting = lighting;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, activeLightCache: ActiveLightCache): void {
         if (!this.visible)
             return;
         if (this.cullParent !== null && !this.cullParent.visible)
@@ -934,7 +934,7 @@ export class RootMeshRenderer {
             }
         }
 
-        this.geometryData.update(device, viewerInput);
+        this.geometryData.update(device, viewerInput, activeLightCache);
         const renderData = this.geometryData.renderData;
 
         const template = renderInstManager.pushTemplate();
@@ -960,9 +960,8 @@ export class RootMeshRenderer {
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
 
-        const tick = Math.floor(viewerInput.time / (1000 / 30));
         const objectLightColor = this.objectLighting !== null
-            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, viewerInput.camera.worldMatrix, tick, this.geometryData.dynamicLightingEnabled)
+            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
         this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor);
 
@@ -984,6 +983,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private backdropRenderer: BackdropRenderer | null;
     private sceneCuller = new SceneCuller();
+    private activeLightCache: ActiveLightCache;
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -1011,9 +1011,10 @@ export class DK64Renderer implements Viewer.SceneGfx {
         this.sceneCuller.setObjectCullBoundingBox(renderer, objectBoundingBox);
     }
 
-    constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null) {
+    constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null, dynamicLights: readonly DynamicLight[]) {
         this.renderHelper = new GfxRenderHelper(device);
         this.backdropRenderer = createBackdropRenderer(device, this.renderHelper.renderCache, backdrop, sceneID);
+        this.activeLightCache = new ActiveLightCache(dynamicLights);
         // func_global_asm_80648C84 overrides Aztec's generic 990 start with
         // 995 while its map-specific fog animation is idle. The animation can
         // temporarily lower it toward 970 during gameplay.
@@ -1120,9 +1121,11 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
         template.setBindingLayouts(bindingLayouts);
 
+        const tick = Math.floor(viewerInput.time / (1000 / 30));
+        this.activeLightCache.update(viewerInput.camera.worldMatrix, tick);
         this.sceneCuller.prepareToRender(viewerInput.camera.frustum);
         for (let i = 0; i < this.meshRenderers.length; i++)
-            this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.activeLightCache);
 
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -2063,7 +2066,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const objectLightingEnvironment = buildObjectLightingEnvironment(map.vertBin, map.chunks, dynamicLights);
 
         const sharedOutput = new RSPSharedOutput();
-        const sceneRenderer = new DK64Renderer(device, sceneID, map.clipNear, map.clipFar, romData.Backdrop);
+        const sceneRenderer = new DK64Renderer(device, sceneID, map.clipNear, map.clipFar, romData.Backdrop, dynamicLights);
         const cache = sceneRenderer.renderHelper.renderCache;
 
         for (let i = 0; i < map.displayLists.length; i++) {
