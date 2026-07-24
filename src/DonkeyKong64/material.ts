@@ -16,15 +16,19 @@ export enum GeneratedSurfaceMaterial {
 }
 
 export enum SceneNodeMaterial {
+    Clouds = 1,
     Sand = 2,
     WaterStream = 3,
     Water = 4,
+    AnimatedTexture = 5,
+    ScrollingTexture = 6,
     GroundFog = 7,
 }
 
 export interface AnimatedMaterialTextureBinding {
     segment: number;
-    textureID: number;
+    textureIDs: readonly number[];
+    frameDuration: number;
 }
 
 export interface GeneratedSurfaceMaterialParams {
@@ -39,25 +43,23 @@ export function isGeneratedSurfaceMaterial(material: number): material is Genera
 }
 
 export function isSceneNodeMaterial(material: number): material is SceneNodeMaterial {
-    return material === SceneNodeMaterial.Sand
-        || material === SceneNodeMaterial.WaterStream
-        || material === SceneNodeMaterial.Water
-        || material === SceneNodeMaterial.GroundFog;
+    return material >= SceneNodeMaterial.Clouds
+        && material <= SceneNodeMaterial.GroundFog;
 }
 
 export function getGeneratedSurfaceAnimatedTextureBindings(material: GeneratedSurfaceMaterial): readonly AnimatedMaterialTextureBinding[] {
     switch (material) {
     case GeneratedSurfaceMaterial.Water:
     case GeneratedSurfaceMaterial.WaterFog:
-        return [{ segment: 0x0D, textureID: 0x3C5 }];
+        return [{ segment: 0x0D, textureIDs: [0x3C5], frameDuration: 0 }];
     case GeneratedSurfaceMaterial.LavaBright:
-        return [{ segment: 0x0D, textureID: 0x3B9 }];
+        return [{ segment: 0x0D, textureIDs: [0x3B9], frameDuration: 0 }];
     case GeneratedSurfaceMaterial.Acid:
-        return [{ segment: 0x0D, textureID: 0x3D2 }];
+        return [{ segment: 0x0D, textureIDs: [0x3D2], frameDuration: 0 }];
     case GeneratedSurfaceMaterial.WaterFire:
         return [
-            { segment: 0x0C, textureID: 0x3BA },
-            { segment: 0x0D, textureID: 0x3DB },
+            { segment: 0x0C, textureIDs: [0x3BA], frameDuration: 0 },
+            { segment: 0x0D, textureIDs: [0x3DB], frameDuration: 0 },
         ];
     default:
         return [];
@@ -66,12 +68,20 @@ export function getGeneratedSurfaceAnimatedTextureBindings(material: GeneratedSu
 
 export function getSceneNodeAnimatedTextureBindings(material: SceneNodeMaterial | null): readonly AnimatedMaterialTextureBinding[] {
     switch (material) {
+    case SceneNodeMaterial.AnimatedTexture:
+        // func_global_asm_8063D288 loads table-7 textures 0x3AC..0x3B6 and
+        // func_global_asm_8063D468 advances one image every update.
+        return [{
+            segment: 0x0C,
+            textureIDs: [0x3AC, 0x3AD, 0x3AE, 0x3AF, 0x3B0, 0x3B1, 0x3B2, 0x3B3, 0x3B4, 0x3B5, 0x3B6],
+            frameDuration: 1,
+        }];
     case SceneNodeMaterial.Water:
-        return [{ segment: 0x0C, textureID: 0x3E0 }];
+        return [{ segment: 0x0C, textureIDs: [0x3E0], frameDuration: 0 }];
     case SceneNodeMaterial.WaterStream:
         return [
-            { segment: 0x0C, textureID: 0x3B7 },
-            { segment: 0x0D, textureID: 0x3B8 },
+            { segment: 0x0C, textureIDs: [0x3B7], frameDuration: 0 },
+            { segment: 0x0D, textureIDs: [0x3B8], frameDuration: 0 },
         ];
     default:
         return [];
@@ -80,6 +90,9 @@ export function getSceneNodeAnimatedTextureBindings(material: SceneNodeMaterial 
 
 export function initSceneNodeMaterial(rspState: RSPState, material: SceneNodeMaterial, fogEnabled: boolean, mapID: number): void {
     switch (material) {
+    case SceneNodeMaterial.Clouds:
+        initCloudBackground(rspState);
+        break;
     case SceneNodeMaterial.Sand:
         initSandMaterial(rspState, fogEnabled);
         break;
@@ -88,6 +101,12 @@ export function initSceneNodeMaterial(rspState: RSPState, material: SceneNodeMat
         break;
     case SceneNodeMaterial.Water:
         initWaterMaterial(rspState);
+        break;
+    case SceneNodeMaterial.AnimatedTexture:
+        initAnimatedBackground(rspState);
+        break;
+    case SceneNodeMaterial.ScrollingTexture:
+        initScrollingBackground(rspState);
         break;
     case SceneNodeMaterial.GroundFog:
         initGroundFogMaterial(rspState, mapID);
@@ -144,6 +163,100 @@ export function initDL(rspState: RSPState, opaque: boolean, fogEnabled = false):
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     // Some objects assume this gets set and might rely on stage rendering first.
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
+}
+
+// D_global_asm_80747D80[1], constructed by func_global_asm_8063C4C4.
+// SHADE is intentionally retained: the geometry's vertex colors provide the
+// smoothly interpolated background lighting while the two texture tiles add
+// detail over the blue primitive/environment tint.
+function initCloudBackground(rspState: RSPState): void {
+    rspState.gDPSetOtherModeH(
+        OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        2,
+        OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+    );
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(
+        RSP_Geometry.G_SHADE
+        | RSP_Geometry.G_CULL_BACK
+        | RSP_Geometry.G_SHADING_SMOOTH,
+    );
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 0);
+    rspState.gSPTexture(true, 1, 3, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x0C192008);
+    rspState.gDPSetCombine(0x001114C0, 0xFFFFFEFC);
+    rspState.gSPSetEnvColor(0x00, 0x40, 0x7F, 0xFF);
+    rspState.gSPSetPrimColor(0, 0x50, 0x50, 0xB4, 0x46);
+
+    // The original context inherits the active texture-image pointer and
+    // interprets the same uploaded bytes through I8 and IA8 render tiles.
+    rspState.gDPSetTileSize(1, 0x0FF, 0, 0x07C, 0x07C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_I, ImageSize.G_IM_SIZ_8b, 0, 0, 7, 0, 1, 5, 0, 1, 5, 0);
+    rspState.gDPLoadBlock(7, 0, 0, 1023, 0x200);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_I, ImageSize.G_IM_SIZ_8b, 4, 0, 1, 0, 0, 5, 0, 0, 5, 15);
+    rspState.gDPSetTileSize(2, 0x0FF, 0, 0x07C, 0x07C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 0, 0x100, 7, 0, 1, 5, 0, 1, 5, 0);
+    rspState.gDPLoadBlock(7, 0, 0, 1023, 0x200);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 4, 0x100, 2, 0, 0, 5, 0, 0, 5, 15);
+    rspState.setTextureScrollSpeeds([1, 0.439]);
+}
+
+// D_global_asm_80747D80[5], constructed by func_global_asm_8063D2E4.
+function initAnimatedBackground(rspState: RSPState): void {
+    rspState.gDPSetOtherModeH(
+        OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        2,
+        OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+    );
+    rspState.gDPSetOtherModeH(
+        OtherModeH_Layout.G_MDSFT_TEXTLOD,
+        1,
+        1 << OtherModeH_Layout.G_MDSFT_TEXTLOD,
+    );
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(
+        RSP_Geometry.G_ZBUFFER
+        | RSP_Geometry.G_SHADE
+        | RSP_Geometry.G_CULL_BACK
+        | RSP_Geometry.G_SHADING_SMOOTH,
+    );
+    rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
+    rspState.gDPSetCombine(0x01FFFFFF, 0xFFFCF279);
+    rspState.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
+
+    rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 1, 0x0C000000);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 6, 0, 0, 5, 0);
+    rspState.gDPLoadBlock(7, 0, 0, 1023, 0x100);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_8b, 8, 0, 0, 0, 0, 6, 0, 0, 5, 0);
+    rspState.gDPSetTileSize(0, 0, 0, 0x0FC, 0x07C);
+}
+
+// D_global_asm_80747D80[6], constructed by func_global_asm_8063D4A4.
+function initScrollingBackground(rspState: RSPState): void {
+    rspState.gDPSetOtherModeH(
+        OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        2,
+        OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+    );
+    rspState.gDPSetOtherModeH(
+        OtherModeH_Layout.G_MDSFT_TEXTLOD,
+        1,
+        1 << OtherModeH_Layout.G_MDSFT_TEXTLOD,
+    );
+    rspState.gSPClearGeometryMode(0xFFFFFFFF);
+    rspState.gSPSetGeometryMode(
+        RSP_Geometry.G_ZBUFFER
+        | RSP_Geometry.G_SHADE
+        | RSP_Geometry.G_CULL_BACK
+        | RSP_Geometry.G_SHADING_SMOOTH,
+    );
+    rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+    rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
+    rspState.gDPSetCombine(0x00121804, 0xFF1FFFFF);
+    rspState.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
+    rspState.gDPSetTileSize(0, 0, 0, 0x0FC, 0x0FC);
+    rspState.setTextureScrollSpeeds([0.865]);
 }
 
 // D_global_asm_80747D80[4], used by map scene nodes for water. The game

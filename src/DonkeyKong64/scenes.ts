@@ -42,6 +42,8 @@ import {
     isSceneNodeMaterial,
 } from './material.js';
 import type { AnimatedMaterialTextureBinding } from './material.js';
+import { createBackdropRenderer } from './background.js';
+import type { BackdropData, BackdropRenderer } from './background.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -67,8 +69,8 @@ function resolveAnimatedMaterialTextures(bindings: readonly AnimatedMaterialText
     return bindings.map((binding) => ({
         segment: binding.segment,
         group: 0,
-        frameDuration: 0,
-        frames: [textures[binding.textureID]],
+        frameDuration: binding.frameDuration,
+        frames: binding.textureIDs.map((textureID) => textures[textureID]),
     }));
 }
 
@@ -824,6 +826,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 export class DK64Renderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
+    private backdropRenderer: BackdropRenderer | null;
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -843,8 +846,9 @@ export class DK64Renderer implements Viewer.SceneGfx {
         return renderer;
     }
 
-    constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number) {
+    constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.backdropRenderer = createBackdropRenderer(device, this.renderHelper.renderCache, backdrop, sceneID);
         // func_global_asm_80648C84 overrides Aztec's generic 990 start with
         // 995 while its map-specific fog animation is idle. The animation can
         // temporarily lower it toward 970 during gameplay.
@@ -938,10 +942,12 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
-
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.backdropRenderer?.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
+
+        template.setBindingLayouts(bindingLayouts);
 
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -976,6 +982,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.backdropRenderer?.destroy(device);
         this.renderHelper.destroy();
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].destroy(device);
@@ -1426,6 +1433,7 @@ class TextureData {
 
 export class ROMData {
     public MapData: ArrayBufferSlice;
+    public Backdrop: BackdropData | null;
     public PropGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
     public ActorDefinitions = new globalThis.Map<number, number>();
     public ActorGeometryData = new globalThis.Map<number, ArrayBufferSlice>();
@@ -1469,6 +1477,14 @@ export class ROMData {
         }
         applyTextureEntries(this.TexData, level.TexData, true);
         applyTextureEntries(this.AnimTexData, level.AnimTexData, false);
+        const backdrop = level.Backdrop ?? null;
+        if (backdrop !== null) {
+            const data = this.TexData[backdrop.TextureIndex];
+            assert(data !== undefined);
+            this.Backdrop = { TextureID: backdrop.TextureID, Data: data };
+        } else {
+            this.Backdrop = null;
+        }
     }
 
     public loadSetup(): ArrayBufferSlice {
@@ -1858,8 +1874,9 @@ class SceneDesc implements Viewer.SceneDesc {
         const objectLightingEnvironment = buildObjectLightingEnvironment(map.vertBin, map.chunks, dynamicLights);
 
         const sharedOutput = new RSPSharedOutput();
-        const sceneRenderer = new DK64Renderer(device, sceneID, map.clipNear, map.clipFar);
+        const sceneRenderer = new DK64Renderer(device, sceneID, map.clipNear, map.clipFar, romData.Backdrop);
         const cache = sceneRenderer.renderHelper.renderCache;
+
         for (let i = 0; i < map.displayLists.length; i++) {
             const dl = map.displayLists[i];
 
@@ -1887,7 +1904,7 @@ class SceneDesc implements Viewer.SceneDesc {
             if (dl.materialIndex !== null)
                 initSceneNodeMaterial(state, dl.materialIndex, map.fogEnabled, sceneID);
             const firstVertex = sharedOutput.vertices.length;
-            runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
+            runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr, dl.ChunkID >= 0);
 
             const output = state.finish();
 

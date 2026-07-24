@@ -471,14 +471,15 @@ enum F3DEX2_GBI {
     G_RDPHALF_1         = 0XE1,
 }
 
-export function runDL_F3DEX2(state: RSPState, addr: number): void {
+export function runDL_F3DEX2(state: RSPState, addr: number, stopAtSnoop = false): void {
     const segment = (addr >>> 24) & 0xFF;
     const segmentBuffer = state.segmentBuffers[segment];
     if (segmentBuffer === undefined)
         throw new Error(`Missing F3DEX2 display-list segment 0x${hexzero(segment, 2)} for address 0x${hexzero(addr, 8)}`);
     const view = segmentBuffer.createDataView();
+    const start = addr & 0x00FFFFFF;
 
-    for (let i = (addr & 0x00FFFFFF); i < segmentBuffer.byteLength; i += 0x08) {
+    for (let i = start; i < segmentBuffer.byteLength; i += 0x08) {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
@@ -651,8 +652,20 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             case F3DEX2_GBI.G_RDPTILESYNC:
             case F3DEX2_GBI.G_RDPPIPESYNC:
             case F3DEX2_GBI.G_RDPLOADSYNC:
-            case F3DEX2_GBI.G_SNOOP:
                 // Implementation not necessary.
+                break;
+
+            case F3DEX2_GBI.G_SNOOP:
+                // DK64's map loader uses these no-op tags to divide a chunk
+                // display list into independently submitted sections, each
+                // with its own vertex-segment base. The marker at the start
+                // belongs to this section; the next one starts another.
+                //
+                // Actor geometry also uses G_SNOOP as a visibility marker,
+                // where it remains an ordinary no-op, so only map section
+                // callers opt into this boundary behavior.
+                if (stopAtSnoop && i !== start)
+                    return;
                 break;
 
             default:

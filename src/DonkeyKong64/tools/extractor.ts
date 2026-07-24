@@ -62,7 +62,9 @@ function main() {
     //    selection is understood; other actors render in their neutral pose.
     // 12 text: TODO: not extracted or interpreted.
     // 13 animation code: TODO: not extracted or interpreted.
-    // 14 HUD textures: TODO: not extracted; not map geometry.
+    // 14 HUD textures: the pre-map panorama renderer uses entries 0x2D and
+    //    0x2E on the maps selected by func_global_asm_80707980. Other HUD
+    //    textures are not extracted until their rendering paths are handled.
     // 15 paths: TODO: not extracted or interpreted.
     // 16 spawners/fences: TODO: not extracted or rendered.
     // 17 DKTV: TODO: not extracted; not map geometry.
@@ -100,6 +102,7 @@ function main() {
         Setup: 9,
         Scripts: 10,
         Animations: 11,
+        HUDTextures: 14,
         Critters: 22,
         TexturesGeometry: 25,
     } as const;
@@ -115,6 +118,26 @@ function main() {
     const EnvironmentParticleCount = 13;
     const ActorDefinitionTableOffset = 0x1535B0;
     const ActorDefinitionCount = 0x80;
+    // func_global_asm_80707980's current_map jump table. These are the only
+    // retail maps which dispatch to the camera-tracked panorama helper
+    // func_global_asm_807069A4.
+    const backdropTextureIDs = new Map<number, number>([
+        [0x03, 0x2E], // K. Rool barrel: Lanky's maze
+        [0x0B, 0x2E], // Stealthy Snoop (normal, no logo)
+        [0x0E, 0x2D], // Aztec beetle race
+        [0x41, 0x2E], // Stealthy Snoop (normal)
+        [0x42, 0x2E], // Mad Maze Maul (hard)
+        [0x43, 0x2E], // Stash Snatch (normal)
+        [0x44, 0x2E], // Mad Maze Maul (easy)
+        [0x45, 0x2E], // Mad Maze Maul (normal)
+        [0x4A, 0x2E], // Stash Snatch (easy)
+        [0x4B, 0x2E], // Stash Snatch (hard)
+        [0x7C, 0x2E], // Mad Maze Maul (insane)
+        [0x7D, 0x2E], // Stash Snatch (insane)
+        [0x7E, 0x2E], // Stealthy Snoop (very easy)
+        [0x7F, 0x2E], // Stealthy Snoop (easy)
+        [0x80, 0x2E], // Stealthy Snoop (hard)
+    ]);
 
     function getTableOffset(table: number): number {
         return PointerTableOffset + view.getUint32(PointerTableOffset + table * 4);
@@ -166,6 +189,7 @@ function main() {
     const ActorGeometryData = extractCompressedTable(PointerTable.ActorGeometry);
     const SetupData = extractCompressedTable(PointerTable.Setup);
     const ScriptData = extractCompressedTable(PointerTable.Scripts);
+    const HUDTextureData = extractCompressedTable(PointerTable.HUDTextures);
     const CritterData = extractCompressedTable(PointerTable.Critters);
 
     function resolveTableEntry(table: (ArrayBufferSlice | number)[], index: number): ArrayBufferSlice {
@@ -252,6 +276,14 @@ function main() {
 
         texTableIdx += 0x04;
     }
+    // Give the two HUD-source panoramas ordinary texture indices so the
+    // existing owner analysis can keep single-map data local and shard shared
+    // data without a backdrop-specific archive path.
+    const backdropTextureIndices = new Map<number, number>();
+    for (const textureID of new Set(backdropTextureIDs.values())) {
+        backdropTextureIndices.set(textureID, TexData.length);
+        TexData.push(resolveTableEntry(HUDTextureData, textureID));
+    }
 
     // Table 7 contains uncompressed textures. Map geometry uses these for
     // animated materials, swapping the texture bound to an RSP segment every
@@ -275,6 +307,7 @@ function main() {
 
     interface LevelSource {
         MapData: ArrayBufferSlice;
+        Backdrop: { TextureID: number, TextureIndex: number } | null;
         SetupData: ArrayBufferSlice;
         ScriptData: ArrayBufferSlice;
         CritterData: ArrayBufferSlice | null;
@@ -688,8 +721,19 @@ function main() {
         scanScriptedSpriteUsage(setup, scripts, textureUsage);
         const UnhandledMapFeatures = inventoryUnhandledMapFeatures(map);
 
+        const backdropTextureID = backdropTextureIDs.get(mapID);
+        const backdropTextureIndex = backdropTextureID !== undefined
+            ? backdropTextureIndices.get(backdropTextureID)!
+            : null;
+        if (backdropTextureIndex !== null)
+            textureUsage.geometry.add(backdropTextureIndex);
         levels.push({
             MapData: mapData,
+            // Both panorama branches use the same 320x240 source rectangle
+            // and are rendered before map geometry.
+            Backdrop: backdropTextureID !== undefined
+                ? { TextureID: backdropTextureID, TextureIndex: backdropTextureIndex! }
+                : null,
             SetupData: setupData,
             ScriptData: scriptData,
             CritterData: mapID < CritterData.length ? resolveTableEntry(CritterData, mapID) : null,
@@ -1008,6 +1052,7 @@ function main() {
         const source = levels[mapID];
         const levelWithoutGroups = {
             MapData: source.MapData,
+            Backdrop: source.Backdrop,
             SetupData: source.SetupData,
             ScriptData: source.ScriptData,
             CritterData: source.CritterData,

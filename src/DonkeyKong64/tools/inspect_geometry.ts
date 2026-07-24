@@ -832,7 +832,7 @@ function auditSceneSetups(rom: Buffer, mapIDs: number[]): void {
 function main(): void {
     const args = process.argv.slice(2);
     if (args.length < 1) {
-        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--audit-scenes=<map-ids>] [--dl=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--matrix-props] [--actor-model=<model-hex>] [--actor-dl] [--animation=<id-hex>] [--texture=<id-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--light-animations] [--actor-definition=<type-hex>] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
+        console.error('Usage: npm run inspect:DonkeyKong64 -- <map-id-hex> [--audit-scenes=<map-ids>] [--dl=<relative-offset-hex>] [--vertex-base=<relative-offset-hex>] [--prop-geometry=<type-hex>] [--prop-dl] [--matrix-props] [--actor-model=<model-hex>] [--actor-dl] [--animation=<id-hex>] [--texture=<id-hex>] [--setup] [--scripts] [--effects] [--environment-particles] [--light-animations] [--actor-definition=<type-hex>] [--effect-points] [--spawners] [--critters] [--sprites[=<id-hex>]] [--rom=<path>]');
         console.error('Example: npm run inspect:DonkeyKong64 -- B0 --dl=9778');
         process.exit(1);
     }
@@ -840,6 +840,7 @@ function main(): void {
     const mapID = parseNumber(args[0]);
     const romPath = args.find((arg) => arg.startsWith('--rom='))?.slice('--rom='.length) ?? 'data/DonkeyKong64_Raw/rom.z64';
     const dlArg = args.find((arg) => arg.startsWith('--dl='));
+    const vertexBaseArg = args.find((arg) => arg.startsWith('--vertex-base='));
     const rom = readFileSync(romPath);
     const auditScenesArg = args.find((arg) => arg.startsWith('--audit-scenes='));
     if (auditScenesArg !== undefined) {
@@ -848,8 +849,11 @@ function main(): void {
     }
     const map = getMapData(rom, mapID);
     inspectMap(map, mapID);
-    if (dlArg !== undefined)
-        disassembleDisplayList(map, map.readUInt32BE(0x34), parseNumber(dlArg.slice('--dl='.length)));
+    if (dlArg !== undefined) {
+        const vertexStart = map.readUInt32BE(0x38)
+            + (vertexBaseArg !== undefined ? parseNumber(vertexBaseArg.slice('--vertex-base='.length)) : 0);
+        disassembleDisplayList(map, map.readUInt32BE(0x34), parseNumber(dlArg.slice('--dl='.length)), vertexStart);
+    }
     const propGeometryArg = args.find((arg) => arg.startsWith('--prop-geometry='));
     if (propGeometryArg !== undefined) {
         const propType = parseNumber(propGeometryArg.slice('--prop-geometry='.length));
