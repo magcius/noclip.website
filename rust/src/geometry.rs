@@ -266,8 +266,6 @@ impl ConvexHull {
             i += 4;
         }
 
-        // Portal-clipped frustums do not necessarily have a multiple of four
-        // planes, so finish the tail without constructing nalgebra vectors.
         while i < self.planes.len() {
             let plane = &self.planes[i];
             let x = if plane.normal.x >= 0.0 {

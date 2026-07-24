@@ -110,11 +110,7 @@ export interface DK64ActorGeometry {
     auxiliaryData: { headerOffset: number; start: number; end: number }[];
 }
 
-/**
- * Read-only access to the USA DK64 ROM structures used by the archive
- * extractor. Inspection tools use this API too, so pointer-table and overlay
- * knowledge has a single owner.
- */
+// DK64Extractor is exported so it can be reused by inspection tooling during reversing.
 export class DK64Extractor {
     public static readonly PointerTableOffset = 0x101C50;
     public static readonly PointerTableCountOffset = DK64Extractor.PointerTableOffset + 0x80;
@@ -480,31 +476,26 @@ function main() {
     const rom = readFileSync(`${pathBaseIn}/rom.z64`);
     const extractor = new DK64Extractor(rom);
 
-    // USA ROM pointer-table directory. The first 32 words are table offsets,
-    // relative to PointerTableOffset, and the next 32 words are slot counts.
-    // Some sparse tables pad their final slots with the next table's start;
-    // extractCompressedTable stops at that sentinel.
-    // TODO: locate this directory by ROM revision/signature; all addresses and
-    // overlay offsets below currently describe only the USA ROM.
-    // func_global_asm_80707980's current_map jump table. These are the only
-    // retail maps which dispatch to the camera-tracked panorama helper
-    // func_global_asm_807069A4.
     const backdropTextureIDs = new Map<number, number>([
-        [0x03, 0x2E], // K. Rool barrel: Lanky's maze
-        [0x0B, 0x2E], // Stealthy Snoop (normal, no logo)
         [0x0E, 0x2D], // Aztec beetle race
+
+        [0x03, 0x2E], // K. Rool barrel: Lanky's maze
+
+        [0x0B, 0x2E], // Stealthy Snoop (normal, no logo)
         [0x41, 0x2E], // Stealthy Snoop (normal)
-        [0x42, 0x2E], // Mad Maze Maul (hard)
-        [0x43, 0x2E], // Stash Snatch (normal)
-        [0x44, 0x2E], // Mad Maze Maul (easy)
-        [0x45, 0x2E], // Mad Maze Maul (normal)
-        [0x4A, 0x2E], // Stash Snatch (easy)
-        [0x4B, 0x2E], // Stash Snatch (hard)
-        [0x7C, 0x2E], // Mad Maze Maul (insane)
-        [0x7D, 0x2E], // Stash Snatch (insane)
         [0x7E, 0x2E], // Stealthy Snoop (very easy)
         [0x7F, 0x2E], // Stealthy Snoop (easy)
         [0x80, 0x2E], // Stealthy Snoop (hard)
+
+        [0x42, 0x2E], // Mad Maze Maul (hard)
+        [0x44, 0x2E], // Mad Maze Maul (easy)
+        [0x45, 0x2E], // Mad Maze Maul (normal)
+        [0x7C, 0x2E], // Mad Maze Maul (insane)
+
+        [0x43, 0x2E], // Stash Snatch (normal)
+        [0x4A, 0x2E], // Stash Snatch (easy)
+        [0x4B, 0x2E], // Stash Snatch (hard)
+        [0x7D, 0x2E], // Stash Snatch (insane)
     ]);
 
     const extractCompressedTable = (table: number): (ArrayBufferSlice | number)[] =>
@@ -530,9 +521,6 @@ function main() {
         return entry;
     }
 
-    // SpriteData is stored in the compressed global overlay. This table is
-    // the game's authoritative mapping from sprite IDs to texture frames,
-    // formats, dimensions, and sprite-sheet layout.
     const SpriteData = extractor.getSpriteDefinitions();
     const CustomScriptFunctionData = extractor.getCustomScriptFunctionAddresses();
     const EnvironmentParticleData = extractor.getEnvironmentParticles();
@@ -545,18 +533,14 @@ function main() {
         .flatMap((sprite) => sprite.images)) + 1;
     for (let i = 0; i < textureCount; i++)
         TexData[i] = ArrayBufferSlice.fromView(extractor.extractCompressedTableEntry(PointerTable.TexturesGeometry, i));
-    // Give the two HUD-source panoramas ordinary texture indices so the
-    // existing owner analysis can keep single-map data local and shard shared
-    // data without a backdrop-specific archive path.
+    // The two panorama backdrops are given normal texture indices for later archive packing.
     const backdropTextureIndices = new Map<number, number>();
     for (const textureID of new Set(backdropTextureIDs.values())) {
         backdropTextureIndices.set(textureID, TexData.length);
         TexData.push(resolveTableEntry(HUDTextureData, textureID));
     }
 
-    // Table 7 contains uncompressed textures. Map geometry uses these for
-    // animated materials, swapping the texture bound to an RSP segment every
-    // few game ticks.
+    // Table 7 textures are uncompressed and used for animated map materials.
     const AnimTexData: ArrayBufferSlice[] = [];
     const uncompressedTextureCount = Math.max(0x3E1, Math.max(...SpriteData
         .filter((sprite) => sprite.table === 0)
@@ -603,8 +587,7 @@ function main() {
             if (data.readUInt8(offs) !== 0xFD)
                 continue;
             const address = data.readUInt32BE(offs + 4);
-            // Segment zero is an index into pointer table 25. Other segments
-            // are supplied by map/prop animation descriptors handled below.
+            // Segment zero means an index into pointer table 25.
             if ((address >>> 24) === 0 && !excluded.has(address))
                 output.add(address);
         }
@@ -633,8 +616,7 @@ function main() {
                 usage.animated.add(map.readUInt32BE(offs + 0x0C + frame * 4));
         }
 
-        // Runtime-generated surfaces use fixed textures which do not appear
-        // in G_SETTIMG commands as pointer-table indices.
+        // Surfaces use fixed textures that need to be accounted for.
         const generatedSurfaceStart = map.readUInt32BE(0x4C);
         const generatedSurfaceCount = map.readUInt32BE(generatedSurfaceStart);
         for (let i = 0; i < generatedSurfaceCount; i++) {
@@ -648,8 +630,6 @@ function main() {
                 addUnhandled('GeneratedSurfaceMaterial', material);
             switch (material) {
             case GeneratedSurfaceMaterial.Lava:
-                // func_global_asm_80661B84 loads the CI4 image and its
-                // RGBA16 palette for generated-surface material 1.
                 usage.geometry.add(0x2EE);
                 usage.geometry.add(0x2EF);
                 break;
@@ -682,8 +662,6 @@ function main() {
             }
             switch (material) {
             case SceneNodeMaterial.Sand:
-                // func_global_asm_8063C784 loads the complete RGBA16 mip
-                // chain used by scene-node sand material 2.
                 usage.geometry.add(0x565);
                 break;
             case SceneNodeMaterial.GroundFog:
@@ -701,9 +679,6 @@ function main() {
         if (parsed.decal !== null)
             usage.geometry.add(parsed.decal.texture);
 
-        // Indexed prop animations leave their target IDs in segment zero,
-        // even though both the target and frames come from table 7. Exclude
-        // those placeholders from the table-25 command scan.
         const animatedTargets = new Set<number>();
         for (const texture of parsed.indexedTextures) {
             if (texture.frameCount === 0 || texture.frameCount > 0x1E)
@@ -714,9 +689,7 @@ function main() {
         }
 
         if (parsed.layout === 2) {
-            // func_global_asm_8063524C builds one textured quad from each
-            // 0x30-byte descriptor. The first texture is the image and the
-            // optional second texture is its CI palette.
+            // from func_global_asm_8063524C
             for (const quad of parsed.runtimeQuads) {
                 if (!animatedTargets.has(quad.texture))
                     usage.geometry.add(quad.texture);
@@ -799,9 +772,8 @@ function main() {
         }
     }
 
-    // Resolve aliases before writing so each map archive is self-contained.
-    // Prop geometry is selected from the setup file, avoiding geometry for
-    // every other level.
+    // Make self-contained map archives by resolving aliases and storing
+    // appropriate prop geometry in the level archive.
     const levels: LevelSource[] = [];
     for (let mapID = 0; mapID < MapData.length; mapID++) {
         const mapData = resolveTableEntry(MapData, mapID);
@@ -832,23 +804,19 @@ function main() {
             } else if (type === 0x2A) {
                 actorAnimations.add(0x402);
             } else if (type === 0x77) {
-                // ACTOR_BOOMBOX: func_global_asm_806A1F64 uses 0x63F during
-                // normal gameplay and switches to 0x640 for cutscenes.
                 actorAnimations.add(0x63F);
             }
         }
         const ActorDefinitions = [...actorDefinitions].map(([Type, Model]) => ({ Type, Model }));
         const ActorGeometry = [];
         for (const model of actorModels) {
-            // Actor model IDs are one-based; pointer-table slot zero is model 1.
-            const tableIndex = model - 1;
+            const tableIndex = model - 1; // Actor IDs are 1-based
             if (tableIndex < ActorGeometryData.length)
                 ActorGeometry.push({ Model: model, Data: resolveTableEntry(ActorGeometryData, tableIndex) });
         }
         const animations = [...actorAnimations].map((id) => ({
             ID: id,
-            // Unlike the geometry tables, table 11 stores animation files
-            // uncompressed. Preserve the exact pointer-bounded file.
+            // Table 11 stores uncompressed animations.
             Data: ArrayBufferSlice.fromView(extractor.extractRawTableEntry(PointerTable.Animations, id)),
         }));
 
@@ -888,6 +856,17 @@ function main() {
             textureUsage,
         });
     }
+
+    // Instead of having one big archive for all the DK64 content (~16MB),
+    // split it into multiple archives.
+    //
+    // Structure:
+    //        $MAP.crg1: map archive, unique mesh/texture/... data
+    //   common_$N.crg1: a shard containing data used by multiple maps
+    //      common.crg1: resources used by all maps.
+    //
+    // This splitting reduces the average map load to ~950KB, down from
+    // the ~4.25MB baseline for common.crg1 + $MAP.crg1.
 
     function buildOwners(kind: keyof TextureUsage): Map<number, number[]> {
         const owners = new Map<number, number[]>();
@@ -938,9 +917,6 @@ function main() {
         byteLength: number;
     }
 
-    // A texture only belongs in the always-loaded archive when every map uses
-    // it. All other shared textures are packed by map affinity to minimize
-    // aggregate bytes fetched across the complete scene list.
     const universalTextureOwnerCount = levels.length;
     const commonTextureGroupCountArg = process.argv.find((arg) => arg.startsWith('--common-texture-groups='));
     const commonTextureGroupCount = commonTextureGroupCountArg !== undefined
@@ -959,9 +935,7 @@ function main() {
             sharedResources.push({ kind: 'animated', id, data: AnimTexData[id], owners });
     }
 
-    // Canonicalize exact consumer subsets before packing. This both gives the
-    // seeding pass more useful units than individual textures and guarantees
-    // deterministic ordering independent of Map/Set iteration details.
+    // Canonicalize subsets for determinism.
     const subsetByKey = new Map<string, TextureOwnerSubset>();
     for (const resource of sharedResources) {
         const key = resource.owners.join(',');
@@ -980,10 +954,6 @@ function main() {
         || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     );
 
-    // Seed each pack with one of the largest exact-owner subsets, then pack
-    // the remaining subsets from largest to smallest. Adding a subset grows
-    // the group for its existing consumers and can also make new maps fetch
-    // every resource already in that group.
     const commonTextureGroups: CommonTextureGroup[] = Array.from({ length: commonTextureGroupCount }, () => ({
         resources: [],
         owners: new Set<number>(),
@@ -1003,10 +973,12 @@ function main() {
         }
     }
 
+    // To start, put the largest N subsets into a shard of its own.
     const seededSubsetCount = Math.min(commonTextureGroupCount, textureOwnerSubsets.length);
     for (let subsetIndex = 0; subsetIndex < seededSubsetCount; subsetIndex++)
         addSubsetToGroup(textureOwnerSubsets[subsetIndex], subsetIndex);
 
+    // Then add the remaining subsets, attempting to minimize excess costs.
     for (let subsetIndex = seededSubsetCount; subsetIndex < textureOwnerSubsets.length; subsetIndex++) {
         const subset = textureOwnerSubsets[subsetIndex];
         let bestGroup = 0;
@@ -1034,13 +1006,9 @@ function main() {
         addSubsetToGroup(subset, bestGroup);
     }
 
-    // The greedy pass gives every large subset a reasonable home. Revisit
-    // those choices until moving any complete owner subset no longer reduces
-    // total bytes fetched across all maps. The always-loaded archive is also
-    // a candidate: a broadly used subset can be cheaper there than the
-    // collateral over-fetch it causes inside a shard.
+    // Finally, try to rearrange textures to minimize the average load cost.
     const baseTextureKeys = new Set<string>();
-    for (let pass = 0; pass < 0x20; pass++) {
+    for (let pass = 0; pass < 0x10; pass++) {
         let moveCount = 0;
         for (const subset of textureOwnerSubsets) {
             const sourceIndex = subsetGroup.get(subset)!;

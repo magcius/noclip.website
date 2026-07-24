@@ -47,7 +47,7 @@ function wrap01(v: number): number {
 }
 
 function calcAztecBeetleRaceTint(height: number): readonly [number, number, number] {
-    // D_global_asm_80754F58, consumed by func_global_asm_807065F8.
+    // From func_global_asm_807065F8 and D_global_asm_80754F58
     const keys: readonly (readonly [number, number, number, number])[] = [
         [0, 0xFF, 0x00, 0x00],
         [1900, 0x00, 0x00, 0xFF],
@@ -76,9 +76,7 @@ function calcBackdropTint(mapID: number, height: number): readonly [number, numb
     if (mapID === 0x0E)
         return calcAztecBeetleRaceTint(height);
 
-    // func_global_asm_807065F8 dims the backdrop in the branded bonus-game
-    // variants. The two other 0x2E users (maps 03 and 0B) take the default
-    // white branch.
+    // From func_global_asm_807065F8
     switch (mapID) {
     case 0x41:
     case 0x42:
@@ -114,9 +112,7 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         const pixels = new Uint8Array(width * height * 4);
         decodeTex_RGBA16(pixels, src, 0, width, height);
 
-        // func_global_asm_807069A4 selects TEXEL0 * PRIMITIVE through
-        // 0xFC11FE23 / 0xFFFFF7FB before calling the ordinary textured
-        // triangle helper func_global_asm_80702464.
+        // From func_global_asm_807069A4
         const otherModeH = TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT;
         const program = new F3DEX_Program(
             otherModeH,
@@ -144,7 +140,7 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         });
 
         const vertices = new Float32Array([
-            // position (w is the bone index), texture coordinate, color
+            // pos.xyz, bone index, texcoord, color
             -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
              1,  1, 0, 0,  1, 0,  1, 1, 1, 1,
              1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
@@ -185,29 +181,16 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         let mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         fillMatrix4x4(mapped, offs, identityMatrix);
 
-        // func_global_asm_8068BBF8 derives these two angles from the camera's
-        // eye/at vectors. func_global_asm_807069A4 then selects a wrapped
-        // 230x190 window from the 320x240 source.
+        // Translated from func_global_asm_8068BBF8 and func_global_asm_807069A4
         const camera = viewerInput.camera.worldMatrix;
         const forwardX = -camera[8];
         const forwardY = -camera[9];
         const forwardZ = -camera[10];
-        // func_global_asm_80665E48 measures an angle clockwise from -X.
-        // The camera update stores its complement in unk2D4, and
-        // func_global_asm_807069A4 complements it again before selecting the
-        // source rectangle. Keep the resulting original angle here.
         const horizontalAngle = wrap01(Math.atan2(-forwardZ, -forwardX) / (Math.PI * 2));
         const pitch = Math.atan2(forwardY, Math.hypot(forwardX, forwardZ));
-        // The equivalent vertical call to func_global_asm_80665E48 produces
-        // pi/2 - pitch after func_global_asm_807069A4's complement. Positive
-        // noclip pitch therefore moves the source window upward.
         const verticalAngle = Math.PI / 2 - pitch;
         const centerU = horizontalAngle;
         const centerV = wrap01((verticalAngle / (Math.PI * 2)) * (320 / 240));
-        // The 230x190 values are destination viewport dimensions, not the
-        // sampled source dimensions. func_global_asm_807069A4 constructs a
-        // 5.6x matrix and uses its reciprocal when building the source
-        // rectangle, so the actual camera window is about 41.07x33.93 texels.
         const backdropScale = 5.6;
         const scaleU = (230 / backdropScale) / 320;
         const scaleV = (190 / backdropScale) / 240;
@@ -223,8 +206,6 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         offs += fillMatrix4x2(mapped, offs, textureMatrix);
         offs += fillMatrix4x2(mapped, offs, identityMatrix);
 
-        // Map vertices use three times the gameplay coordinate scale. The
-        // original tint samples the player's gameplay-space Y position.
         const tint = calcBackdropTint(this.mapID, camera[13] / 3);
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
@@ -242,9 +223,8 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
 
 type BackdropColor = readonly [number, number, number];
 
-// The first eight entries are D_global_asm_80754EF8's four-color backdrop
-// palettes, consumed by func_global_asm_80704B20's untextured, SHADE-only sky
-// geometry. Colors are ordered from the top of the sky to the bottom.
+// Backdrop palettes from func_global_asm_80704B20 + D_global_asm_80754EF8
+// Colors go from top to bottom.
 const gradientBackdropPalettes: readonly (readonly BackdropColor[])[] = [
     [[0x00, 0x40, 0xFF], [0xFF, 0x8F, 0x11], [0xFF, 0x8F, 0x11], [0x00, 0x2C, 0x00]],
     [[0x46, 0x82, 0xFA], [0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF], [0x00, 0x2C, 0x00]],
@@ -258,13 +238,9 @@ const gradientBackdropPalettes: readonly (readonly BackdropColor[])[] = [
     [[0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF]],
 ];
 
-// func_global_asm_80707980's map jump table. The ordinary black-clear branches
-// are intentionally absent; these entries call the general gradient-sky helper
-// or select a non-black direct fill. Some game branches blend two palettes
-// during a scripted transition; with no corresponding gameplay state, the
-// initial palette selected by the game is the stable backdrop for the viewer.
+// From func_global_asm_80707980's gradient assignments.
 const gradientBackdropPaletteByMap = new Map<number, number>([
-    [0x07, 4], // Jungle Japes
+    [0x07, 4],
     [0x08, 3],
     [0x1E, 0],
     [0x22, 5],
@@ -287,7 +263,7 @@ function pushGradientQuad(
 ): void {
     const r0 = color0[0] / 0xFF, g0 = color0[1] / 0xFF, b0 = color0[2] / 0xFF;
     const r1 = color1[0] / 0xFF, g1 = color1[1] / 0xFF, b1 = color1[2] / 0xFF;
-    // position (w is the bone index), unused texture coordinate, color
+    // pos.xyz, bone index, texcoord, color
     dst.push(
         -1, y0, 0, 0, 0, 0, r0, g0, b0, 1,
          1, y0, 0, 0, 0, 0, r0, g0, b0, 1,
@@ -306,8 +282,7 @@ class GradientBackdropRenderer implements BackdropRenderer {
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, palette: readonly BackdropColor[], paletteIndex: number) {
-        // func_global_asm_80704B20 uses 0xFCFFFFFF / 0xFFFE793C:
-        // the combiner output is SHADE, supplied by the sky mesh's colors.
+        // From func_global_asm_80704B20 + D_global_asm_80754ED8
         const program = new F3DEX_Program(
             0,
             0x00552048,
@@ -317,13 +292,6 @@ class GradientBackdropRenderer implements BackdropRenderer {
         program.defines.set('USE_VERTEX_COLOR', '1');
         this.gfxProgram = cache.createProgram(program);
 
-        // D_global_asm_80754ED8 selects one of three eight-vertex strips.
-        // Preserve their authored Y coordinates in the game's 320x240
-        // projection. func_global_asm_80704B20 places a level camera's strip
-        // at sourceY - 336, so Japes' rows 0,400,440,800 appear at screen Y
-        // -336,64,104,464. Its pure blue endpoint is therefore deliberately
-        // above the viewport; the visible top is already interpolating toward
-        // white. Solid end caps accommodate noclip's unrestricted pitch.
         const sourceRows = paletteIndex === 4
             ? [0, 400, 440, 800]
             : (paletteIndex === 5 || paletteIndex === 7)
@@ -377,8 +345,6 @@ class GradientBackdropRenderer implements BackdropRenderer {
         const camera = viewerInput.camera.worldMatrix;
         const pitch = Math.atan2(-camera[9], Math.hypot(camera[8], camera[10]));
         const drawMatrix = mat4.create();
-        // The original vertical offset is 300*sin(pitch) pixels. Convert from
-        // the 240-pixel game viewport to clip space (whose height is 2).
         drawMatrix[13] = -2.5 * Math.sin(pitch);
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
         mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);

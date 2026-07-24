@@ -45,9 +45,7 @@ class TerrainTriangleGrid {
             }
         }
 
-        // Size cells for about eight triangles apiece on uniformly covered
-        // terrain. Deriving this from the scene bounds also handles the 3x
-        // coordinate scale used by streamed maps.
+        // Try to fit ~8 triangles per grid cell.
         const targetCellCount = Math.max(1, Math.ceil(triangles.length / 8));
         const terrainArea = (maxX - minX) * (maxZ - minZ);
         this.cellSize = triangles.length > 0 && terrainArea > 0
@@ -204,8 +202,7 @@ function samplePropMatrixAnimation(animation: PropMatrixAnimation, tick: number)
             for (let animationTick = track.lastTick; animationTick < tick; animationTick++) {
                 const frame = Math.floor(track.framePosition);
                 const t = track.framePosition - frame;
-                // func_global_asm_806500E0 interpolates the adjacent timing
-                // bytes, then advances by speed * timing / 300 each 30 Hz tick.
+                // from func_global_asm_806500E0
                 const timing = track.timings[frame]
                     + (track.timings[frame + 1] - track.timings[frame]) * t;
                 track.framePosition += track.speed * timing / 300;
@@ -241,9 +238,7 @@ function samplePropMatrixAnimation(animation: PropMatrixAnimation, tick: number)
             mat4.multiply(node.outputMatrix, animationComponent, node.outputMatrix);
             mat4.fromTranslation(animationComponent, [interpolate(6), interpolate(7), interpolate(8)]);
             mat4.multiply(node.outputMatrix, animationComponent, node.outputMatrix);
-            // 8064FB64 concatenates the first base matrix, the interpolated
-            // transform, and the following base matrix in row-vector order.
-            // The matrices read below are their column-vector transposes.
+            // from 8064FB64
             mat4.multiply(node.outputMatrix, node.outputMatrix, node.baseMatrix);
             mat4.multiply(node.outputMatrix, node.postMatrix, node.outputMatrix);
         }
@@ -337,8 +332,7 @@ function findPropAnimationScripts(scripts: InstanceScript[], propID: number): { 
                 channelSpeeds.set(command.args[0], command.args[1]);
             } else if (command.opcode === 0x11) {
                 const channel = command.args[0];
-                // func_global_asm_8064F450 initializes each channel's
-                // func_global_asm_80650A04 speed field to one.
+                // from func_global_asm_8064F450 + func_global_asm_80650A04
                 starts.push({
                     channel,
                     speed: channelSpeeds.get(channel) ?? 1,
@@ -354,19 +348,13 @@ function findPropAnimationScripts(scripts: InstanceScript[], propID: number): { 
     return channels.map((channel) => {
         const channelStarts = starts.filter((start) => start.channel === channel);
         const movingStarts = channelStarts.filter((start) => start.speed !== 0);
-        // Scripts commonly provide a high-speed start to restore persistent
-        // state, followed by the slower start seen during live gameplay. We
-        // do not simulate script conditions, so use the least-magnitude
-        // moving speed for each selected channel. Fairy Island's door, for
-        // example, uses 255 to snap open on reload and 1 for its visible event.
+        // Use the slowest animation since those look better.
         const candidates = movingStarts.length > 0 ? movingStarts : channelStarts;
         const selected = candidates.reduce((best, candidate) => {
             const candidateMagnitude = Math.abs(candidate.speed);
             const bestMagnitude = Math.abs(best.speed);
             if (candidateMagnitude < bestMagnitude)
                 return candidate;
-            // If initialization and conditional starts use the same speed,
-            // classify the channel as triggered so it receives endpoint holds.
             if (candidateMagnitude === bestMagnitude && candidate.holdEndpoints && !best.holdEndpoints)
                 return candidate;
             return best;
@@ -387,7 +375,6 @@ function buildTriggeredPlaybackPositions(timings: Uint8Array, speed: number): Fl
     let framePosition = forwards ? 0 : lastFrame;
     const target = forwards ? lastFrame : 0;
     const positions = [framePosition];
-    // Keep malformed or extremely slow tracks from allocating unbounded data.
     for (let tick = 0; tick < 30 * 60 && (forwards ? framePosition < target : framePosition > target); tick++) {
         const frame = Math.min(Math.floor(framePosition), lastFrame - 1);
         const t = framePosition - frame;
@@ -422,16 +409,13 @@ function applyInitialPropMatrices(
         const vertex = sharedOutput.vertices[firstVertex + i];
         vec3.set(animationPosition, vertex.x, vertex.y, vertex.z);
         const storedMatrixChain = state.vertexMatrixChains[firstVertex + i];
-        // An empty chain means the display list emitted this vertex before
-        // selecting any segment-9 matrix. SP_MatrixIndex defaults to zero,
-        // but that is not an implicit load of matrix zero.
+        // An empty chain does not imply a load of matrix zero.
         const matrixChain = storedMatrixChain ?? [];
         for (const matrixIndex of matrixChain) {
             if (matrixIndex === undefined)
                 continue;
             const matrixOffset = matrixIndex * 0x40;
-            // func_global_asm_8064F450 copies the initial matrix range, then
-            // initializes the remaining runtime output matrices to identity.
+            // from func_global_asm_8064F450
             if (matrixOffset < 0 || matrixOffset + 0x40 > initialMatrixDataSize || matrixBuffer + matrixOffset + 0x40 > view.byteLength)
                 continue;
             let matrix = matrices.get(matrixIndex);
@@ -460,9 +444,7 @@ function decodePropMatrixAnimation(
 ): Mesh['propMatrixAnimation'] {
     const setups = findPropAnimationScripts(scripts, prop.id);
     if (setups.length === 0) {
-        // Matrix-capable geometry starts from its initial matrix buffer and
-        // remains static until behavior code or an instance script activates
-        // a channel. A prop with no animation commands is therefore valid.
+        // Props with no animation commands are still valid, just static.
         return undefined;
     }
 
@@ -504,8 +486,6 @@ function decodePropMatrixAnimation(
             const matrixIndex = matrixOffset >>> 6;
             const parentMatrixOffset = view.getUint32(record + 4, false);
             if (parentMatrixOffset + 0x80 > initialMatrixDataSize) {
-                // TODO: Resolve animated parents whose matrices are generated
-                // by another active model2 channel.
                 warnPropAnimationFeatureOnce(
                     'animated-parent',
                     prop,
@@ -591,9 +571,6 @@ function decodePropMatrixAnimation(
     for (let matrixOffset = 0; matrixOffset + 0x40 <= initialMatrixDataSize; matrixOffset += 0x40)
         initialMatrices.set(matrixOffset >>> 6, readMatrix(matrixBuffer + matrixOffset));
 
-    // Keep the static initial pose in the shared buffer. Animated vertices
-    // are overwritten from their raw source positions every update, walking
-    // the same load/multiply matrix chain that the display list selected.
     applyInitialPropMatrices(view, state, sharedOutput, firstVertex, vertexCount);
     const animation: PropMatrixAnimation = {
         firstVertex,
@@ -743,10 +720,7 @@ function createPropDecalVertexBuffer(vertices: readonly ProjectedDecalVertex[], 
 }
 
 function parseModel2IndexedTextures(geometryView: DataView, romData: ROMData): AnimatedTexture[] {
-    // func_global_asm_806349FC registers the target G_SETTIMG IDs from this
-    // descriptor list. func_global_asm_80636EFC then deliberately leaves
-    // those IDs unresolved while loading every other model texture from table
-    // 25; func_global_asm_80639CD0 supplies the selected frames from table 7.
+    // from func_global_asm_806349FC + func_global_asm_80636EFC + func_global_asm_80639CD0
     const descriptorStart = geometryView.getUint32(0x6C, false);
     if (descriptorStart + 4 > geometryView.byteLength)
         return [];
@@ -774,10 +748,7 @@ function parseModel2IndexedTextures(geometryView: DataView, romData: ROMData): A
         }
         if (frames.length !== frameCount)
             continue;
-        // func_global_asm_806349FC initializes playback mode to 1, which
-        // advances these frames automatically. Descriptor +0x04 is instead
-        // unk4A: 80639CD0 supplies the current and next frames together, and
-        // uses unk50 / unk4C as their blend fraction.
+        // from func_global_asm_806349FC
         textures.push({
             segment: 0,
             group: targetTextureID,
@@ -794,13 +765,11 @@ function applyInitialModel2TextureScripts(textures: AnimatedTexture[], scripts: 
     if (script === undefined || textures.length === 0)
         return textures;
 
-    // Texture tracks are one-based in prop scripts. func_global_asm_806349FC
-    // initializes them in automatic playback mode at frame zero.
+    // from func_global_asm_806349FC
     const playbackModes = textures.map(() => 1);
     const selectedFrames = textures.map(() => 0);
     for (const block of script.blocks) {
-        // These state-zero blocks run once while the prop is initialized.
-        // Blocks which assign a new script state are runtime transitions.
+        // These are init scripts. Blocks that set new states are transitions.
         if (block.conditions.length !== 1
             || block.conditions[0].opcode !== 1
             || block.conditions[0].args[0] !== 0
@@ -812,10 +781,10 @@ function applyInitialModel2TextureScripts(textures: AnimatedTexture[], scripts: 
             if (textureIndex < 0 || textureIndex >= textures.length)
                 continue;
             if (command.opcode === 0x27) {
-                // func_global_asm_80634EA4: select automatic/manual playback.
+                // from func_global_asm_80634EA4
                 playbackModes[textureIndex] = command.args[1];
             } else if (command.opcode === 0x28) {
-                // func_global_asm_80635018: select frame and frame counter.
+                // from func_global_asm_80635018
                 selectedFrames[textureIndex] = command.args[1];
             }
         }
@@ -999,9 +968,7 @@ function initRuntimePropMaterial(state: RSPState, quad: RuntimePropQuad): void {
     state.gSPClearGeometryMode(0xFFFFFFFF);
     state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
     state.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
-    // Layout-2 props with setup flag 1 are placed in the game's translucent
-    // object list. func_global_asm_80637B6C selects this depth-tested,
-    // non-depth-writing render mode for them.
+    // from func_global_asm_80637B6C
     state.gDPSetOtherModeL(0, 29, 0x0C184A50);
     state.gDPSetCombine(0x00119623, 0xFF2FFFFF); // G_CC_MODULATEIA_PRIM
     state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
@@ -1024,8 +991,6 @@ function initRuntimePropMaterial(state: RSPState, quad: RuntimePropQuad): void {
 }
 
 function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, view: DataView, instances: SetupProp[], worldScale: number, lightingEnvironment: ObjectLightingEnvironment): void {
-    // Pickup-style layout-2 props use the same segment-zero placeholder IDs
-    // and table-7 animation descriptors as regular model2 geometry.
     const indexedTextures = parseModel2IndexedTextures(view, romData);
     for (const quad of parseRuntimePropQuads(view)) {
         if (quad.width === 0 || quad.height === 0 || quad.size > ImageSize.G_IM_SIZ_32b)
@@ -1042,9 +1007,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         if (output === null)
             continue;
 
-        // Geometry, textures, programs, and GPU buffers are identical for
-        // every setup instance. Keep individual renderers for object culling
-        // and lighting, but have them share all immutable draw resources.
+        // Share draw resources between instances of props.
         const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
         const meshData = sceneRenderer.addMeshData(device, cache, mesh);
         let sharedRenderer: RootMeshRenderer | null = null;
@@ -1067,9 +1030,6 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             ));
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
-            // The game sorts this object list far-to-near. At minimum these
-            // must follow translucent map surfaces; leaving the default opaque
-            // sort key lets water submitted later blend over the plants.
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             renderer.setBackfaceCullingEnabled(false);
         }
@@ -1089,8 +1049,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
     }
 
     for (const [propType, instances] of propsByType) {
-        // func_global_asm_80636FFC explicitly returns without submitting
-        // these object types; they are handled outside the static model path.
+        // from func_global_asm_80636FFC: ignore these object types
         if (propType === 0x0000 || propType === 0x0241)
             continue;
         const geometry = romData.loadPropGeometry(propType);
@@ -1098,32 +1057,22 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const assetFamily = geometry.createTypedArray(Uint8Array, 0x0C, 0x10);
         const assetFamilyEnd = assetFamily.indexOf(0);
         const assetFamilyName = String.fromCharCode(...assetFamily.subarray(0, assetFamilyEnd >= 0 ? assetFamilyEnd : assetFamily.length));
-        // Keep this decoded for diagnostics and future family-specific
-        // behavior, but do not use it to restrict generic prop rendering.
-        void assetFamilyName;
         addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainGrid, worldScale);
         if (view.getUint8(0x1C) === 2) {
             addRuntimeModel2Props(device, cache, sceneRenderer, sharedOutput, romData, view, instances, worldScale, lightingEnvironment);
             continue;
         }
-        // Header layout 1 stores an F3DEX2 display-list range followed by its
-        // segment-8 vertices.
         if (view.getUint8(0x1C) !== 1)
             continue;
 
+        // Layout 1: F3DEX2 displaylist + segment8 verts.
         const mainDisplayListStart = view.getUint32(0x40, false);
         const secondaryDisplayListStart = view.getUint32(0x44, false);
         const vertexStart = view.getUint32(0x48, false);
         const usesRuntimeMatrices = propDisplayListUsesMatrices(view, mainDisplayListStart, secondaryDisplayListStart);
-        // Matrix-driven props are accepted by capability, not type. The
-        // decoder below opts out when a track uses channels we do not yet
-        // support.
         const segmentBuffers: ArrayBufferSlice[] = [];
         segmentBuffers[0x08] = geometry.slice(vertexStart);
         segmentBuffers[0x0A] = geometry.slice(mainDisplayListStart);
-        // The game submits the secondary range by physical address while it
-        // retains segment 0x0A for branches into the primary range. Give the
-        // secondary entry point an otherwise unused local segment.
         segmentBuffers[0x0F] = geometry;
 
         const indexedTextures = applyInitialModel2TextureScripts(
@@ -1133,14 +1082,9 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         );
         const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
         initDL(state, true, fogEnabled);
-        // func_global_asm_80636FFC installs this inherited state immediately
-        // before submitting both prop display lists. Tree materials use
-        // primitive color but do not set it inside their own lists.
+        // from func_global_asm_80636FFC -- basic inheritd state for props.
         state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
-        // LOD wrappers select their first (highest-detail) target with
-        // G_RDPHALF_1 + G_BRANCH_Z. Direct display lists simply begin at zero.
-        // TODO: implement G_BRANCH_Z and submit the wrapper itself so props
-        // can switch LOD based on the projected Z value.
+        // TODO: maybe handle LODs with G_BRANCH_Z instead of always using highest?
         const displayListOffset = findHighDetailPropDisplayList(view, mainDisplayListStart);
         const firstVertex = sharedOutput.vertices.length;
         runDL_F3DEX2(state, 0x0A000000 | displayListOffset);
@@ -1177,10 +1121,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
                 prop.scale * worldScale,
                 prop.scale * worldScale,
             ]);
-            // func_global_asm_80636FFC samples one light color for the whole
-            // model2 object. Header byte 0x1D becomes runtime unkC2; nonzero
-            // values deliberately bypass the sample (self-lit torches are a
-            // visible example).
+            // from func_global_asm_80636FFC: self-lit objects have a flag to opt out of dynamic lighting.
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
             sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());

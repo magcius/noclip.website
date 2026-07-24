@@ -69,8 +69,7 @@ export function getGeneratedSurfaceAnimatedTextureBindings(material: GeneratedSu
 export function getSceneNodeAnimatedTextureBindings(material: SceneNodeMaterial | null): readonly AnimatedMaterialTextureBinding[] {
     switch (material) {
     case SceneNodeMaterial.AnimatedTexture:
-        // func_global_asm_8063D288 loads table-7 textures 0x3AC..0x3B6 and
-        // func_global_asm_8063D468 advances one image every update.
+        // from func_global_asm_8063D288 + func_global_asm_8063D468
         return [{
             segment: 0x0C,
             textureIDs: [0x3AC, 0x3AD, 0x3AE, 0x3AF, 0x3B0, 0x3B1, 0x3B2, 0x3B3, 0x3B4, 0x3B5, 0x3B6],
@@ -153,20 +152,17 @@ export function initGeneratedSurfaceMaterial(rspState: RSPState, material: Gener
 export function initDL(rspState: RSPState, opaque: boolean, fogEnabled = false): void {
     rspState.gSPSetGeometryMode(RSP_Geometry.G_SHADE | (fogEnabled ? RSP_Geometry.G_FOG : 0));
     if (opaque) {
-        rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
+        rspState.gDPSetOtherModeL(0, 29, 0x0C192078);
         rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING);
     } else {
-        rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
+        rspState.gDPSetOtherModeL(0, 29, 0x005049D8);
     }
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
 }
 
-// D_global_asm_80747D80[1], constructed by func_global_asm_8063C4C4.
-// SHADE is intentionally retained: the geometry's vertex colors provide the
-// smoothly interpolated background lighting while the two texture tiles add
-// detail over the blue primitive/environment tint.
+// from func_global_asm_8063C4C4 + D_global_asm_80747D80[1]
 function initCloudBackground(rspState: RSPState): void {
     rspState.gDPSetOtherModeH(
         OtherModeH_Layout.G_MDSFT_CYCLETYPE,
@@ -186,8 +182,6 @@ function initCloudBackground(rspState: RSPState): void {
     rspState.gSPSetEnvColor(0x00, 0x40, 0x7F, 0xFF);
     rspState.gSPSetPrimColor(0, 0x50, 0x50, 0xB4, 0x46);
 
-    // The original context inherits the active texture-image pointer and
-    // interprets the same uploaded bytes through I8 and IA8 render tiles.
     rspState.gDPSetTileSize(1, 0x0FF, 0, 0x07C, 0x07C);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_I, ImageSize.G_IM_SIZ_8b, 0, 0, 7, 0, 1, 5, 0, 1, 5, 0);
     rspState.gDPLoadBlock(7, 0, 0, 1023, 0x200);
@@ -199,7 +193,7 @@ function initCloudBackground(rspState: RSPState): void {
     rspState.setTextureScrollSpeeds([1, 0.439]);
 }
 
-// D_global_asm_80747D80[5], constructed by func_global_asm_8063D2E4.
+// from func_global_asm_8063D2E4 + D_global_asm_80747D80[5]
 function initAnimatedBackground(rspState: RSPState): void {
     rspState.gDPSetOtherModeH(
         OtherModeH_Layout.G_MDSFT_CYCLETYPE,
@@ -230,7 +224,7 @@ function initAnimatedBackground(rspState: RSPState): void {
     rspState.gDPSetTileSize(0, 0, 0, 0x0FC, 0x07C);
 }
 
-// D_global_asm_80747D80[6], constructed by func_global_asm_8063D4A4.
+// from func_global_asm_8063D4A4 + D_global_asm_80747D80[6]
 function initScrollingBackground(rspState: RSPState): void {
     rspState.gDPSetOtherModeH(
         OtherModeH_Layout.G_MDSFT_CYCLETYPE,
@@ -257,9 +251,7 @@ function initScrollingBackground(rspState: RSPState): void {
     rspState.setTextureScrollSpeeds([0.865]);
 }
 
-// D_global_asm_80747D80[4], used by map scene nodes for water. The game
-// generates this material display list at runtime, before submitting the
-// geometry-only display list stored in the map file.
+// from D_global_asm_80747D80[4]
 function initWaterMaterial(rspState: RSPState): void {
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     rspState.gSPClearGeometryMode(0xFFFFFFFF);
@@ -269,8 +261,7 @@ function initWaterMaterial(rspState: RSPState): void {
     rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
     rspState.gDPSetCombine(0x00FF9441, 0xFF13FFFF);
 
-    // Handler 4 loads table-7 texture 0x3E0 once, then interprets the same
-    // TMEM contents through two independently scrolling IA8 render tiles.
+    // independently scrolling IA8 textures
     rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 1, 0x0C000000);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_IA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 6, 0, 0, 6, 0);
     rspState.gDPLoadBlock(7, 0, 0, 2047, 256);
@@ -283,9 +274,7 @@ function initWaterMaterial(rspState: RSPState): void {
     rspState.setTextureScrollSpeeds([5, 2]);
 }
 
-// D_global_asm_80747D80[SceneNodeMaterial.Sand]. func_global_asm_8063C784
-// loads the complete 32x32 RGBA16 mip chain from texture 0x565, and
-// func_global_asm_8063C7C4 constructs the material display list.
+// from func_global_asm_8063C7C4 + D_global_asm_80747D80[SceneNodeMaterial.Sand] + func_global_asm_8063C784
 function initSandMaterial(rspState: RSPState, fogEnabled: boolean): void {
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     rspState.gSPClearGeometryMode(0xFFFFFFFF);
@@ -304,9 +293,7 @@ function initSandMaterial(rspState: RSPState, fogEnabled: boolean): void {
     rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, 0x565);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0);
     rspState.gDPLoadBlock(7, 0, 0, 2047, 0);
-    // The renderer currently samples the base level when texture LOD is on,
-    // but preserve all four runtime tile descriptors for future mipmapping.
-    // The changing T origin is emulated by setTextureScrollSpeeds below.
+    // The renderer doesn't use these mipmapping levels yet.
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0, 0, 0, 0, 5, 0, 0, 5, 0);
     rspState.gDPSetTileSize(0, 2, 0, 0x07E, 0x07E);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 4, 0x100, 1, 0, 0, 4, 1, 0, 4, 1);
@@ -318,8 +305,7 @@ function initSandMaterial(rspState: RSPState, fogEnabled: boolean): void {
     rspState.setTextureScrollSpeeds([1]);
 }
 
-// D_global_asm_80747D80[SceneNodeMaterial.WaterStream]. This is the complete
-// material generated by func_global_asm_8063CB40.
+// from func_global_asm_8063CB40 + D_global_asm_80747D80[SceneNodeMaterial.WaterStream]
 function initWaterStreamMaterial(rspState: RSPState, fogEnabled: boolean, mapID: number): void {
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     rspState.gSPClearGeometryMode(0xFFFFFFFF);
@@ -334,8 +320,7 @@ function initWaterStreamMaterial(rspState: RSPState, fogEnabled: boolean, mapID:
     rspState.gDPSetOtherModeL(3, 29, fogEnabled ? 0xC8104A50 : 0x0C184A50);
     rspState.gDPSetCombine(0x00FFFE41, 0xFFFFFFD3);
 
-    // Four early maps select different translucency values. All other maps,
-    // including Castle Dungeon and Fairy Island, use the default 0x50.
+    // Maps can override the translucency.
     let alpha = 0x50;
     if (mapID === 0x01)
         alpha = 0xB4;
@@ -345,8 +330,7 @@ function initWaterStreamMaterial(rspState: RSPState, fogEnabled: boolean, mapID:
         alpha = 0x3C;
     rspState.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, alpha);
 
-    // func_global_asm_8063CADC loads table-7 textures 0x3B7 and 0x3B8.
-    // Bindings 0x0C and 0x0D are supplied by the scene loader.
+    // from func_global_asm_8063CADC: use table-7 textures 0x3B7 and 0x3B8 bound to 0x0C and 0x0D.
     rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, 0x0C000000);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 5, 0, 0, 5, 0);
     rspState.gDPLoadBlock(7, 0, 0, 1023, 0x200);
@@ -361,9 +345,7 @@ function initWaterStreamMaterial(rspState: RSPState, fogEnabled: boolean, mapID:
     rspState.setTextureScrollSpeeds([1.234, 0.45]);
 }
 
-// D_global_asm_80747D80[SceneNodeMaterial.GroundFog].
-// func_global_asm_8063D608 loads texture 0x1765 and
-// func_global_asm_8063D638 constructs this material.
+// func_global_asm_8063D638 + D_global_asm_80747D80[SceneNodeMaterial.GroundFog + func_global_asm_8063D608
 function initGroundFogMaterial(rspState: RSPState, mapID: number): void {
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 1 << OtherModeH_Layout.G_MDSFT_TEXTLOD);
@@ -414,9 +396,8 @@ function initGeneratedWaterSurfaceMaterial(rspState: RSPState, scrollS: number, 
     rspState.setTextureScrollSpeeds([scrollS, scrollT]);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.WaterFog]. This shares
-// Water's table-7 texture 0x3C5, but func_global_asm_806618A0 uses fog and
-// the surface record's alpha as a primitive-alpha multiplier.
+// from func_global_asm_806618A0 + D_global_asm_80748A90[GeneratedSurfaceMaterial.WaterFog]
+// TODO: figure out how to render waterfog properly
 function initGeneratedWaterFogSurfaceMaterial(rspState: RSPState, scrollS: number, scrollT: number, alpha: number): void {
     rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 1, 0x0D000000);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_32b, 0, 0, 7, 0, 0, 5, 14, 0, 5, 14);
@@ -438,9 +419,7 @@ function initGeneratedWaterFogSurfaceMaterial(rspState: RSPState, scrollS: numbe
     rspState.setTextureScrollSpeeds([scrollS, scrollT]);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.Lava]. The game loads texture
-// 0x2EE and palette 0x2EF in func_global_asm_80661B84, then constructs this
-// material display list in func_global_asm_80661BF0.
+// from func_global_asm_80661BF0 + D_global_asm_80748A90[GeneratedSurfaceMaterial.Lava] + func_global_asm_80661B84
 function initGeneratedLavaSurfaceMaterial(rspState: RSPState, scrollSpeed: number): void {
     rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_CI, ImageSize.G_IM_SIZ_16b, 1, 0x2EE);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_CI, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 6, 0, 0, 6, 0);
@@ -467,9 +446,7 @@ function initGeneratedLavaSurfaceMaterial(rspState: RSPState, scrollSpeed: numbe
     rspState.setTextureScrollSpeeds([scrollSpeed]);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.Meadow]. The game loads
-// texture 0xF0 in func_global_asm_80661EC4 and constructs this material in
-// func_global_asm_80661F0C.
+// from func_global_asm_80661F0C + D_global_asm_80748A90[GeneratedSurfaceMaterial.Meadow] + func_global_asm_80661EC4
 function initGeneratedMeadowSurfaceMaterial(rspState: RSPState): void {
     initGeneratedMipmappedSurfaceMaterial(rspState, 0xF0);
 }
@@ -496,8 +473,7 @@ function initGeneratedMipmappedSurfaceMaterial(rspState: RSPState, textureID: nu
     rspState.gDPSetOtherModeL(3, 29, 0x0C192230);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.Dirt]. The handler is
-// func_global_asm_806621D0 and uses table-25 texture 0x75C.
+// from func_global_asm_806621D0 + D_global_asm_80748A90[GeneratedSurfaceMaterial.Dirt]
 function initGeneratedDirtSurfaceMaterial(rspState: RSPState): void {
     initGeneratedMipmappedSurfaceMaterial(rspState, 0x75C);
 }
@@ -518,20 +494,17 @@ function initGeneratedScrollingOpaqueSurfaceMaterial(rspState: RSPState, segment
     rspState.setTextureScrollSpeeds([scrollT]);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.LavaBright]. The handler is
-// func_global_asm_8066241C and uses table-7 texture 0x3B9.
+// from func_global_asm_8066241C + D_global_asm_80748A90[GeneratedSurfaceMaterial.LavaBright], expecting table-7 0x3B9
 function initGeneratedLavaBrightSurfaceMaterial(rspState: RSPState, scrollT: number): void {
     initGeneratedScrollingOpaqueSurfaceMaterial(rspState, 0x0D, scrollT);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.Acid]. The handler is
-// func_global_asm_80662618 and uses table-7 texture 0x3D2.
+// from func_global_asm_80662618 + D_global_asm_80748A90[GeneratedSurfaceMaterial.Acid], expecting table-7 0x3D2
 function initGeneratedAcidSurfaceMaterial(rspState: RSPState, scrollT: number): void {
     initGeneratedScrollingOpaqueSurfaceMaterial(rspState, 0x0D, scrollT);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.WaterFire]. The handler is
-// func_global_asm_80662838 and combines table-7 textures 0x3BA and 0x3DB.
+// from func_global_asm_80662838 + D_global_asm_80748A90[GeneratedSurfaceMaterial.WaterFire], expecting table-7 0x3BA and 0x3DB.
 function initGeneratedWaterFireSurfaceMaterial(rspState: RSPState): void {
     rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, 0x0C000000);
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0, 7, 0, 0, 5, 0, 0, 5, 0);
@@ -555,8 +528,7 @@ function initGeneratedWaterFireSurfaceMaterial(rspState: RSPState): void {
     rspState.gDPSetOtherModeL(0, 29, 0x0C184A50);
 }
 
-// D_global_asm_80748A90[GeneratedSurfaceMaterial.DirtCave]. The handler
-// delegates to func_global_asm_80661F0C with table-25 texture 0xAF4.
+// from func_global_asm_80661F0C + D_global_asm_80748A90[GeneratedSurfaceMaterial.DirtCave].
 function initGeneratedDirtCaveSurfaceMaterial(rspState: RSPState): void {
     initGeneratedMipmappedSurfaceMaterial(rspState, 0xAF4);
 }
@@ -569,9 +541,7 @@ export interface SpriteMaterialDefinition {
 }
 
 function getSpriteImageFormat(sprite: SpriteMaterialDefinition): ImageFormat {
-    // func_global_asm_80714778 copies SpriteData::unk6 to the runtime
-    // descriptor's unkA. func_global_asm_80715E94 then uses unkA & 7 as
-    // G_IM_FMT for every texture command.
+    // from func_global_asm_80714778
     return sprite.flags & 0x07;
 }
 
@@ -587,9 +557,7 @@ export function initSpriteMaterial(rspState: RSPState, sprite: SpriteMaterialDef
     const texelCount = sprite.width * sprite.height;
     const loadCount = Math.min(0x07FF, Math.ceil(texelCount * bitsPerPixel / 16) - 1);
     const line = Math.max(1, Math.ceil(sprite.width * bitsPerPixel / 64));
-    // G_TX_DXT_FRAC is 11: CALC_DXT rounds 2^11 / words-per-line up.
-    // Using 0x07FF here is one short for exact divisors (including both
-    // waterfall sprites), which shears the texture as it is loaded to TMEM.
+    // Handle G_TX_DXT_FRAC=11
     const dxt = Math.max(1, Math.ceil(0x0800 / line));
     const maskS = Math.ceil(Math.log2(sprite.width));
     const maskT = Math.ceil(Math.log2(sprite.height));
@@ -602,8 +570,8 @@ export function initSpriteMaterial(rspState: RSPState, sprite: SpriteMaterialDef
     rspState.gDPSetCombine(0x00119623, 0xFF2FFFFF); // G_CC_MODULATEIA_PRIM
     rspState.gSPSetPrimColor(0, color[0], color[1], color[2], color[3]);
 
-    // The game loads through a 16-bit tile for 4/8/16-bit sprites and a
-    // 32-bit tile for RGBA32, then renders using the definition's real size.
+    // The game code loads tiles up to 16-bit through a 16-bit tile, but renders using the real size.
+    // Speculation: this might be an optimization for the 16-bit bus.
     const loadSize = siz === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
     rspState.gDPSetTextureImage(fmt, loadSize, 1, segment << 24);
     rspState.gDPSetTile(fmt, loadSize, 0, 0, 7, 0, 0, maskT, 0, 0, maskS, 0);

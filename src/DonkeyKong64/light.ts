@@ -162,8 +162,7 @@ export function buildObjectLighting(environment: ObjectLightingEnvironment, orig
     };
 }
 
-// D_global_asm_80748430, consumed by func_global_asm_8065EB10. Entry zero is
-// the "no light" setup value; the remaining indices are the game's keyframes.
+// From func_global_asm_8065EB10 + D_global_asm_80748430
 const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
     [],
     [{ intensity: .4, color: [255, 0, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 255], radius: 150, duration: 15 }],
@@ -202,12 +201,9 @@ export function buildDynamicLights(
 ): DynamicLight[] {
     const lights: DynamicLight[] = [];
     for (const prop of setup.props) {
-        // Every model-two setup entry can select one of
-        // D_global_asm_80748430's light animations through byte 0x2E.
-        // func_global_asm_80663FCC's smaller flame/torch type list belongs to
-        // the nearby particle-effect system and is not a light eligibility
-        // test. In particular, B0's invisible "torches" markers (0x241) use
-        // animations 0x0A and 0x17.
+        // Model2 selects from lightAnimations with 0x2E.
+        // func_global_asm_80663FCC handles flames and torches through
+        // the particle-effect system.
         if (prop.lightAnimation === 0)
             continue;
         const animation = lightAnimations[prop.lightAnimation];
@@ -218,17 +214,12 @@ export function buildDynamicLights(
             kind: 'point',
             origin: vec3.fromValues(prop.position[0] * 3, prop.position[1] * 3, prop.position[2] * 3),
             animation,
-            // func_global_asm_8065EB10 adds the model instance index to
-            // object_timer so nearby flames do not pulse in lockstep.
+            // func_global_asm_8065EB10: vary light animation phase to avoid synchronization.
             phase: prop.setupIndex,
             maxDistance: maxDistance > 0 ? maxDistance : 700,
         });
     }
     for (const actor of setup.actors) {
-        // Setup actor types are the runtime Actors enum minus 0x10.
-        // 0x10 is ACTOR_SWINGING_LIGHT and 0x2A is the otherwise easy to
-        // miss ACTOR_SWINGING_LIGHT_2 ("Cave light", model 0x97). Both use
-        // func_global_asm_8069AB74 and animation 0x402.
         const definition = getActorRenderDefinition(actor.type, 0);
         if (definition === null || definition.lightBone === undefined || definition.animation === null)
             continue;
@@ -239,7 +230,6 @@ export function buildDynamicLights(
         const skeleton = parseActorSkeleton(actorGeometry);
         lights.push({
             kind: 'spot',
-            // The original uses x_position + 0.3 as the cone source.
             origin: vec3.fromValues((actor.position[0] + 0.3) * 3, actor.position[1] * 3, actor.position[2] * 3),
             color: [
                 actor.lightColor[0] / 0xFF,
@@ -250,8 +240,6 @@ export function buildDynamicLights(
             outerAngle: actor.lightCone[1] !== 0 ? actor.lightCone[1] : 65,
             speed: actor.lightSpeed,
             rotationY: actor.rotationY / 0x1000 * Math.PI * 2,
-            // createLight's default visibility distance; this behavior does
-            // not override it.
             maxDistance: 700,
             animation: parseActorAnimation(animationData, skeleton.offsets.length, definition.animation),
             skeleton,
@@ -315,15 +303,13 @@ export function buildMapChunkLighting(
     const vertexIndices: number[] = [];
     const chunkVertexEnd = chunk.vertOffset + chunk.vertSize;
     for (let vertexIndex = firstVertex; vertexIndex < sharedOutput.vertices.length; vertexIndex++) {
-        // B0's animated torch material uses the authored vertex-color path
-        // rather than the chunk's CPU-relit copy.
+        // Animated torches are self-lit.
         if (animatedMaterialVertices.has(vertexIndex))
             continue;
         const sourceAddress = vertexSourceAddresses[vertexIndex];
         if ((sourceAddress >>> 24) !== 0x06)
             continue;
-        // Segment 6 is rebound to this display list's section vertex base.
-        // Convert the address back into the complete map vertex buffer.
+        // Convert from segment 6 to the map vertex buffer.
         const sourceOffset = sectionVertexOffset + (sourceAddress & 0x00FFFFFF);
         if (sourceOffset >= chunk.vertOffset && sourceOffset < chunkVertexEnd)
             vertexIndices.push(vertexIndex);
@@ -331,8 +317,7 @@ export function buildMapChunkLighting(
     if (vertexIndices.length === 0)
         return undefined;
 
-    // func_global_asm_80655410 only copies and relights map chunks whose
-    // header flag is set. Ambient still applies when no light reaches them.
+    // func_global_asm_80655410: only flagged chunks are relit by dynamic lights.
     return {
         ambientColor: chunk.ambientColor,
         modulateVertexColors: chunk.modulateVertexColors,
@@ -352,9 +337,7 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     if (cameraFade === 0)
         return null;
     if (light.kind === 'spot') {
-        // func_global_asm_8069AB74 targets getBonePosition(actor, 2).
-        // Evaluate that bone from the archived model skeleton and 0x402
-        // instead of assuming a particular segment length.
+        // func_global_asm_8069AB74: the light is hanging off the 3rd bone
         sampleActorBonePosition(bonePosition, light.skeleton, light.animation, light.speed, tick, light.targetBone);
         vec3.scale(bonePosition, bonePosition, light.scale);
         const sinY = Math.sin(light.rotationY);
@@ -367,8 +350,7 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
         vec3.normalize(direction, direction);
         return {
             origin: light.origin,
-            // func_global_asm_8065C990 uses these literal distances
-            // against the map's three-times-scale vertex coordinates.
+            // from func_global_asm_8065C990
             innerRadius: 300,
             outerRadius: 1100,
             color: [
@@ -396,11 +378,9 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     const intensity = (current.intensity + (next.intensity - current.intensity) * t) * cameraFade;
     return {
         origin: light.origin,
-        // func_global_asm_8065BAA0 converts createLight's radius R into
-        // an inner radius of R and an outer radius of 3R for the raw map
-        // vertices consumed by func_global_asm_8065C990.
+
         innerRadius: radius,
-        outerRadius: radius * 3,
+        outerRadius: radius * 3,  // from func_global_asm_8065BAA0
         color: [
             (current.color[0] + (next.color[0] - current.color[0]) * t) / 0xFF * intensity,
             (current.color[1] + (next.color[1] - current.color[1]) * t) / 0xFF * intensity,
@@ -461,6 +441,8 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
         return;
     }
 
+    // func_global_asm_80655410: relight flagged map chunks.
+    // props/actors use sampleObjectLighting instead.
     for (const vertexIndex of lighting.vertexIndices) {
         const vertex = vertices[vertexIndex];
         let red = lighting.ambientColor[0];
@@ -477,14 +459,11 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
             green += light.color[1] * falloff;
             blue += light.color[2] * falloff;
         }
-        // func_global_asm_80655410 relights the complete copied vertex
-        // buffer of each flagged map chunk. Props and actors use the separate
-        // object-origin sample implemented by sampleObjectLighting.
         const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
         const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
         const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;
-        // func_global_asm_8065C990 applies the vertex tint before clamping.
+        // func_global_asm_8065C990: tint before clamping.
         vertexBufferData[dst + 0] = Math.min(1, red * baseRed);
         vertexBufferData[dst + 1] = Math.min(1, green * baseGreen);
         vertexBufferData[dst + 2] = Math.min(1, blue * baseBlue);

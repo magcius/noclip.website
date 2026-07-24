@@ -107,8 +107,6 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
             ),
             scale: view.getFloat32(offs + 0x0C, false),
             lightSpeed: view.getFloat32(offs + 0x10, false),
-            // The behavior passes these s32 fields through u16 temporaries,
-            // and createLight finally truncates them to u8.
             lightColor: [
                 view.getInt32(offs + 0x14, false) & 0xFF,
                 view.getInt32(offs + 0x18, false) & 0xFF,

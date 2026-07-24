@@ -331,7 +331,6 @@ class DrawCallInstance {
             const mappings = this.animatedTextureMappings[i];
             if (mappings === undefined)
                 continue;
-            // DK64 advances these counters once per 30 Hz game tick.
             const animation = this.drawCall.textureBindings[i].animation!;
             const frameDuration = Math.max(animation.frameDuration, 1);
             const frameOffset = animation.frameOffset;
@@ -388,16 +387,14 @@ class DrawCallInstance {
             primColor[0] * (primColorMultiplier?.[0] ?? 1),
             primColor[1] * (primColorMultiplier?.[1] ?? 1),
             primColor[2] * (primColorMultiplier?.[2] ?? 1),
-            primColor[3] * primAlphaMultiplier); // primitive color
+            primColor[3] * primAlphaMultiplier);
         const envColor = this.drawCall.DP_EnvColor;
-        offs += fillVec4(comb, offs, envColor[0], envColor[1], envColor[2], envColor[3]); // environment color
+        offs += fillVec4(comb, offs, envColor[0], envColor[1], envColor[2], envColor[3]);
         if (this.crossfadeDuration > 0) {
-            // The game writes its integer animation counter to PRIM_LOD_FRAC.
-            // Retain its 30 Hz frame boundaries, but interpolate the fraction
-            // continuously so the fade stays smooth at the viewer frame rate.
+            // Interpolate the 30Hz game tick in PRIM_LOD_FRAC for smoother crossfades.
             const animationTick = viewerInput.time / (1000 / 30);
             const blend = (animationTick % this.crossfadeDuration) / this.crossfadeDuration;
-            offs += fillVec4(comb, offs, blend, 0, 0, 0); // primitive LOD fraction
+            offs += fillVec4(comb, offs, blend, 0, 0, 0);
         }
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1033,13 +1030,10 @@ export class DK64Renderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         this.backdropRenderer = createBackdropRenderer(device, this.renderHelper.renderCache, backdrop, sceneID);
         this.activeLightCache = new ActiveLightCache(dynamicLights);
-        // func_global_asm_80648C84 overrides Aztec's generic 990 start with
-        // 995 while its map-specific fog animation is idle. The animation can
-        // temporarily lower it toward 970 during gameplay.
+        // from func_global_asm_80648C84: Aztec has custom fog pos overrides.
         const fogNearPosition = sceneID === 0x26 ? 995 : 990;
         this.fogParams = {
-            // gSPFogPosition is expressed in projected-depth units. Convert
-            // through DK64's map projection instead of noclip's projection.
+            // Note that fog positions are in DK64 projected-depth units.
             near: fogPositionToViewDistance(fogNearPosition, clipNear, clipFar),
             far: fogPositionToViewDistance(999, clipNear, clipFar),
             color: sceneID === 0x26
@@ -1420,8 +1414,6 @@ function addSceneActors(
                     break;
                 }
             } catch (e) {
-                // Actor setup is opt-out: malformed or unsupported model
-                // families are isolated here instead of aborting the scene.
                 if (!warnedModels.has(definition.model)) {
                     warnedModels.add(definition.model);
                     console.warn(
@@ -1484,10 +1476,6 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
     assert(definition.imagesPerFrameHorizontal === 1 && definition.imagesPerFrameVertical === 1);
     const sourceTable = definition.table !== 0 ? romData.TexData : romData.AnimTexData;
     const sourceFrames = definition.images.map((image) => sourceTable[image]);
-    const frameCount = sourceFrames.length;
-    // Sprite instances have their own sub-frame counter in the game. Expand
-    // the frame list to one entry per tick so particles emitted between global
-    // frame boundaries still begin on their requested first image.
     const frames = sourceFrames.flatMap((frame) => new Array(frameDuration).fill(frame));
     const animationTickCount = frames.length;
 
@@ -1504,10 +1492,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             segmentBuffers[0x08] = createSpriteVertexBuffer(definition, batch.length);
             const animation: AnimatedTexture[] = [{
                 segment,
-                // All phase batches use the same source frames. Key the
-                // translated textures by sprite definition, not phase;
-                // otherwise different sprites on segment 0x0E can alias in
-                // the shared texture cache when their phase numbers match.
+                // Ensure sprites on the same segment+phase don't overlap in the texture cache.
                 group: definition.id,
                 frameDuration: 1,
                 frameOffset: phase,
@@ -1565,9 +1550,7 @@ function isAlwaysRunningInitialBlock(block: ScriptBlock): boolean {
 }
 
 function nextEffectRandom(state: { value: number }): number {
-    // A fixed stream makes the viewer's static reconstruction repeatable.
-    // The game uses its shared RNG; emitter frequency and selection semantics
-    // below are otherwise identical.
+    // The game uses its own RNG, this isolated RNG is simpler.
     state.value = (Math.imul(state.value, 0x41C64E6D) + 0x3039) >>> 0;
     return state.value >>> 16;
 }
@@ -1585,9 +1568,8 @@ function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, scene
     const spriteByAddress = new Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
     const loopTicks = 900;
 
-    // func_global_asm_80664CB0 / func_global_asm_80664D20: map-keyed
-    // ambient waterfall emitters. Each definition emits a broad, stationary
-    // RGBA32 splash along its line and a smaller rising IA8 spray.
+    // from func_global_asm_80664CB0 + func_global_asm_80664D20:
+    // ambient waterfall emitters.
     const baseSpray = spriteByAddress.get(0x8072140C);
     const risingSpray = spriteByAddress.get(0x8071FF18);
     if (baseSpray !== undefined && risingSpray !== undefined) {
@@ -1597,11 +1579,6 @@ function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, scene
             const random = { value: (mapID << 16) ^ entryIndex ^ 0x664D20 };
             const baseEvents: SpriteParticleEvent[] = [];
             const risingEvents: SpriteParticleEvent[] = [];
-            // func_global_asm_80717B64 kills the base sprite after one full
-            // animation: 6 frames * 3 ticks. The emitter replaces all five
-            // B0 sprites on that same 18-tick cadence. Generate every row,
-            // rather than leaving the first row alive forever, since each
-            // replacement chooses a fresh random starting frame.
             for (let tick = 0; tick < loopTicks; tick++) {
                 if (tick % 18 === 0) {
                     for (let offset = 0; offset <= 1.00001; offset += entry.gap) {
@@ -1621,8 +1598,7 @@ function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, scene
                 }
             }
             const drawDistance = entry.distance * 3;
-            // func_global_asm_80717B64 preserves the spawn alpha through the
-            // first 3/4 of the draw distance, then fades it to zero.
+            // from func_global_asm_80717B64: particle spawn alpha control
             addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, baseSpray, baseEvents, entry.baseScale, loopTicks, 3, 18, [0xFF, 0xFF, 0xFF, 0x96], drawDistance, drawDistance * 3 / 4);
             addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, risingSpray, risingEvents, entry.risingScale, loopTicks, 3, 30, [0xFF, 0xFF, 0xFF, 0x96], entry.distance * 3);
         }
@@ -1640,8 +1616,7 @@ function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, scene
                     continue;
                 const functionAddress = romData.CustomScriptFunctionData[command.args[0]];
 
-                // func_global_asm_80644EC8: twice per tick, emit sprite
-                // D_global_asm_80720A7C at a random point in point sets 0/1.
+                // from func_global_asm_80644EC8: 2 sprites (D_global_asm_80720A7C) per tick
                 if (functionAddress === 0x80644EC8) {
                     const definition = spriteByAddress.get(0x80720A7C);
                     if (definition === undefined)
@@ -1728,10 +1703,8 @@ class SceneDesc implements Viewer.SceneDesc {
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
             segmentBuffers[0x07] = map.f3dexBin;
-            // Segment bindings persist across DK64's material display lists.
-            // Put the section's own animation group first, but retain the
-            // other map bindings as fallbacks for lists which inherit state
-            // from a previous section.
+            // Bindings persist across material display lists. The state
+            // must be maintained for proper rendering.
             const animatedTextures = dl.textureAnimationGroup !== null
                 ? [
                     ...map.animatedTextures.filter((entry) => entry.group === dl.textureAnimationGroup),
@@ -1743,8 +1716,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 romData.AnimTexData,
             ));
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
-            // func_global_asm_806592B4 applies global fog before ordinary
-            // map display lists are submitted.
+            // func_global_asm_806592B4: global fog
             initDL(state, true, map.fogEnabled);
             if (dl.materialIndex !== null)
                 initSceneNodeMaterial(state, dl.materialIndex, map.fogEnabled, sceneID);
@@ -1786,14 +1758,10 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 
-        // Capture only the map display-list geometry. The game obtains these
-        // planes from its floor-collision query; the rendered triangles give
-        // the decal pass the corresponding visible surface without archiving
-        // a second copy of the map collision data.
+        // Floor decals need an efficient way to find terrain triangles.
+        // The game uses floor-collision data, this is approximately equivalent.
         const terrainTriangles = buildTerrainTriangles(sharedOutput);
-        // Streamed maps store their map vertices at three times setup-space
-        // coordinates. Single-model maps such as DK's House store both map
-        // vertices and setup objects in the same coordinate space.
+        // Streamed maps have 3x coords, single-chunk maps (DK's House etc) do not.
         const setupWorldScale = map.chunkCount > 0 ? 3 : 1;
 
         for (const surface of map.generatedSurfaces) {

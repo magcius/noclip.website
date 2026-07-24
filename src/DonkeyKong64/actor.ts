@@ -61,10 +61,9 @@ export function getActorRenderDefinition(type: number, model: number): ActorRend
         return { model: 0x81, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
     if (type === 0x2A)
         return { model: 0x97, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
-    // ACTOR_BOOMBOX uses animation 0x63F at 8x in func_global_asm_806A1F64.
-    if (type === 0x77)
+    if (type === 0x77) // BOOMBOX, from func_global_asm_806A1F64
         return { model: 0x64, animation: 0x63F, animationSpeed: 8.0, renderer: 'skeletal' };
-    // func_global_asm_8068412C advances tag barrels' yaw and bob phase by 0x32.
+    // barrels yaw&bob, see func_global_asm_8068412C
     if ((type === 0x52 || type === 0x78 || type === 0x79) && model !== 0)
         return {
             model,
@@ -93,8 +92,7 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
     const flags = view.getUint16(0x04, false);
     const frameCount = view.getUint8(0x12);
     const frameStride = view.getUint8(0x13);
-    // func_global_asm_80614130 adds six to this offset after loading the
-    // table-11 file. func_global_asm_80619C2C then indexes it by frameStride.
+    // See func_global_asm_80614130 + func_global_asm_80619C2C for reference.
     const frameDataStart = view.getUint16(0x06, false) + 6;
     const animationBoneCount = view.getUint8(0x11) - 1;
     const decodedBoneCount = Math.min(boneCount, animationBoneCount);
@@ -111,8 +109,7 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
     const initialBitOffset = rootChannelBits[0] + rootChannelBits[1] + rootChannelBits[2];
     const rotations: Int16Array[] = [];
 
-    // TODO: Decode and apply the root XYZ translation channels handled at
-    // 80619CB0..80619D94. Their packed bits precede the bone rotations.
+    // TODO: Handle root translation xyz channels (func_global_asm_806195D0)
     if (rootChannelBits.some((bits) => bits !== 0) || rootChannelBases.some((base) => base !== 0)) {
         warnAnimationFeatureOnce(
             'root-translation',
@@ -120,9 +117,7 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
             'root translation channels are present but are not applied',
         );
     }
-    // TODO: Determine and implement the remaining animation-header flags.
-    // Flag 0x0002 is the only value present in the currently archived actor
-    // animation; func_global_asm_80619C2C also branches on flag 0x0020.
+    // TODO: Refer to func_global_asm_80619C2C, which also handles 0x0020
     if ((flags & ~0x0002) !== 0) {
         warnAnimationFeatureOnce(
             'animation-flags',
@@ -130,7 +125,6 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
             `unsupported header flags 0x${(flags & ~0x0002).toString(16)} are set`,
         );
     }
-    // TODO: Retain extra animation bones when actor attachments require them.
     if (animationBoneCount > boneCount) {
         warnAnimationFeatureOnce(
             'extra-bones',
@@ -156,8 +150,6 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
             for (let axis = 0; axis < 3; axis++) {
                 const descriptor = view.getUint16(0x14 + bone * 6 + axis * 2, false);
                 const bitCount = descriptor & 0x0F;
-                // TODO: Preserve and apply X/Y rotations. The current actor
-                // matrix path only consumes the Z channel used by 0x402.
                 if (axis < 2 && descriptor !== 0) {
                     warnAnimationFeatureOnce(
                         'xy-rotation',
@@ -165,11 +157,7 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
                         'bone X/Y rotation channels are present but are not applied',
                     );
                 }
-                // Non-extended rotations store a signed base in the upper
-                // 12 bits and a packed delta with five fractional zero bits.
-                // See 80619DA8..80619E2C.
-                // TODO: Decode the extra descriptor word used when bit 0x10
-                // is set, following 80619E60..80619EF0.
+                // The assembly handles this around 80619DA8..80619E2C and 80619E60..80619EF0
                 if ((descriptor & 0x10) !== 0) {
                     warnAnimationFeatureOnce(
                         'extended-descriptor',
@@ -210,7 +198,7 @@ export function sampleActorAnimationPose(animation: ActorAnimation, speed: numbe
 }
 
 function initializeActorDL(state: RSPState): void {
-    // func_global_asm_80630DCC leaves G_SHADE and G_LIGHTING disabled.
+    // from func_global_asm_80630DCC
     state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADING_SMOOTH);
     state.gDPSetOtherModeL(0, 29, 0x0C192078);
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
@@ -229,10 +217,7 @@ function installActorVisibilitySegments(
     for (let offs = displayListStart; offs + 8 <= displayListEnd; offs += 8) {
         const w0 = view.getUint32(offs, false);
         const w1 = view.getUint32(offs + 4, false);
-        // func_global_asm_8061324C recognizes no-push display-list branches
-        // paired with a G_SNOOP marker. func_global_asm_80614C38 then points
-        // the target segment either just past this branch (visible) or at the
-        // marker (hidden), according to the actor's hand-state bits.
+        // from func_global_asm_8061324C + func_global_asm_80614C38
         if ((w0 >>> 24) !== 0xDE || ((w0 >>> 16) & 0xFF) !== 1)
             continue;
         const segment = w1 >>> 24;
@@ -276,8 +261,7 @@ function parseActorAnimatedTextures(
             frameIDs.push(view.getUint16(offs, false));
         if (!enabled)
             continue;
-        // func_global_asm_8067E784 starts the Tiny and Chunky size-barrel
-        // sequence at 0.5 frames per tick and restricts it to frames 0..8.
+        // func_global_asm_8067E784 modifies barrel animations
         const isSizeBarrel = actor.type === 0x18 || actor.type === 0x09;
         const activeFrameIDs = isSizeBarrel ? frameIDs.slice(0, 9) : frameIDs.slice(0, 1);
         const frames = activeFrameIDs
@@ -361,7 +345,6 @@ export function buildSkeletalActorMesh(
     }
     const skeleton = parseActorSkeleton(geometry);
     if (skeleton.offsets.length === 0) {
-        // Static actors still select an identity matrix from segment 4.
         skeleton.offsets.push(vec3.create());
         skeleton.parents.push(-1);
     }

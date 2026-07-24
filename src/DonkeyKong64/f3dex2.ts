@@ -36,8 +36,6 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
-    // Level geometry historically relies on vertex colors even when G_SHADE
-    // is absent. Actor wrappers can opt out to preserve their unlit materials.
     public useVertexColors = true;
     public textureBindings: DrawTextureBinding[] = [];
 }
@@ -61,7 +59,6 @@ function getAnimatedTextureCacheKey(frame: ArrayBufferSlice): number {
         animatedTextureSourceIDs.set(frame, sourceID);
     }
 
-    // All ordinary RDP addresses and existing synthetic keys are uint32s.
     return 0x100000000 + sourceID;
 }
 
@@ -185,9 +182,6 @@ export class RSPState {
     }
 
     public gSPMatrix(dramAddr: number, params: number): void {
-        // Actor and model2 matrices are arrays of 0x40-byte Mtx records in
-        // segments 4 and 9. The renderer transforms decoded vertices on the
-        // CPU, but retaining the selected record preserves their binding.
         const segment = dramAddr >>> 24;
         if (segment !== 0x04 && segment !== 0x09)
             return;
@@ -244,7 +238,7 @@ export class RSPState {
             if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
                 const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
                 // assert(textlut === RDP.TextureLUT.G_TT_RGBA16);
-    
+
                 const palTmem = 0x100 + (tile.palette << 4);
                 const palCache = assertExists(this.DP_TMemUploadTracker.get(palTmem));
                 segmentBuffers[0x02] = assertExists(this.textureBuffers[palCache.addr]);
@@ -285,9 +279,7 @@ export class RSPState {
     }
 
     private _flushTextures(dc: DrawCall): void {
-        // G_TEXTURE can remain enabled across untextured materials. Actor
-        // model 0x64 does this before its first TMEM upload, relying on the
-        // active SHADE-only combiner to avoid sampling a tile.
+        // Actor 0x64 relies on G_TEXTURE staying active before its TMEM upload.
         if (!this.SP_TextureState.on
             || (!RDP.combineParamsUsesT0(dc.DP_Combine) && !RDP.combineParamsUsesT1(dc.DP_Combine)))
             return;
@@ -336,7 +328,7 @@ export class RSPState {
             vec4.copy(dc.DP_PrimColor, this.DP_PrimColor);
             vec4.copy(dc.DP_EnvColor, this.DP_EnvColor);
             dc.DP_PrimLOD = this.DP_PrimLOD;
- 
+
             this._flushTextures(dc);
         }
     }
@@ -556,7 +548,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number, stopAtSnoop = false)
             } break;
 
             case F3DEX2_GBI.G_MTX:
-                // F3DEX2 encodes G_MTX_PUSH inverted in the command.
+                // Note that G_MTX_PUSH is inverted.
                 state.gSPMatrix(w1, (w0 & 0xFF) ^ 0x04);
                 break;
 
@@ -584,8 +576,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number, stopAtSnoop = false)
 
             case F3DEX2_GBI.G_DL: {
                 runDL_F3DEX2(state, w1);
-                // G_DL_PUSH (0) returns here and resumes this list, while
-                // G_DL_NOPUSH (1) is a branch and never resumes it.
+                // PUSH (0) resumes this list, NOPUSH(1) doesn't.
                 if ((w0 & 0x00010000) !== 0)
                     return;
             } break;
@@ -671,14 +662,6 @@ export function runDL_F3DEX2(state: RSPState, addr: number, stopAtSnoop = false)
                 break;
 
             case F3DEX2_GBI.G_SNOOP:
-                // DK64's map loader uses these no-op tags to divide a chunk
-                // display list into independently submitted sections, each
-                // with its own vertex-segment base. The marker at the start
-                // belongs to this section; the next one starts another.
-                //
-                // Actor geometry also uses G_SNOOP as a visibility marker,
-                // where it remains an ordinary no-op, so only map section
-                // callers opt into this boundary behavior.
                 if (stopAtSnoop && i !== start)
                     return;
                 break;
