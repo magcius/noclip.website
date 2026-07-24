@@ -47,8 +47,8 @@ function main() {
     // 03 map floors: TODO: not extracted or interpreted (floor collision).
     // 04 prop geometry: extracted as PropGeometryData; TODO: interpret every
     //    prop header/display-list variant, animation, and LOD path.
-    // 05 actor geometry: supported skeletal actors are extracted for maps
-    //    which place them; TODO: render the remaining actor model families.
+    // 05 actor geometry: every nonzero model referenced by a map's setup
+    //    actors is extracted; unsupported model families opt out at runtime.
     // 06 unused: TODO: verify that no retail map references this table.
     // 07 uncompressed textures: partially extracted as AnimTexData; TODO:
     //    archive the complete table instead of only known map/sprite frames.
@@ -58,8 +58,8 @@ function main() {
     //    actor/model1 entries and all remaining model2 behaviors.
     // 10 instance scripts: extracted raw as ScriptData; TODO: interpret the
     //    complete condition/action language and stateful object behavior.
-    // 11 animations: maps archive the animation files required by the actors
-    //    we support; TODO: generically interpret every animation channel.
+    // 11 animations: maps archive behavior-specific animations whose
+    //    selection is understood; other actors render in their neutral pose.
     // 12 text: TODO: not extracted or interpreted.
     // 13 animation code: TODO: not extracted or interpreted.
     // 14 HUD textures: TODO: not extracted; not map geometry.
@@ -113,6 +113,8 @@ function main() {
     const CustomScriptFunctionCount = 118;
     const EnvironmentParticleTableOffset = 0x14D8A0;
     const EnvironmentParticleCount = 13;
+    const ActorDefinitionTableOffset = 0x1535B0;
+    const ActorDefinitionCount = 0x80;
 
     function getTableOffset(table: number): number {
         return PointerTableOffset + view.getUint32(PointerTableOffset + table * 4);
@@ -230,6 +232,11 @@ function main() {
             risingScale: globalASM.readFloatBE(offs + 0x1C),
         });
     }
+    const actorModelByType = new Map<number, number>();
+    for (let i = 0; i < ActorDefinitionCount; i++) {
+        const offs = ActorDefinitionTableOffset + i * 0x30;
+        actorModelByType.set(globalASM.readUInt16BE(offs), globalASM.readUInt16BE(offs + 2));
+    }
 
     // Texture data table.
     const TexData: ArrayBufferSlice[] = [];
@@ -272,6 +279,7 @@ function main() {
         ScriptData: ArrayBufferSlice;
         CritterData: ArrayBufferSlice | null;
         PropGeometry: { Type: number, Data: ArrayBufferSlice }[];
+        ActorDefinitions: { Type: number, Model: number }[];
         ActorGeometry: { Model: number, Data: ArrayBufferSlice }[];
         AnimationData: { ID: number, Data: ArrayBufferSlice }[];
         EnvironmentParticleData: typeof EnvironmentParticleData;
@@ -421,6 +429,20 @@ function main() {
             const pointer = actor.readUInt32BE(displayListTable + i * 4);
             scanDisplayList(0x03000000 | (pointer - runtimeBase));
         }
+        const descriptorPointer = actor.readUInt32BE(0x10);
+        let descriptorOffs = descriptorPointer - runtimeBase + 0x28;
+        if (descriptorPointer !== 0 && descriptorOffs >= 0 && descriptorOffs + 2 <= actor.byteLength) {
+            const descriptorCount = actor.readUInt16BE(descriptorOffs);
+            descriptorOffs += 2;
+            for (let descriptor = 0; descriptor < descriptorCount; descriptor++) {
+                if (descriptorOffs + 6 > actor.byteLength)
+                    break;
+                const frameCount = actor.readUInt16BE(descriptorOffs);
+                descriptorOffs += 6;
+                for (let frame = 0; frame < frameCount && descriptorOffs + 2 <= actor.byteLength; frame++, descriptorOffs += 2)
+                    usage.geometry.add(actor.readUInt16BE(descriptorOffs));
+            }
+        }
     }
 
     const spriteByAddress = new Map(SpriteData.map((sprite) => [sprite.address, sprite]));
@@ -497,16 +519,24 @@ function main() {
         actorOffs += 4;
         const actorModels = new Set<number>();
         const actorAnimations = new Set<number>();
+        const actorDefinitions = new Map<number, number>();
         for (let i = 0; i < actorCount; i++, actorOffs += 0x38) {
             const type = setup.readUInt16BE(actorOffs + 0x32);
+            const model = actorModelByType.get(type + 0x10) ?? 0;
+            actorDefinitions.set(type, model);
+            if (model !== 0)
+                actorModels.add(model);
             if (type === 0x10) {
-                actorModels.add(0x81);
                 actorAnimations.add(0x402);
             } else if (type === 0x2A) {
-                actorModels.add(0x97);
                 actorAnimations.add(0x402);
+            } else if (type === 0x77) {
+                // ACTOR_BOOMBOX: func_global_asm_806A1F64 uses 0x63F during
+                // normal gameplay and switches to 0x640 for cutscenes.
+                actorAnimations.add(0x63F);
             }
         }
+        const ActorDefinitions = [...actorDefinitions].map(([Type, Model]) => ({ Type, Model }));
         const ActorGeometry = [];
         for (const model of actorModels) {
             // Actor model IDs are one-based; pointer-table slot zero is model 1.
@@ -542,6 +572,7 @@ function main() {
             ScriptData: scriptData,
             CritterData: mapID < CritterData.length ? resolveTableEntry(CritterData, mapID) : null,
             PropGeometry,
+            ActorDefinitions,
             ActorGeometry,
             AnimationData: animations,
             EnvironmentParticleData: environmentParticleData,
@@ -858,6 +889,7 @@ function main() {
             ScriptData: source.ScriptData,
             CritterData: source.CritterData,
             PropGeometry: source.PropGeometry,
+            ActorDefinitions: source.ActorDefinitions,
             ActorGeometry: source.ActorGeometry,
             AnimationData: source.AnimationData,
             EnvironmentParticleData: source.EnvironmentParticleData,

@@ -166,8 +166,8 @@ export function buildDynamicLights(
         // 0x10 is ACTOR_SWINGING_LIGHT and 0x2A is the otherwise easy to
         // miss ACTOR_SWINGING_LIGHT_2 ("Cave light", model 0x97). Both use
         // func_global_asm_8069AB74 and animation 0x402.
-        const definition = getActorRenderDefinition(actor.type);
-        if (definition === null || definition.lightBone === undefined)
+        const definition = getActorRenderDefinition(actor.type, 0);
+        if (definition === null || definition.lightBone === undefined || definition.animation === null)
             continue;
         const actorGeometry = actorResources.loadActorGeometry(definition.model);
         const animationData = actorResources.loadAnimation(definition.animation);

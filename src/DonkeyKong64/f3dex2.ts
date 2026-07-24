@@ -31,6 +31,7 @@ export class DrawCall extends F3DEX.DrawCall {
     public textureAnimationIndices: number[][] = [];
     public textureAnimationFrameDurations: number[] = [];
     public textureAnimationFrameOffsets: number[] = [];
+    public textureAnimationCrossfadeGroups: (number | null)[] = [];
     public textureScrollSpeeds: number[] = [];
 }
 
@@ -39,6 +40,7 @@ export interface AnimatedTexture {
     group: number;
     frameDuration: number;
     frameOffset?: number;
+    crossfade?: boolean;
     frames: ArrayBufferSlice[];
 }
 
@@ -67,8 +69,10 @@ export class RSPState {
     private stateChanged: boolean = false;
     private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
     private vertexCacheSourceAddresses = nArray(64, () => 0);
+    private vertexCacheMatrixChains = nArray(64, () => [] as number[]);
     public vertexSourceAddresses: number[] = [];
     public vertexMatrixIndices: number[] = [];
+    public vertexMatrixChains: number[][] = [];
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new F3DEX.TextureState();
@@ -87,6 +91,8 @@ export class RSPState {
     private textureScrollSpeeds: number[] = [];
 
     public SP_MatrixIndex = 0;
+    private SP_MatrixChain: number[] = [];
+    private SP_MatrixStack: number[][] = [];
     public DP_Half1 = 0;
 
     constructor(
@@ -107,6 +113,8 @@ export class RSPState {
     // partially reset the state to prepare for a new node
     public clear(): void {
         this.SP_MatrixIndex = 0;
+        this.SP_MatrixChain.length = 0;
+        this.SP_MatrixStack.length = 0;
         // start a new collection of drawcalls
         this.output = new RSPOutput();
         this.stateChanged = true;
@@ -114,6 +122,7 @@ export class RSPState {
         // mark any existing vertices as belonging to the parent
         for (let i = 0; i < this.vertexCache.length; i++) {
             this.vertexCache[i].matrixIndex = 1;
+            this.vertexCacheMatrixChains[i] = [];
             this.vertexCache[i].outputIndex = -1;
         }
     }
@@ -149,19 +158,35 @@ export class RSPState {
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
             this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
+            this.vertexCacheMatrixChains[v0 + i] = this.SP_MatrixChain.slice();
             this.vertexCacheSourceAddresses[v0 + i] = dramAddr + i * 0x10;
         }
     }
 
-    public gSPMatrix(dramAddr: number): void {
-        // Actor matrices are an array of 0x40-byte Mtx records in segment 4.
-        // The renderer skins the decoded vertices on the CPU, but retaining
-        // the selected record preserves the display list's bone binding.
-        if ((dramAddr >>> 24) === 0x04)
-            this.SP_MatrixIndex = (dramAddr & 0x00FFFFFF) >>> 6;
+    public gSPMatrix(dramAddr: number, params: number): void {
+        // Actor and model2 matrices are arrays of 0x40-byte Mtx records in
+        // segments 4 and 9. The renderer transforms decoded vertices on the
+        // CPU, but retaining the selected record preserves their binding.
+        const segment = dramAddr >>> 24;
+        if (segment !== 0x04 && segment !== 0x09)
+            return;
+        const matrixIndex = (dramAddr & 0x00FFFFFF) >>> 6;
+        if (params & 0x04)
+            this.SP_MatrixStack.push(this.SP_MatrixChain.slice());
+        if (params & 0x02)
+            this.SP_MatrixChain = [matrixIndex];
+        else
+            this.SP_MatrixChain.push(matrixIndex);
+        this.SP_MatrixIndex = matrixIndex;
     }
 
-    private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number, frameOffset: number } {
+    public gSPPopMatrix(count: number): void {
+        for (let i = 0; i < count && this.SP_MatrixStack.length > 0; i++)
+            this.SP_MatrixChain = this.SP_MatrixStack.pop()!;
+        this.SP_MatrixIndex = this.SP_MatrixChain[this.SP_MatrixChain.length - 1] ?? 0;
+    }
+
+    private _translateTileTexture(tileIndex: number): { textureIndex: number, animationIndices: number[], frameDuration: number, frameOffset: number, crossfadeGroup: number | null } {
         const tile = this.DP_TileState[tileIndex];
         const cache = assertExists(this.DP_TMemUploadTracker.get(tile.tmem));
         const segment = (cache.addr >>> 24) & 0xFF;
@@ -185,6 +210,7 @@ export class RSPState {
                     animationIndices: textureIndices.length > 1 ? textureIndices : [],
                     frameDuration: animation.frameDuration,
                     frameOffset: animation.frameOffset ?? 0,
+                    crossfadeGroup: animation.crossfade ? animation.group : null,
                 };
             }
 
@@ -212,12 +238,13 @@ export class RSPState {
                 animationIndices: [],
                 frameDuration: 0,
                 frameOffset: 0,
+                crossfadeGroup: null,
             };
         } else {
             const animation = this.animatedTextures.find((entry) => entry.segment === segment);
             if (animation === undefined) {
                 console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
-                return { textureIndex: 0, animationIndices: [], frameDuration: 0, frameOffset: 0 };
+                return { textureIndex: 0, animationIndices: [], frameDuration: 0, frameOffset: 0, crossfadeGroup: null };
             }
 
             const oldCacheKey = tile.cacheKey;
@@ -236,13 +263,17 @@ export class RSPState {
                 animationIndices: textureIndices,
                 frameDuration: animation.frameDuration,
                 frameOffset: animation.frameOffset ?? 0,
+                crossfadeGroup: null,
             };
         }
     }
 
     private _flushTextures(dc: DrawCall): void {
-        // If textures are not on, then we have no textures.
-        if (!this.SP_TextureState.on)
+        // G_TEXTURE can remain enabled across untextured materials. Actor
+        // model 0x64 does this before its first TMEM upload, relying on the
+        // active SHADE-only combiner to avoid sampling a tile.
+        if (!this.SP_TextureState.on
+            || (!RDP.combineParamsUsesT0(dc.DP_Combine) && !RDP.combineParamsUsesT1(dc.DP_Combine)))
             return;
 
         const lod_en = !!((this.DP_OtherModeH >>> 16) & 0x01);
@@ -259,15 +290,19 @@ export class RSPState {
             dc.textureAnimationIndices.push(texture0.animationIndices);
             dc.textureAnimationFrameDurations.push(texture0.frameDuration);
             dc.textureAnimationFrameOffsets.push(texture0.frameOffset);
+            dc.textureAnimationCrossfadeGroups.push(texture0.crossfadeGroup);
             dc.textureScrollSpeeds.push(this.textureScrollSpeeds[0] ?? 0);
 
             if (!lod_en && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 const texture1 = this._translateTileTexture(this.SP_TextureState.tile + 1);
+                if (texture0.crossfadeGroup !== null && texture1.crossfadeGroup === texture0.crossfadeGroup)
+                    texture1.frameOffset++;
                 dc.textureIndices.push(texture1.textureIndex);
                 dc.textureAnimationIndices.push(texture1.animationIndices);
                 dc.textureAnimationFrameDurations.push(texture1.frameDuration);
                 dc.textureAnimationFrameOffsets.push(texture1.frameOffset);
+                dc.textureAnimationCrossfadeGroups.push(texture1.crossfadeGroup);
                 dc.textureScrollSpeeds.push(this.textureScrollSpeeds[1] ?? 0);
             }
         }
@@ -302,6 +337,9 @@ export class RSPState {
         this.vertexMatrixIndices[this.vertexCache[i0].outputIndex] = this.vertexCache[i0].matrixIndex;
         this.vertexMatrixIndices[this.vertexCache[i1].outputIndex] = this.vertexCache[i1].matrixIndex;
         this.vertexMatrixIndices[this.vertexCache[i2].outputIndex] = this.vertexCache[i2].matrixIndex;
+        this.vertexMatrixChains[this.vertexCache[i0].outputIndex] = this.vertexCacheMatrixChains[i0];
+        this.vertexMatrixChains[this.vertexCache[i1].outputIndex] = this.vertexCacheMatrixChains[i1];
+        this.vertexMatrixChains[this.vertexCache[i2].outputIndex] = this.vertexCacheMatrixChains[i2];
         this.sharedOutput.indices.push(
             this.vertexCache[i0].outputIndex,
             this.vertexCache[i1].outputIndex,
@@ -434,7 +472,10 @@ enum F3DEX2_GBI {
 }
 
 export function runDL_F3DEX2(state: RSPState, addr: number): void {
-    const segmentBuffer = state.segmentBuffers[(addr >>> 24) & 0xFF];
+    const segment = (addr >>> 24) & 0xFF;
+    const segmentBuffer = state.segmentBuffers[segment];
+    if (segmentBuffer === undefined)
+        throw new Error(`Missing F3DEX2 display-list segment 0x${hexzero(segment, 2)} for address 0x${hexzero(addr, 8)}`);
     const view = segmentBuffer.createDataView();
 
     for (let i = (addr & 0x00FFFFFF); i < segmentBuffer.byteLength; i += 0x08) {
@@ -499,7 +540,8 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             } break;
 
             case F3DEX2_GBI.G_MTX:
-                state.gSPMatrix(w1);
+                // F3DEX2 encodes G_MTX_PUSH inverted in the command.
+                state.gSPMatrix(w1, (w0 & 0xFF) ^ 0x04);
                 break;
 
             case F3DEX2_GBI.G_TRI1: {
@@ -572,7 +614,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             } break;
 
             case F3DEX2_GBI.G_POPMTX: {
-                // state.gSPPopMatrix();
+                state.gSPPopMatrix(Math.max(1, w1 >>> 6));
             } break;
 
             case F3DEX2_GBI.G_SETPRIMCOLOR: {

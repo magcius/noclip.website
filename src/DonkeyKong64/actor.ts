@@ -5,7 +5,7 @@ import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { assert } from '../util.js';
-import { RSP_Geometry, RSPOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 
 export interface SetupActor {
     type: number;
@@ -54,17 +54,35 @@ export interface SkeletalActorMesh {
 
 export interface ActorRenderDefinition {
     model: number;
-    animation: number;
+    animation: number | null;
+    animationSpeed: number | 'setup';
     renderer: 'skeletal';
     lightBone?: number;
+    rotationYSpeed?: number;
 }
 
-export function getActorRenderDefinition(type: number): ActorRenderDefinition | null {
+export function getActorRenderDefinition(type: number, model: number): ActorRenderDefinition | null {
+    // Behavior-specific animation overrides. Actors without an override still
+    // render in their neutral skeletal pose, so new setup types opt in by
+    // default as soon as the extractor can resolve a nonzero model.
     if (type === 0x10)
-        return { model: 0x81, animation: 0x402, renderer: 'skeletal', lightBone: 2 };
+        return { model: 0x81, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
     if (type === 0x2A)
-        return { model: 0x97, animation: 0x402, renderer: 'skeletal', lightBone: 2 };
-    return null;
+        return { model: 0x97, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
+    // Setup actor 0x77 becomes ACTOR_BOOMBOX (0x87) after the engine adds
+    // 0x10. func_global_asm_806A1F64 selects animation 0x63F during normal
+    // gameplay (0x640 in cutscenes) and passes an 8.0 speed multiplier.
+    if (type === 0x77)
+        return { model: 0x64, animation: 0x63F, animationSpeed: 8.0, renderer: 'skeletal' };
+    // Setup actor 0x52 becomes the tag-barrel actor 0x62 after the engine's
+    // +0x10 type lookup. World/Troff swap barrels 0x78 and 0x79 use thin
+    // wrappers around the same behavior. func_global_asm_8068412C advances
+    // their 12-bit yaw by 0x32 every update while the barrel is not entered.
+    if ((type === 0x52 || type === 0x78 || type === 0x79) && model !== 0)
+        return { model, animation: null, animationSpeed: 0, renderer: 'skeletal', rotationYSpeed: 0x32 };
+    if (model === 0)
+        return null;
+    return { model, animation: null, animationSpeed: 0, renderer: 'skeletal' };
 }
 
 const warnedAnimationFeatures = new Set<string>();
@@ -249,6 +267,82 @@ function initializeActorDL(state: RSPState): void {
     state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
 }
 
+function installActorVisibilitySegments(
+    geometry: ArrayBufferSlice,
+    view: DataView,
+    displayListStart: number,
+    displayListEnd: number,
+    segmentBuffers: ArrayBufferSlice[],
+): void {
+    for (let offs = displayListStart; offs + 8 <= displayListEnd; offs += 8) {
+        const w0 = view.getUint32(offs, false);
+        const w1 = view.getUint32(offs + 4, false);
+        // func_global_asm_8061324C recognizes no-push display-list branches
+        // paired with a G_SNOOP marker. func_global_asm_80614C38 then points
+        // the target segment either just past this branch (visible) or at the
+        // marker (hidden), according to the actor's hand-state bits.
+        if ((w0 >>> 24) !== 0xDE || ((w0 >>> 16) & 0xFF) !== 1)
+            continue;
+        const segment = w1 >>> 24;
+        let hasMarker = false;
+        for (let marker = displayListStart; marker + 8 <= displayListEnd; marker += 8) {
+            if (view.getUint32(marker, false) === 0 && view.getUint32(marker + 4, false) === segment) {
+                hasMarker = true;
+                break;
+            }
+        }
+        if (hasMarker && segmentBuffers[segment] === undefined)
+            segmentBuffers[segment] = geometry.slice(offs + 8);
+    }
+}
+
+function parseActorAnimatedTextures(
+    geometry: ArrayBufferSlice,
+    textureBuffers: ArrayBufferSlice[],
+    actor: SetupActor,
+): AnimatedTexture[] {
+    const view = geometry.createDataView();
+    const runtimeBase = view.getUint32(0x00, false);
+    const descriptorPointer = view.getUint32(0x10, false);
+    if (descriptorPointer === 0)
+        return [];
+    let offs = descriptorPointer - runtimeBase + 0x28;
+    if (offs < 0 || offs + 2 > view.byteLength)
+        return [];
+    const descriptorCount = view.getUint16(offs, false);
+    offs += 2;
+    const animatedTextures: AnimatedTexture[] = [];
+    for (let descriptor = 0; descriptor < descriptorCount; descriptor++) {
+        if (offs + 6 > view.byteLength)
+            break;
+        const frameCount = view.getUint16(offs, false);
+        const segment = view.getUint16(offs + 2, false);
+        const enabled = view.getUint16(offs + 4, false) !== 0;
+        offs += 6;
+        const frameIDs: number[] = [];
+        for (let frame = 0; frame < frameCount && offs + 2 <= view.byteLength; frame++, offs += 2)
+            frameIDs.push(view.getUint16(offs, false));
+        if (!enabled)
+            continue;
+        // func_global_asm_8067E784 starts the Tiny and Chunky size-barrel
+        // sequence at 0.5 frames per tick and restricts it to frames 0..8.
+        const isSizeBarrel = actor.type === 0x18 || actor.type === 0x09;
+        const activeFrameIDs = isSizeBarrel ? frameIDs.slice(0, 9) : frameIDs.slice(0, 1);
+        const frames = activeFrameIDs
+            .map((textureID) => textureBuffers[textureID])
+            .filter((frame): frame is ArrayBufferSlice => frame !== undefined);
+        if (frames.length > 0) {
+            animatedTextures.push({
+                segment,
+                group: descriptor,
+                frames,
+                frameDuration: isSizeBarrel ? 2 : 0,
+            });
+        }
+    }
+    return animatedTextures;
+}
+
 export function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
     const view = data.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
@@ -270,8 +364,9 @@ export function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
 
 export function buildSkeletalActorMesh(
     geometry: ArrayBufferSlice,
-    animationData: ArrayBufferSlice,
-    animationID: number,
+    animationData: ArrayBufferSlice | null,
+    animationID: number | null,
+    animationSpeed: number,
     actor: SetupActor,
     textureBuffers: ArrayBufferSlice[],
     sharedOutput: RSPSharedOutput,
@@ -282,7 +377,12 @@ export function buildSkeletalActorMesh(
     const displayListTable = view.getUint32(0x04, false) - runtimeBase + 0x28;
     const segmentBuffers: ArrayBufferSlice[] = [];
     segmentBuffers[0x03] = geometry.slice(0x28);
-    const state = new RSPState(textureBuffers, segmentBuffers, sharedOutput);
+    if (displayListCount > 0) {
+        const firstDisplayList = view.getUint32(displayListTable, false) - runtimeBase + 0x28;
+        installActorVisibilitySegments(geometry, view, firstDisplayList, displayListTable, segmentBuffers);
+    }
+    const animatedTextures = parseActorAnimatedTextures(geometry, textureBuffers, actor);
+    const state = new RSPState(textureBuffers, segmentBuffers, sharedOutput, animatedTextures);
     initializeActorDL(state);
     const firstVertex = sharedOutput.vertices.length;
     for (let i = 0; i < displayListCount; i++) {
@@ -308,7 +408,21 @@ export function buildSkeletalActorMesh(
         matrixIndices[i] = state.vertexMatrixIndices[firstVertex + i] ?? 0;
     }
     const skeleton = parseActorSkeleton(geometry);
-    const sourceAnimation = parseActorAnimation(animationData, skeleton.offsets.length, animationID);
+    if (skeleton.offsets.length === 0) {
+        // Static actor models still select segment-4 matrix zero in their
+        // display lists. The engine supplies the actor's identity/root matrix
+        // there; use a synthetic root so the shared CPU skinning path applies
+        // the same no-op local transform.
+        skeleton.offsets.push(vec3.create());
+        skeleton.parents.push(-1);
+    }
+    const sourceAnimation = animationData !== null && animationID !== null
+        ? parseActorAnimation(animationData, skeleton.offsets.length, animationID)
+        : {
+            playbackRate: 0,
+            frameCount: 1,
+            rotations: [new Int16Array(skeleton.offsets.length * 3)],
+        };
     return {
         rspState: state,
         rspOutput: output,
@@ -316,7 +430,7 @@ export function buildSkeletalActorMesh(
         animation: {
             firstVertex,
             vertexCount,
-            speed: actor.lightSpeed,
+            speed: animationSpeed,
             sourcePositions,
             matrixIndices,
             boneOffsets: skeleton.offsets,
