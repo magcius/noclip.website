@@ -32,6 +32,7 @@
   },
   "scripts": {
     "start": "wireit",
+    "start:release": "wireit",
     "build": "wireit",
     "build:wasm-debug": "wireit",
     "build:wasm-release": "wireit",
@@ -63,6 +64,15 @@
       "command": "rsbuild dev",
       "dependencies": [
         "build:wasm-debug"
+      ],
+      "service": true,
+      "cascade": false,
+      "files": []
+    },
+    "start:release": {
+      "command": "rsbuild dev",
+      "dependencies": [
+        "build:wasm-release"
       ],
       "service": true,
       "cascade": false,

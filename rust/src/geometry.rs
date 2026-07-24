@@ -213,10 +213,86 @@ impl ConvexHull {
     }
 
     pub fn contains_aabb(&self, aabb: &AABB) -> bool {
+        #[cfg(target_arch = "wasm32")]
+        {
+            return self.contains_aabb_simd(aabb);
+        }
+
         match self.intersect_aabb(aabb) {
             IntersectionState::Outside => false,
             _ => true,
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn contains_aabb_simd(&self, aabb: &AABB) -> bool {
+        use core::arch::wasm32::{
+            f32x4, f32x4_add, f32x4_ge, f32x4_lt, f32x4_mul, f32x4_splat, i32x4_bitmask,
+            v128_bitselect,
+        };
+
+        let zero = f32x4_splat(0.0);
+        let min_x = f32x4_splat(aabb.min.x);
+        let min_y = f32x4_splat(aabb.min.y);
+        let min_z = f32x4_splat(aabb.min.z);
+        let max_x = f32x4_splat(aabb.max.x);
+        let max_y = f32x4_splat(aabb.max.y);
+        let max_z = f32x4_splat(aabb.max.z);
+
+        let mut i = 0;
+        while i + 4 <= self.planes.len() {
+            let p0 = &self.planes[i];
+            let p1 = &self.planes[i + 1];
+            let p2 = &self.planes[i + 2];
+            let p3 = &self.planes[i + 3];
+
+            let nx = f32x4(p0.normal.x, p1.normal.x, p2.normal.x, p3.normal.x);
+            let ny = f32x4(p0.normal.y, p1.normal.y, p2.normal.y, p3.normal.y);
+            let nz = f32x4(p0.normal.z, p1.normal.z, p2.normal.z, p3.normal.z);
+            let d = f32x4(p0.d, p1.d, p2.d, p3.d);
+
+            let x = v128_bitselect(max_x, min_x, f32x4_ge(nx, zero));
+            let y = v128_bitselect(max_y, min_y, f32x4_ge(ny, zero));
+            let z = v128_bitselect(max_z, min_z, f32x4_ge(nz, zero));
+            let distance = f32x4_add(
+                f32x4_add(f32x4_mul(nx, x), f32x4_mul(ny, y)),
+                f32x4_add(f32x4_mul(nz, z), d),
+            );
+
+            if i32x4_bitmask(f32x4_lt(distance, zero)) != 0 {
+                return false;
+            }
+
+            i += 4;
+        }
+
+        // Portal-clipped frustums do not necessarily have a multiple of four
+        // planes, so finish the tail without constructing nalgebra vectors.
+        while i < self.planes.len() {
+            let plane = &self.planes[i];
+            let x = if plane.normal.x >= 0.0 {
+                aabb.max.x
+            } else {
+                aabb.min.x
+            };
+            let y = if plane.normal.y >= 0.0 {
+                aabb.max.y
+            } else {
+                aabb.min.y
+            };
+            let z = if plane.normal.z >= 0.0 {
+                aabb.max.z
+            } else {
+                aabb.min.z
+            };
+            let distance = plane.normal.x * x + plane.normal.y * y + plane.normal.z * z + plane.d;
+            if distance < 0.0 {
+                return false;
+            }
+            i += 1;
+        }
+
+        true
     }
 
     pub fn contains_sphere(&self, center: &Vec3, radius: f32) -> bool {
@@ -261,7 +337,7 @@ impl ConvexHull {
         self.intersect_aabb(&aabb)
     }
 
-    pub fn js_contains_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
+    pub fn js_contains_aabb(&self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
         let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
         self.contains_aabb(&aabb)
     }
