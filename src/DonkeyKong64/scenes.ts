@@ -46,8 +46,7 @@ import type { GeneratedSurface, InstanceScript, ScriptBlock, SetupActor, SetupPr
 import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import { AABB } from '../Geometry.js';
-import { SceneCuller, computeMeshLocalBoundingBox, computeMeshWorldBoundingBox } from './cull.js';
-import type { CullGroup } from './cull.js';
+import { MeshBounds } from './cull.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -537,7 +536,7 @@ export interface Mesh {
 
 export class MeshData {
     public renderData: RenderData;
-    private localBoundingBox: AABB | null | undefined;
+    public cullBounds: MeshBounds;
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
     public dynamicLightingEnabled = true;
@@ -547,6 +546,11 @@ export class MeshData {
         this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propAnimation !== undefined);
         this.spriteFades = mesh.spriteBillboards !== undefined ? nArray(mesh.spriteBillboards.length, () => 1) : null;
         this.lightingDirty = mesh.dynamicLighting !== undefined;
+        this.cullBounds = new MeshBounds(
+            mesh.sharedOutput,
+            mesh.rspOutput,
+            [mesh.propAnimation?.boundingBox, mesh.actorAnimation?.boundingBox],
+        );
 
         const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
             const localFirstVertex = firstVertex - this.renderData.vertexStart;
@@ -569,17 +573,6 @@ export class MeshData {
             includeVertexRange(sprite.firstVertex, 4);
         for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
             includeVertexRange(vertexIndex, 1);
-    }
-
-    public getLocalBoundingBox(): AABB | null {
-        if (this.localBoundingBox === undefined) {
-            this.localBoundingBox = this.mesh.rspOutput === null ? null : computeMeshLocalBoundingBox(
-                this.mesh.sharedOutput,
-                this.mesh.rspOutput,
-                [this.mesh.propAnimation?.boundingBox, this.mesh.actorAnimation?.boundingBox],
-            );
-        }
-        return this.localBoundingBox;
     }
 
     public setDynamicLightingEnabled(enabled: boolean): void {
@@ -749,7 +742,6 @@ const lookatScratch = vec3.create();
 const modelViewScratch = mat4.create();
 export class RootMeshRenderer {
     private visible = true;
-    private cullParent: CullGroup | null = null;
     private cullBoundingBox: AABB | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
@@ -845,23 +837,12 @@ export class RootMeshRenderer {
         this.visible = v;
     }
 
-    public setCullBoundingBox(boundingBox: AABB): void {
+    public setCullBoundingBox(boundingBox: AABB | null): void {
         this.cullBoundingBox = boundingBox;
     }
 
-    public setCullParent(cullGroup: CullGroup): void {
-        this.cullParent = cullGroup;
-    }
-
     public computeWorldBoundingBox(): AABB | null {
-        const localBoundingBox = this.geometryData.getLocalBoundingBox();
-        if (localBoundingBox === null)
-            return null;
-        return computeMeshWorldBoundingBox(
-            localBoundingBox,
-            this.modelMatrix,
-            this.rootTransformAnimation,
-        );
+        return this.geometryData.cullBounds.computeWorld(this.modelMatrix, this.rootTransformAnimation);
     }
 
     public setRotationYAnimation(anglePerTick: number): void {
@@ -897,10 +878,7 @@ export class RootMeshRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, activeLightCache: ActiveLightCache): void {
         if (!this.visible)
             return;
-        if (this.cullParent !== null && !this.cullParent.visible)
-            return;
-        if (this.cullBoundingBox !== null
-            && !viewerInput.camera.frustum.contains(this.cullBoundingBox))
+        if (this.cullBoundingBox !== null && !viewerInput.camera.frustum.contains(this.cullBoundingBox))
             return;
 
         if (this.rootTransformAnimation !== null) {
@@ -979,7 +957,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private backdropRenderer: BackdropRenderer | null;
-    private sceneCuller = new SceneCuller();
     private activeLightCache: ActiveLightCache;
     public gpuTextureCache = new GPUTextureCache();
 
@@ -999,14 +976,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
         const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
         this.meshRenderers.push(renderer);
         return renderer;
-    }
-
-    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): CullGroup {
-        return this.sceneCuller.addChunkBoundingBox(chunkID, boundingBox);
-    }
-
-    public setObjectCullBoundingBox(renderer: RootMeshRenderer, objectBoundingBox: AABB | null): void {
-        this.sceneCuller.setObjectCullBoundingBox(renderer, objectBoundingBox);
     }
 
     constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null, dynamicLights: readonly DynamicLight[]) {
@@ -1099,12 +1068,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
         addVisibilityCheckbox('Show Surfaces', SceneRenderLayer.Surfaces);
         addVisibilityCheckbox('Show Effects', SceneRenderLayer.Effects);
 
-        const showChunkBoundsCheckbox = new UI.Checkbox('Show Chunk Bounds', false);
-        showChunkBoundsCheckbox.onchanged = () => {
-            this.sceneCuller.showBounds = showChunkBoundsCheckbox.checked;
-        };
-        renderHacksPanel.contents.appendChild(showChunkBoundsCheckbox.elem);
-
         return [renderHacksPanel];
     }
 
@@ -1118,7 +1081,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         this.activeLightCache.update(viewerInput.camera.worldMatrix, tick);
-        this.sceneCuller.prepareToRender(viewerInput.camera.frustum);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.activeLightCache);
 
@@ -1128,17 +1090,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
-        const debugDraw = this.renderHelper.debugDraw;
-        const showChunkBounds = this.sceneCuller.showBounds;
-        if (showChunkBounds) {
-            debugDraw.beginFrame(
-                viewerInput.camera.projectionMatrix,
-                viewerInput.camera.viewMatrix,
-                viewerInput.backbufferWidth,
-                viewerInput.backbufferHeight,
-            );
-            this.sceneCuller.drawBounds(debugDraw);
-        }
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -1153,8 +1104,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        if (showChunkBounds)
-            debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
@@ -1389,7 +1338,7 @@ function addSceneActors(
             renderer.setRotationYAnimation(definition.rotationYSpeed);
         if (definition.positionYAmplitude !== undefined)
             renderer.setPositionYAnimation(definition.positionYAmplitude * worldScale, definition.rotationYSpeed ?? 0);
-        sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
+        renderer.setCullBoundingBox(renderer.computeWorldBoundingBox());
         sceneRenderer.meshRenderers.push(renderer);
     }
 }
@@ -1659,13 +1608,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 ? SceneRenderLayer.MapGeometry
                 : SceneRenderLayer.Surfaces;
             const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
-            if (dl.ChunkID >= 0) {
-                const boundingBox = meshData.getLocalBoundingBox();
-                if (boundingBox !== null) {
-                    meshRenderer.setCullBoundingBox(boundingBox);
-                    meshRenderer.setCullParent(sceneRenderer.addChunkBoundingBox(dl.ChunkID, boundingBox));
-                }
-            }
+            if (dl.ChunkID >= 0)
+                meshRenderer.setCullBoundingBox(meshData.cullBounds.getLocal());
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 

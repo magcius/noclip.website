@@ -804,7 +804,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
         renderer.modelMatrix[12] = worldX;
         renderer.modelMatrix[13] = worldY;
         renderer.modelMatrix[14] = worldZ;
-        sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
+        renderer.setCullBoundingBox(renderer.computeWorldBoundingBox());
         if (fadeEndDistance > fadeStartDistance) {
             renderer.distanceFade = {
                 origin: vec3.fromValues(worldX, worldY, worldZ),
@@ -934,7 +934,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             if (sharedRenderer === null)
                 sharedRenderer = renderer;
             renderer.setCameraBillboard(origin, scale);
-            sceneRenderer.setObjectCullBoundingBox(renderer, computeBillboardBoundingBox(
+            renderer.setCullBoundingBox(computeBillboardBoundingBox(
                 origin,
                 quad.x.map((x) => x * scale),
                 quad.y.map((y) => y * scale),
@@ -1031,7 +1031,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             // from func_global_asm_80636FFC: self-lit objects have a flag to opt out of dynamic lighting.
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
-            sceneRenderer.setObjectCullBoundingBox(renderer, renderer.computeWorldBoundingBox());
+            renderer.setCullBoundingBox(renderer.computeWorldBoundingBox());
         }
     }
 }

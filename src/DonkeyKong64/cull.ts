@@ -2,29 +2,14 @@ import { mat4 } from 'gl-matrix';
 import type { ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
 
 import type { RSPSharedOutput } from '../BanjoKazooie/f3dex.js';
-import { Cyan } from '../Color.js';
 import { AABB } from '../Geometry.js';
-import type { Frustum } from '../Geometry.js';
-import type { DebugDraw } from '../gfx/helpers/DebugDraw.js';
 import type { RSPOutput } from './f3dex2.js';
-
-export interface CullGroup {
-    boundingBox: AABB;
-    visible: boolean;
-}
-
-interface CullableRenderer {
-    setCullBoundingBox(boundingBox: AABB): void;
-    setCullParent(cullGroup: CullGroup): void;
-}
 
 interface RootTransformCullAnimation {
     baseMatrix: ReadonlyMat4;
     rotationYRadiansPerTick: number;
     positionYAmplitude: number;
 }
-
-const identityMatrix = mat4.create();
 
 function computeDisplayListBoundingBox(sharedOutput: RSPSharedOutput, output: RSPOutput): AABB | null {
     const boundingBox = new AABB();
@@ -200,46 +185,56 @@ export function computeMatrixAnimationBoundingBox(
     return boundingBox;
 }
 
-export function computeMeshLocalBoundingBox(
-    sharedOutput: RSPSharedOutput,
-    output: RSPOutput,
-    animationBoundingBoxes: readonly (AABB | undefined)[],
-): AABB | null {
-    const localBoundingBox = computeDisplayListBoundingBox(sharedOutput, output);
-    if (localBoundingBox === null)
-        return null;
-    for (const boundingBox of animationBoundingBoxes) {
-        if (boundingBox !== undefined)
-            localBoundingBox.union(localBoundingBox, boundingBox);
-    }
-    return localBoundingBox;
-}
+export class MeshBounds {
+    private localBoundingBox: AABB | null | undefined;
 
-export function computeMeshWorldBoundingBox(
-    sourceBoundingBox: AABB,
-    modelMatrix: ReadonlyMat4,
-    rootAnimation: RootTransformCullAnimation | null,
-): AABB {
-    const localBoundingBox = sourceBoundingBox.clone();
-    const worldBoundingBox = new AABB();
-    if (rootAnimation === null) {
-        worldBoundingBox.transform(localBoundingBox, modelMatrix);
-    } else {
-        if (rootAnimation.rotationYRadiansPerTick !== 0) {
-            const radiusXZ = Math.hypot(
-                Math.max(Math.abs(localBoundingBox.min[0]), Math.abs(localBoundingBox.max[0])),
-                Math.max(Math.abs(localBoundingBox.min[2]), Math.abs(localBoundingBox.max[2])),
-            );
-            localBoundingBox.set(
-                -radiusXZ, localBoundingBox.min[1], -radiusXZ,
-                radiusXZ, localBoundingBox.max[1], radiusXZ,
-            );
-        }
-        worldBoundingBox.transform(localBoundingBox, rootAnimation.baseMatrix);
-        worldBoundingBox.min[1] -= Math.abs(rootAnimation.positionYAmplitude);
-        worldBoundingBox.max[1] += Math.abs(rootAnimation.positionYAmplitude);
+    constructor(
+        private sharedOutput: RSPSharedOutput,
+        private output: RSPOutput | null,
+        private animationBoundingBoxes: readonly (AABB | undefined)[],
+    ) {
     }
-    return worldBoundingBox;
+
+    public getLocal(): AABB | null {
+        if (this.localBoundingBox === undefined) {
+            this.localBoundingBox = this.output === null
+                ? null
+                : computeDisplayListBoundingBox(this.sharedOutput, this.output);
+            if (this.localBoundingBox !== null) {
+                for (const boundingBox of this.animationBoundingBoxes) {
+                    if (boundingBox !== undefined)
+                        this.localBoundingBox.union(this.localBoundingBox, boundingBox);
+                }
+            }
+        }
+        return this.localBoundingBox;
+    }
+
+    public computeWorld(modelMatrix: ReadonlyMat4, rootAnimation: RootTransformCullAnimation | null): AABB | null {
+        const sourceBoundingBox = this.getLocal();
+        if (sourceBoundingBox === null)
+            return null;
+        const localBoundingBox = sourceBoundingBox.clone();
+        const worldBoundingBox = new AABB();
+        if (rootAnimation === null) {
+            worldBoundingBox.transform(localBoundingBox, modelMatrix);
+        } else {
+            if (rootAnimation.rotationYRadiansPerTick !== 0) {
+                const radiusXZ = Math.hypot(
+                    Math.max(Math.abs(localBoundingBox.min[0]), Math.abs(localBoundingBox.max[0])),
+                    Math.max(Math.abs(localBoundingBox.min[2]), Math.abs(localBoundingBox.max[2])),
+                );
+                localBoundingBox.set(
+                    -radiusXZ, localBoundingBox.min[1], -radiusXZ,
+                    radiusXZ, localBoundingBox.max[1], radiusXZ,
+                );
+            }
+            worldBoundingBox.transform(localBoundingBox, rootAnimation.baseMatrix);
+            worldBoundingBox.min[1] -= Math.abs(rootAnimation.positionYAmplitude);
+            worldBoundingBox.max[1] += Math.abs(rootAnimation.positionYAmplitude);
+        }
+        return worldBoundingBox;
+    }
 }
 
 export function computeSkeletalAnimationBoundingBox(
@@ -267,64 +262,4 @@ export function computeSkeletalAnimationBoundingBox(
         -boundingRadius, -boundingRadius, -boundingRadius,
         boundingRadius, boundingRadius, boundingRadius,
     );
-}
-
-export class SceneCuller {
-    public showBounds = false;
-
-    private chunkCullGroups: (CullGroup | undefined)[] = [];
-
-    public addChunkBoundingBox(chunkID: number, boundingBox: AABB): CullGroup {
-        let cullGroup = this.chunkCullGroups[chunkID];
-        if (cullGroup === undefined) {
-            cullGroup = { boundingBox: boundingBox.clone(), visible: true };
-            this.chunkCullGroups[chunkID] = cullGroup;
-        } else {
-            cullGroup.boundingBox.union(cullGroup.boundingBox, boundingBox);
-        }
-        return cullGroup;
-    }
-
-    public setObjectCullBoundingBox(renderer: CullableRenderer, objectBoundingBox: AABB | null): void {
-        if (objectBoundingBox === null)
-            return;
-        renderer.setCullBoundingBox(objectBoundingBox);
-
-        let bestCullGroup: CullGroup | null = null;
-        let bestVolume = Infinity;
-        for (const cullGroup of this.chunkCullGroups) {
-            if (cullGroup === undefined)
-                continue;
-            const boundingBox = cullGroup.boundingBox;
-            if (objectBoundingBox.min[0] < boundingBox.min[0] || objectBoundingBox.max[0] > boundingBox.max[0]
-                || objectBoundingBox.min[1] < boundingBox.min[1] || objectBoundingBox.max[1] > boundingBox.max[1]
-                || objectBoundingBox.min[2] < boundingBox.min[2] || objectBoundingBox.max[2] > boundingBox.max[2])
-                continue;
-            const volume = (boundingBox.max[0] - boundingBox.min[0])
-                * (boundingBox.max[1] - boundingBox.min[1])
-                * (boundingBox.max[2] - boundingBox.min[2]);
-            if (volume < bestVolume) {
-                bestCullGroup = cullGroup;
-                bestVolume = volume;
-            }
-        }
-        if (bestCullGroup !== null)
-            renderer.setCullParent(bestCullGroup);
-    }
-
-    public prepareToRender(frustum: Frustum): void {
-        for (const cullGroup of this.chunkCullGroups) {
-            if (cullGroup !== undefined)
-                cullGroup.visible = frustum.contains(cullGroup.boundingBox);
-        }
-    }
-
-    public drawBounds(debugDraw: DebugDraw): void {
-        if (!this.showBounds)
-            return;
-        for (const cullGroup of this.chunkCullGroups) {
-            if (cullGroup !== undefined)
-                debugDraw.drawBoxLine(cullGroup.boundingBox, identityMatrix, Cyan);
-        }
-    }
 }
