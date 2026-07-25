@@ -532,7 +532,7 @@ class Main {
             assert(ret.viewer !== undefined);
             this.viewer = ret.viewer;
 
-            this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
+            this.webXRContext = new WebXRContext(this.viewer.gfxDevice, this.viewer.gfxSwapChain);
             this.webXRContext.onframe = this.animationLoop.frameRequested;
             this.webXRContext.onsupportedchanged = this._syncWebXRSettingsVisible.bind(this);
 
@@ -1069,6 +1069,8 @@ class Main {
     }
 
     private _syncWebXRSettingsVisible(): void {
+        if (this.ui === undefined)
+            return;
         this.ui.xrSettings.setVisible(this.webXRContext.isSupported);
     }
 

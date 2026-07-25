@@ -1,5 +1,5 @@
 
-import { GfxSwapChain } from "./gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxSwapChain } from "./gfx/platform/GfxPlatform.js";
 import { mat4, vec3 } from "gl-matrix";
 
 // TODO WebXR: Known issues
@@ -35,7 +35,7 @@ export class WebXRContext {
 
     public isSupported = false;
 
-    constructor(private swapChain: GfxSwapChain) {
+    constructor(public device: GfxDevice, private swapChain: GfxSwapChain) {
         this.checkIsSupported();
     }
 
@@ -66,7 +66,7 @@ export class WebXRContext {
         ]);
 
         const layer = await this.swapChain.createWebXRLayer(this.xrSession);
-        this.xrSession.updateRenderState({ baseLayer: layer, depthNear: 5, depthFar: 1000000.0 });
+        this.xrSession.updateRenderState({ baseLayer: layer, depthNear: 100000, depthFar: 5 });
 
         if (this.onstart !== null)
             this.onstart();
