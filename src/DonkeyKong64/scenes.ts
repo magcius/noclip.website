@@ -1265,7 +1265,7 @@ export class ROMData {
     public TexData: ArrayBufferSlice[];
     public AnimTexData: ArrayBufferSlice[];
 
-    constructor(common: CommonData, level: any, commonTextureGroups: TextureData[], unknown: TextureData | null) {
+    constructor(common: CommonData, level: any, commonTextureGroups: TextureData[]) {
         this.MapData = level.MapData;
         this.SetupData = level.SetupData;
         this.ScriptData = level.ScriptData;
@@ -1287,10 +1287,6 @@ export class ROMData {
         for (const group of commonTextureGroups) {
             overlayTextureData(this.TexData, group.TexData);
             overlayTextureData(this.AnimTexData, group.AnimTexData);
-        }
-        if (unknown !== null) {
-            overlayTextureData(this.TexData, unknown.TexData);
-            overlayTextureData(this.AnimTexData, unknown.AnimTexData);
         }
         applyTextureEntries(this.TexData, level.TexData, true);
         applyTextureEntries(this.AnimTexData, level.AnimTexData, false);
@@ -1588,20 +1584,13 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
         const levelData: any = BYML.parse(levelBuffer, BYML.FileType.CRG1);
         const commonTextureGroupIDs: number[] = levelData.CommonTextureGroups ?? [];
-        const [commonTextureGroups, unknownData] = await Promise.all([
-            Promise.all(commonTextureGroupIDs.map((groupID) => {
-                const suffix = hexzero(groupID, 2).toUpperCase();
-                return context.dataShare.ensureObject(`${pathBase}/CommonTextureData/${suffix}`, async () => {
-                    return new TextureData(await dataFetcher.fetchData(`${pathBase}/common_${suffix}.crg1`));
-                });
-            })),
-            levelData.UsesUnknownTextures
-                ? context.dataShare.ensureObject(`${pathBase}/UnknownData`, async () => {
-                    return new TextureData(await dataFetcher.fetchData(`${pathBase}/unknown.crg1`));
-                })
-                : Promise.resolve(null),
-        ]);
-        const romData = new ROMData(commonData, levelData, commonTextureGroups, unknownData);
+        const commonTextureGroups = await Promise.all(commonTextureGroupIDs.map((groupID) => {
+            const suffix = hexzero(groupID, 2).toUpperCase();
+            return context.dataShare.ensureObject(`${pathBase}/CommonTextureData/${suffix}`, async () => {
+                return new TextureData(await dataFetcher.fetchData(`${pathBase}/common_${suffix}.crg1`));
+            });
+        }));
+        const romData = new ROMData(commonData, levelData, commonTextureGroups);
         const map = new DK64Map(decompress(romData.MapData), romData.AnimTexData);
         const setup = parseSetup(romData.loadSetup());
         const scripts = parseInstanceScripts(romData.loadScripts());

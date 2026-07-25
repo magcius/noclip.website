@@ -1,21 +1,44 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
-import { fileURLToPath } from "url";
 
 import * as BYML from '../../byml.js';
-import { assert, hexzero } from "../../util.js";
-import { Zlib, gunzipSync, inflateRawSync } from "zlib";
+import { assert } from "../../util.js";
+import { Zlib, inflateRawSync } from "zlib";
+import { hexzero } from "../../util.js";
+import { gunzipSync } from "zlib";
 import { parseInstanceScripts, parseSetup as parseSetupData } from '../parse.js';
-import type { InstanceScript, Setup } from '../parse.js';
 import {
     GeneratedSurfaceMaterial, SceneNodeMaterial,
     getGeneratedSurfaceAnimatedTextureBindings, getSceneNodeAnimatedTextureBindings,
     isGeneratedSurfaceMaterial, isSceneNodeMaterial,
 } from '../material.js';
 
-export const PointerTable = {
-    MapGeometry: 1,
+function fetchDataSync(path: string): ArrayBufferSlice {
+    const b: Buffer = readFileSync(path);
+    return new ArrayBufferSlice(b.buffer);
+}
+
+const pathBaseIn  = `./data/DonkeyKong64_Raw`;
+const pathBaseOut = `./data/DonkeyKong64`;
+
+function determineSizeOfZlibStream(buffer: ArrayBufferSlice, srcOffs: number): number {
+    const view = buffer.createDataView();
+    assert(view.getUint32(srcOffs + 0x00) === 0x1F8B0800);
+
+    // typescript types are wrong, when info = true, then it returns a buffer and an engine
+    const { engine } = inflateRawSync(buffer.createTypedArray(Uint8Array, srcOffs + 0x0A), { info: true }) as unknown as { buffer: Buffer, engine: Zlib };
+    const size = engine.bytesWritten;
+
+    return 0x12 + size;
+}
+
+function cutZlibBuffer(buffer: ArrayBufferSlice, srcOffs: number): ArrayBufferSlice {
+    const size = determineSizeOfZlibStream(buffer, srcOffs);
+    return buffer.subarray(srcOffs, size);
+}
+
+const PointerTable = {
     PropGeometry: 4,
     ActorGeometry: 5,
     TexturesUncompressed: 7,
@@ -23,458 +46,41 @@ export const PointerTable = {
     Scripts: 10,
     Animations: 11,
     HUDTextures: 14,
-    Spawners: 16,
     Critters: 22,
-    TexturesGeometry: 25,
 } as const;
 
-export interface DK64SpriteDefinition {
-    address: number;
-    id: number;
-    imagesPerFrameHorizontal: number;
-    imagesPerFrameVertical: number;
-    flags: number;
-    codec: number;
-    params: number[];
-    table: number;
-    width: number;
-    height: number;
-    images: number[];
-}
-
-export interface DK64EnvironmentParticle {
-    map: number;
-    start: number[];
-    end: number[];
-    gap: number;
-    distance: number;
-    baseScale: number;
-    risingScale: number;
-}
-
-export interface DK64ActorDefinition {
-    tableIndex: number;
-    type: number;
-    model: number;
-    behavior: number;
-    name: string;
-    words: number[];
-}
-
-export interface DK64LightAnimationKeyframe {
-    intensity: number;
-    color: number[];
-    radius: number;
-    duration: number;
-}
-
-export interface DK64PropGeometry {
-    name: string;
-    layout: number;
-    mainDisplayListStart: number;
-    secondaryDisplayListStart: number;
-    vertexStart: number;
-    matrixAnimationStart: number;
-    matrixDataStart: number;
-    decal: {
-        texture: number;
-        rotationStep: number;
-        footprint: number[];
-        textureSize: number[];
-        format: number;
-        size: number;
-        fade: number[];
-        alpha: number;
-        flags: number;
-    } | null;
-    indexedTextures: { target: number; crossfade: number; duration: number; frameCount: number; frames: number[] }[];
-    runtimeQuads: {
-        texture: number;
-        palette: number;
-        dimensions: number[];
-        format: number;
-        size: number;
-        x: number[];
-        y: number[];
-        z: number[];
-        s: number[];
-        t: number[];
-    }[];
-}
-
-export interface DK64ActorGeometry {
-    runtimeBase: number;
-    boneCount: number;
-    displayLists: { pointer: number; localOffset: number }[];
-    skeletonOffset: number;
-    auxiliaryData: { headerOffset: number; start: number; end: number }[];
-}
-
-// DK64Extractor is exported so it can be reused by inspection tooling during reversing.
-export class DK64Extractor {
-    public static readonly PointerTableOffset = 0x101C50;
-    public static readonly PointerTableCountOffset = DK64Extractor.PointerTableOffset + 0x80;
-    public static readonly GlobalASMVirtualBase = 0x805FB300;
-
-    private static readonly GlobalASMCodeROMOffset = 0x113F0;
-    private static readonly GlobalASMDataROMOffset = 0xC29D4;
-    private static readonly GlobalASMDataCompressedSize = 0x949C;
-    private static readonly SpritePointerTableOffset = 0x15A090;
-    private static readonly SpritePointerCount = 176;
-    private static readonly CustomScriptFunctionTableOffset = 0x14CB70;
-    private static readonly EnvironmentParticleTableOffset = 0x14D8A0;
-    private static readonly EnvironmentParticleCount = 13;
-    private static readonly LightAnimationTableAddress = 0x80748430;
-    private static readonly LightAnimationCount = 27;
-    private static readonly ActorDefinitionTableAddress = 0x8074E8B0;
-    private static readonly ActorDefinitionCount = 0x80;
-    private static readonly ActorBehaviorTableAddress = 0x8074C0A0;
-
-    private globalASM: Buffer | null = null;
-
-    constructor(public readonly rom: Buffer, private readonly reportRedirect: (message: string) => void = console.log) {
-    }
-
-    public getTableOffset(table: number): number {
-        return DK64Extractor.PointerTableOffset
-            + this.rom.readUInt32BE(DK64Extractor.PointerTableOffset + table * 4);
-    }
-
-    public getTableCount(table: number): number {
-        return this.rom.readUInt32BE(DK64Extractor.PointerTableCountOffset + table * 4);
-    }
-
-    public getPointerTableData(table: number, fileID: number, name = `Table ${table}`): Buffer {
-        return this.getPointerTableDataAt(this.getTableOffset(table), fileID, name, new Set());
-    }
-
-    public extractCompressedTable(table: number): (Buffer | number)[] {
-        const tableOffset = this.getTableOffset(table);
-        const files: (Buffer | number)[] = [];
-        const firstFileForPointer = new Map<number, number>();
-        for (let i = 0; i < this.getTableCount(table); i++) {
-            const pointer = this.rom.readUInt32BE(tableOffset + i * 4);
-            const nextTableStart = table < 31
-                ? this.rom.readUInt32BE(DK64Extractor.PointerTableOffset + (table + 1) * 4) : 0;
-            if (!(pointer & 0x80000000) && nextTableStart !== 0 && pointer >= nextTableStart)
-                break;
-            const offs = (pointer & 0x7FFFFFFF) + DK64Extractor.PointerTableOffset;
-            if ((pointer & 0x80000000) !== 0)
-                files[i] = this.rom.readUInt16BE(offs);
-            else if (firstFileForPointer.has(pointer))
-                files[i] = firstFileForPointer.get(pointer)!;
-            else {
-                firstFileForPointer.set(pointer, i);
-                assert(this.rom.readUInt32BE(offs) === 0x1F8B0800);
-                const { engine } = inflateRawSync(this.rom.subarray(offs + 0x0A), { info: true }) as unknown as { buffer: Buffer, engine: Zlib };
-                files[i] = this.rom.subarray(offs, offs + 0x0A + engine.bytesWritten);
-            }
-        }
-        return files;
-    }
-
-    public extractCompressedTableEntry(table: number, index: number): Buffer {
-        const tableOffset = this.getTableOffset(table);
-        assert(index >= 0 && index < this.getTableCount(table));
-        const pointer = this.rom.readUInt32BE(tableOffset + index * 4);
-        assert((pointer & 0x80000000) === 0);
-        const offs = (pointer & 0x7FFFFFFF) + DK64Extractor.PointerTableOffset;
-        assert(this.rom.readUInt32BE(offs) === 0x1F8B0800);
-        const { engine } = inflateRawSync(this.rom.subarray(offs + 0x0A), { info: true }) as unknown as { buffer: Buffer, engine: Zlib };
-        return this.rom.subarray(offs, offs + 0x0A + engine.bytesWritten);
-    }
-
-    public extractRawTableEntry(table: number, index: number): Buffer {
-        const tableOffset = this.getTableOffset(table);
-        assert(index >= 0 && index < this.getTableCount(table));
-        const pointer = this.rom.readUInt32BE(tableOffset + index * 4);
-        const nextPointer = this.rom.readUInt32BE(tableOffset + (index + 1) * 4);
-        assert((pointer & 0x80000000) === 0);
-        assert((nextPointer & 0x80000000) === 0);
-        const offs = (pointer & 0x7FFFFFFF) + DK64Extractor.PointerTableOffset;
-        const nextOffs = (nextPointer & 0x7FFFFFFF) + DK64Extractor.PointerTableOffset;
-        assert(nextOffs >= offs);
-        return this.rom.subarray(offs, nextOffs);
-    }
-
-    private getPointerTableDataAt(tableOffset: number, fileID: number, name: string, visited: Set<number>): Buffer {
-        assert(!visited.has(fileID));
-        visited.add(fileID);
-        const pointer = this.rom.readUInt32BE(tableOffset + fileID * 4);
-        const romOffset = (pointer & 0x7FFFFFFF) + DK64Extractor.PointerTableOffset;
-        if ((pointer & 0x80000000) !== 0) {
-            const targetFileID = this.rom.readUInt16BE(romOffset);
-            this.reportRedirect(`${name} ${hexzero(fileID, 2)} redirects to ${hexzero(targetFileID, 2)}`);
-            return this.getPointerTableDataAt(tableOffset, targetFileID, name, visited);
-        }
-
-        if (this.rom.readUInt32BE(romOffset) === 0x1F8B0800)
-            return inflateRawSync(this.rom.subarray(romOffset + 0x0A));
-        const nextPointer = this.rom.readUInt32BE(tableOffset + (fileID + 1) * 4);
-        const nextROMOffset = (nextPointer & 0x7FFFFFFF) + DK64Extractor.PointerTableOffset;
-        return this.rom.subarray(romOffset, nextROMOffset);
-    }
-
-    public getMap(mapID: number): Buffer {
-        return this.getPointerTableData(PointerTable.MapGeometry, mapID, 'Map');
-    }
-
-    public getPropGeometry(type: number): Buffer {
-        return this.getPointerTableData(PointerTable.PropGeometry, type, 'Prop geometry');
-    }
-
-    public parsePropGeometry(data: Buffer): DK64PropGeometry {
-        const indexedTextures: DK64PropGeometry['indexedTextures'] = [];
-        const indexedStart = data.readUInt32BE(0x6C);
-        if (indexedStart + 4 <= data.length) {
-            const count = data.readUInt32BE(indexedStart);
-            for (let i = 0; i < count; i++) {
-                const offs = indexedStart + 4 + i * 0x84;
-                if (offs + 0x84 > data.length)
-                    break;
-                const frameCount = data.readUInt32BE(offs + 0x0C);
-                indexedTextures.push({
-                    target: data.readUInt32BE(offs),
-                    crossfade: data.readUInt32BE(offs + 4),
-                    duration: data.readUInt32BE(offs + 8),
-                    frameCount,
-                    frames: Array.from(
-                        { length: Math.max(1, Math.min(frameCount, 0x1E)) },
-                        (_, frame) => frame === 0 ? data.readUInt32BE(offs) : data.readUInt32BE(offs + 0x0C + frame * 4),
-                    ),
-                });
-            }
-        }
-        const runtimeQuads: DK64PropGeometry['runtimeQuads'] = [];
-        const runtimeStart = data.readUInt32BE(0x70);
-        if (data.readUInt8(0x1C) === 2 && runtimeStart + 4 <= data.length) {
-            const count = data.readUInt32BE(runtimeStart);
-            for (let i = 0; i < count; i++) {
-                const offs = runtimeStart + 4 + i * 0x30;
-                if (offs + 0x30 > data.length)
-                    break;
-                const values = (base: number, stride: number) =>
-                    Array.from({ length: 4 }, (_, j) => data.readInt16BE(offs + base + j * stride));
-                runtimeQuads.push({
-                    texture: data.readUInt16BE(offs),
-                    palette: data.readUInt16BE(offs + 2),
-                    dimensions: [data.readUInt8(offs + 0x2C), data.readUInt8(offs + 0x2D)],
-                    format: data.readUInt8(offs + 0x2F),
-                    size: data.readUInt8(offs + 0x2E),
-                    x: values(0x04, 2),
-                    y: values(0x0C, 2),
-                    z: values(0x14, 2),
-                    s: values(0x1C, 4),
-                    t: values(0x1E, 4),
-                });
-            }
-        }
-        const decalTexture = data.readUInt16BE(0x28);
-        return {
-            name: data.subarray(0x0C, 0x20).toString('ascii').split('\0')[0],
-            layout: data.readUInt8(0x1C),
-            mainDisplayListStart: data.readUInt32BE(0x40),
-            secondaryDisplayListStart: data.readUInt32BE(0x44),
-            vertexStart: data.readUInt32BE(0x48),
-            matrixAnimationStart: data.readUInt32BE(0x64),
-            matrixDataStart: data.readUInt32BE(0x68),
-            decal: decalTexture === 0xFFFF ? null : {
-                texture: decalTexture,
-                rotationStep: data.readInt16BE(0x2C),
-                footprint: [data.readInt16BE(0x2E), data.readInt16BE(0x30)],
-                textureSize: [data.readUInt8(0x32), data.readUInt8(0x33)],
-                format: data.readUInt8(0x34) & 0x07,
-                size: data.readUInt8(0x35),
-                fade: [data.readUInt8(0x36) * 10, data.readUInt8(0x37) * 10],
-                alpha: data.readUInt8(0x38),
-                flags: data.readUInt8(0x39),
-            },
-            indexedTextures,
-            runtimeQuads,
-        };
-    }
-
-    public getActorGeometry(model: number): Buffer {
-        assert(model > 0);
-        return this.getPointerTableData(PointerTable.ActorGeometry, model - 1, 'Actor geometry');
-    }
-
-    public parseActorGeometry(data: Buffer): DK64ActorGeometry {
-        const runtimeBase = data.readUInt32BE(0);
-        const localOffset = (address: number) => address - runtimeBase + 0x28;
-        const displayListTable = localOffset(data.readUInt32BE(4));
-        const displayLists = Array.from({ length: data.readUInt8(0x21) }, (_, i) => {
-            const pointer = data.readUInt32BE(displayListTable + i * 4);
-            return { pointer, localOffset: localOffset(pointer) };
-        });
-        const pointers = [0x0C, 0x10, 0x14]
-            .map((headerOffset) => ({ headerOffset, pointer: data.readUInt32BE(headerOffset) }))
-            .filter(({ pointer }) => pointer >= runtimeBase && localOffset(pointer) < data.length)
-            .sort((a, b) => a.pointer - b.pointer);
-        return {
-            runtimeBase,
-            boneCount: data.readUInt8(0x20),
-            displayLists,
-            skeletonOffset: localOffset(data.readUInt32BE(8)),
-            auxiliaryData: pointers.map(({ headerOffset, pointer }, i) => ({
-                headerOffset,
-                start: localOffset(pointer),
-                end: i + 1 < pointers.length ? localOffset(pointers[i + 1].pointer) : data.length,
-            })),
-        };
-    }
-
-    public getSetup(mapID: number): Buffer {
-        return this.getPointerTableData(PointerTable.Setup, mapID, 'Setup');
-    }
-
-    public getScripts(mapID: number): Buffer {
-        return this.getPointerTableData(PointerTable.Scripts, mapID, 'Scripts');
-    }
-
-    public parseSetup(data: Buffer): Setup {
-        return parseSetupData(ArrayBufferSlice.fromView(data));
-    }
-
-    public getParsedSetup(mapID: number): Setup {
-        return this.parseSetup(this.getSetup(mapID));
-    }
-
-    public parseScripts(data: Buffer): InstanceScript[] {
-        return parseInstanceScripts(ArrayBufferSlice.fromView(data));
-    }
-
-    public getAnimation(id: number): Buffer {
-        return this.getPointerTableData(PointerTable.Animations, id, 'Animation');
-    }
-
-    public getGeometryTexture(id: number): Buffer {
-        return this.getPointerTableData(PointerTable.TexturesGeometry, id, 'Texture');
-    }
-
-    public getSpawners(mapID: number): Buffer {
-        return this.getPointerTableData(PointerTable.Spawners, mapID, 'Spawners');
-    }
-
-    public getCritters(mapID: number): Buffer {
-        return this.getPointerTableData(PointerTable.Critters, mapID, 'Critters');
-    }
-
-    public getGlobalASM(): Buffer {
-        if (this.globalASM === null) {
-            const code = gunzipSync(this.rom.subarray(
-                DK64Extractor.GlobalASMCodeROMOffset,
-                DK64Extractor.GlobalASMDataROMOffset,
-            ));
-            const data = gunzipSync(this.rom.subarray(
-                DK64Extractor.GlobalASMDataROMOffset,
-                DK64Extractor.GlobalASMDataROMOffset + DK64Extractor.GlobalASMDataCompressedSize,
-            ));
-            this.globalASM = Buffer.concat([code, data]);
-        }
-        return this.globalASM;
-    }
-
-    public globalAddressToOffset(address: number): number {
-        const offs = address - DK64Extractor.GlobalASMVirtualBase;
-        assert(offs >= 0 && offs < this.getGlobalASM().length);
-        return offs;
-    }
-
-    public getSpriteDefinitions(): DK64SpriteDefinition[] {
-        const globalASM = this.getGlobalASM();
-        const sprites: DK64SpriteDefinition[] = [];
-        for (let i = 0; i < DK64Extractor.SpritePointerCount; i++) {
-            const address = globalASM.readUInt32BE(DK64Extractor.SpritePointerTableOffset + i * 4);
-            const offs = this.globalAddressToOffset(address);
-            const imageCount = globalASM.readUInt16BE(offs + 0x12);
-            sprites.push({
-                address,
-                id: globalASM.readUInt32BE(offs),
-                imagesPerFrameHorizontal: globalASM.readUInt8(offs + 4),
-                imagesPerFrameVertical: globalASM.readUInt8(offs + 5),
-                flags: globalASM.readUInt8(offs + 6),
-                codec: globalASM.readUInt8(offs + 7),
-                params: Array.from(globalASM.subarray(offs + 8, offs + 0x0D)),
-                table: globalASM.readUInt8(offs + 0x0D),
-                width: globalASM.readUInt16BE(offs + 0x0E),
-                height: globalASM.readUInt16BE(offs + 0x10),
-                images: Array.from({ length: imageCount }, (_, j) => globalASM.readUInt16BE(offs + 0x14 + j * 2)),
-            });
-        }
-        return sprites;
-    }
-
-    public getEnvironmentParticles(): DK64EnvironmentParticle[] {
-        const globalASM = this.getGlobalASM();
-        return Array.from({ length: DK64Extractor.EnvironmentParticleCount }, (_, i) => {
-            const offs = DK64Extractor.EnvironmentParticleTableOffset + i * 0x20;
-            return {
-                map: globalASM.readUInt8(offs),
-                start: [globalASM.readInt16BE(offs + 2), globalASM.readInt16BE(offs + 4), globalASM.readInt16BE(offs + 6)],
-                end: [globalASM.readInt16BE(offs + 8), globalASM.readInt16BE(offs + 0x0A), globalASM.readInt16BE(offs + 0x0C)],
-                gap: globalASM.readFloatBE(offs + 0x10),
-                distance: globalASM.readInt16BE(offs + 0x14),
-                baseScale: globalASM.readFloatBE(offs + 0x18),
-                risingScale: globalASM.readFloatBE(offs + 0x1C),
-            };
-        });
-    }
-
-    public getActorDefinitions(): DK64ActorDefinition[] {
-        const globalASM = this.getGlobalASM();
-        return Array.from({ length: DK64Extractor.ActorDefinitionCount }, (_, tableIndex) => {
-            const offs = this.globalAddressToOffset(DK64Extractor.ActorDefinitionTableAddress) + tableIndex * 0x30;
-            const type = globalASM.readUInt16BE(offs);
-            return {
-                tableIndex,
-                type,
-                model: globalASM.readUInt16BE(offs + 2),
-                behavior: globalASM.readUInt32BE(
-                    this.globalAddressToOffset(DK64Extractor.ActorBehaviorTableAddress) + type * 4,
-                ),
-                name: globalASM.subarray(offs + 0x14, offs + 0x2C).toString('ascii').split('\0')[0],
-                words: Array.from({ length: 11 }, (_, i) => globalASM.readUInt32BE(offs + 4 + i * 4)),
-            };
-        });
-    }
-
-    public getLightAnimations(): DK64LightAnimationKeyframe[][] {
-        const globalASM = this.getGlobalASM();
-        const table = this.globalAddressToOffset(DK64Extractor.LightAnimationTableAddress);
-        return Array.from({ length: DK64Extractor.LightAnimationCount }, (_, animation) => {
-            const keyframes: DK64LightAnimationKeyframe[] = [];
-            for (let keyframe = 0; keyframe < 5; keyframe++) {
-                const offs = table + animation * 0x3C + keyframe * 0x0C;
-                const duration = globalASM.readInt16BE(offs + 0x0A);
-                if (duration === 0)
-                    break;
-                keyframes.push({
-                    intensity: globalASM.readFloatBE(offs),
-                    color: [globalASM.readUInt8(offs + 4), globalASM.readUInt8(offs + 5), globalASM.readUInt8(offs + 6)],
-                    radius: globalASM.readInt16BE(offs + 8),
-                    duration,
-                });
-            }
-            return keyframes;
-        });
-    }
-
-    public getCustomScriptFunctionAddress(index: number): number {
-        return this.getGlobalASM().readUInt32BE(DK64Extractor.CustomScriptFunctionTableOffset + index * 4);
-    }
-
-    public getCustomScriptFunctionAddresses(count = 118): number[] {
-        return Array.from({ length: count }, (_, index) => this.getCustomScriptFunctionAddress(index));
-    }
-}
-
-const pathBaseIn  = `./data/DonkeyKong64_Raw`;
-const pathBaseOut = `./data/DonkeyKong64`;
-
 function main() {
-    const rom = readFileSync(`${pathBaseIn}/rom.z64`);
-    const extractor = new DK64Extractor(rom);
+    const romData = fetchDataSync(`${pathBaseIn}/rom.z64`);
+    const view = romData.createDataView();
+
+    // USA pointer table locations
+    const PointerTableOffset = 0x101C50;
+    const MapTableOffset = 0x15232C;
+    const WallTableOffset = 0x43CBEC;
+    const FloorTableOffset = 0x63CA6C;
+    const SetupTableOffset = 0xD0E86C;
+    const StructTableOffset = 0x82A06C;
+    const ActorModelTableOffset = 0x8D3018;
+    const TextureTableOffset = 0x118B638;
+
+    // Map data table.
+    const MapData: (ArrayBufferSlice | number)[] = [];
+    let mapTableIdx = MapTableOffset;
+    for (let i = 0; i < 0xD8; i++) {
+        const mapDataPtr = view.getUint32(mapTableIdx + 0x00);
+
+        const offs = (mapDataPtr & 0x7FFFFFFF) + PointerTableOffset;
+        if (!!(mapDataPtr & 0x80000000)) {
+            // Indirect reference to another map.
+            const otherMap = view.getUint16(offs);
+            MapData[i] = otherMap;
+        } else {
+            // TODO(jstpierre): Extract the proper size, and decompress on client.
+            MapData[i] = cutZlibBuffer(romData, offs);
+        }
+
+        mapTableIdx += 0x04;
+    }
 
     const backdropTextureIDs = new Map<number, number>([
         [0x0E, 0x2D], // Aztec beetle race
@@ -498,10 +104,48 @@ function main() {
         [0x7D, 0x2E], // Stash Snatch (insane)
     ]);
 
-    const extractCompressedTable = (table: number): (ArrayBufferSlice | number)[] =>
-        extractor.extractCompressedTable(table)
-            .map((entry) => typeof entry === 'number' ? entry : ArrayBufferSlice.fromView(entry));
-    const MapData = extractCompressedTable(PointerTable.MapGeometry);
+    function getTableOffset(table: number): number {
+        return PointerTableOffset + view.getUint32(PointerTableOffset + table * 4);
+    }
+
+    function getTableCount(table: number): number {
+        return view.getUint32(PointerTableOffset + 0x80 + table * 4);
+    }
+
+    function extractCompressedTable(table: number): (ArrayBufferSlice | number)[] {
+        const tableOffset = getTableOffset(table);
+        const files: (ArrayBufferSlice | number)[] = [];
+        const firstFileForPointer = new Map<number, number>();
+        for (let i = 0; i < getTableCount(table); i++) {
+            const pointer = view.getUint32(tableOffset + i * 4);
+            const nextTableStart = table < 31 ? view.getUint32(PointerTableOffset + (table + 1) * 4) : 0;
+            if (!(pointer & 0x80000000) && nextTableStart !== 0 && pointer >= nextTableStart)
+                break;
+            const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
+            if ((pointer & 0x80000000) !== 0)
+                files[i] = view.getUint16(offs);
+            else if (firstFileForPointer.has(pointer))
+                files[i] = firstFileForPointer.get(pointer)!;
+            else {
+                firstFileForPointer.set(pointer, i);
+                files[i] = cutZlibBuffer(romData, offs);
+            }
+        }
+        return files;
+    }
+
+    function extractRawTableEntry(table: number, index: number): ArrayBufferSlice {
+        const tableOffset = getTableOffset(table);
+        assert(index >= 0 && index < getTableCount(table));
+        const pointer = view.getUint32(tableOffset + index * 4);
+        const nextPointer = view.getUint32(tableOffset + (index + 1) * 4);
+        assert((pointer & 0x80000000) === 0 && (nextPointer & 0x80000000) === 0);
+        const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
+        const nextOffs = (nextPointer & 0x7FFFFFFF) + PointerTableOffset;
+        assert(nextOffs >= offs);
+        return romData.subarray(offs, nextOffs - offs);
+    }
+
     const PropGeometryData = extractCompressedTable(PointerTable.PropGeometry);
     const ActorGeometryData = extractCompressedTable(PointerTable.ActorGeometry);
     const SetupData = extractCompressedTable(PointerTable.Setup);
@@ -521,18 +165,68 @@ function main() {
         return entry;
     }
 
-    const SpriteData = extractor.getSpriteDefinitions();
-    const CustomScriptFunctionData = extractor.getCustomScriptFunctionAddresses();
-    const EnvironmentParticleData = extractor.getEnvironmentParticles();
-    const actorModelByType = new Map(extractor.getActorDefinitions()
-        .map(({ type, model }) => [type, model] as const));
+    const globalASM = Buffer.concat([
+        gunzipSync(romData.createTypedArray(Uint8Array, 0x113F0, 0xC29D4 - 0x113F0)),
+        gunzipSync(romData.createTypedArray(Uint8Array, 0xC29D4, 0x949C)),
+    ]);
+    function globalAddressToOffset(address: number): number {
+        const offs = address - 0x805FB300;
+        assert(offs >= 0 && offs < globalASM.length);
+        return offs;
+    }
 
+    const SpriteData = Array.from({ length: 176 }, (_, i) => {
+        const address = globalASM.readUInt32BE(0x15A090 + i * 4);
+        const offs = globalAddressToOffset(address);
+        const imageCount = globalASM.readUInt16BE(offs + 0x12);
+        return {
+            address,
+            id: globalASM.readUInt32BE(offs),
+            imagesPerFrameHorizontal: globalASM.readUInt8(offs + 4),
+            imagesPerFrameVertical: globalASM.readUInt8(offs + 5),
+            flags: globalASM.readUInt8(offs + 6),
+            codec: globalASM.readUInt8(offs + 7),
+            params: Array.from(globalASM.subarray(offs + 8, offs + 0x0D)),
+            table: globalASM.readUInt8(offs + 0x0D),
+            width: globalASM.readUInt16BE(offs + 0x0E),
+            height: globalASM.readUInt16BE(offs + 0x10),
+            images: Array.from({ length: imageCount }, (_, j) => globalASM.readUInt16BE(offs + 0x14 + j * 2)),
+        };
+    });
+    const CustomScriptFunctionData = Array.from({ length: 118 }, (_, i) =>
+        globalASM.readUInt32BE(0x14CB70 + i * 4));
+    const EnvironmentParticleData = Array.from({ length: 13 }, (_, i) => {
+        const offs = 0x14D8A0 + i * 0x20;
+        return {
+            map: globalASM.readUInt8(offs),
+            start: [globalASM.readInt16BE(offs + 2), globalASM.readInt16BE(offs + 4), globalASM.readInt16BE(offs + 6)],
+            end: [globalASM.readInt16BE(offs + 8), globalASM.readInt16BE(offs + 0x0A), globalASM.readInt16BE(offs + 0x0C)],
+            gap: globalASM.readFloatBE(offs + 0x10),
+            distance: globalASM.readInt16BE(offs + 0x14),
+            baseScale: globalASM.readFloatBE(offs + 0x18),
+            risingScale: globalASM.readFloatBE(offs + 0x1C),
+        };
+    });
+    const actorModelByType = new Map(Array.from({ length: 0x80 }, (_, i) => {
+        const offs = globalAddressToOffset(0x8074E8B0) + i * 0x30;
+        return [globalASM.readUInt16BE(offs), globalASM.readUInt16BE(offs + 2)] as const;
+    }));
+
+    // Texture data table.
     const TexData: ArrayBufferSlice[] = [];
+    // TODO(jstpierre): Proper count
+    let texTableIdx = TextureTableOffset;
     const textureCount = Math.max(...SpriteData
         .filter((sprite) => sprite.table === 1)
         .flatMap((sprite) => sprite.images)) + 1;
-    for (let i = 0; i < textureCount; i++)
-        TexData[i] = ArrayBufferSlice.fromView(extractor.extractCompressedTableEntry(PointerTable.TexturesGeometry, i));
+    for (let i = 0; i < textureCount; i++) {
+        const texDataPtr = view.getUint32(texTableIdx + 0x00);
+
+        const offs = (texDataPtr & 0x7FFFFFFF) + PointerTableOffset;
+        TexData[i] = cutZlibBuffer(romData, offs);
+
+        texTableIdx += 0x04;
+    }
     // The two panorama backdrops are given normal texture indices for later archive packing.
     const backdropTextureIndices = new Map<number, number>();
     for (const textureID of new Set(backdropTextureIDs.values())) {
@@ -546,7 +240,7 @@ function main() {
         .filter((sprite) => sprite.table === 0)
         .flatMap((sprite) => sprite.images)) + 1);
     for (let i = 0; i < uncompressedTextureCount; i++)
-        AnimTexData[i] = ArrayBufferSlice.fromView(extractor.extractRawTableEntry(PointerTable.TexturesUncompressed, i));
+        AnimTexData[i] = extractRawTableEntry(PointerTable.TexturesUncompressed, i);
 
     interface TextureUsage {
         geometry: Set<number>;
@@ -564,14 +258,7 @@ function main() {
         ActorGeometry: { Model: number, Data: ArrayBufferSlice }[];
         AnimationData: { ID: number, Data: ArrayBufferSlice }[];
         EnvironmentParticleData: typeof EnvironmentParticleData;
-        UnhandledMapFeatures: UnhandledMapFeature[];
         textureUsage: TextureUsage;
-    }
-
-    interface UnhandledMapFeature {
-        Kind: string;
-        Material: number;
-        Count: number;
     }
 
     const supportedSceneNodeMaterials = new Set<number>([
@@ -593,16 +280,7 @@ function main() {
         }
     }
 
-    function scanMapTextureUsage(map: Buffer, usage: TextureUsage): UnhandledMapFeature[] {
-        const unhandled = new Map<string, UnhandledMapFeature>();
-        const addUnhandled = (kind: string, material: number): void => {
-            const key = `${kind}:${material}`;
-            const entry = unhandled.get(key);
-            if (entry !== undefined)
-                entry.Count++;
-            else
-                unhandled.set(key, { Kind: kind, Material: material, Count: 1 });
-        };
+    function scanMapTextureUsage(map: Buffer, usage: TextureUsage): void {
         const dlStart = map.readUInt32BE(0x34);
         const vertStart = map.readUInt32BE(0x38);
         scanTextureCommands(map, dlStart, vertStart, usage.geometry);
@@ -626,8 +304,7 @@ function main() {
                     for (const textureID of binding.textureIDs)
                         usage.animated.add(textureID);
                 }
-            } else
-                addUnhandled('GeneratedSurfaceMaterial', material);
+            }
             switch (material) {
             case GeneratedSurfaceMaterial.Lava:
                 usage.geometry.add(0x2EE);
@@ -652,8 +329,6 @@ function main() {
             const material = map.readUInt16BE(rootNode + 0x70 + i * 2);
             if (displayList < 0)
                 continue;
-            if (!supportedSceneNodeMaterials.has(material))
-                addUnhandled('SceneNodeMaterial', material);
             if (supportedSceneNodeMaterials.has(material) && isSceneNodeMaterial(material)) {
                 for (const binding of getSceneNodeAnimatedTextureBindings(material)) {
                     for (const textureID of binding.textureIDs)
@@ -669,48 +344,63 @@ function main() {
                 break;
             }
         }
-        return [...unhandled.values()].sort((a, b) =>
-            a.Kind.localeCompare(b.Kind) || a.Material - b.Material,
-        );
     }
 
     function scanPropTextureUsage(prop: Buffer, usage: TextureUsage): void {
-        const parsed = extractor.parsePropGeometry(prop);
-        if (parsed.decal !== null)
-            usage.geometry.add(parsed.decal.texture);
+        const decalTexture = prop.readUInt16BE(0x28);
+        if (decalTexture !== 0xFFFF)
+            usage.geometry.add(decalTexture);
 
         const animatedTargets = new Set<number>();
-        for (const texture of parsed.indexedTextures) {
-            if (texture.frameCount === 0 || texture.frameCount > 0x1E)
-                continue;
-            animatedTargets.add(texture.target);
-            for (const frame of texture.frames)
-                usage.animated.add(frame);
+        const indexedStart = prop.readUInt32BE(0x6C);
+        if (indexedStart + 4 <= prop.length) {
+            const count = prop.readUInt32BE(indexedStart);
+            for (let i = 0; i < count; i++) {
+                const offs = indexedStart + 4 + i * 0x84;
+                if (offs + 0x84 > prop.length)
+                    break;
+                const frameCount = prop.readUInt32BE(offs + 0x0C);
+                if (frameCount === 0 || frameCount > 0x1E)
+                    continue;
+                animatedTargets.add(prop.readUInt32BE(offs));
+                for (let frame = 0; frame < frameCount; frame++)
+                    usage.animated.add(frame === 0 ? prop.readUInt32BE(offs) : prop.readUInt32BE(offs + 0x0C + frame * 4));
+            }
         }
 
-        if (parsed.layout === 2) {
+        const layout = prop.readUInt8(0x1C);
+        if (layout === 2) {
             // from func_global_asm_8063524C
-            for (const quad of parsed.runtimeQuads) {
-                if (!animatedTargets.has(quad.texture))
-                    usage.geometry.add(quad.texture);
-                if (quad.palette !== 0xFFFF)
-                    usage.geometry.add(quad.palette);
+            const runtimeStart = prop.readUInt32BE(0x70);
+            if (runtimeStart + 4 <= prop.length) {
+                const count = prop.readUInt32BE(runtimeStart);
+                for (let i = 0; i < count; i++) {
+                    const offs = runtimeStart + 4 + i * 0x30;
+                    if (offs + 0x30 > prop.length)
+                        break;
+                    const texture = prop.readUInt16BE(offs);
+                    const palette = prop.readUInt16BE(offs + 2);
+                    if (!animatedTargets.has(texture))
+                        usage.geometry.add(texture);
+                    if (palette !== 0xFFFF)
+                        usage.geometry.add(palette);
+                }
             }
             return;
         }
-        if (parsed.layout !== 1)
+        if (layout !== 1)
             return;
         scanTextureCommands(
             prop,
-            Math.min(parsed.mainDisplayListStart, parsed.secondaryDisplayListStart),
-            parsed.vertexStart,
+            Math.min(prop.readUInt32BE(0x40), prop.readUInt32BE(0x44)),
+            prop.readUInt32BE(0x48),
             usage.geometry,
             animatedTargets,
         );
     }
 
     function scanActorTextureUsage(actor: Buffer, usage: TextureUsage): void {
-        const parsed = extractor.parseActorGeometry(actor);
+        const runtimeBase = actor.readUInt32BE(0);
         const visited = new Set<number>();
         const scanDisplayList = (address: number): void => {
             if ((address >>> 24) !== 0x03)
@@ -730,10 +420,11 @@ function main() {
                     return;
             }
         };
-        for (const { pointer } of parsed.displayLists)
-            scanDisplayList(0x03000000 | (pointer - parsed.runtimeBase));
+        const displayListTable = actor.readUInt32BE(4) - runtimeBase + 0x28;
+        for (let i = 0; i < actor.readUInt8(0x21); i++)
+            scanDisplayList(0x03000000 | (actor.readUInt32BE(displayListTable + i * 4) - runtimeBase));
         const descriptorPointer = actor.readUInt32BE(0x10);
-        let descriptorOffs = descriptorPointer - parsed.runtimeBase + 0x28;
+        let descriptorOffs = descriptorPointer - runtimeBase + 0x28;
         if (descriptorPointer !== 0 && descriptorOffs >= 0 && descriptorOffs + 2 <= actor.byteLength) {
             const descriptorCount = actor.readUInt16BE(descriptorOffs);
             descriptorOffs += 2;
@@ -759,8 +450,8 @@ function main() {
     }
 
     function scanScriptedSpriteUsage(setup: Buffer, scripts: Buffer, usage: TextureUsage): void {
-        const propIDs = new Set(extractor.parseSetup(setup).props.map(({ id }) => id));
-        for (const script of extractor.parseScripts(scripts)) {
+        const propIDs = new Set(parseSetupData(ArrayBufferSlice.fromView(setup)).props.map(({ id }) => id));
+        for (const script of parseInstanceScripts(ArrayBufferSlice.fromView(scripts))) {
             for (const block of script.blocks) {
                 const condition = block.conditions.length === 1 ? block.conditions[0] : null;
                 const resetsState = block.executions.some(({ opcode }) => opcode === 1);
@@ -779,10 +470,10 @@ function main() {
         const mapData = resolveTableEntry(MapData, mapID);
         const setupData = resolveTableEntry(SetupData, mapID);
         const scriptData = resolveTableEntry(ScriptData, mapID);
-        const map = extractor.getMap(mapID);
-        const setup = extractor.getSetup(mapID);
-        const scripts = extractor.getScripts(mapID);
-        const parsedSetup = extractor.parseSetup(setup);
+        const map = gunzipSync(mapData.createTypedArray(Uint8Array));
+        const setup = gunzipSync(setupData.createTypedArray(Uint8Array));
+        const scripts = gunzipSync(scriptData.createTypedArray(Uint8Array));
+        const parsedSetup = parseSetupData(ArrayBufferSlice.fromView(setup));
         const propTypes = new Set(parsedSetup.props.map(({ type }) => type));
 
         const PropGeometry = [];
@@ -817,16 +508,16 @@ function main() {
         const animations = [...actorAnimations].map((id) => ({
             ID: id,
             // Table 11 stores uncompressed animations.
-            Data: ArrayBufferSlice.fromView(extractor.extractRawTableEntry(PointerTable.Animations, id)),
+            Data: extractRawTableEntry(PointerTable.Animations, id),
         }));
 
         const environmentParticleData = EnvironmentParticleData.filter((entry) => entry.map === mapID);
         const textureUsage: TextureUsage = { geometry: new Set(), animated: new Set() };
-        const UnhandledMapFeatures = scanMapTextureUsage(map, textureUsage);
+        scanMapTextureUsage(map, textureUsage);
         for (const prop of PropGeometry)
-            scanPropTextureUsage(extractor.getPropGeometry(prop.Type), textureUsage);
+            scanPropTextureUsage(gunzipSync(prop.Data.createTypedArray(Uint8Array)), textureUsage);
         for (const actor of ActorGeometry)
-            scanActorTextureUsage(extractor.getActorGeometry(actor.Model), textureUsage);
+            scanActorTextureUsage(gunzipSync(actor.Data.createTypedArray(Uint8Array)), textureUsage);
         if (environmentParticleData.length > 0) {
             addSpriteTextureUsage(0x8072140C, textureUsage);
             addSpriteTextureUsage(0x8071FF18, textureUsage);
@@ -852,7 +543,6 @@ function main() {
             ActorGeometry,
             AnimationData: animations,
             EnvironmentParticleData: environmentParticleData,
-            UnhandledMapFeatures,
             textureUsage,
         });
     }
@@ -865,7 +555,7 @@ function main() {
     //   common_$N.crg1: a shard containing data used by multiple maps
     //      common.crg1: resources used by all maps.
     //
-    // This splitting reduces the average map load to ~950KB, down from
+    // This splitting reduces the average map load to ~1.1MB, down from
     // the ~4.25MB baseline for common.crg1 + $MAP.crg1.
 
     function buildOwners(kind: keyof TextureUsage): Map<number, number[]> {
@@ -906,7 +596,6 @@ function main() {
     interface CommonTextureGroup {
         resources: SharedTextureResource[];
         owners: Set<number>;
-        ownerRefCounts: number[];
         byteLength: number;
     }
 
@@ -957,20 +646,15 @@ function main() {
     const commonTextureGroups: CommonTextureGroup[] = Array.from({ length: commonTextureGroupCount }, () => ({
         resources: [],
         owners: new Set<number>(),
-        ownerRefCounts: Array(levels.length).fill(0),
         byteLength: 0,
     }));
-    const subsetGroup = new Map<TextureOwnerSubset, number>();
 
     function addSubsetToGroup(subset: TextureOwnerSubset, groupIndex: number): void {
         const group = commonTextureGroups[groupIndex];
         group.resources.push(...subset.resources);
         group.byteLength += subset.byteLength;
-        subsetGroup.set(subset, groupIndex);
-        for (const owner of subset.owners) {
+        for (const owner of subset.owners)
             group.owners.add(owner);
-            group.ownerRefCounts[owner]++;
-        }
     }
 
     // To start, put the largest N subsets into a shard of its own.
@@ -1006,85 +690,6 @@ function main() {
         addSubsetToGroup(subset, bestGroup);
     }
 
-    // Finally, try to rearrange textures to minimize the average load cost.
-    const baseTextureKeys = new Set<string>();
-    for (let pass = 0; pass < 0x10; pass++) {
-        let moveCount = 0;
-        for (const subset of textureOwnerSubsets) {
-            const sourceIndex = subsetGroup.get(subset)!;
-            if (sourceIndex < 0)
-                continue;
-            const source = commonTextureGroups[sourceIndex];
-            let removedOwners = 0;
-            for (const owner of subset.owners) {
-                if (source.ownerRefCounts[owner] === 1)
-                    removedOwners++;
-            }
-            const sourceOwnerCountAfterMove = source.owners.size - removedOwners;
-            const sourceBytesAfterMove = source.byteLength - subset.byteLength;
-            const oldSourceCost = source.byteLength * source.owners.size;
-            const newSourceCost = sourceBytesAfterMove * sourceOwnerCountAfterMove;
-
-            let bestDestination = sourceIndex;
-            let bestDelta = 0;
-            const moveToBaseDelta = newSourceCost
-                + subset.byteLength * levels.length
-                - oldSourceCost;
-            if (moveToBaseDelta < bestDelta) {
-                bestDelta = moveToBaseDelta;
-                bestDestination = -1;
-            }
-            for (let destinationIndex = 0; destinationIndex < commonTextureGroups.length; destinationIndex++) {
-                if (destinationIndex === sourceIndex)
-                    continue;
-                const destination = commonTextureGroups[destinationIndex];
-                let addedOwners = 0;
-                for (const owner of subset.owners) {
-                    if (destination.ownerRefCounts[owner] === 0)
-                        addedOwners++;
-                }
-                const oldDestinationCost = destination.byteLength * destination.owners.size;
-                const newDestinationCost = (destination.byteLength + subset.byteLength)
-                    * (destination.owners.size + addedOwners);
-                const delta = newSourceCost + newDestinationCost - oldSourceCost - oldDestinationCost;
-                if (delta < bestDelta) {
-                    bestDelta = delta;
-                    bestDestination = destinationIndex;
-                }
-            }
-            if (bestDestination === sourceIndex)
-                continue;
-
-            for (const resource of subset.resources)
-                source.resources.splice(source.resources.indexOf(resource), 1);
-            source.byteLength -= subset.byteLength;
-            for (const owner of subset.owners) {
-                source.ownerRefCounts[owner]--;
-                if (source.ownerRefCounts[owner] === 0)
-                    source.owners.delete(owner);
-            }
-            if (bestDestination < 0) {
-                for (const resource of subset.resources)
-                    baseTextureKeys.add(`${resource.kind}:${resource.id}`);
-                subsetGroup.set(subset, -1);
-                moveCount++;
-                continue;
-            }
-
-            const destination = commonTextureGroups[bestDestination];
-            destination.resources.push(...subset.resources);
-            destination.byteLength += subset.byteLength;
-            for (const owner of subset.owners) {
-                if (destination.ownerRefCounts[owner]++ === 0)
-                    destination.owners.add(owner);
-            }
-            subsetGroup.set(subset, bestDestination);
-            moveCount++;
-        }
-        if (moveCount === 0)
-            break;
-    }
-
     const groupByTexture = new Map<string, number>();
     for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
         for (const resource of commonTextureGroups[groupIndex].resources)
@@ -1097,10 +702,7 @@ function main() {
                 const ownerCount = owners.get(textureID)!.length;
                 if (ownerCount === 1 || ownerCount === universalTextureOwnerCount)
                     continue;
-                const key = `${kind}:${textureID}`;
-                if (baseTextureKeys.has(key))
-                    continue;
-                const groupIndex = groupByTexture.get(key);
+                const groupIndex = groupByTexture.get(`${kind}:${textureID}`);
                 assert(groupIndex !== undefined && commonTextureGroups[groupIndex].owners.has(mapID));
             }
         }
@@ -1134,11 +736,9 @@ function main() {
         SpriteData,
         CustomScriptFunctionData,
         TexData: makeTextureEntries(TexData, (id) =>
-            (geometryOwners.get(id)?.length ?? 0) === universalTextureOwnerCount
-            || baseTextureKeys.has(`geometry:${id}`)),
+            (geometryOwners.get(id)?.length ?? 0) === universalTextureOwnerCount),
         AnimTexData: makeTextureEntries(AnimTexData, (id) =>
-            (animatedOwners.get(id)?.length ?? 0) === universalTextureOwnerCount
-            || baseTextureKeys.has(`animated:${id}`)),
+            (animatedOwners.get(id)?.length ?? 0) === universalTextureOwnerCount),
     };
     const commonArchiveSize = writeArchive('common.crg1', common);
 
@@ -1149,15 +749,7 @@ function main() {
         commonTextureGroupArchiveSizes[groupIndex] = writeArchive(`common_${suffix}.crg1`, archive);
     }
 
-    const unknown = {
-        TexData: makeTextureEntries(TexData, (id) => !geometryOwners.has(id)),
-        AnimTexData: makeTextureEntries(AnimTexData, (id) => !animatedOwners.has(id)),
-    };
-    const unknownArchiveSize = writeArchive('unknown.crg1', unknown);
-
-    const levelArchiveSizes: number[] = [];
-    const singleCommonLevelArchiveSizes: number[] = [];
-    const commonTextureGroupIDsByLevel: number[][] = [];
+    let totalFetchedBytes = 0;
     for (let mapID = 0; mapID < levels.length; mapID++) {
         const source = levels[mapID];
         const levelWithoutGroups = {
@@ -1173,7 +765,6 @@ function main() {
             EnvironmentParticleData: source.EnvironmentParticleData,
             TexData: makeTextureEntries(TexData, (id) => geometryOwners.get(id)?.length === 1 && geometryOwners.get(id)![0] === mapID),
             AnimTexData: makeTextureEntries(AnimTexData, (id) => animatedOwners.get(id)?.length === 1 && animatedOwners.get(id)![0] === mapID),
-            UsesUnknownTextures: false,
         };
         const commonTextureGroupIDs = commonTextureGroups
             .map((group, groupIndex) => group.owners.has(mapID) ? groupIndex : -1)
@@ -1183,95 +774,12 @@ function main() {
             CommonTextureGroups: commonTextureGroupIDs,
         };
         const filename = `${hexzero(mapID, 2).toUpperCase()}.crg1`;
-        levelArchiveSizes[mapID] = writeArchive(filename, level);
-        singleCommonLevelArchiveSizes[mapID] = BYML.write(levelWithoutGroups, BYML.FileType.CRG1).byteLength;
-        commonTextureGroupIDsByLevel[mapID] = commonTextureGroupIDs;
+        const levelArchiveSize = writeArchive(filename, level);
+        totalFetchedBytes += commonArchiveSize + levelArchiveSize
+            + commonTextureGroupIDs.reduce((sum, groupIndex) => sum + commonTextureGroupArchiveSizes[groupIndex], 0);
     }
+    console.log(`DK64 average fetch size: ${(totalFetchedBytes / levels.length / 0x400).toFixed(1)} KiB`);
 
-    const singleCommon = {
-        SpriteData,
-        CustomScriptFunctionData,
-        TexData: makeTextureEntries(TexData, (id) => (geometryOwners.get(id)?.length ?? 0) > 1),
-        AnimTexData: makeTextureEntries(AnimTexData, (id) => (animatedOwners.get(id)?.length ?? 0) > 1),
-    };
-    const singleCommonArchiveSize = BYML.write(singleCommon, BYML.FileType.CRG1).byteLength;
-
-    const shardedTextureCount = commonTextureGroups.reduce((sum, group) => sum + group.resources.length, 0);
-    const shardedTextureBytes = commonTextureGroups.reduce((sum, group) => sum + group.byteLength, 0);
-    const idealAggregateTextureBytes = sharedResources.reduce(
-        (sum, resource) => sum + resource.data.byteLength * resource.owners.length, 0,
-    );
-    const baseTextureBytes = sharedResources
-        .filter((resource) => baseTextureKeys.has(`${resource.kind}:${resource.id}`))
-        .reduce((sum, resource) => sum + resource.data.byteLength, 0);
-    const packedAggregateTextureBytes = commonTextureGroups.reduce(
-        (sum, group) => sum + group.byteLength * group.owners.size, 0,
-    ) + baseTextureBytes * levels.length;
-    const groupRequestsPerLevel = levels.map((_, mapID) =>
-        commonTextureGroups.filter((group) => group.owners.has(mapID)).length,
-    );
-    const fetchedBytesPerLevel = levels.map((_, mapID) =>
-        commonArchiveSize
-        + levelArchiveSizes[mapID]
-        + commonTextureGroupIDsByLevel[mapID].reduce(
-            (sum, groupIndex) => sum + commonTextureGroupArchiveSizes[groupIndex], 0,
-        ),
-    );
-    const singleCommonFetchedBytesPerLevel = levels.map((_, mapID) =>
-        singleCommonArchiveSize + singleCommonLevelArchiveSizes[mapID],
-    );
-    const average = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length;
-    const averageFetchedBytes = average(fetchedBytesPerLevel);
-    const averageSingleCommonFetchedBytes = average(singleCommonFetchedBytesPerLevel);
-    const fetchReduction = 1 - averageFetchedBytes / averageSingleCommonFetchedBytes;
-    const formatBytes = (bytes: number): string => bytes >= 0x100000
-        ? `${(bytes / 0x100000).toFixed(2)} MiB`
-        : `${(bytes / 0x400).toFixed(1)} KiB`;
-
-    const unhandledFeatureOwners = new Map<string, { feature: UnhandledMapFeature, maps: number[] }>();
-    for (let mapID = 0; mapID < levels.length; mapID++) {
-        for (const feature of levels[mapID].UnhandledMapFeatures) {
-            const key = `${feature.Kind}:${feature.Material}`;
-            let entry = unhandledFeatureOwners.get(key);
-            if (entry === undefined) {
-                entry = {
-                    feature: { ...feature, Count: 0 },
-                    maps: [],
-                };
-                unhandledFeatureOwners.set(key, entry);
-            }
-            entry.feature.Count += feature.Count;
-            entry.maps.push(mapID);
-        }
-    }
-    console.log('DK64 unhandled map-rendering inventory:');
-    if (unhandledFeatureOwners.size === 0) {
-        console.log('  none');
-    } else {
-        for (const { feature, maps } of unhandledFeatureOwners.values()) {
-            const mapList = maps.map((mapID) => hexzero(mapID, 2).toUpperCase()).join(',');
-            console.log(`  ${feature.Kind} ${feature.Material}: ${feature.Count} entries in maps ${mapList}`);
-        }
-    }
-
-    console.log(`DK64 texture analysis (${levels.length} maps, minimizing aggregate fetched bytes):`);
-    console.log(`  sharded textures: ${shardedTextureCount} (${shardedTextureBytes} bytes)`);
-    console.log(`  optimizer promoted to always-loaded: ${baseTextureKeys.size} textures (${baseTextureBytes} bytes)`);
-    console.log(`  groups requested per map: min ${Math.min(...groupRequestsPerLevel)}, average ${(groupRequestsPerLevel.reduce((a, b) => a + b, 0) / levels.length).toFixed(2)}, max ${Math.max(...groupRequestsPerLevel)}`);
-    console.log(`  average shared-texture bytes: ideal ${(idealAggregateTextureBytes / levels.length).toFixed(0)}, packed ${(packedAggregateTextureBytes / levels.length).toFixed(0)} (${(packedAggregateTextureBytes / idealAggregateTextureBytes).toFixed(2)}x)`);
-    console.log(`DK64 archive fetch analysis:`);
-    console.log(`  common.crg1: ${formatBytes(commonArchiveSize)} (${commonArchiveSize} bytes)`);
-    console.log(`  common_00..${hexzero(commonTextureGroupCount - 1, 2).toUpperCase()}.crg1 combined: ${formatBytes(commonTextureGroupArchiveSizes.reduce((sum, size) => sum + size, 0))}`);
-    console.log(`  unknown.crg1: ${formatBytes(unknownArchiveSize)} (not loaded by current maps)`);
-    console.log(`  average first-level fetch: ${formatBytes(averageFetchedBytes)}`);
-    console.log(`  single-common baseline: ${formatBytes(averageSingleCommonFetchedBytes)}`);
-    console.log(`  average fetch reduction: ${(fetchReduction * 100).toFixed(1)}%`);
-    console.log(`  first-level fetch range: ${formatBytes(Math.min(...fetchedBytesPerLevel))} .. ${formatBytes(Math.max(...fetchedBytesPerLevel))}`);
-    for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
-        const group = commonTextureGroups[groupIndex];
-        console.log(`  common_${hexzero(groupIndex, 2).toUpperCase()}: ${group.resources.length} textures, ${formatBytes(commonTextureGroupArchiveSizes[groupIndex])}, ${group.owners.size} maps`);
-    }
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1])
-    main();
+main();

@@ -9,44 +9,27 @@ import {
 
 export interface SetupProp {
     setupIndex: number;
-    offset: number;
     position: vec3;
     scale: number;
-    unknown10: number;
-    unknown14: number;
     rotation: vec3;
-    unknown24: number;
     type: number;
     id: number;
-    unknown2C: number;
     lightAnimation: number;
-    flags: number;
-}
-
-export interface SetupMystery {
-    offset: number;
-    words: readonly number[];
 }
 
 export interface SetupActor {
-    setupIndex: number;
-    offset: number;
     position: vec3;
     scale: number;
     lightSpeed: number;
     lightColor: readonly [number, number, number];
     lightCone: readonly [number, number];
-    unknown28: number;
-    unknown2C: number;
     rotationY: number;
     type: number;
     id: number;
-    unknown36: number;
 }
 
 export interface Setup {
     props: readonly SetupProp[];
-    mystery: readonly SetupMystery[];
     actors: readonly SetupActor[];
 }
 
@@ -60,46 +43,31 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
     for (let i = 0; i < propCount; i++, offs += 0x30) {
         props.push({
             setupIndex: i,
-            offset: offs,
             position: vec3.fromValues(
                 view.getFloat32(offs + 0x00, false),
                 view.getFloat32(offs + 0x04, false),
                 view.getFloat32(offs + 0x08, false),
             ),
             scale: view.getFloat32(offs + 0x0C, false),
-            unknown10: view.getUint32(offs + 0x10, false),
-            unknown14: view.getUint32(offs + 0x14, false),
             rotation: vec3.fromValues(
                 view.getFloat32(offs + 0x18, false),
                 view.getFloat32(offs + 0x1C, false),
                 view.getFloat32(offs + 0x20, false),
             ),
-            unknown24: view.getFloat32(offs + 0x24, false),
             type: view.getUint16(offs + 0x28, false),
             id: view.getUint16(offs + 0x2A, false),
-            unknown2C: view.getUint16(offs + 0x2C, false),
             lightAnimation: view.getUint8(offs + 0x2E),
-            flags: view.getUint8(offs + 0x2F),
         });
     }
 
     const mysteryCount = view.getUint32(offs, false);
-    offs += 4;
-    const mystery: SetupMystery[] = [];
-    for (let i = 0; i < mysteryCount; i++, offs += 0x24) {
-        const words: number[] = [];
-        for (let j = 0; j < 9; j++)
-            words.push(view.getUint32(offs + j * 4, false));
-        mystery.push({ offset: offs, words });
-    }
+    offs += 4 + mysteryCount * 0x24;
 
     const actorCount = view.getUint32(offs, false);
     offs += 4;
     const actors: SetupActor[] = [];
-    for (let i = 0; i < actorCount; i++, offs += 0x38) {
+    for (let remaining = actorCount; remaining > 0; remaining--, offs += 0x38) {
         actors.push({
-            setupIndex: i,
-            offset: offs,
             position: vec3.fromValues(
                 view.getFloat32(offs + 0x00, false),
                 view.getFloat32(offs + 0x04, false),
@@ -116,16 +84,13 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
                 view.getFloat32(offs + 0x20, false),
                 view.getFloat32(offs + 0x24, false),
             ],
-            unknown28: view.getUint32(offs + 0x28, false),
-            unknown2C: view.getUint32(offs + 0x2C, false),
             rotationY: view.getInt16(offs + 0x30, false),
             type: view.getUint16(offs + 0x32, false),
             id: view.getUint16(offs + 0x34, false),
-            unknown36: view.getUint16(offs + 0x36, false),
         });
     }
 
-    return { props, mystery, actors };
+    return { props, actors };
 }
 
 export interface ScriptCommand {
