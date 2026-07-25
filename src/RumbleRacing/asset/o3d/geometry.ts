@@ -1,4 +1,5 @@
 import { vec2, vec3 } from "gl-matrix";
+import { Color, colorNewFromRGBA } from "../../../Color";
 import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
 
@@ -7,7 +8,10 @@ export interface Primitive {
   primType: number;
   vertices: {
     position: vec3;
-    normal: vec3;
+    // A vertex carries either a normal (lit at runtime) or a baked RGBA color,
+    // depending on which of the two unpack layouts the strip was built from.
+    normal: vec3 | null;
+    color: Color | null;
     uv: vec2;
     adcBitSet: boolean;
   }[];
@@ -173,6 +177,7 @@ export function getGeometry(
                 cmdA.v3_32[j].v2,
                 cmdA.v3_32[j].v3,
               ),
+              color: null,
               adcBitSet: cmdA.v3_32[j].adcBitSet,
               position: vec3.fromValues(
                 cmdB.v3_32[j].v1,
@@ -185,9 +190,11 @@ export function getGeometry(
         } else if (
           cmdA.type === VifUnpackFormat.V3_32 && // A = vertices
           cmdB.type === VifUnpackFormat.V2_32 && // B = uvs
-          cmdC.type === VifUnpackFormat.V4_8 // C = normals
+          cmdC.type === VifUnpackFormat.V4_8 // C = RGBA vertex colors
         ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
+            const rgba = cmdC.v4_8[j];
+
             strip.vertices.push({
               position: vec3.fromValues(
                 cmdA.v3_32[j].v1,
@@ -195,12 +202,16 @@ export function getGeometry(
                 cmdA.v3_32[j].v3,
               ),
               uv: vec2.fromValues(cmdB.v2_32[j].v1, cmdB.v2_32[j].v2),
-              normal: vec3.fromValues(
-                cmdC.v4_8[j].v1 / 255.0,
-                cmdC.v4_8[j].v2 / 255.0,
-                cmdC.v4_8[j].v3 / 255.0,
+              normal: null,
+              // GS colors are 0x80 = 1.0, and the ADC bit still lives in the low
+              // bit of the blue channel, so mask it back out of the color.
+              color: colorNewFromRGBA(
+                rgba.v1 / 0x80,
+                rgba.v2 / 0x80,
+                (rgba.v3 & ~1) / 0x80,
+                rgba.v4 / 0x80,
               ),
-              adcBitSet: cmdC.v4_8[j].adcBitSet,
+              adcBitSet: rgba.adcBitSet,
             });
           }
         }

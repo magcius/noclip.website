@@ -44,9 +44,15 @@ export class ObfGeometry {
           bufferByteOffset: 5 * 4,
           bufferIndex: 0,
         },
+        {
+          location: TrackProgram.a_Color,
+          format: GfxFormat.F32_RGBA,
+          bufferByteOffset: 8 * 4,
+          bufferIndex: 0,
+        },
       ],
       vertexBufferDescriptors: [
-        { byteStride: 8 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
+        { byteStride: 12 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
       ],
       indexBufferFormat: GfxFormat.U32_R,
     });
@@ -66,18 +72,23 @@ export class ObfGeometry {
             continue;
           }
 
-          const data = new Float32Array(buffer.positions.length * 8);
+          const data = new Float32Array(buffer.positions.length * 12);
           for (let i = 0; i < buffer.positions.length; i++) {
-            data[i * 8 + 0] = buffer.positions[i][0];
-            data[i * 8 + 1] = buffer.positions[i][1];
-            data[i * 8 + 2] = buffer.positions[i][2];
+            data[i * 12 + 0] = buffer.positions[i][0];
+            data[i * 12 + 1] = buffer.positions[i][1];
+            data[i * 12 + 2] = buffer.positions[i][2];
 
-            data[i * 8 + 3] = buffer.uvs[i][0];
-            data[i * 8 + 4] = buffer.uvs[i][1];
+            data[i * 12 + 3] = buffer.uvs[i][0];
+            data[i * 12 + 4] = buffer.uvs[i][1];
 
-            data[i * 8 + 5] = buffer.normals[i][0];
-            data[i * 8 + 6] = buffer.normals[i][1];
-            data[i * 8 + 7] = buffer.normals[i][2];
+            data[i * 12 + 5] = buffer.normals[i][0];
+            data[i * 12 + 6] = buffer.normals[i][1];
+            data[i * 12 + 7] = buffer.normals[i][2];
+
+            data[i * 12 + 8] = buffer.colors[i].r;
+            data[i * 12 + 9] = buffer.colors[i].g;
+            data[i * 12 + 10] = buffer.colors[i].b;
+            data[i * 12 + 11] = buffer.colors[i].a;
           }
 
           const vBuf = createBufferFromData(
@@ -98,6 +109,7 @@ export class ObfGeometry {
             indexBuffer: iBuf,
             indexCount: buffer.indices.length,
             textureId: buffer.textureId,
+            hasVertexColors: buffer.hasVertexColors,
           });
         }
       }

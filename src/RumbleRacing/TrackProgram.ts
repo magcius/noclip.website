@@ -5,9 +5,17 @@ export class TrackProgram extends DeviceProgram {
   public static a_Position = 0;
   public static a_TexCoord = 1;
   public static a_Normal = 2;
+  public static a_Color = 3;
 
   public static ub_SceneParams = 0;
   public static ub_MeshParams = 1;
+
+  // Geometry either ships normals and gets lit at runtime, or ships baked RGBA
+  // vertex colors which simply modulate the texture.
+  constructor(hasVertexColors: boolean) {
+    super();
+    this.setDefineBool("USE_VERTEX_COLOR", hasVertexColors);
+  }
 
   public override vert = `
 ${TrackProgram.Common}
@@ -15,15 +23,18 @@ ${TrackProgram.Common}
 layout(location = ${TrackProgram.a_Position}) in vec3 a_Position;
 layout(location = ${TrackProgram.a_TexCoord}) in vec2 a_TexCoord;
 layout(location = ${TrackProgram.a_Normal}) in vec3 a_Normal;
+layout(location = ${TrackProgram.a_Color}) in vec4 a_Color;
 
 out vec2 v_TexCoord;
 out vec3 v_Normal;
+out vec4 v_Color;
 
 void main() {
     vec3 t_PositionWorld = (UnpackMatrix(u_WorldFromLocal) * vec4(a_Position.xyz, 1.0f)).xyz;
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0f);
     v_TexCoord = a_TexCoord.xy;
     v_Normal = a_Normal;
+    v_Color = a_Color;
 }
 `;
 
@@ -32,6 +43,7 @@ ${TrackProgram.Common}
 
 in vec2 v_TexCoord;
 in vec3 v_Normal;
+in vec4 v_Color;
 
 void main() {
     vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
@@ -39,12 +51,16 @@ void main() {
     if (color.a < 0.99)
         discard;
 
+#ifdef USE_VERTEX_COLOR
+    gl_FragColor = color * v_Color;
+#else
     vec3 lightDir = normalize(vec3(0.4, 1.0, 0.2));
     float NdotL = max(dot(normalize(v_Normal), lightDir), 0.0);
 
     float lighting = 0.25 + NdotL * 0.75;
 
     gl_FragColor = vec4(color.rgb * lighting, color.a);
+#endif
 }
 `;
 

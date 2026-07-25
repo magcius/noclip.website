@@ -7,7 +7,9 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { getTextures } from "./asset/txf/TXF";
 import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
-import { vec2, vec3 } from "gl-matrix";
+import { ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { Color, White } from "../Color";
+import { Vec3Zero } from "../MathHelpers";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
@@ -19,6 +21,7 @@ export interface DrawCall {
   indexBuffer: GfxBuffer;
   indexCount: number;
   textureId: number;
+  hasVertexColors: boolean;
 }
 
 export interface JsonBuffer {
@@ -27,7 +30,11 @@ export interface JsonBuffer {
   name: string;
   positions: vec3[];
   uvs: vec2[];
-  normals: vec3[];
+  normals: ReadonlyVec3[];
+  colors: Color[];
+  // Vertices come with either normals or baked vertex colors; this says which
+  // one this buffer's data actually holds.
+  hasVertexColors: boolean;
   indices: number[];
 }
 
@@ -96,15 +103,19 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       const indices: number[] = [];
       const positions: vec3[] = [];
       const uvs: vec2[] = [];
-      const normals: vec3[] = [];
+      const normals: ReadonlyVec3[] = [];
+      const colors: Color[] = [];
+      let hasVertexColors = false;
 
       for (const strip of buf.primitives) {
         const base = positions.length;
 
         for (const vert of strip.vertices) {
           positions.push(vert.position);
-          normals.push(vert.normal);
+          normals.push(vert.normal ?? Vec3Zero);
+          colors.push(vert.color ?? White);
           uvs.push(vert.uv);
+          if (vert.color !== null) hasVertexColors = true;
         }
 
         let isFlipped = false;
@@ -136,6 +147,8 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
         positions,
         uvs,
         normals,
+        colors,
+        hasVertexColors,
         indices,
       });
     }

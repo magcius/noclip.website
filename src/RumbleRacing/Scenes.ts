@@ -53,6 +53,7 @@ class RumbleRacingScene implements SceneGfx {
   private trackGeometries: ObfGeometry[] = [];
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
   private trackProgram: GfxProgram;
+  private trackVertexColorProgram: GfxProgram;
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
@@ -94,7 +95,8 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
-    this.trackProgram = cache.createProgram(new TrackProgram());
+    this.trackProgram = cache.createProgram(new TrackProgram(false));
+    this.trackVertexColorProgram = cache.createProgram(new TrackProgram(true));
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -164,6 +166,9 @@ class RumbleRacingScene implements SceneGfx {
       if (!tex) continue;
 
       const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+      renderInst.setGfxProgram(
+        dc.hasVertexColors ? this.trackVertexColorProgram : this.trackProgram,
+      );
       renderInst.setSamplerBindings(0, [
         { gfxTexture: tex, gfxSampler: this.linearSampler },
       ]);
@@ -186,7 +191,6 @@ class RumbleRacingScene implements SceneGfx {
 
   private renderMap(): void {
     const template = this.renderHelper.renderInstManager.pushTemplate();
-    template.setGfxProgram(this.trackProgram);
     template.setMegaStateFlags({
       cullMode: GfxCullMode.None,
       attachmentsState: [
