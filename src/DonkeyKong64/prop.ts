@@ -1,7 +1,6 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { RSPSharedOutput } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TexCM } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -9,7 +8,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
 import { nArray } from '../util.js';
-import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import { AnimatedTexture, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
@@ -169,7 +168,7 @@ export interface PropAnimationState {
     nodesByMatrixIndex: Map<number, PropAnimationNode>;
     vertexOffsets: Uint32Array;
     sourcePositions: Float32Array;
-    vertexMatrixChains: number[][];
+    vertexModelViewMatrixIndices: number[][];
     initialMatrices: Map<number, mat4>;
     boundingBox: AABB;
 }
@@ -255,7 +254,7 @@ function forEachPropAnimationVertex(
             animation.sourcePositions[source + 1],
             animation.sourcePositions[source + 2],
         );
-        for (const matrixIndex of animation.vertexMatrixChains[i]) {
+        for (const matrixIndex of animation.vertexModelViewMatrixIndices[i]) {
             const matrix = animation.nodesByMatrixIndex.get(matrixIndex)?.outputMatrix
                 ?? animation.initialMatrices.get(matrixIndex);
             if (matrix !== undefined)
@@ -387,8 +386,8 @@ function applyPropBindPose(
         const vertex = sharedOutput.vertices[firstVertex + i];
         vec3.set(animationPosition, vertex.x, vertex.y, vertex.z);
         // An empty chain does not imply a load of matrix zero.
-        const matrixChain = state.vertexMatrixChains[firstVertex + i]!;
-        for (const matrixIndex of matrixChain) {
+        const modelViewMatrixIndices = state.vertexModelViewMatrixIndices[firstVertex + i]!;
+        for (const matrixIndex of modelViewMatrixIndices) {
             const matrixOffset = matrixIndex * 0x40;
             // from func_global_asm_8064F450
             if (matrixOffset + 0x40 > initialMatrixDataSize)
@@ -491,15 +490,15 @@ function decodePropAnimation(
     }
 
     const vertexOffsets: number[] = [];
-    const vertexMatrixChains: number[][] = [];
+    const vertexModelViewMatrixIndices: number[][] = [];
     const sourcePositions: number[] = [];
     for (let i = 0; i < vertexCount; i++) {
-        const matrixChain = state.vertexMatrixChains[firstVertex + i]!;
-        if (!matrixChain.some((matrixIndex) => nodesByMatrixIndex.has(matrixIndex)))
+        const modelViewMatrixIndices = state.vertexModelViewMatrixIndices[firstVertex + i]!;
+        if (!modelViewMatrixIndices.some((matrixIndex) => nodesByMatrixIndex.has(matrixIndex)))
             continue;
         const vertex = sharedOutput.vertices[firstVertex + i];
         vertexOffsets.push(i);
-        vertexMatrixChains.push(matrixChain);
+        vertexModelViewMatrixIndices.push(modelViewMatrixIndices);
         sourcePositions.push(vertex.x, vertex.y, vertex.z);
     }
 
@@ -514,7 +513,7 @@ function decodePropAnimation(
         nodesByMatrixIndex,
         vertexOffsets: new Uint32Array(vertexOffsets),
         sourcePositions: new Float32Array(sourcePositions),
-        vertexMatrixChains,
+        vertexModelViewMatrixIndices,
         initialMatrices,
         boundingBox: new AABB(),
     };
@@ -912,7 +911,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
 
         const segmentBuffers: ArrayBufferSlice[] = [];
         segmentBuffers[0x08] = createRuntimePropVertexBuffer(quad);
-        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, indexedTextures);
         initRuntimePropMaterial(state, quad);
         state.gSPVertex(0x08000000, 4, 0);
         state.gSPTri(0, 1, 2);
@@ -989,7 +988,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             scripts,
             instances[0].id,
         );
-        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, [], indexedTextures);
+        const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, indexedTextures);
         initDL(state, true, fogEnabled);
         // from func_global_asm_80636FFC -- basic inheritd state for props.
         state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);

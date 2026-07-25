@@ -68,7 +68,7 @@ interface MatrixAnimationCullTrack {
 interface MatrixAnimationCullData {
     tracks: readonly MatrixAnimationCullTrack[];
     sourcePositions: Float32Array;
-    vertexMatrixChains: readonly (readonly number[])[];
+    vertexModelViewMatrixIndices: readonly (readonly number[])[];
     nodesByMatrixIndex: ReadonlyMap<number, MatrixAnimationCullNode>;
     initialMatrices: ReadonlyMap<number, ReadonlyMat4>;
 }
@@ -85,7 +85,7 @@ function computeConservativeMatrixAnimationBoundingBox(animation: MatrixAnimatio
             animation.sourcePositions[source + 1],
             animation.sourcePositions[source + 2],
         );
-        for (const matrixIndex of animation.vertexMatrixChains[i]) {
+        for (const matrixIndex of animation.vertexModelViewMatrixIndices[i]) {
             const node = animation.nodesByMatrixIndex.get(matrixIndex);
             if (node === undefined) {
                 const matrix = animation.initialMatrices.get(matrixIndex);

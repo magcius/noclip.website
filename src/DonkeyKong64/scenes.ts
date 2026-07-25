@@ -12,7 +12,7 @@ import { DeviceProgram } from '../Program.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { TextureMapping, FakeTextureHolder } from '../TextureHolder.js';
-import { AnimatedTexture, DrawCall, RSP_Geometry, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
+import { AnimatedTexture, DrawCall, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
 import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera.js';
@@ -20,7 +20,7 @@ import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/he
 import { translateCM, Texture, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { TextFilt } from "../Common/N64/Image.js";
-import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
+import { Vertex } from '../BanjoKazooie/f3dex.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { Vec3UnitY, Vec3Zero, scaleMatrix, setMatrixTranslation } from '../MathHelpers.js';
 
@@ -197,10 +197,10 @@ class DrawCallInstance {
     constructor(device: GfxDevice, cache: GfxRenderCache, gpuTextureCache: GPUTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
-            const binding = drawCall.textureBindings[i];
-            if (binding === undefined)
+            const textureIndex = drawCall.textureIndices[i];
+            if (textureIndex === undefined)
                 continue;
-            const tex = sharedOutput.textureCache.textures[binding.textureIndex];
+            const tex = sharedOutput.textureCache.textures[textureIndex];
 
             if (tex) {
                 this.textureEntry[i] = tex;
@@ -208,7 +208,7 @@ class DrawCallInstance {
                 this.textureMappings[i].gfxSampler = translateSampler(cache, tex, linearFiltering);
             }
 
-            const animation = binding.animation;
+            const animation = drawCall.textureAnimations[i];
             if (animation !== undefined) {
                 this.animatedTextureEntries[i] = animation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
                 this.animatedTextureMappings[i] = this.animatedTextureEntries[i].map((entry, frame) => {
@@ -221,10 +221,10 @@ class DrawCallInstance {
                 });
             }
         }
-        const crossfade0 = drawCall.textureBindings[0]?.animation?.crossfadeGroup;
-        const crossfade1 = drawCall.textureBindings[1]?.animation?.crossfadeGroup;
+        const crossfade0 = drawCall.textureAnimations[0]?.crossfadeGroup;
+        const crossfade1 = drawCall.textureAnimations[1]?.crossfadeGroup;
         if (crossfade0 !== null && crossfade0 !== undefined && crossfade0 === crossfade1)
-            this.crossfadeDuration = Math.max(drawCall.textureBindings[0].animation!.frameDuration, 1);
+            this.crossfadeDuration = Math.max(drawCall.textureAnimations[0]!.frameDuration, 1);
 
         this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
         this.isTranslucent = this.crossfadeDuration > 0 || renderModeIsTranslucent(this.megaStateFlags);
@@ -242,7 +242,7 @@ class DrawCallInstance {
         if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
             program.defines.set('LIGHTING', '1');
 
-        if (this.vertexColorsEnabled && this.drawCall.useVertexColors)
+        if (this.vertexColorsEnabled && this.drawCall.SP_VertexColorsEnabled)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
@@ -304,7 +304,7 @@ class DrawCallInstance {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
             calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
-            const speed = this.drawCall.textureBindings[textureEntryIndex]?.scrollSpeed ?? 0;
+            const speed = this.drawCall.textureScrollSpeeds[textureEntryIndex] ?? 0;
             if (speed !== 0) {
                 const ticks = Math.floor(time / (1000 / 30));
                 if (ticks > 0) {
@@ -330,7 +330,7 @@ class DrawCallInstance {
             const mappings = this.animatedTextureMappings[i];
             if (mappings === undefined)
                 continue;
-            const animation = this.drawCall.textureBindings[i].animation!;
+            const animation = this.drawCall.textureAnimations[i]!;
             const frameDuration = Math.max(animation.frameDuration, 1);
             const frameOffset = animation.frameOffset;
             const frame = (Math.floor(animationTick / frameDuration) + frameOffset) % mappings.length;
@@ -1152,22 +1152,32 @@ interface EnvironmentParticleData {
     risingScale: number;
 }
 
-class CommonData {
-    public SpriteData: SpriteData[];
-    public CustomScriptFunctionData: number[];
+class TextureData {
     public TexData: ArrayBufferSlice[] = [];
     public AnimTexData: ArrayBufferSlice[] = [];
 
-    constructor(buffer: ArrayBufferSlice) {
-        const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
+    public static fromBuffer(buffer: ArrayBufferSlice): TextureData {
+        return new TextureData(BYML.parse(buffer, BYML.FileType.CRG1));
+    }
 
-        this.SpriteData = obj.SpriteData ?? [];
-        this.CustomScriptFunctionData = obj.CustomScriptFunctionData ?? [];
+    constructor(obj: any) {
         applyTextureEntries(this.TexData, obj.TexData, true);
-        applyTextureEntries(this.AnimTexData, obj.AnimTexData!, false);
+        applyTextureEntries(this.AnimTexData, obj.AnimTexData, false);
     }
 
     public destroy(device: GfxDevice): void {
+    }
+}
+
+class CommonData extends TextureData {
+    public SpriteData: SpriteData[];
+    public CustomScriptFunctionData: number[];
+
+    constructor(buffer: ArrayBufferSlice) {
+        const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
+        super(obj);
+        this.SpriteData = obj.SpriteData ?? [];
+        this.CustomScriptFunctionData = obj.CustomScriptFunctionData ?? [];
     }
 }
 
@@ -1180,20 +1190,6 @@ function overlayTextureData(target: ArrayBufferSlice[], source: ArrayBufferSlice
     for (let id = 0; id < source.length; id++) {
         if (source[id] !== undefined)
             target[id] = source[id];
-    }
-}
-
-class TextureData {
-    public TexData: ArrayBufferSlice[] = [];
-    public AnimTexData: ArrayBufferSlice[] = [];
-
-    constructor(buffer: ArrayBufferSlice) {
-        const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
-        applyTextureEntries(this.TexData, obj.TexData, true);
-        applyTextureEntries(this.AnimTexData, obj.AnimTexData, false);
-    }
-
-    public destroy(device: GfxDevice): void {
     }
 }
 
@@ -1536,7 +1532,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const commonTextureGroups = await Promise.all(commonTextureGroupIDs.map((groupID) => {
             const suffix = hexzero(groupID, 2).toUpperCase();
             return context.dataShare.ensureObject(`${pathBase}/CommonTextureData/${suffix}`, async () => {
-                return new TextureData(await dataFetcher.fetchData(`${pathBase}/common_${suffix}.crg1`));
+                return TextureData.fromBuffer(await dataFetcher.fetchData(`${pathBase}/common_${suffix}.crg1`));
             });
         }));
         const romData = new ROMData(commonData, levelData, commonTextureGroups);
@@ -1581,7 +1577,7 @@ class SceneDesc implements Viewer.SceneDesc {
             if (dl.materialIndex !== null)
                 initSceneNodeMaterial(state, dl.materialIndex, map.fogEnabled, sceneID);
             const firstVertex = sharedOutput.vertices.length;
-            runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr, dl.ChunkID >= 0);
+            runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
             const output = state.finish();
 

@@ -1,12 +1,12 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
+import { Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import type { AABB } from '../Geometry.js';
 import { computeSkeletalAnimationBoundingBox } from './cull.js';
-import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 
 export interface ActorAnimation {
     playbackRate: number;
@@ -238,7 +238,7 @@ export function buildActorMesh(
     }
     const output = state.finish()!;
     for (const drawCall of output.drawCalls)
-        drawCall.useVertexColors = false;
+        drawCall.SP_VertexColorsEnabled = false;
 
     const vertexCount = sharedOutput.vertices.length - firstVertex;
     const sourcePositions = new Float32Array(vertexCount * 3);
@@ -248,7 +248,7 @@ export function buildActorMesh(
         sourcePositions[i * 3 + 0] = vertex.x;
         sourcePositions[i * 3 + 1] = vertex.y;
         sourcePositions[i * 3 + 2] = vertex.z;
-        boneIndices[i] = state.vertexMatrixIndices[firstVertex + i]!;
+        boneIndices[i] = vertex.matrixIndex;
     }
     const skeleton = parseActorSkeleton(geometry);
     if (skeleton.offsets.length === 0) {
