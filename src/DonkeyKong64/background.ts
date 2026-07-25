@@ -40,7 +40,6 @@ const backdropBindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const identityMatrix = mat4.create();
-const textureMatrix = mat4.create();
 
 function wrap01(v: number): number {
     return v - Math.floor(v);
@@ -198,7 +197,7 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
         mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
         offs += fillMatrix4x3(mapped, offs, identityMatrix);
-        mat4.identity(textureMatrix);
+        const textureMatrix = mat4.create();
         textureMatrix[0] = scaleU;
         textureMatrix[5] = scaleV;
         textureMatrix[12] = centerU - scaleU / 2;
