@@ -110,6 +110,7 @@ export class ObfGeometry {
             indexCount: buffer.indices.length,
             textureId: buffer.textureId,
             hasVertexColors: buffer.hasVertexColors,
+            translucent: buffer.translucent,
           });
         }
       }

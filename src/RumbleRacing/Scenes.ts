@@ -50,6 +50,7 @@ const GLOBAL_SCALE = 300.0; // this feels the best
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
   private renderInstList = new GfxRenderInstList();
+  private translucentRenderInstList = new GfxRenderInstList();
   private trackGeometries: ObfGeometry[] = [];
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
   private trackProgram: GfxProgram;
@@ -185,7 +186,14 @@ class RumbleRacingScene implements SceneGfx {
       );
       fillMatrix4x3(meshParams, 0, modelMatrix);
 
-      this.renderInstList.submitRenderInst(renderInst);
+      if (dc.translucent) {
+        // Blended geometry can't own the depth buffer, or it punches holes that
+        // reject the opaque geometry sitting behind it.
+        renderInst.setMegaStateFlags({ depthWrite: false });
+        this.translucentRenderInstList.submitRenderInst(renderInst);
+      } else {
+        this.renderInstList.submitRenderInst(renderInst);
+      }
     }
   }
 
@@ -301,6 +309,10 @@ class RumbleRacingScene implements SceneGfx {
       );
       pass.exec((passRenderer) => {
         this.renderInstList.drawOnPassRenderer(
+          this.renderHelper.renderCache,
+          passRenderer,
+        );
+        this.translucentRenderInstList.drawOnPassRenderer(
           this.renderHelper.renderCache,
           passRenderer,
         );

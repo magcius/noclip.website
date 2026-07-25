@@ -22,6 +22,7 @@ export interface DrawCall {
   indexCount: number;
   textureId: number;
   hasVertexColors: boolean;
+  translucent: boolean;
 }
 
 export interface JsonBuffer {
@@ -35,6 +36,9 @@ export interface JsonBuffer {
   // Vertices come with either normals or baked vertex colors; this says which
   // one this buffer's data actually holds.
   hasVertexColors: boolean;
+  // Some vertex colors carry an alpha below 0x80 (a fair few are flat 0x00), so
+  // those buffers have to be blended after the opaque geometry.
+  translucent: boolean;
   indices: number[];
 }
 
@@ -106,6 +110,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       const normals: ReadonlyVec3[] = [];
       const colors: Color[] = [];
       let hasVertexColors = false;
+      let translucent = false;
 
       for (const strip of buf.primitives) {
         const base = positions.length;
@@ -115,7 +120,10 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
           normals.push(vert.normal ?? Vec3Zero);
           colors.push(vert.color ?? White);
           uvs.push(vert.uv);
-          if (vert.color !== null) hasVertexColors = true;
+          if (vert.color !== null) {
+            hasVertexColors = true;
+            if (vert.color.a < 1.0) translucent = true;
+          }
         }
 
         let isFlipped = false;
@@ -149,6 +157,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
         normals,
         colors,
         hasVertexColors,
+        translucent,
         indices,
       });
     }
