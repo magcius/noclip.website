@@ -3,7 +3,7 @@ use std::io::Cursor;
 
 use deku::reader::Reader;
 use deku::DekuContainerRead;
-use noclip_macros::{FromStructPerField, FromEnumPerVariant, from};
+use noclip_macros::{FromStructPerField, FromEnumPerVariant};
 use wasm_bindgen::prelude::*;
 use deku::DekuReader;
 

@@ -586,6 +586,13 @@ export class BSPRenderer {
             if (classname.startsWith('trigger_'))
                 continue;
 
+            const rendermode = parseInt(entity.rendermode || '0', 10);
+            const renderamt = parseInt(entity.renderamt || '0', 10);
+
+            // rendermode 1 (Color) / 2 (Texture) / 5 (Additive) with renderamt 0 = fully transparent
+            if (rendermode !== 0 && rendermode !== 4 && renderamt === 0)
+                continue;
+
             if (this.context.isQuake) {
                 const spawnflags = parseInt(entity.spawnflags || '0', 10);
 
