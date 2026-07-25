@@ -7,22 +7,26 @@ import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTexture
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
-import { nArray, align, assert, hexzero } from '../util.js';
+import { nArray, align, assert } from '../util.js';
+import { hexzero } from '../util.js';
 import { DeviceProgram } from '../Program.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { TextureMapping, FakeTextureHolder } from '../TextureHolder.js';
-import { AnimatedTexture, DrawCall, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
+import { DrawCall, RSP_Geometry, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
+import { AnimatedTexture, RSPSharedOutput } from './f3dex2.js';
 import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
-import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera.js';
 import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { translateCM, Texture, OtherModeH_Layout } from '../Common/N64/RDP.js';
+import { translateCM, Texture, OtherModeH_Layout, OtherModeH_CycleType } from '../Common/N64/RDP.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { TextFilt } from "../Common/N64/Image.js";
-import { Vertex } from '../BanjoKazooie/f3dex.js';
+import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image.js";
+import { RSPSharedOutput as BanjoRSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { Vec3UnitY, Vec3Zero, scaleMatrix, setMatrixTranslation } from '../MathHelpers.js';
+import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { scaleMatrix, setMatrixTranslation } from '../MathHelpers.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as Deflate from '../Common/Compression/Deflate.js';
@@ -179,7 +183,6 @@ function fogPositionToViewDistance(position: number, clipNear: number, clipFar: 
 
 class DrawCallInstance {
     private textureEntry: Texture[] = [];
-    private animatedTextureEntries: Texture[][] = [];
     private animatedTextureMappings: TextureMapping[][] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
@@ -210,8 +213,8 @@ class DrawCallInstance {
 
             const animation = drawCall.textureAnimations[i];
             if (animation !== undefined) {
-                this.animatedTextureEntries[i] = animation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
-                this.animatedTextureMappings[i] = this.animatedTextureEntries[i].map((entry, frame) => {
+                const entries = animation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
+                this.animatedTextureMappings[i] = entries.map((entry, frame) => {
                     if (frame === 0)
                         return this.textureMappings[i];
                     const mapping = new TextureMapping();
@@ -402,7 +405,7 @@ class DrawCallInstance {
     }
 }
 
-function makeVertexBufferData(v: readonly Vertex[]): Float32Array {
+function makeVertexBufferData(v: Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
@@ -452,22 +455,11 @@ export class RenderData {
             (end, vertexIndex) => Math.max(end, vertexIndex + 1),
             vertexStart,
         );
-        const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
-            vertexStart = Math.min(vertexStart, firstVertex);
-            vertexEnd = Math.max(vertexEnd, firstVertex + vertexCount);
-        };
-        if (mesh.generatedSurfaceAnimation !== undefined)
-            includeVertexRange(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
-        if (mesh.actorAnimation !== undefined)
-            includeVertexRange(mesh.actorAnimation.firstVertex, mesh.actorAnimation.vertexCount);
-        if (mesh.propAnimation !== undefined) {
-            for (const vertexOffset of mesh.propAnimation.vertexOffsets)
-                includeVertexRange(mesh.propAnimation.firstVertex + vertexOffset, 1);
+        const dynamicVertexRange = getDynamicVertexRange(mesh);
+        if (dynamicVertexRange !== null) {
+            vertexStart = Math.min(vertexStart, dynamicVertexRange.start);
+            vertexEnd = Math.max(vertexEnd, dynamicVertexRange.end);
         }
-        for (const sprite of mesh.spriteBillboards ?? [])
-            includeVertexRange(sprite.firstVertex, 4);
-        for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
-            includeVertexRange(vertexIndex, 1);
         this.vertexStart = vertexStart;
 
         assert(vertexEnd - this.vertexStart <= 0xFFFFFFFF);
@@ -534,6 +526,26 @@ export interface Mesh {
     }[];
 }
 
+function getDynamicVertexRange(mesh: Mesh): { start: number, end: number } | null {
+    let rangeStart = Infinity, rangeEnd = -Infinity;
+    const include = (start: number, count: number): void => {
+        rangeStart = Math.min(rangeStart, start);
+        rangeEnd = Math.max(rangeEnd, start + count);
+    };
+    if (mesh.generatedSurfaceAnimation !== undefined)
+        include(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
+    if (mesh.actorAnimation !== undefined)
+        include(mesh.actorAnimation.firstVertex, mesh.actorAnimation.vertexCount);
+    if (mesh.propAnimation !== undefined)
+        for (const vertexOffset of mesh.propAnimation.vertexOffsets)
+            include(mesh.propAnimation.firstVertex + vertexOffset, 1);
+    for (const sprite of mesh.spriteBillboards ?? [])
+        include(sprite.firstVertex, 4);
+    for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
+        include(vertexIndex, 1);
+    return rangeStart <= rangeEnd ? { start: rangeStart, end: rangeEnd } : null;
+}
+
 export class MeshData {
     public renderData: RenderData;
     public cullBounds: MeshBounds;
@@ -552,27 +564,13 @@ export class MeshData {
             [mesh.propAnimation?.boundingBox, mesh.actorAnimation?.boundingBox],
         );
 
-        const includeVertexRange = (firstVertex: number, vertexCount: number): void => {
-            const localFirstVertex = firstVertex - this.renderData.vertexStart;
-            if (this.dirtyVertexRange === null) {
-                this.dirtyVertexRange = { start: localFirstVertex, end: localFirstVertex + vertexCount };
-            } else {
-                this.dirtyVertexRange.start = Math.min(this.dirtyVertexRange.start, localFirstVertex);
-                this.dirtyVertexRange.end = Math.max(this.dirtyVertexRange.end, localFirstVertex + vertexCount);
-            }
-        };
-        if (mesh.generatedSurfaceAnimation !== undefined)
-            includeVertexRange(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
-        if (mesh.actorAnimation !== undefined)
-            includeVertexRange(mesh.actorAnimation.firstVertex, mesh.actorAnimation.vertexCount);
-        if (mesh.propAnimation !== undefined) {
-            for (const vertexOffset of mesh.propAnimation.vertexOffsets)
-                includeVertexRange(mesh.propAnimation.firstVertex + vertexOffset, 1);
+        const dynamicVertexRange = getDynamicVertexRange(mesh);
+        if (dynamicVertexRange !== null) {
+            this.dirtyVertexRange = {
+                start: dynamicVertexRange.start - this.renderData.vertexStart,
+                end: dynamicVertexRange.end - this.renderData.vertexStart,
+            };
         }
-        for (const sprite of mesh.spriteBillboards ?? [])
-            includeVertexRange(sprite.firstVertex, 4);
-        for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
-            includeVertexRange(vertexIndex, 1);
     }
 
     public setDynamicLightingEnabled(enabled: boolean): void {
@@ -1003,7 +1001,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
 
-        const enableCullingCheckbox = new UI.Checkbox('Enable Backface Culling', true);
+        const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
             for (const meshRenderer of this.meshRenderers)
                 meshRenderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
@@ -1072,12 +1070,11 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-
         const template = this.renderHelper.pushTemplateRenderInst();
-        this.backdropRenderer?.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
-
         template.setBindingLayouts(bindingLayouts);
+
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+        this.backdropRenderer?.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         this.activeLightCache.update(viewerInput.camera.worldMatrix, tick);
@@ -1124,6 +1121,8 @@ export class DK64Renderer implements Viewer.SceneGfx {
 }
 
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
+    const view = buffer.createDataView();
+    assert(view.getUint32(0x00) === 0x1F8B0800);
     const decompressed = Deflate.decompress_raw(buffer.slice(0x0A));
     return decompressed;
 }
