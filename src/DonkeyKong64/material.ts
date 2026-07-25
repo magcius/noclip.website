@@ -546,7 +546,6 @@ function getSpriteImageFormat(sprite: SpriteMaterialDefinition): ImageFormat {
 }
 
 function getSpriteImageSize(sprite: SpriteMaterialDefinition): ImageSize {
-    assert(sprite.codec >= 0 && sprite.codec <= 3);
     return sprite.codec as ImageSize;
 }
 

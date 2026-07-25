@@ -244,7 +244,7 @@ export function computeMeshWorldBoundingBox(
 
 export function computeSkeletalAnimationBoundingBox(
     sourcePositions: Float32Array,
-    matrixIndices: Uint8Array,
+    boneIndices: Uint8Array,
     boneOffsets: readonly ReadonlyVec3[],
     boneParents: readonly number[],
 ): AABB {
@@ -255,7 +255,7 @@ export function computeSkeletalAnimationBoundingBox(
             sourcePositions[i * 3 + 1],
             sourcePositions[i * 3 + 2],
         );
-        let bone = Math.min(matrixIndices[i], boneOffsets.length - 1);
+        let bone = Math.min(boneIndices[i], boneOffsets.length - 1);
         for (let depth = 0; bone >= 0 && depth < boneOffsets.length; depth++) {
             const offset = boneOffsets[bone];
             radius += Math.hypot(offset[0], offset[1], offset[2]);

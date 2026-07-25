@@ -87,21 +87,15 @@ export interface ActiveLight {
 export class ActiveLightCache {
     private activeLights = new Map<DynamicLight, ActiveLight>();
     private bonePosition = vec3.create();
-    private lastUpdateTick = -1;
 
     constructor(private lights: readonly DynamicLight[]) {
     }
 
     public update(camera: ArrayLike<number>, tick: number): void {
-        if (tick === this.lastUpdateTick)
-            return;
-        this.lastUpdateTick = tick;
         this.activeLights.clear();
 
         for (const light of this.lights) {
-            const activeLight = sampleActiveLight(light, camera, tick, this.bonePosition);
-            if (activeLight !== null)
-                this.activeLights.set(light, activeLight);
+            this.activeLights.set(light, sampleActiveLight(light, camera, tick, this.bonePosition));
         }
     }
 
@@ -207,8 +201,6 @@ export function buildDynamicLights(
         if (prop.lightAnimation === 0)
             continue;
         const animation = lightAnimations[prop.lightAnimation];
-        if (animation === undefined || animation.length === 0)
-            continue;
         const maxDistance = loadPropGeometry(prop.type).getUint16(0x1E, false);
         lights.push({
             kind: 'point',
@@ -223,10 +215,8 @@ export function buildDynamicLights(
         const definition = getActorRenderDefinition(actor.type, 0);
         if (definition === null || definition.lightBone === undefined || definition.animation === null)
             continue;
-        const actorGeometry = actorResources.loadActorGeometry(definition.model);
-        const animationData = actorResources.loadAnimation(definition.animation);
-        if (actorGeometry === null || animationData === null)
-            continue;
+        const actorGeometry = actorResources.loadActorGeometry(definition.model)!;
+        const animationData = actorResources.loadAnimation(definition.animation)!;
         const skeleton = parseActorSkeleton(actorGeometry);
         lights.push({
             kind: 'spot',
@@ -241,7 +231,7 @@ export function buildDynamicLights(
             speed: actor.lightSpeed,
             rotationY: actor.rotationY / 0x1000 * Math.PI * 2,
             maxDistance: 700,
-            animation: parseActorAnimation(animationData, skeleton.offsets.length, definition.animation),
+            animation: parseActorAnimation(animationData, skeleton.offsets.length),
             skeleton,
             scale: actor.scale * actorModelScale,
             targetBone: definition.lightBone,
@@ -251,8 +241,6 @@ export function buildDynamicLights(
 }
 
 function filterDynamicLightsForVertices(sharedOutput: RSPSharedOutput, vertexIndices: readonly number[], lights: readonly DynamicLight[]): DynamicLight[] {
-    if (vertexIndices.length === 0)
-        return [];
     const min = vec3.fromValues(Infinity, Infinity, Infinity);
     const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
     for (const vertexIndex of vertexIndices) {
@@ -314,8 +302,6 @@ export function buildMapChunkLighting(
         if (sourceOffset >= chunk.vertOffset && sourceOffset < chunkVertexEnd)
             vertexIndices.push(vertexIndex);
     }
-    if (vertexIndices.length === 0)
-        return undefined;
 
     // func_global_asm_80655410: only flagged chunks are relit by dynamic lights.
     return {
@@ -326,7 +312,7 @@ export function buildMapChunkLighting(
     };
 }
 
-function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick: number, bonePosition: vec3): ActiveLight | null {
+function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick: number, bonePosition: vec3): ActiveLight {
     const cameraDistance = Math.hypot(
         camera[12] - light.origin[0],
         camera[13] - light.origin[1],
@@ -334,8 +320,6 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     ) / 3;
     const distanceRatio = cameraDistance / light.maxDistance;
     const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
-    if (cameraFade === 0)
-        return null;
     if (light.kind === 'spot') {
         // func_global_asm_8069AB74: the light is hanging off the 3rd bone
         sampleActorBonePosition(bonePosition, light.skeleton, light.animation, light.speed, tick, light.targetBone);
@@ -398,8 +382,6 @@ function sampleLightAtPosition(light: ActiveLight, x: number, y: number, z: numb
         return 0;
     let falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
     if (light.direction !== undefined) {
-        if (distance === 0)
-            return 0;
         const coneDot = (dx * light.direction[0] + dy * light.direction[1] + dz * light.direction[2]) / distance;
         if (coneDot < light.outerConeCos!)
             return 0;
@@ -415,9 +397,7 @@ export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, active
 
     vec3.copy(dst, lighting.ambientColor);
     for (const dynamicLight of lighting.lights) {
-        const light = activeLightCache.get(dynamicLight);
-        if (light === undefined)
-            continue;
+        const light = activeLightCache.get(dynamicLight)!;
         const falloff = sampleLightAtPosition(light, lighting.origin[0], lighting.origin[1], lighting.origin[2]);
         dst[0] += light.color[0] * falloff;
         dst[1] += light.color[1] * falloff;
@@ -449,12 +429,8 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
         let green = lighting.ambientColor[1];
         let blue = lighting.ambientColor[2];
         for (const dynamicLight of lighting.lights) {
-            const light = activeLightCache.get(dynamicLight);
-            if (light === undefined)
-                continue;
+            const light = activeLightCache.get(dynamicLight)!;
             const falloff = sampleLightAtPosition(light, vertex.x, vertex.y, vertex.z);
-            if (falloff <= 0)
-                continue;
             red += light.color[0] * falloff;
             green += light.color[1] * falloff;
             blue += light.color[2] * falloff;

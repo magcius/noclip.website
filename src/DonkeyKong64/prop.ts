@@ -8,7 +8,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
-import { assert, hexzero, nArray } from '../util.js';
+import { nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
@@ -144,7 +144,7 @@ function findTerrainSurface(grid: TerrainTriangleGrid, x: number, z: number, ray
     return result;
 }
 
-interface PropMatrixAnimationNode {
+interface PropAnimationNode {
     matrixIndex: number;
     transforms: Float32Array;
     baseMatrix: mat4;
@@ -152,9 +152,9 @@ interface PropMatrixAnimationNode {
     outputMatrix: mat4;
 }
 
-interface PropMatrixAnimationTrack {
+interface PropAnimationTrack {
     channel: number;
-    nodes: PropMatrixAnimationNode[];
+    nodes: PropAnimationNode[];
     timings: Uint8Array;
     speed: number;
     triggeredPlaybackPositions: Float32Array | null;
@@ -163,10 +163,10 @@ interface PropMatrixAnimationTrack {
     lastTick: number;
 }
 
-export interface PropMatrixAnimation {
+export interface PropAnimationState {
     firstVertex: number;
-    tracks: PropMatrixAnimationTrack[];
-    nodesByMatrixIndex: Map<number, PropMatrixAnimationNode>;
+    tracks: PropAnimationTrack[];
+    nodesByMatrixIndex: Map<number, PropAnimationNode>;
     vertexOffsets: Uint32Array;
     sourcePositions: Float32Array;
     vertexMatrixChains: number[][];
@@ -174,10 +174,8 @@ export interface PropMatrixAnimation {
     boundingBox: AABB;
 }
 
-const animationComponent = mat4.create();
-const animationPosition = vec3.create();
-
-function samplePropMatrixAnimation(animation: PropMatrixAnimation, tick: number): void {
+function samplePropAnimation(animation: PropAnimationState, tick: number): void {
+    const animationComponent = mat4.create();
     for (const track of animation.tracks) {
         const frameCount = track.timings.length;
         if (track.triggeredPlaybackPositions !== null) {
@@ -245,10 +243,11 @@ function samplePropMatrixAnimation(animation: PropMatrixAnimation, tick: number)
     }
 }
 
-function forEachPropMatrixAnimationVertex(
-    animation: PropMatrixAnimation,
+function forEachPropAnimationVertex(
+    animation: PropAnimationState,
     callback: (vertexIndex: number, position: vec3) => void,
 ): void {
+    const animationPosition = vec3.create();
     for (let i = 0; i < animation.vertexOffsets.length; i++) {
         const source = i * 3;
         vec3.set(animationPosition,
@@ -266,9 +265,9 @@ function forEachPropMatrixAnimationVertex(
     }
 }
 
-export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertexBufferData: Float32Array, vertexBufferFirstVertex: number, tick: number): void {
-    samplePropMatrixAnimation(animation, tick);
-    forEachPropMatrixAnimationVertex(animation, (vertexIndex, position) => {
+export function updatePropAnimation(animation: PropAnimationState, vertexBufferData: Float32Array, vertexBufferFirstVertex: number, tick: number): void {
+    samplePropAnimation(animation, tick);
+    forEachPropAnimationVertex(animation, (vertexIndex, position) => {
         const target = (vertexIndex - vertexBufferFirstVertex) * 10;
         vertexBufferData[target + 0] = position[0];
         vertexBufferData[target + 1] = position[1];
@@ -276,16 +275,16 @@ export function updatePropMatrixAnimation(animation: PropMatrixAnimation, vertex
     });
 }
 
-function findHighDetailPropDisplayList(view: DataView, mainDisplayListStart: number): number {
-    let half1 = -1;
+function findHighestDetailDisplayListOffset(view: DataView, mainDisplayListStart: number): number {
+    let pendingHalf1 = -1;
     for (let offs = mainDisplayListStart; offs < Math.min(view.byteLength, mainDisplayListStart + 0x80); offs += 8) {
         const w0 = view.getUint32(offs, false);
         const w1 = view.getUint32(offs + 4, false);
         const opcode = w0 >>> 24;
         if (opcode === 0xE1)
-            half1 = w1;
-        else if (opcode === 0x04 && (half1 >>> 24) === 0x0A)
-            return half1 & 0x00FFFFFF;
+            pendingHalf1 = w1;
+        else if (opcode === 0x04 && (pendingHalf1 >>> 24) === 0x0A)
+            return pendingHalf1 & 0x00FFFFFF;
         else if (opcode === 0xDF)
             break;
     }
@@ -300,71 +299,51 @@ function propDisplayListUsesMatrices(view: DataView, start: number, end: number)
     return false;
 }
 
-const warnedPropAnimationFeatures = new Set<string>();
-
-function warnPropAnimationFeatureOnce(feature: string, prop: SetupProp, channel: number, message: string): void {
-    const warningKey = `${feature}:${prop.type}:${channel}`;
-    if (warnedPropAnimationFeatures.has(warningKey))
-        return;
-    warnedPropAnimationFeatures.add(warningKey);
-    const position = Array.from(prop.position, (component) => component.toFixed(1)).join(',');
-    console.warn(
-        `[DK64 prop animation] type=0x${hexzero(prop.type, 4)} id=0x${hexzero(prop.id, 4)}`
-        + ` position=(${position}) channel=${channel}: ${message}`,
-    );
-}
-
 function isInitialPropScriptBlock(block: InstanceScript['blocks'][number]): boolean {
     return block.conditions.length === 1
         && block.conditions[0].opcode === 1
         && block.conditions[0].args[0] === 0;
 }
 
-function findPropAnimationScripts(scripts: InstanceScript[], propID: number): { channel: number; speed: number; holdEndpoints: boolean }[] {
+interface PropAnimationTrackDefinition {
+    channel: number;
+    speed: number;
+    holdEndpoints: boolean;
+}
+
+function findPropAnimationTrackDefinitions(scripts: InstanceScript[], propID: number): PropAnimationTrackDefinition[] {
     const script = scripts.find((entry) => entry.id === propID);
     if (script === undefined)
         return [];
     const channelSpeeds = new Map<number, number>();
-    const starts: { channel: number; speed: number; holdEndpoints: boolean }[] = [];
+    const selectedByChannel = new Map<number, PropAnimationTrackDefinition>();
     for (const block of script.blocks) {
         for (const command of block.executions) {
             if (command.opcode === 0x14) {
                 channelSpeeds.set(command.args[0], command.args[1]);
             } else if (command.opcode === 0x11) {
                 const channel = command.args[0];
-                // from func_global_asm_8064F450 + func_global_asm_80650A04
-                starts.push({
+                const candidate = {
                     channel,
                     speed: channelSpeeds.get(channel) ?? 1,
                     holdEndpoints: !isInitialPropScriptBlock(block),
-                });
+                };
+                const selected = selectedByChannel.get(channel);
+                // from func_global_asm_8064F450 + func_global_asm_80650A04
+                // Prefer moving animations, then the slowest magnitude. On a
+                // tie, endpoint-holding playback looks closest to the game.
+                if (selected === undefined
+                    || (selected.speed === 0 && candidate.speed !== 0)
+                    || ((selected.speed === 0) === (candidate.speed === 0)
+                        && (Math.abs(candidate.speed) < Math.abs(selected.speed)
+                            || (Math.abs(candidate.speed) === Math.abs(selected.speed)
+                                && candidate.holdEndpoints && !selected.holdEndpoints)))) {
+                    selectedByChannel.set(channel, candidate);
+                }
             }
         }
     }
-    if (starts.length === 0)
-        return [];
-
-    const channels = [...new Set(starts.map((start) => start.channel))];
-    return channels.map((channel) => {
-        const channelStarts = starts.filter((start) => start.channel === channel);
-        const movingStarts = channelStarts.filter((start) => start.speed !== 0);
-        // Use the slowest animation since those look better.
-        const candidates = movingStarts.length > 0 ? movingStarts : channelStarts;
-        const selected = candidates.reduce((best, candidate) => {
-            const candidateMagnitude = Math.abs(candidate.speed);
-            const bestMagnitude = Math.abs(best.speed);
-            if (candidateMagnitude < bestMagnitude)
-                return candidate;
-            if (candidateMagnitude === bestMagnitude && candidate.holdEndpoints && !best.holdEndpoints)
-                return candidate;
-            return best;
-        });
-        return {
-            channel,
-            speed: selected.speed,
-            holdEndpoints: selected.holdEndpoints,
-        };
-    });
+    return [...selectedByChannel.values()];
 }
 
 function buildTriggeredPlaybackPositions(timings: Uint8Array, speed: number): Float32Array {
@@ -392,7 +371,7 @@ function buildTriggeredPlaybackPositions(timings: Uint8Array, speed: number): Fl
     return new Float32Array(positions);
 }
 
-function applyInitialPropMatrices(
+function applyPropBindPose(
     view: DataView,
     state: RSPState,
     sharedOutput: RSPSharedOutput,
@@ -400,23 +379,19 @@ function applyInitialPropMatrices(
     vertexCount: number,
 ): void {
     const matrixData = view.getUint32(0x68, false);
-    if (matrixData + 8 > view.byteLength)
-        return;
     const matrixBuffer = matrixData + 8;
     const initialMatrixDataSize = view.getUint32(matrixData + 4, false);
     const matrices = new Map<number, mat4>();
+    const animationPosition = vec3.create();
     for (let i = 0; i < vertexCount; i++) {
         const vertex = sharedOutput.vertices[firstVertex + i];
         vec3.set(animationPosition, vertex.x, vertex.y, vertex.z);
-        const storedMatrixChain = state.vertexMatrixChains[firstVertex + i];
         // An empty chain does not imply a load of matrix zero.
-        const matrixChain = storedMatrixChain ?? [];
+        const matrixChain = state.vertexMatrixChains[firstVertex + i]!;
         for (const matrixIndex of matrixChain) {
-            if (matrixIndex === undefined)
-                continue;
             const matrixOffset = matrixIndex * 0x40;
             // from func_global_asm_8064F450
-            if (matrixOffset < 0 || matrixOffset + 0x40 > initialMatrixDataSize || matrixBuffer + matrixOffset + 0x40 > view.byteLength)
+            if (matrixOffset + 0x40 > initialMatrixDataSize)
                 continue;
             let matrix = matrices.get(matrixIndex);
             if (matrix === undefined) {
@@ -433,7 +408,7 @@ function applyInitialPropMatrices(
     }
 }
 
-function decodePropMatrixAnimation(
+function decodePropAnimation(
     view: DataView,
     scripts: InstanceScript[],
     prop: SetupProp,
@@ -441,9 +416,9 @@ function decodePropMatrixAnimation(
     sharedOutput: RSPSharedOutput,
     firstVertex: number,
     vertexCount: number,
-): Mesh['propMatrixAnimation'] {
-    const setups = findPropAnimationScripts(scripts, prop.id);
-    if (setups.length === 0) {
+): Mesh['propAnimation'] {
+    const trackDefinitions = findPropAnimationTrackDefinitions(scripts, prop.id);
+    if (trackDefinitions.length === 0) {
         // Props with no animation commands are still valid, just static.
         return undefined;
     }
@@ -461,49 +436,33 @@ function decodePropMatrixAnimation(
         return matrix;
     };
 
-    const tracks: PropMatrixAnimationTrack[] = [];
-    const nodesByMatrixIndex = new Map<number, PropMatrixAnimationNode>();
-    for (const setup of setups) {
-        if (setup.channel < 0 || setup.channel >= 10)
-            return undefined;
-        const channelStart = animationTable + view.getUint32(animationTable + setup.channel * 4, false);
-        if (channelStart < animationTable || channelStart + 0x3C > matrixData)
-            return undefined;
+    const tracks: PropAnimationTrack[] = [];
+    const nodesByMatrixIndex = new Map<number, PropAnimationNode>();
+    for (const trackDefinition of trackDefinitions) {
+        const channelStart = animationTable + view.getUint32(animationTable + trackDefinition.channel * 4, false);
 
         const frameCount = view.getUint8(channelStart);
         const nodeCount = view.getUint8(channelStart + 0x39);
-        if (frameCount < 2 || nodeCount === 0)
+        if (nodeCount === 0)
             return undefined;
         const timings = new Uint8Array(frameCount);
         for (let frame = 0; frame < frameCount; frame++)
             timings[frame] = view.getUint8(channelStart + 1 + frame);
 
         const recordStride = 8 + frameCount * 0x24;
-        const nodes: PropMatrixAnimationNode[] = [];
+        const nodes: PropAnimationNode[] = [];
         for (let nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
             const record = channelStart + 0x3C + nodeIndex * recordStride;
             const matrixOffset = view.getUint32(record, false);
             const matrixIndex = matrixOffset >>> 6;
             const parentMatrixOffset = view.getUint32(record + 4, false);
-            if (parentMatrixOffset + 0x80 > initialMatrixDataSize) {
-                warnPropAnimationFeatureOnce(
-                    'animated-parent',
-                    prop,
-                    setup.channel,
-                    `node=${nodeIndex} outputMatrix=0x${hexzero(matrixOffset, 4)}`
-                    + ` parentMatrix=0x${hexzero(parentMatrixOffset, 4)}`
-                    + ` exceeds initialMatrixDataSize=0x${hexzero(initialMatrixDataSize, 4)}`
-                    + ` frames=${frameCount} nodes=${nodeCount}`,
-                );
-                return undefined;
-            }
             const transforms = new Float32Array(frameCount * 9);
             for (let frame = 0; frame < frameCount; frame++) {
                 const transform = record + 8 + frame * 0x24;
                 for (let component = 0; component < 9; component++)
                     transforms[frame * 9 + component] = view.getFloat32(transform + component * 4, false);
             }
-            const node: PropMatrixAnimationNode = {
+            const node: PropAnimationNode = {
                 matrixIndex,
                 transforms,
                 baseMatrix: readMatrix(matrixBuffer + parentMatrixOffset),
@@ -513,17 +472,17 @@ function decodePropMatrixAnimation(
             nodes.push(node);
             nodesByMatrixIndex.set(matrixIndex, node);
         }
-        const triggeredPlaybackPositions = setup.holdEndpoints
-            ? buildTriggeredPlaybackPositions(timings, setup.speed)
+        const triggeredPlaybackPositions = trackDefinition.holdEndpoints
+            ? buildTriggeredPlaybackPositions(timings, trackDefinition.speed)
             : null;
         const animationLengthTicks = triggeredPlaybackPositions === null
             ? 0
             : Math.max(triggeredPlaybackPositions.length - 1, 1);
         tracks.push({
-            channel: setup.channel,
+            channel: trackDefinition.channel,
             nodes,
             timings,
-            speed: setup.speed,
+            speed: trackDefinition.speed,
             triggeredPlaybackPositions,
             endpointHoldTicks: Math.max(30, animationLengthTicks),
             framePosition: 0,
@@ -534,45 +493,22 @@ function decodePropMatrixAnimation(
     const vertexOffsets: number[] = [];
     const vertexMatrixChains: number[][] = [];
     const sourcePositions: number[] = [];
-    const boundMatrixIndices = new Set<number>();
     for (let i = 0; i < vertexCount; i++) {
-        const storedMatrixChain = state.vertexMatrixChains[firstVertex + i];
-        const matrixChain = storedMatrixChain ?? [];
-        if (!matrixChain.some((matrixIndex) => matrixIndex !== undefined && nodesByMatrixIndex.has(matrixIndex)))
+        const matrixChain = state.vertexMatrixChains[firstVertex + i]!;
+        if (!matrixChain.some((matrixIndex) => nodesByMatrixIndex.has(matrixIndex)))
             continue;
-        const definedMatrixChain = matrixChain.filter((matrixIndex): matrixIndex is number => matrixIndex !== undefined);
-        for (const matrixIndex of definedMatrixChain) {
-            if (nodesByMatrixIndex.has(matrixIndex))
-                boundMatrixIndices.add(matrixIndex);
-        }
         const vertex = sharedOutput.vertices[firstVertex + i];
         vertexOffsets.push(i);
-        vertexMatrixChains.push(definedMatrixChain);
+        vertexMatrixChains.push(matrixChain);
         sourcePositions.push(vertex.x, vertex.y, vertex.z);
     }
-    for (const track of tracks) {
-        for (let nodeIndex = 0; nodeIndex < track.nodes.length; nodeIndex++) {
-            const node = track.nodes[nodeIndex];
-            if (boundMatrixIndices.has(node.matrixIndex))
-                continue;
-            warnPropAnimationFeatureOnce(
-                'missing-matrix-binding',
-                prop,
-                track.channel,
-                `node=${nodeIndex} outputMatrix=0x${hexzero(node.matrixIndex * 0x40, 4)} has no emitted vertices`
-                + ` frames=${track.timings.length} nodes=${track.nodes.length}`,
-            );
-        }
-    }
-    if (vertexOffsets.length === 0)
-        return undefined;
 
     const initialMatrices = new Map<number, mat4>();
     for (let matrixOffset = 0; matrixOffset + 0x40 <= initialMatrixDataSize; matrixOffset += 0x40)
         initialMatrices.set(matrixOffset >>> 6, readMatrix(matrixBuffer + matrixOffset));
 
-    applyInitialPropMatrices(view, state, sharedOutput, firstVertex, vertexCount);
-    const animation: PropMatrixAnimation = {
+    applyPropBindPose(view, state, sharedOutput, firstVertex, vertexCount);
+    const animation: PropAnimationState = {
         firstVertex,
         tracks,
         nodesByMatrixIndex,
@@ -584,8 +520,8 @@ function decodePropMatrixAnimation(
     };
     animation.boundingBox = computeMatrixAnimationBoundingBox(
         animation,
-        (tick) => samplePropMatrixAnimation(animation, tick),
-        (callback) => forEachPropMatrixAnimationVertex(animation, (_vertexIndex, position) => callback(position)),
+        (tick) => samplePropAnimation(animation, tick),
+        (callback) => forEachPropAnimationVertex(animation, (_vertexIndex, position) => callback(position)),
     );
     return animation;
 }
@@ -722,32 +658,21 @@ function createPropDecalVertexBuffer(vertices: readonly ProjectedDecalVertex[], 
 function parseModel2IndexedTextures(geometryView: DataView, romData: ROMData): AnimatedTexture[] {
     // from func_global_asm_806349FC + func_global_asm_80636EFC + func_global_asm_80639CD0
     const descriptorStart = geometryView.getUint32(0x6C, false);
-    if (descriptorStart + 4 > geometryView.byteLength)
-        return [];
     const descriptorCount = geometryView.getUint32(descriptorStart, false);
     const textures: AnimatedTexture[] = [];
     for (let i = 0; i < descriptorCount; i++) {
         const offs = descriptorStart + 4 + i * 0x84;
-        if (offs + 0x84 > geometryView.byteLength)
-            break;
         const targetTextureID = geometryView.getUint32(offs + 0x00, false);
         const crossfade = geometryView.getUint32(offs + 0x04, false);
         const frameDuration = geometryView.getUint32(offs + 0x08, false);
         const frameCount = geometryView.getUint32(offs + 0x0C, false);
-        if (frameCount === 0 || frameCount > 0x1E)
-            continue;
         const frames: ArrayBufferSlice[] = [];
         for (let frame = 0; frame < frameCount; frame++) {
             const textureID = frame === 0
                 ? targetTextureID
                 : geometryView.getUint32(offs + 0x0C + frame * 4, false);
-            const texture = romData.AnimTexData[textureID];
-            if (texture === undefined)
-                break;
-            frames.push(texture);
+            frames.push(romData.AnimTexData[textureID]!);
         }
-        if (frames.length !== frameCount)
-            continue;
         // from func_global_asm_806349FC
         textures.push({
             segment: 0,
@@ -778,8 +703,6 @@ function applyInitialModel2TextureScripts(textures: AnimatedTexture[], scripts: 
 
         for (const command of block.executions) {
             const textureIndex = command.args[0] - 1;
-            if (textureIndex < 0 || textureIndex >= textures.length)
-                continue;
             if (command.opcode === 0x27) {
                 // from func_global_asm_80634EA4
                 playbackModes[textureIndex] = command.args[1];
@@ -794,8 +717,6 @@ function applyInitialModel2TextureScripts(textures: AnimatedTexture[], scripts: 
         if (playbackModes[index] !== 0 || texture.crossfade)
             return texture;
         const selectedFrame = selectedFrames[index];
-        if (selectedFrame < 0 || selectedFrame >= texture.frames.length)
-            return texture;
         return {
             ...texture,
             frameDuration: 0,
@@ -875,9 +796,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
             for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3)
                 state.gSPTri(vertex, vertex + 1, vertex + 2);
         }
-        const output = state.finish();
-        if (output === null)
-            continue;
+        const output = state.finish()!;
 
         const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
         const meshData = sceneRenderer.addMeshData(device, cache, mesh);
@@ -912,11 +831,7 @@ interface RuntimePropQuad {
 
 function parseRuntimePropQuads(view: DataView): RuntimePropQuad[] {
     const tableStart = view.getUint32(0x70, false);
-    if (tableStart + 4 > view.byteLength)
-        return [];
     const count = view.getUint32(tableStart, false);
-    if (count > 0x100 || tableStart + 4 + count * 0x30 > view.byteLength)
-        return [];
 
     const quads: RuntimePropQuad[] = [];
     for (let i = 0; i < count; i++) {
@@ -976,7 +891,6 @@ function initRuntimePropMaterial(state: RSPState, quad: RuntimePropQuad): void {
     const indexed = quad.format === ImageFormat.G_IM_FMT_CI;
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLUT, 2, indexed ? 0x8000 : 0);
     if (indexed) {
-        assert(quad.paletteID !== 0xFFFF);
         state.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, quad.paletteID);
         state.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 7, 0, 0, 0, 0, 0, 0, 0);
         state.gDPLoadTLUT(7, quad.size === ImageSize.G_IM_SIZ_4b ? 15 : 255);
@@ -1003,9 +917,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         state.gSPVertex(0x08000000, 4, 0);
         state.gSPTri(0, 1, 2);
         state.gSPTri(0, 2, 3);
-        const output = state.finish();
-        if (output === null)
-            continue;
+        const output = state.finish()!;
 
         // Share draw resources between instances of props.
         const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output };
@@ -1054,9 +966,6 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             continue;
         const geometry = romData.loadPropGeometry(propType);
         const view = geometry.createDataView();
-        const assetFamily = geometry.createTypedArray(Uint8Array, 0x0C, 0x10);
-        const assetFamilyEnd = assetFamily.indexOf(0);
-        const assetFamilyName = String.fromCharCode(...assetFamily.subarray(0, assetFamilyEnd >= 0 ? assetFamilyEnd : assetFamily.length));
         addModel2PropDecals(device, cache, sceneRenderer, sharedOutput, romData, view, instances, terrainGrid, worldScale);
         if (view.getUint8(0x1C) === 2) {
             addRuntimeModel2Props(device, cache, sceneRenderer, sharedOutput, romData, view, instances, worldScale, lightingEnvironment);
@@ -1085,21 +994,19 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         // from func_global_asm_80636FFC -- basic inheritd state for props.
         state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
         // TODO: maybe handle LODs with G_BRANCH_Z instead of always using highest?
-        const displayListOffset = findHighDetailPropDisplayList(view, mainDisplayListStart);
+        const displayListOffset = findHighestDetailDisplayListOffset(view, mainDisplayListStart);
         const firstVertex = sharedOutput.vertices.length;
         runDL_F3DEX2(state, 0x0A000000 | displayListOffset);
         runDL_F3DEX2(state, 0x0F000000 | secondaryDisplayListStart);
-        const output = state.finish();
-        if (output === null)
-            continue;
+        const output = state.finish()!;
 
         const vertexCount = sharedOutput.vertices.length - firstVertex;
-        const propMatrixAnimation = usesRuntimeMatrices
-            ? decodePropMatrixAnimation(view, scripts, instances[0], state, sharedOutput, firstVertex, vertexCount)
+        const propAnimation = usesRuntimeMatrices
+            ? decodePropAnimation(view, scripts, instances[0], state, sharedOutput, firstVertex, vertexCount)
             : undefined;
-        if (usesRuntimeMatrices && propMatrixAnimation === undefined)
-            applyInitialPropMatrices(view, state, sharedOutput, firstVertex, vertexCount);
-        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, propMatrixAnimation };
+        if (usesRuntimeMatrices && propAnimation === undefined)
+            applyPropBindPose(view, state, sharedOutput, firstVertex, vertexCount);
+        const mesh: Mesh = { sharedOutput, rspState: state, rspOutput: output, propAnimation };
         const meshData = sceneRenderer.addMeshData(device, cache, mesh);
         for (const prop of instances) {
             const renderer = sceneRenderer.addPropMeshRenderer(device, cache, meshData);

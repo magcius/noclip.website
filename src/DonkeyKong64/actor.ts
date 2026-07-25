@@ -5,18 +5,11 @@ import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import type { AABB } from '../Geometry.js';
-import { assert } from '../util.js';
 import { computeSkeletalAnimationBoundingBox } from './cull.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
-import type { SetupActor } from './parse.js';
-
-export interface ActorAnimationPose {
-    boneAngles: readonly number[];
-}
 
 export interface ActorAnimation {
     playbackRate: number;
-    frameCount: number;
     rotations: readonly Int16Array[];
 }
 
@@ -27,30 +20,27 @@ export interface ActorSkeleton {
 
 export const actorModelScale = 0.15;
 
-export interface SkeletalActorAnimation {
+export interface ActorAnimationState {
     firstVertex: number;
     vertexCount: number;
     speed: number;
     sourcePositions: Float32Array;
-    matrixIndices: Uint8Array;
-    boneOffsets: vec3[];
-    boneParents: number[];
-    sourceAnimation: ActorAnimation;
+    boneIndices: Uint8Array;
+    skeleton: ActorSkeleton;
+    animation: ActorAnimation;
     boundingBox: AABB;
 }
 
-export interface SkeletalActorMesh {
+export interface ActorMesh {
     rspState: RSPState;
     rspOutput: RSPOutput;
-    animation: SkeletalActorAnimation;
-    actor: SetupActor;
+    animation: ActorAnimationState;
 }
 
 export interface ActorRenderDefinition {
     model: number;
     animation: number | null;
     animationSpeed: number | 'setup';
-    renderer: 'skeletal';
     lightBone?: number;
     rotationYSpeed?: number;
     positionYAmplitude?: number;
@@ -58,80 +48,30 @@ export interface ActorRenderDefinition {
 
 export function getActorRenderDefinition(type: number, model: number): ActorRenderDefinition | null {
     if (type === 0x10)
-        return { model: 0x81, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
+        return { model: 0x81, animation: 0x402, animationSpeed: 'setup', lightBone: 2 };
     if (type === 0x2A)
-        return { model: 0x97, animation: 0x402, animationSpeed: 'setup', renderer: 'skeletal', lightBone: 2 };
-    if (type === 0x77) // BOOMBOX, from func_global_asm_806A1F64
-        return { model: 0x64, animation: 0x63F, animationSpeed: 8.0, renderer: 'skeletal' };
+        return { model: 0x97, animation: 0x402, animationSpeed: 'setup', lightBone: 2 };
+    if (model === 0)
+        return null;
     // barrels yaw&bob, see func_global_asm_8068412C
-    if ((type === 0x52 || type === 0x78 || type === 0x79) && model !== 0)
+    if (type === 0x52 || type === 0x78 || type === 0x79)
         return {
             model,
             animation: null,
             animationSpeed: 0,
-            renderer: 'skeletal',
             rotationYSpeed: 0x32,
             positionYAmplitude: 5,
         };
-    if (model === 0)
-        return null;
-    return { model, animation: null, animationSpeed: 0, renderer: 'skeletal' };
+    return { model, animation: null, animationSpeed: 0 };
 }
 
-const warnedAnimationFeatures = new Set<string>();
-
-function warnAnimationFeatureOnce(feature: string, animationID: number, message: string): void {
-    if (warnedAnimationFeatures.has(feature))
-        return;
-    warnedAnimationFeatures.add(feature);
-    console.warn(`[DK64 actor] animation 0x${animationID.toString(16)}: ${message}`);
-}
-
-export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, animationID: number): ActorAnimation {
+export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number): ActorAnimation {
     const view = data.createDataView();
-    const flags = view.getUint16(0x04, false);
     const frameCount = view.getUint8(0x12);
     const frameStride = view.getUint8(0x13);
     // See func_global_asm_80614130 + func_global_asm_80619C2C for reference.
     const frameDataStart = view.getUint16(0x06, false) + 6;
-    const animationBoneCount = view.getUint8(0x11) - 1;
-    const decodedBoneCount = Math.min(boneCount, animationBoneCount);
-    const rootChannelBits = [
-        view.getUint8(0x0E),
-        view.getUint8(0x0F),
-        view.getUint8(0x10),
-    ];
-    const rootChannelBases = [
-        view.getInt16(0x08, false),
-        view.getInt16(0x0A, false),
-        view.getInt16(0x0C, false),
-    ];
-    const initialBitOffset = rootChannelBits[0] + rootChannelBits[1] + rootChannelBits[2];
     const rotations: Int16Array[] = [];
-
-    // TODO: Handle root translation xyz channels (func_global_asm_806195D0)
-    if (rootChannelBits.some((bits) => bits !== 0) || rootChannelBases.some((base) => base !== 0)) {
-        warnAnimationFeatureOnce(
-            'root-translation',
-            animationID,
-            'root translation channels are present but are not applied',
-        );
-    }
-    // TODO: Refer to func_global_asm_80619C2C, which also handles 0x0020
-    if ((flags & ~0x0002) !== 0) {
-        warnAnimationFeatureOnce(
-            'animation-flags',
-            animationID,
-            `unsupported header flags 0x${(flags & ~0x0002).toString(16)} are set`,
-        );
-    }
-    if (animationBoneCount > boneCount) {
-        warnAnimationFeatureOnce(
-            'extra-bones',
-            animationID,
-            `${animationBoneCount - boneCount} animation bone(s) are not present in the model skeleton and will be ignored`,
-        );
-    }
 
     const readBits = (bitOffset: number, bitCount: number): number => {
         let value = 0;
@@ -144,57 +84,41 @@ export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number, a
     const toS16 = (value: number): number => (value << 16) >> 16;
 
     for (let frame = 0; frame < frameCount; frame++) {
-        const frameRotations = new Int16Array(boneCount * 3);
-        let bitOffset = (frameDataStart + frame * frameStride) * 8 + initialBitOffset;
-        for (let bone = 0; bone < decodedBoneCount; bone++) {
+        const frameRotations = new Int16Array(boneCount);
+        let bitOffset = (frameDataStart + frame * frameStride) * 8;
+        for (let bone = 0; bone < boneCount; bone++) {
             for (let axis = 0; axis < 3; axis++) {
                 const descriptor = view.getUint16(0x14 + bone * 6 + axis * 2, false);
                 const bitCount = descriptor & 0x0F;
-                if (axis < 2 && descriptor !== 0) {
-                    warnAnimationFeatureOnce(
-                        'xy-rotation',
-                        animationID,
-                        'bone X/Y rotation channels are present but are not applied',
-                    );
-                }
-                // The assembly handles this around 80619DA8..80619E2C and 80619E60..80619EF0
-                if ((descriptor & 0x10) !== 0) {
-                    warnAnimationFeatureOnce(
-                        'extended-descriptor',
-                        animationID,
-                        'extended rotation descriptors are not supported',
-                    );
-                }
-                assert((descriptor & 0x10) === 0);
                 const sample = readBits(bitOffset, bitCount);
                 bitOffset += bitCount;
-                frameRotations[bone * 3 + axis] = toS16((descriptor & 0xFFF0) + (sample << 5));
+                if (axis === 2)
+                    frameRotations[bone] = toS16((descriptor & 0xFFF0) + (sample << 5));
             }
         }
-        assert(bitOffset <= (frameDataStart + (frame + 1) * frameStride) * 8);
         rotations.push(frameRotations);
     }
 
     return {
         playbackRate: view.getFloat32(0x00, false),
-        frameCount,
         rotations,
     };
 }
 
-export function sampleActorAnimationPose(animation: ActorAnimation, speed: number, tick: number): ActorAnimationPose {
-    const animationFrame = ((tick * speed * animation.playbackRate) % animation.frameCount + animation.frameCount) % animation.frameCount;
+function sampleActorAnimation(animation: ActorAnimation, speed: number, tick: number): number[] {
+    const frameCount = animation.rotations.length;
+    const animationFrame = ((tick * speed * animation.playbackRate) % frameCount + frameCount) % frameCount;
     const frame = Math.floor(animationFrame);
-    const nextFrame = (frame + 1) % animation.frameCount;
+    const nextFrame = (frame + 1) % frameCount;
     const t = animationFrame - frame;
-    const boneCount = animation.rotations[frame].length / 3;
+    const boneCount = animation.rotations[frame].length;
     const boneAngles: number[] = [];
     for (let bone = 0; bone < boneCount; bone++) {
-        const a = animation.rotations[frame][bone * 3 + 2];
-        const b = animation.rotations[nextFrame][bone * 3 + 2];
+        const a = animation.rotations[frame][bone];
+        const b = animation.rotations[nextFrame][bone];
         boneAngles.push((a + (b - a) * t) * Math.PI * 2 / 0x10000);
     }
-    return { boneAngles };
+    return boneAngles;
 }
 
 function initializeActorDL(state: RSPState): void {
@@ -207,13 +131,18 @@ function initializeActorDL(state: RSPState): void {
     state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
 }
 
-function installActorVisibilitySegments(
+function installDefaultActorPartSegments(
     geometry: ArrayBufferSlice,
     view: DataView,
     displayListStart: number,
     displayListEnd: number,
     segmentBuffers: ArrayBufferSlice[],
 ): void {
+    const markers = new Set<number>();
+    for (let offs = displayListStart; offs + 8 <= displayListEnd; offs += 8) {
+        if (view.getUint32(offs, false) === 0)
+            markers.add(view.getUint32(offs + 4, false));
+    }
     for (let offs = displayListStart; offs + 8 <= displayListEnd; offs += 8) {
         const w0 = view.getUint32(offs, false);
         const w1 = view.getUint32(offs + 4, false);
@@ -221,14 +150,7 @@ function installActorVisibilitySegments(
         if ((w0 >>> 24) !== 0xDE || ((w0 >>> 16) & 0xFF) !== 1)
             continue;
         const segment = w1 >>> 24;
-        let hasMarker = false;
-        for (let marker = displayListStart; marker + 8 <= displayListEnd; marker += 8) {
-            if (view.getUint32(marker, false) === 0 && view.getUint32(marker + 4, false) === segment) {
-                hasMarker = true;
-                break;
-            }
-        }
-        if (hasMarker && segmentBuffers[segment] === undefined)
+        if (markers.has(segment) && segmentBuffers[segment] === undefined)
             segmentBuffers[segment] = geometry.slice(offs + 8);
     }
 }
@@ -236,7 +158,7 @@ function installActorVisibilitySegments(
 function parseActorAnimatedTextures(
     geometry: ArrayBufferSlice,
     textureBuffers: ArrayBufferSlice[],
-    actor: SetupActor,
+    actorType: number,
 ): AnimatedTexture[] {
     const view = geometry.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
@@ -244,37 +166,27 @@ function parseActorAnimatedTextures(
     if (descriptorPointer === 0)
         return [];
     let offs = descriptorPointer - runtimeBase + 0x28;
-    if (offs < 0 || offs + 2 > view.byteLength)
-        return [];
     const descriptorCount = view.getUint16(offs, false);
     offs += 2;
     const animatedTextures: AnimatedTexture[] = [];
+    // func_global_asm_8067E784 modifies barrel animations
+    const activeFrameCount = actorType === 0x18 || actorType === 0x09 ? 9 : 1;
     for (let descriptor = 0; descriptor < descriptorCount; descriptor++) {
-        if (offs + 6 > view.byteLength)
-            break;
         const frameCount = view.getUint16(offs, false);
         const segment = view.getUint16(offs + 2, false);
-        const enabled = view.getUint16(offs + 4, false) !== 0;
         offs += 6;
         const frameIDs: number[] = [];
-        for (let frame = 0; frame < frameCount && offs + 2 <= view.byteLength; frame++, offs += 2)
-            frameIDs.push(view.getUint16(offs, false));
-        if (!enabled)
-            continue;
-        // func_global_asm_8067E784 modifies barrel animations
-        const isSizeBarrel = actor.type === 0x18 || actor.type === 0x09;
-        const activeFrameIDs = isSizeBarrel ? frameIDs.slice(0, 9) : frameIDs.slice(0, 1);
-        const frames = activeFrameIDs
-            .map((textureID) => textureBuffers[textureID])
-            .filter((frame): frame is ArrayBufferSlice => frame !== undefined);
-        if (frames.length > 0) {
-            animatedTextures.push({
-                segment,
-                group: descriptor,
-                frames,
-                frameDuration: isSizeBarrel ? 2 : 0,
-            });
+        for (let frame = 0; frame < frameCount; frame++, offs += 2) {
+            if (frame < activeFrameCount)
+                frameIDs.push(view.getUint16(offs, false));
         }
+        const frames = frameIDs.map((textureID) => textureBuffers[textureID]!);
+        animatedTextures.push({
+            segment,
+            group: descriptor,
+            frames,
+            frameDuration: activeFrameCount > 1 ? 2 : 0,
+        });
     }
     return animatedTextures;
 }
@@ -298,15 +210,14 @@ export function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
     return { offsets, parents };
 }
 
-export function buildSkeletalActorMesh(
+export function buildActorMesh(
     geometry: ArrayBufferSlice,
     animationData: ArrayBufferSlice | null,
-    animationID: number | null,
     animationSpeed: number,
-    actor: SetupActor,
+    actorType: number,
     textureBuffers: ArrayBufferSlice[],
     sharedOutput: RSPSharedOutput,
-): SkeletalActorMesh | null {
+): ActorMesh {
     const view = geometry.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
     const displayListCount = view.getUint8(0x21);
@@ -315,9 +226,9 @@ export function buildSkeletalActorMesh(
     segmentBuffers[0x03] = geometry.slice(0x28);
     if (displayListCount > 0) {
         const firstDisplayList = view.getUint32(displayListTable, false) - runtimeBase + 0x28;
-        installActorVisibilitySegments(geometry, view, firstDisplayList, displayListTable, segmentBuffers);
+        installDefaultActorPartSegments(geometry, view, firstDisplayList, displayListTable, segmentBuffers);
     }
-    const animatedTextures = parseActorAnimatedTextures(geometry, textureBuffers, actor);
+    const animatedTextures = parseActorAnimatedTextures(geometry, textureBuffers, actorType);
     const state = new RSPState(textureBuffers, segmentBuffers, sharedOutput, animatedTextures);
     initializeActorDL(state);
     const firstVertex = sharedOutput.vertices.length;
@@ -325,111 +236,97 @@ export function buildSkeletalActorMesh(
         const pointer = view.getUint32(displayListTable + i * 4, false);
         runDL_F3DEX2(state, 0x03000000 | (pointer - runtimeBase));
     }
-    const output = state.finish();
-    if (output === null) {
-        console.warn(`[DK64 actor] skeletal model produced no draw calls`);
-        return null;
-    }
+    const output = state.finish()!;
     for (const drawCall of output.drawCalls)
         drawCall.useVertexColors = false;
 
     const vertexCount = sharedOutput.vertices.length - firstVertex;
     const sourcePositions = new Float32Array(vertexCount * 3);
-    const matrixIndices = new Uint8Array(vertexCount);
+    const boneIndices = new Uint8Array(vertexCount);
     for (let i = 0; i < vertexCount; i++) {
         const vertex = sharedOutput.vertices[firstVertex + i];
         sourcePositions[i * 3 + 0] = vertex.x;
         sourcePositions[i * 3 + 1] = vertex.y;
         sourcePositions[i * 3 + 2] = vertex.z;
-        matrixIndices[i] = state.vertexMatrixIndices[firstVertex + i] ?? 0;
+        boneIndices[i] = state.vertexMatrixIndices[firstVertex + i]!;
     }
     const skeleton = parseActorSkeleton(geometry);
     if (skeleton.offsets.length === 0) {
         skeleton.offsets.push(vec3.create());
         skeleton.parents.push(-1);
     }
-    const sourceAnimation = animationData !== null && animationID !== null
-        ? parseActorAnimation(animationData, skeleton.offsets.length, animationID)
+    const animation = animationData !== null
+        ? parseActorAnimation(animationData, skeleton.offsets.length)
         : {
             playbackRate: 0,
-            frameCount: 1,
-            rotations: [new Int16Array(skeleton.offsets.length * 3)],
+            rotations: [new Int16Array(skeleton.offsets.length)],
         };
     return {
         rspState: state,
         rspOutput: output,
-        actor,
         animation: {
             firstVertex,
             vertexCount,
             speed: animationSpeed,
             sourcePositions,
-            matrixIndices,
-            boneOffsets: skeleton.offsets,
-            boneParents: skeleton.parents,
-            sourceAnimation,
+            boneIndices,
+            skeleton,
+            animation,
             boundingBox: computeSkeletalAnimationBoundingBox(
-                sourcePositions, matrixIndices, skeleton.offsets, skeleton.parents,
+                sourcePositions, boneIndices, skeleton.offsets, skeleton.parents,
             ),
         },
     };
 }
 
-const currentBoneMatrices: mat4[] = [];
-const boneOrigin = vec3.create();
-const sourcePosition = vec3.create();
-const skinnedPosition = vec3.create();
-
-function buildActorBoneMatrices(skeleton: ActorSkeleton, pose: ActorAnimationPose): void {
-    currentBoneMatrices.length = skeleton.offsets.length;
+function buildActorBoneMatrices(skeleton: ActorSkeleton, boneAngles: readonly number[]): mat4[] {
+    const boneMatrices: mat4[] = [];
     for (let i = 0; i < skeleton.offsets.length; i++) {
-        const matrix = currentBoneMatrices[i] ?? mat4.create();
-        currentBoneMatrices[i] = matrix;
-        mat4.identity(matrix);
+        const matrix = mat4.create();
+        boneMatrices.push(matrix);
         const parent = skeleton.parents[i];
         if (parent >= 0)
-            mat4.copy(matrix, currentBoneMatrices[parent]);
+            mat4.copy(matrix, boneMatrices[parent]);
         mat4.translate(matrix, matrix, skeleton.offsets[i]);
-        mat4.rotateZ(matrix, matrix, pose.boneAngles[i] ?? 0);
+        mat4.rotateZ(matrix, matrix, boneAngles[i] ?? 0);
     }
+    return boneMatrices;
 }
 
 export function sampleActorBonePosition(
     dst: vec3,
     skeleton: ActorSkeleton,
-    sourceAnimation: ActorAnimation,
+    animation: ActorAnimation,
     speed: number,
     tick: number,
     boneIndex: number,
 ): void {
-    assert(boneIndex >= 0 && boneIndex < skeleton.offsets.length);
-    const pose = sampleActorAnimationPose(sourceAnimation, speed, tick);
-    buildActorBoneMatrices(skeleton, pose);
-    vec3.transformMat4(dst, boneOrigin, currentBoneMatrices[boneIndex]);
+    const boneAngles = sampleActorAnimation(animation, speed, tick);
+    const boneMatrices = buildActorBoneMatrices(skeleton, boneAngles);
+    vec3.set(dst, boneMatrices[boneIndex][12], boneMatrices[boneIndex][13], boneMatrices[boneIndex][14]);
 }
 
-export function updateSkeletalActor(
-    animation: SkeletalActorAnimation,
+export function updateActorAnimation(
+    state: ActorAnimationState,
     vertices: Vertex[],
     vertexBufferData: Float32Array | null,
     vertexBufferFirstVertex: number,
     tick: number,
 ): void {
-    const pose = sampleActorAnimationPose(animation.sourceAnimation, animation.speed, tick);
-    buildActorBoneMatrices({
-        offsets: animation.boneOffsets,
-        parents: animation.boneParents,
-    }, pose);
+    const boneAngles = sampleActorAnimation(state.animation, state.speed, tick);
+    const boneMatrices = buildActorBoneMatrices(state.skeleton, boneAngles);
+    const sourcePosition = vec3.create();
+    const skinnedPosition = vec3.create();
 
-    for (let i = 0; i < animation.vertexCount; i++) {
-        const bone = Math.min(animation.matrixIndices[i], currentBoneMatrices.length - 1);
+    for (let i = 0; i < state.vertexCount; i++) {
+        const bone = state.boneIndices[i];
         vec3.set(sourcePosition,
-            animation.sourcePositions[i * 3 + 0],
-            animation.sourcePositions[i * 3 + 1],
-            animation.sourcePositions[i * 3 + 2],
+            state.sourcePositions[i * 3 + 0],
+            state.sourcePositions[i * 3 + 1],
+            state.sourcePositions[i * 3 + 2],
         );
-        vec3.transformMat4(skinnedPosition, sourcePosition, currentBoneMatrices[bone]);
-        const vertexIndex = animation.firstVertex + i;
+        vec3.transformMat4(skinnedPosition, sourcePosition, boneMatrices[bone]);
+        const vertexIndex = state.firstVertex + i;
         vertices[vertexIndex].x = skinnedPosition[0];
         vertices[vertexIndex].y = skinnedPosition[1];
         vertices[vertexIndex].z = skinnedPosition[2];
