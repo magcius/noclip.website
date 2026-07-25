@@ -212,10 +212,56 @@ impl ConvexHull {
         return result;
     }
 
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    pub fn contains_aabb_simd(&self, aabb: &AABB) -> bool {
+        use core::arch::wasm32::{ f32x4, f32x4_ge, f32x4_lt, f32x4_relaxed_madd, f32x4_splat, i32x4_bitmask, v128_bitselect, };
+        let zero = f32x4_splat(0.0);
+
+        // Step four planes at a time
+        let zero_plane = Plane { d: 0.0, normal: Vec3::zeros() };
+        for i in (0..self.planes.len()).step_by(4) {
+            let p0 = &self.planes[i + 0];
+            let valid_num = (self.planes.len() - i).min(4);
+            let p1 = if valid_num > 1 { &self.planes[i + 1] } else { &zero_plane };
+            let p2 = if valid_num > 2 { &self.planes[i + 2] } else { &zero_plane };
+            let p3 = if valid_num > 3 { &self.planes[i + 3] } else { &zero_plane };
+
+            // Four planes worth of normals.
+            let nx = f32x4(p0.normal.x, p1.normal.x, p2.normal.x, p3.normal.x);
+            let ny = f32x4(p0.normal.y, p1.normal.y, p2.normal.y, p3.normal.y);
+            let nz = f32x4(p0.normal.z, p1.normal.z, p2.normal.z, p3.normal.z);
+            let d = f32x4(p0.d, p1.d, p2.d, p3.d);
+
+            // Find the closest corner to each individual plane.
+            let cx = v128_bitselect(f32x4_splat(aabb.max.x), f32x4_splat(aabb.min.x), f32x4_ge(nx, zero));
+            let cy = v128_bitselect(f32x4_splat(aabb.max.y), f32x4_splat(aabb.min.y), f32x4_ge(ny, zero));
+            let cz = v128_bitselect(f32x4_splat(aabb.max.z), f32x4_splat(aabb.min.z), f32x4_ge(nz, zero));
+
+            // Dot product all the planes.
+            let mut dist = f32x4_relaxed_madd(nx, cx, d);
+            dist = f32x4_relaxed_madd(ny, cy, dist);
+            dist = f32x4_relaxed_madd(nz, cz, dist);
+
+            let valid_mask = (1 << valid_num) - 1;
+            if (i32x4_bitmask(f32x4_lt(dist, zero)) & valid_mask) != 0 {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     pub fn contains_aabb(&self, aabb: &AABB) -> bool {
-        match self.intersect_aabb(aabb) {
-            IntersectionState::Outside => false,
-            _ => true,
+        if cfg!(all(target_arch = "wasm32", target_feature = "simd128")) {
+            return self.contains_aabb_simd(aabb);
+        } else {
+            for plane in &self.planes {
+                let nearest = aabb.get_closest_point_along_direction(&plane.normal);
+                if plane.distance(&nearest) < 0.0 {
+                    return false;
+                }
+            }
+            true
         }
     }
 
@@ -256,28 +302,28 @@ impl ConvexHull {
         self.planes.push(plane.normalized());
     }
 
-    pub fn js_intersect_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {
+    pub fn js_intersect_aabb(&self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {
         let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
         self.intersect_aabb(&aabb)
     }
 
-    pub fn js_contains_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
+    pub fn js_contains_aabb(&self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
         let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
         self.contains_aabb(&aabb)
     }
 
-    pub fn js_contains_point(&mut self, pt_slice: &[f32]) -> bool {
+    pub fn js_contains_point(&self, pt_slice: &[f32]) -> bool {
         assert_eq!(pt_slice.iter().count(), 3);
         let pt = make_vec3(pt_slice);
         self.contains_point(&pt)
     }
 
-    pub fn js_intersect_sphere(&mut self, x: f32, y: f32, z: f32, radius: f32) -> IntersectionState {
+    pub fn js_intersect_sphere(&self, x: f32, y: f32, z: f32, radius: f32) -> IntersectionState {
         let center = Vec3::new(x, y, z);
         self.intersect_sphere(&center, radius)
     }
 
-    pub fn js_contains_sphere(&mut self, x: f32, y: f32, z: f32, radius: f32) -> bool {
+    pub fn js_contains_sphere(&self, x: f32, y: f32, z: f32, radius: f32) -> bool {
         let center = Vec3::new(x, y, z);
         self.contains_sphere(&center, radius)
     }
