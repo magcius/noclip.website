@@ -59,11 +59,6 @@ export class ObfGeometry {
 
     const parseNode = (node: ObfJsonNode) => {
       if (node && node.buffers) {
-        // don't draw some weird geometry
-        if (exclude.nodeIds?.has(node.headerOffset)) {
-          return;
-        }
-
         for (const buffer of node.buffers) {
           if (buffer.positions.length === 0) continue;
 

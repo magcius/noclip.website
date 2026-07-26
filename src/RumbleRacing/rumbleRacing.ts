@@ -14,7 +14,6 @@ import { Vec3Zero } from "../MathHelpers";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
-  nodeIds?: Set<number>;
 }
 
 export interface DrawCall {

@@ -507,44 +507,56 @@ export const sceneGroup: SceneGroup = {
   sceneDescs: [
     "Beach Blast",
     new RumbleRacingSceneDesc("BB1", "SunBurn", "Sun Burn", {
-      textureIds: new Set([32]), // sky texture
+      textureIds: new Set([3120]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("BB2", "SurfAndTurf", "Surf And Turf", {}),
+    new RumbleRacingSceneDesc("BB2", "SurfAndTurf", "Surf And Turf", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     "Bad Lands",
     new RumbleRacingSceneDesc("BL1", "SoRefined", "So Refined", {
-      textureIds: new Set([1584]),
+      textureIds: new Set([1584]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("BL2", "CoalCuts", "Coal Cuts", {}),
+    new RumbleRacingSceneDesc("BL2", "CoalCuts", "Coal Cuts", {
+      // seems like there are no tornado clouds in this level for some reason?
+    }),
     "Daytona",
-    new RumbleRacingSceneDesc("DA1", "FlipOut", "Flip Out", {}),
-    new RumbleRacingSceneDesc("DA2", "TheGauntlet", "The Gauntlet", {}),
-    new RumbleRacingSceneDesc("DA3", "WildKingdom", "Wild Kingdom", {}),
+    new RumbleRacingSceneDesc("DA1", "FlipOut", "Flip Out", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
+    new RumbleRacingSceneDesc("DA2", "TheGauntlet", "The Gauntlet", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
+    new RumbleRacingSceneDesc("DA3", "WildKingdom", "Wild Kingdom", {
+      // no clouds in wild kingdom
+    }),
     "Joke Tracks",
     new RumbleRacingSceneDesc("JT1", "CircusMinimus", "Circus Minimus", {
-      textureIds: new Set([32, 1056]), // sky
+      textureIds: new Set([3120]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("JT2", "OuterLimits", "Outer Limits", {}),
+    new RumbleRacingSceneDesc("JT2", "OuterLimits", "Outer Limits", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     "Mountain Air",
-    new RumbleRacingSceneDesc("MA1", "PassingThrough", "Passing Through", {}),
+    new RumbleRacingSceneDesc("MA1", "PassingThrough", "Passing Through", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     new RumbleRacingSceneDesc("MA2", "FallsDown", "Falls Down", {
-      textureIds: new Set([1584]),
+      textureIds: new Set([1584]), // tornado clouds
     }),
     "Metropolis",
-    new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go", {}),
+    new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     new RumbleRacingSceneDesc("MP2", "CarGo", "Car Go", {
-      nodeIds: new Set([1408952]), // Some giant angled rectangle on the border of the map/submarine. Not sure what this is for.
+      textureIds: new Set([3120]), // tornado clouds
     }),
     "Southern Exposure",
     new RumbleRacingSceneDesc("SE1", "TrueGrits", "True Grits", {
-      nodeIds: new Set([
-        // some weird box around the barn fence which uses texture 0,
-        // but texture 0 is a legitimate texture so ignore the geometry
-        7001320, 7004664,
-        // weird geometry (potential shadow?) overlaying truck in gas station
-        1957496,
-      ]),
+      textureIds: new Set([3120]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("SE2", "OverEasy", "Over Easy", {}),
+    new RumbleRacingSceneDesc("SE2", "OverEasy", "Over Easy", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
   ],
   hidden: !IS_DEVELOPMENT,
 };
