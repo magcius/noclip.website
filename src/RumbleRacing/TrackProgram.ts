@@ -57,8 +57,6 @@ in vec3 v_Normal;
 in vec4 v_Color;
 
 void main() {
-    // No alpha testing: the game never writes TEST_1/TEST_2/PABE, so texture
-    // alpha only ever feeds the blend equation.
 #if defined(NO_TEXTURE)
     vec4 color = vec4(1.0);
 #else
@@ -66,8 +64,17 @@ void main() {
 #endif
 
 #if defined(USE_VERTEX_COLOR)
-    gl_FragColor = color * v_Color;
-#elif defined(UNLIT)
+    color *= v_Color;
+#endif
+
+    // The game itself has no alpha test -- it never writes TEST_1/TEST_2/PABE.
+    // This exists so blended surfaces can be drawn in two passes: the near-opaque
+    // texels once with depth writes, then the soft remainder without. Test the
+    // final alpha, after vertex colour, so the two passes partition cleanly.
+    if (color.a < u_AlphaTestRef)
+        discard;
+
+#if defined(USE_VERTEX_COLOR) || defined(UNLIT)
     gl_FragColor = color;
 #else
     vec3 lightDir = normalize(vec3(0.4, 1.0, 0.2));
@@ -94,7 +101,12 @@ layout(std140) uniform ub_SceneParams {
 
 layout(std140) uniform ub_MeshParams {
     Mat3x4 u_WorldFromLocal;
+    vec4 u_MeshMisc;
 };
+
+// Alpha below this is discarded. 0.0 disables the test, since no texel can be
+// less than fully transparent.
+#define u_AlphaTestRef (u_MeshMisc.x)
 
 layout(location = 0) uniform sampler2D u_Texture;
 `;

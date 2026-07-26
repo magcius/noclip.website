@@ -1,6 +1,7 @@
 import {
   ActorData,
   ActorTransforms,
+  DrawCall,
   ExcludeInfo,
   processTrackFile,
   RumbleRacingTrackFile,
@@ -14,7 +15,9 @@ import {
 import {
   fillMatrix4x3,
   fillMatrix4x4,
+  fillVec4,
 } from "../gfx/helpers/UniformBufferHelpers";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import {
   GfxCullMode,
   GfxDevice,
@@ -27,6 +30,7 @@ import {
   GfxBlendMode,
   GfxBlendFactor,
   GfxChannelWriteMask,
+  GfxCompareMode,
   makeTextureDescriptor2D,
   GfxFormat,
 } from "../gfx/platform/GfxPlatform";
@@ -51,6 +55,10 @@ const pathBase = `RumbleRacing`;
 const GLOBAL_SCALE = 300.0; // this feels the best
 
 const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
+
+// Alpha at or above this counts as solid enough to own the depth buffer. Same
+// threshold RatchetAndClank's tfrags use for the equivalent split.
+const SOLID_PASS_ALPHA_REF = 0.99;
 
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
@@ -180,6 +188,35 @@ class RumbleRacingScene implements SceneGfx {
     fillMatrix4x4(data, 0, viewerInput.camera.clipFromWorldMatrix);
   }
 
+  private newDrawCallInst(
+    geometry: ObfGeometry,
+    dc: DrawCall,
+    tex: GfxTexture,
+    modelMatrix: mat4,
+    alphaTestRef: number,
+  ): GfxRenderInst {
+    const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+    renderInst.setGfxProgram(this.getProgram(dc.hasVertexColors));
+    renderInst.setSamplerBindings(0, [
+      { gfxTexture: tex, gfxSampler: this.linearSampler },
+    ]);
+    renderInst.setVertexInput(
+      geometry.inputLayout,
+      [{ buffer: dc.vertexBuffer, byteOffset: 0 }],
+      { buffer: dc.indexBuffer, byteOffset: 0 },
+    );
+    renderInst.setDrawCount(dc.indexCount);
+
+    const meshParams = renderInst.allocateUniformBufferF32(
+      TrackProgram.ub_MeshParams,
+      16,
+    );
+    const offs = fillMatrix4x3(meshParams, 0, modelMatrix);
+    fillVec4(meshParams, offs, alphaTestRef, 0, 0, 0);
+
+    return renderInst;
+  }
+
   private submitGeometryDrawCalls(
     geometry: ObfGeometry,
     modelMatrix: mat4,
@@ -188,41 +225,46 @@ class RumbleRacingScene implements SceneGfx {
       const tex = this.textureMap.get(dc.textureId);
       if (!tex) continue;
 
-      const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-      renderInst.setGfxProgram(this.getProgram(dc.hasVertexColors));
-      renderInst.setSamplerBindings(0, [
-        { gfxTexture: tex, gfxSampler: this.linearSampler },
-      ]);
-      renderInst.setVertexInput(
-        geometry.inputLayout,
-        [{ buffer: dc.vertexBuffer, byteOffset: 0 }],
-        { buffer: dc.indexBuffer, byteOffset: 0 },
-      );
-      renderInst.setDrawCount(dc.indexCount);
-
-      const meshParams = renderInst.allocateUniformBufferF32(
-        TrackProgram.ub_MeshParams,
-        12,
-      );
-      fillMatrix4x3(meshParams, 0, modelMatrix);
-
       if (dc.blendMode === BlendMode.None) {
-        this.renderInstList.submitRenderInst(renderInst);
-      } else {
-        // Blended geometry can't own the depth buffer, or it punches holes that
-        // reject the opaque geometry sitting behind it.
-        renderInst.setMegaStateFlags({ depthWrite: false });
-        setAttachmentStateSimple(megaStateScratch, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor:
-            dc.blendMode === BlendMode.Additive
-              ? GfxBlendFactor.One // ALPHA 0x48: Cs * As + Cd
-              : GfxBlendFactor.OneMinusSrcAlpha, // ALPHA 0x44: (Cs - Cd) * As + Cd
-        });
-        renderInst.setMegaStateFlags(megaStateScratch);
-        this.blendedRenderInstList.submitRenderInst(renderInst);
+        this.renderInstList.submitRenderInst(
+          this.newDrawCallInst(geometry, dc, tex, modelMatrix, 0.0),
+        );
+        continue;
       }
+
+      // Blended geometry is drawn twice, the way RatchetAndClank's tfrags are.
+      // First the near-opaque texels, with depth writes left on, so the surface
+      // still occludes whatever sits behind it -- a surface that owns no depth at
+      // all gets painted over by anything submitted after it, however far away
+      // that is.
+      this.renderInstList.submitRenderInst(
+        this.newDrawCallInst(
+          geometry,
+          dc,
+          tex,
+          modelMatrix,
+          SOLID_PASS_ALPHA_REF,
+        ),
+      );
+
+      // Then the soft remainder. A strict depth compare makes this the exact
+      // complement of the pass above: fragments the solid pass already claimed
+      // sit at equal depth and get rejected, so nothing blends over itself.
+      const soft = this.newDrawCallInst(geometry, dc, tex, modelMatrix, 0.0);
+      soft.setMegaStateFlags({
+        depthWrite: false,
+        depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
+      });
+      setAttachmentStateSimple(megaStateScratch, {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor:
+          dc.blendMode === BlendMode.Additive
+            ? GfxBlendFactor.One // ALPHA 0x48: Cs * As + Cd
+            : GfxBlendFactor.OneMinusSrcAlpha, // ALPHA 0x44: (Cs - Cd) * As + Cd
+      });
+      soft.setMegaStateFlags(megaStateScratch);
+      this.blendedRenderInstList.submitRenderInst(soft);
     }
   }
 
