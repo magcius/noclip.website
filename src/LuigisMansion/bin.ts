@@ -7,6 +7,7 @@ import * as GX from "../gx/gx_enum.js";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { AABB } from "../Geometry.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 
 export interface BIN {
     samplers: Sampler[];
@@ -168,98 +169,15 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
                 ensureSampler(samplerIndex);
         }
 
-        // Fake a GX material.
-        const texGen0 = {
-            index: 0,
-            type: GX.TexGenType.MTX2x4,
-            source: GX.TexGenSrc.TEX0,
-            matrix: GX.TexGenMatrix.IDENTITY,
-            normalize: false,
-            postMatrix: GX.PostTexGenMatrix.PTIDENTITY
-        };
-        const texGens = [texGen0];
-
-        const lightChannel0: GX_Material.LightChannelControl = {
-            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-        };
-
-        const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
-
-        const tevStage0: GX_Material.TevStage = {
-            channelId: GX.RasColorChannelID.COLOR0A0,
-
-            alphaInA: GX.CA.ZERO,
-            alphaInB: GX.CA.ZERO,
-            alphaInC: GX.CA.ZERO,
-            alphaInD: GX.CA.TEXA,
-            alphaOp: GX.TevOp.ADD,
-            alphaBias: GX.TevBias.ZERO,
-            alphaClamp: false,
-            alphaScale: GX.TevScale.SCALE_1,
-            alphaRegId: GX.Register.PREV,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-
-            colorInA: GX.CC.ZERO,
-            colorInB: GX.CC.ZERO,
-            colorInC: GX.CC.ZERO,
-            colorInD: GX.CC.TEXC,
-            colorOp: GX.TevOp.ADD,
-            colorBias: GX.TevBias.ZERO,
-            colorClamp: false,
-            colorScale: GX.TevScale.SCALE_1,
-            colorRegId: GX.Register.PREV,
-            konstColorSel: GX.KonstColorSel.KCSEL_1,
-
-            texCoordId: GX.TexCoordID.TEXCOORD0,
-            texMap: GX.TexMapID.TEXMAP0,
-
-            // We don't use indtex.
-            indTexStage: GX.IndTexStageID.STAGE0,
-            indTexMatrix: GX.IndTexMtxID.OFF,
-            indTexFormat: GX.IndTexFormat._8,
-            indTexBiasSel: GX.IndTexBiasSel.NONE,
-            indTexAlphaSel: GX.IndTexAlphaSel.OFF,
-            indTexWrapS: GX.IndTexWrap.OFF,
-            indTexWrapT: GX.IndTexWrap.OFF,
-            indTexAddPrev: false,
-            indTexUseOrigLOD: false,
-        };
-        const tevStages: GX_Material.TevStage[] = [tevStage0];
-
-        // Filter any pixels less than 0.1.
-        const alphaTest: GX_Material.AlphaTest = {
-            op: GX.AlphaOp.AND,
-            compareA: GX.CompareType.GEQUAL,
-            compareB: GX.CompareType.ALWAYS,
-            referenceA: 0.1,
-            referenceB: 0.0,
-        };
-
-        const ropInfo: GX_Material.RopInfo = {
-            fogType: GX.FogType.NONE,
-            fogAdjEnabled: false,
-            blendMode: GX.BlendMode.NONE,
-            blendSrcFactor: GX.BlendFactor.ONE,
-            blendDstFactor: GX.BlendFactor.ONE,
-            blendLogicOp: GX.LogicOp.CLEAR,
-            depthFunc: GX.CompareType.LESS,
-            depthTest: true,
-            depthWrite: true,
-            colorUpdate: true,
-            alphaUpdate: false,
-        };
-
-        const gxMaterial: GX_Material.GXMaterial = {
-            name: `${name} unknown material ${index}`,
-            cullMode: GX.CullMode.BACK,
-            lightChannels,
-            texGens,
-            tevStages,
-            alphaTest,
-            ropInfo,
-            indTexStages: [],
-        };
+        const mb = new GXMaterialBuilder(`${name} unknown material ${index}`);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0.1, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0.0);
+        mb.setAlphaUpdate(false);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        const gxMaterial = mb.finish();
 
         return { gxMaterial, samplerIndexes };
     }
