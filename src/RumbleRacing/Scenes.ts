@@ -1,7 +1,6 @@
 import {
   ActorData,
   ActorTransforms,
-  DrawCall,
   ExcludeInfo,
   processTrackFile,
   RumbleRacingTrackFile,
@@ -47,7 +46,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
-import { O3DGeometry, ObfGeometry } from "./Geometry";
+import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 
 const pathBase = `RumbleRacing`;
@@ -62,9 +61,11 @@ const SOLID_PASS_ALPHA_REF = 0.99;
 
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
-  private renderInstList = new GfxRenderInstList();
-  private blendedRenderInstList = new GfxRenderInstList();
-  private trackGeometries: ObfGeometry[] = [];
+  // Nothing here sets a sort key, so there's no sort to do -- passing null skips
+  // re-sorting every inst in the list every frame.
+  private renderInstList = new GfxRenderInstList(null);
+  private blendedRenderInstList = new GfxRenderInstList(null);
+  private trackGeometry: MergedGeometry;
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
   private programCache = new Map<number, GfxProgram>();
   private linearSampler: GfxSampler;
@@ -98,9 +99,13 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
-    for (const obf of this.trackFile.obfs) {
-      this.trackGeometries.push(new ObfGeometry(cache, obf, this.exclude));
-    }
+    // Every obf in the track draws with the same matrix, so they all merge
+    // together rather than one batch set per obf.
+    this.trackGeometry = new MergedGeometry(
+      cache,
+      this.trackFile.obfs,
+      this.exclude,
+    );
 
     for (let i = 0; i < this.trackFile.o3ds.length; i++) {
       const o3d = this.trackFile.o3ds[i];
@@ -119,6 +124,28 @@ class RumbleRacingScene implements SceneGfx {
     });
 
     this.handleTextures();
+    this.resolveBatchTextures();
+  }
+
+  // Batches come out of the merge pointing at a texture id. Resolve those to
+  // real sampler bindings once, so submitting a batch doesn't have to build a
+  // binding array per draw call per frame. A batch whose texture never turned up
+  // can't be drawn at all, so drop it here instead of re-checking every frame.
+  private resolveBatchTextures(): void {
+    const resolve = (geometry: MergedGeometry) => {
+      geometry.batches = geometry.batches.filter((batch) => {
+        const gfxTexture = this.textureMap.get(batch.textureId);
+        if (gfxTexture === undefined) return false;
+        batch.samplerBindings = [
+          { gfxTexture, gfxSampler: this.linearSampler },
+        ];
+        return true;
+      });
+    };
+
+    resolve(this.trackGeometry);
+    for (const o3dGeom of this.o3dGeometries.values())
+      for (const frame of o3dGeom.frames) resolve(frame);
   }
 
   private setActorTransforms() {
@@ -158,19 +185,28 @@ class RumbleRacingScene implements SceneGfx {
     this.textureHolder.onnewtextures();
   }
 
-  private getProgram(hasVertexColors: boolean): GfxProgram {
+  private getProgram(
+    hasVertexColors: boolean,
+    alphaTest: boolean,
+  ): GfxProgram {
     const ignoreVertexColors = hasVertexColors && !this.showVertexColors;
     const ignoreTextures = !this.showTextures;
 
     const key =
       (hasVertexColors ? 1 : 0) |
       (ignoreVertexColors ? 2 : 0) |
-      (ignoreTextures ? 4 : 0);
+      (ignoreTextures ? 4 : 0) |
+      (alphaTest ? 8 : 0);
 
     let program = this.programCache.get(key);
     if (program === undefined) {
       program = this.renderHelper.renderCache.createProgram(
-        new TrackProgram(hasVertexColors, ignoreVertexColors, ignoreTextures),
+        new TrackProgram(
+          hasVertexColors,
+          alphaTest,
+          ignoreVertexColors,
+          ignoreTextures,
+        ),
       );
       this.programCache.set(key, program);
     }
@@ -188,24 +224,25 @@ class RumbleRacingScene implements SceneGfx {
     fillMatrix4x4(data, 0, viewerInput.camera.clipFromWorldMatrix);
   }
 
-  private newDrawCallInst(
-    geometry: ObfGeometry,
-    dc: DrawCall,
-    tex: GfxTexture,
+  private newBatchInst(
+    geometry: MergedGeometry,
+    batch: DrawBatch,
     modelMatrix: mat4,
     alphaTestRef: number,
   ): GfxRenderInst {
     const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-    renderInst.setGfxProgram(this.getProgram(dc.hasVertexColors));
-    renderInst.setSamplerBindings(0, [
-      { gfxTexture: tex, gfxSampler: this.linearSampler },
-    ]);
+    // A ref of 0.0 can't reject anything, so those draws get the program with no
+    // discard in it and keep early-Z.
+    renderInst.setGfxProgram(
+      this.getProgram(batch.hasVertexColors, alphaTestRef > 0.0),
+    );
+    renderInst.setSamplerBindings(0, batch.samplerBindings!);
     renderInst.setVertexInput(
       geometry.inputLayout,
-      [{ buffer: dc.vertexBuffer, byteOffset: 0 }],
-      { buffer: dc.indexBuffer, byteOffset: 0 },
+      batch.vertexBufferDescriptors,
+      batch.indexBufferDescriptor,
     );
-    renderInst.setDrawCount(dc.indexCount);
+    renderInst.setDrawCount(batch.indexCount);
 
     const meshParams = renderInst.allocateUniformBufferF32(
       TrackProgram.ub_MeshParams,
@@ -217,17 +254,11 @@ class RumbleRacingScene implements SceneGfx {
     return renderInst;
   }
 
-  private submitGeometryDrawCalls(
-    geometry: ObfGeometry,
-    modelMatrix: mat4,
-  ): void {
-    for (const dc of geometry.drawCalls) {
-      const tex = this.textureMap.get(dc.textureId);
-      if (!tex) continue;
-
-      if (dc.blendMode === BlendMode.None) {
+  private submitBatches(geometry: MergedGeometry, modelMatrix: mat4): void {
+    for (const batch of geometry.batches) {
+      if (batch.blendMode === BlendMode.None) {
         this.renderInstList.submitRenderInst(
-          this.newDrawCallInst(geometry, dc, tex, modelMatrix, 0.0),
+          this.newBatchInst(geometry, batch, modelMatrix, 0.0),
         );
         continue;
       }
@@ -238,19 +269,13 @@ class RumbleRacingScene implements SceneGfx {
       // all gets painted over by anything submitted after it, however far away
       // that is.
       this.renderInstList.submitRenderInst(
-        this.newDrawCallInst(
-          geometry,
-          dc,
-          tex,
-          modelMatrix,
-          SOLID_PASS_ALPHA_REF,
-        ),
+        this.newBatchInst(geometry, batch, modelMatrix, SOLID_PASS_ALPHA_REF),
       );
 
       // Then the soft remainder. A strict depth compare makes this the exact
       // complement of the pass above: fragments the solid pass already claimed
       // sit at equal depth and get rejected, so nothing blends over itself.
-      const soft = this.newDrawCallInst(geometry, dc, tex, modelMatrix, 0.0);
+      const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0);
       soft.setMegaStateFlags({
         depthWrite: false,
         depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
@@ -259,7 +284,7 @@ class RumbleRacingScene implements SceneGfx {
         blendMode: GfxBlendMode.Add,
         blendSrcFactor: GfxBlendFactor.SrcAlpha,
         blendDstFactor:
-          dc.blendMode === BlendMode.Additive
+          batch.blendMode === BlendMode.Additive
             ? GfxBlendFactor.One // ALPHA 0x48: Cs * As + Cd
             : GfxBlendFactor.OneMinusSrcAlpha, // ALPHA 0x44: (Cs - Cd) * As + Cd
       });
@@ -281,25 +306,22 @@ class RumbleRacingScene implements SceneGfx {
       GLOBAL_SCALE,
     ]);
 
-    for (const geometry of this.trackGeometries) {
-      this.submitGeometryDrawCalls(geometry, trackMatrix);
-    }
+    this.submitBatches(this.trackGeometry, trackMatrix);
 
     if (this.showActors) {
       for (const actor of this.trackFile.actors) {
         const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
 
-        const actorMatrix = this.actorMatrices.get(actor.resourceIndex)!;
+        // A static o3d merged all its obfs into a single entry, so this is the
+        // whole thing either way.
+        const frame = o3dGeom.frames[o3dGeom.animationFrame];
+        if (frame === undefined) continue;
 
-        if (o3dGeom.isAnimated) {
-          const frame = o3dGeom.obfGeometries[o3dGeom.animationFrame];
-          this.submitGeometryDrawCalls(frame, actorMatrix);
-        } else {
-          for (const obfGeom of o3dGeom.obfGeometries) {
-            this.submitGeometryDrawCalls(obfGeom, actorMatrix);
-          }
-        }
+        this.submitBatches(
+          frame,
+          this.actorMatrices.get(actor.resourceIndex)!,
+        );
       }
     }
 
@@ -309,8 +331,8 @@ class RumbleRacingScene implements SceneGfx {
   private updateAnimations(viewerInput: ViewerRenderInput): void {
     const halfSecondIndex = Math.floor(viewerInput.time / 100);
     for (const [, o3dGeom] of this.o3dGeometries) {
-      if (o3dGeom.isAnimated && o3dGeom.obfGeometries.length > 0) {
-        o3dGeom.animationFrame = halfSecondIndex % o3dGeom.obfGeometries.length;
+      if (o3dGeom.isAnimated && o3dGeom.frames.length > 0) {
+        o3dGeom.animationFrame = halfSecondIndex % o3dGeom.frames.length;
       }
     }
   }
@@ -443,9 +465,7 @@ class RumbleRacingScene implements SceneGfx {
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
 
-    for (const geometry of this.trackGeometries) {
-      geometry.destroy(device);
-    }
+    this.trackGeometry.destroy(device);
 
     for (const [, o3dGeom] of this.o3dGeometries) {
       o3dGeom.destroy(device);

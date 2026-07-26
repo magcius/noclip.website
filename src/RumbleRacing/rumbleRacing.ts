@@ -7,22 +7,12 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
-import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 import { Vec3Zero } from "../MathHelpers";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
-}
-
-export interface DrawCall {
-  vertexBuffer: GfxBuffer;
-  indexBuffer: GfxBuffer;
-  indexCount: number;
-  textureId: number;
-  hasVertexColors: boolean;
-  blendMode: BlendMode;
 }
 
 export interface JsonBuffer {

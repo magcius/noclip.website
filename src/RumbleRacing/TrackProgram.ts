@@ -16,6 +16,7 @@ export class TrackProgram extends DeviceProgram {
   // than falling into the lighting path.
   constructor(
     hasVertexColors: boolean,
+    alphaTest: boolean,
     ignoreVertexColors: boolean = false,
     ignoreTextures: boolean = false,
   ) {
@@ -26,6 +27,7 @@ export class TrackProgram extends DeviceProgram {
     );
     this.setDefineBool("UNLIT", hasVertexColors && ignoreVertexColors);
     this.setDefineBool("NO_TEXTURE", ignoreTextures);
+    this.setDefineBool("USE_ALPHA_TEST", alphaTest);
   }
 
   public override vert = `
@@ -71,8 +73,14 @@ void main() {
     // This exists so blended surfaces can be drawn in two passes: the near-opaque
     // texels once with depth writes, then the soft remainder without. Test the
     // final alpha, after vertex colour, so the two passes partition cleanly.
+    //
+    // Only the solid pass actually needs it. A discard anywhere in the shader
+    // costs early-Z for the entire draw, so the passes that can't reject a
+    // fragment anyway compile without one.
+#if defined(USE_ALPHA_TEST)
     if (color.a < u_AlphaTestRef)
         discard;
+#endif
 
 #if defined(USE_VERTEX_COLOR) || defined(UNLIT)
     gl_FragColor = color;
