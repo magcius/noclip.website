@@ -561,7 +561,9 @@ export class MeshData {
         this.cullBounds = new MeshBounds(
             mesh.sharedOutput,
             mesh.rspOutput,
-            [mesh.propAnimation?.boundingBox, mesh.actorAnimation?.boundingBox],
+            mesh.actorAnimation?.boundingBox,
+            mesh.propAnimation?.translationBounds,
+            mesh.propAnimation !== undefined ? 0.5 : 0,
         );
 
         const dynamicVertexRange = getDynamicVertexRange(mesh);

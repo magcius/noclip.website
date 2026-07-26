@@ -1,4 +1,3 @@
-import { mat4 } from 'gl-matrix';
 import type { ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
 
 import type { RSPSharedOutput } from '../BanjoKazooie/f3dex.js';
@@ -49,149 +48,15 @@ export function computeBillboardBoundingBox(
     );
 }
 
-interface MatrixAnimationCullNode {
-    transforms: Float32Array;
-    baseMatrix: ReadonlyMat4;
-    postMatrix: ReadonlyMat4;
-    outputMatrix: mat4;
-}
-
-interface MatrixAnimationCullTrack {
-    nodes: readonly MatrixAnimationCullNode[];
-    speed: number;
-    triggeredPlaybackPositions: Float32Array | null;
-    endpointHoldTicks: number;
-    framePosition: number;
-    lastTick: number;
-}
-
-interface MatrixAnimationCullData {
-    tracks: readonly MatrixAnimationCullTrack[];
-    sourcePositions: Float32Array;
-    vertexModelViewMatrixIndices: readonly (readonly number[])[];
-    nodesByMatrixIndex: ReadonlyMap<number, MatrixAnimationCullNode>;
-    initialMatrices: ReadonlyMap<number, ReadonlyMat4>;
-}
-
-function computeConservativeMatrixAnimationBoundingBox(animation: MatrixAnimationCullData): AABB {
-    const boundingBox = new AABB();
-    for (let i = 0; i < animation.sourcePositions.length / 3; i++) {
-        const source = i * 3;
-        let vertexBounds = new AABB(
-            animation.sourcePositions[source + 0],
-            animation.sourcePositions[source + 1],
-            animation.sourcePositions[source + 2],
-            animation.sourcePositions[source + 0],
-            animation.sourcePositions[source + 1],
-            animation.sourcePositions[source + 2],
-        );
-        for (const matrixIndex of animation.vertexModelViewMatrixIndices[i]) {
-            const node = animation.nodesByMatrixIndex.get(matrixIndex);
-            if (node === undefined) {
-                const matrix = animation.initialMatrices.get(matrixIndex);
-                if (matrix !== undefined) {
-                    const transformed = new AABB();
-                    transformed.transform(vertexBounds, matrix);
-                    vertexBounds = transformed;
-                }
-                continue;
-            }
-
-            const baseBounds = new AABB();
-            baseBounds.transform(vertexBounds, node.baseMatrix);
-            let radiusSquared = 0;
-            for (let axis = 0; axis < 3; axis++) {
-                let maxScale = 0;
-                for (let frame = 0; frame < node.transforms.length / 9; frame++)
-                    maxScale = Math.max(maxScale, Math.abs(node.transforms[frame * 9 + axis]));
-                const maxCoordinate = Math.max(Math.abs(baseBounds.min[axis]), Math.abs(baseBounds.max[axis]));
-                radiusSquared += (maxCoordinate * maxScale) ** 2;
-            }
-            const radius = Math.sqrt(radiusSquared);
-            const translationMin = [Infinity, Infinity, Infinity];
-            const translationMax = [-Infinity, -Infinity, -Infinity];
-            for (let frame = 0; frame < node.transforms.length / 9; frame++) {
-                for (let axis = 0; axis < 3; axis++) {
-                    const translation = node.transforms[frame * 9 + 6 + axis];
-                    translationMin[axis] = Math.min(translationMin[axis], translation);
-                    translationMax[axis] = Math.max(translationMax[axis], translation);
-                }
-            }
-            const animatedBounds = new AABB(
-                translationMin[0] - radius,
-                translationMin[1] - radius,
-                translationMin[2] - radius,
-                translationMax[0] + radius,
-                translationMax[1] + radius,
-                translationMax[2] + radius,
-            );
-            vertexBounds = new AABB();
-            vertexBounds.transform(animatedBounds, node.postMatrix);
-        }
-        boundingBox.union(boundingBox, vertexBounds);
-    }
-    return boundingBox;
-}
-
-function combineAnimationCycleTicks(trackCycles: readonly (number | null)[], maxCycleTicks: number): number | null {
-    let cycleTicks = 1;
-    for (const trackCycleTicks of trackCycles) {
-        if (trackCycleTicks === null)
-            return null;
-        let a = cycleTicks, b = trackCycleTicks;
-        while (b !== 0)
-            [a, b] = [b, a % b];
-        cycleTicks = cycleTicks / a * trackCycleTicks;
-        if (cycleTicks > maxCycleTicks)
-            return null;
-    }
-    return cycleTicks;
-}
-
-export function computeMatrixAnimationBoundingBox(
-    animation: MatrixAnimationCullData,
-    sampleAnimation: (tick: number) => void,
-    forEachVertexPosition: (callback: (position: ReadonlyVec3) => void) => void,
-): AABB {
-    const cycleTicks = combineAnimationCycleTicks(animation.tracks.map((track) => {
-        if (track.triggeredPlaybackPositions !== null)
-            return track.endpointHoldTicks * 2 + track.triggeredPlaybackPositions.length;
-        return track.speed === 0 ? 1 : null;
-    }), 30 * 60 * 2);
-    if (cycleTicks === null)
-        return computeConservativeMatrixAnimationBoundingBox(animation);
-
-    const savedTrackStates = animation.tracks.map((track) => ({
-        framePosition: track.framePosition,
-        lastTick: track.lastTick,
-    }));
-    const savedNodeMatrices = animation.tracks.flatMap((track) =>
-        track.nodes.map((node) => mat4.clone(node.outputMatrix)),
-    );
-    const boundingBox = new AABB();
-    for (let tick = 0; tick < cycleTicks; tick++) {
-        sampleAnimation(tick);
-        forEachVertexPosition((position) => boundingBox.unionPoint(position));
-    }
-
-    let matrixIndex = 0;
-    for (let trackIndex = 0; trackIndex < animation.tracks.length; trackIndex++) {
-        const track = animation.tracks[trackIndex];
-        track.framePosition = savedTrackStates[trackIndex].framePosition;
-        track.lastTick = savedTrackStates[trackIndex].lastTick;
-        for (const node of track.nodes)
-            mat4.copy(node.outputMatrix, savedNodeMatrices[matrixIndex++]);
-    }
-    return boundingBox;
-}
-
 export class MeshBounds {
     private localBoundingBox: AABB | null | undefined;
 
     constructor(
         private sharedOutput: RSPSharedOutput,
         private output: RSPOutput | null,
-        private animationBoundingBoxes: readonly (AABB | undefined)[],
+        private animationBoundingBox: AABB | undefined,
+        private animationTranslationBounds: AABB | undefined,
+        private paddingRatio: number,
     ) {
     }
 
@@ -201,9 +66,22 @@ export class MeshBounds {
                 ? null
                 : computeDisplayListBoundingBox(this.sharedOutput, this.output);
             if (this.localBoundingBox !== null) {
-                for (const boundingBox of this.animationBoundingBoxes) {
-                    if (boundingBox !== undefined)
-                        this.localBoundingBox.union(this.localBoundingBox, boundingBox);
+                if (this.animationBoundingBox !== undefined)
+                    this.localBoundingBox.union(this.localBoundingBox, this.animationBoundingBox);
+                if (this.animationTranslationBounds !== undefined) {
+                    for (let axis = 0; axis < 3; axis++) {
+                        this.localBoundingBox.min[axis] += this.animationTranslationBounds.min[axis];
+                        this.localBoundingBox.max[axis] += this.animationTranslationBounds.max[axis];
+                    }
+                }
+                const padding = Math.max(
+                    this.localBoundingBox.max[0] - this.localBoundingBox.min[0],
+                    this.localBoundingBox.max[1] - this.localBoundingBox.min[1],
+                    this.localBoundingBox.max[2] - this.localBoundingBox.min[2],
+                ) * this.paddingRatio;
+                for (let axis = 0; axis < 3; axis++) {
+                    this.localBoundingBox.min[axis] -= padding;
+                    this.localBoundingBox.max[axis] += padding;
                 }
             }
         }

@@ -14,7 +14,7 @@ import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
 import type { InstanceScript, SetupProp } from './parse.js';
 import type { DK64Renderer, Mesh, ROMData, RootMeshRenderer } from './scenes.js';
-import { computeBillboardBoundingBox, computeMatrixAnimationBoundingBox } from './cull.js';
+import { computeBillboardBoundingBox } from './cull.js';
 
 export interface TerrainTriangle {
     vertices: [vec3, vec3, vec3];
@@ -152,7 +152,6 @@ interface PropAnimationNode {
 }
 
 interface PropAnimationTrack {
-    channel: number;
     nodes: PropAnimationNode[];
     timings: Uint8Array;
     speed: number;
@@ -170,7 +169,7 @@ export interface PropAnimationState {
     sourcePositions: Float32Array;
     vertexModelViewMatrixIndices: number[][];
     initialMatrices: Map<number, mat4>;
-    boundingBox: AABB;
+    translationBounds: AABB;
 }
 
 function samplePropAnimation(animation: PropAnimationState, tick: number): void {
@@ -437,6 +436,8 @@ function decodePropAnimation(
 
     const tracks: PropAnimationTrack[] = [];
     const nodesByMatrixIndex = new Map<number, PropAnimationNode>();
+    const translationBounds = new AABB(0, 0, 0, 0, 0, 0);
+    const translation = vec3.create();
     for (const trackDefinition of trackDefinitions) {
         const channelStart = animationTable + view.getUint32(animationTable + trackDefinition.channel * 4, false);
 
@@ -468,6 +469,15 @@ function decodePropAnimation(
                 postMatrix: readMatrix(matrixBuffer + parentMatrixOffset + 0x40),
                 outputMatrix: mat4.create(),
             };
+            for (let frame = 0; frame < frameCount; frame++) {
+                const i = frame * 9;
+                for (let axis = 0; axis < 3; axis++) {
+                    translation[axis] = node.postMatrix[axis] * transforms[i + 6]
+                        + node.postMatrix[axis + 4] * transforms[i + 7]
+                        + node.postMatrix[axis + 8] * transforms[i + 8];
+                }
+                translationBounds.unionPoint(translation);
+            }
             nodes.push(node);
             nodesByMatrixIndex.set(matrixIndex, node);
         }
@@ -478,7 +488,6 @@ function decodePropAnimation(
             ? 0
             : Math.max(triggeredPlaybackPositions.length - 1, 1);
         tracks.push({
-            channel: trackDefinition.channel,
             nodes,
             timings,
             speed: trackDefinition.speed,
@@ -515,13 +524,8 @@ function decodePropAnimation(
         sourcePositions: new Float32Array(sourcePositions),
         vertexModelViewMatrixIndices,
         initialMatrices,
-        boundingBox: new AABB(),
+        translationBounds,
     };
-    animation.boundingBox = computeMatrixAnimationBoundingBox(
-        animation,
-        (tick) => samplePropAnimation(animation, tick),
-        (callback) => forEachPropAnimationVertex(animation, (_vertexIndex, position) => callback(position)),
-    );
     return animation;
 }
 
