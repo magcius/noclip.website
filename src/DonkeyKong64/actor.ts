@@ -129,8 +129,8 @@ function sampleActorAnimation(animation: ActorAnimation, speed: number, tick: nu
 }
 
 function initializeActorDL(state: RSPState): void {
-    // from func_global_asm_80630DCC
-    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADING_SMOOTH);
+    // from func_global_asm_8063A968 + func_global_asm_80630DCC
+    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
     state.gDPSetOtherModeL(0, 29, 0x0C192078);
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
     state.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
@@ -268,8 +268,6 @@ export function buildActorMesh(
         runDL_F3DEX2(state, 0x03000000 | (pointer - runtimeBase));
     }
     const output = state.finish()!;
-    for (const drawCall of output.drawCalls)
-        drawCall.SP_VertexColorsEnabled = false;
 
     const vertexCount = sharedOutput.vertices.length - firstVertex;
     const sourcePositions = new Float32Array(vertexCount * 3);

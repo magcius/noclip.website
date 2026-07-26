@@ -245,7 +245,7 @@ class DrawCallInstance {
         if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
             program.defines.set('LIGHTING', '1');
 
-        if (this.vertexColorsEnabled && this.drawCall.SP_VertexColorsEnabled)
+        if (this.vertexColorsEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)

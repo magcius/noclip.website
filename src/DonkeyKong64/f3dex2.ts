@@ -35,7 +35,6 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
-    public SP_VertexColorsEnabled = true;
     public textureAnimations: (DrawTextureAnimation | undefined)[] = [];
     public textureScrollSpeeds: number[] = [];
 }
