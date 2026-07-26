@@ -58,14 +58,13 @@ class RumbleRacingScene implements SceneGfx {
   private blendedRenderInstList = new GfxRenderInstList();
   private trackGeometries: ObfGeometry[] = [];
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
-  private trackProgram: GfxProgram;
-  private trackVertexColorProgram: GfxProgram;
-  private trackUnlitProgram: GfxProgram;
+  private programCache = new Map<number, GfxProgram>();
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
   private wireframe: boolean = false;
   private showVertexColors: boolean = true;
+  private showTextures: boolean = true;
 
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
@@ -102,10 +101,6 @@ class RumbleRacingScene implements SceneGfx {
         new O3DGeometry(cache, o3d, this.exclude),
       );
     }
-
-    this.trackProgram = cache.createProgram(new TrackProgram(false));
-    this.trackVertexColorProgram = cache.createProgram(new TrackProgram(true));
-    this.trackUnlitProgram = cache.createProgram(new TrackProgram(true, true));
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -155,6 +150,25 @@ class RumbleRacingScene implements SceneGfx {
     this.textureHolder.onnewtextures();
   }
 
+  private getProgram(hasVertexColors: boolean): GfxProgram {
+    const ignoreVertexColors = hasVertexColors && !this.showVertexColors;
+    const ignoreTextures = !this.showTextures;
+
+    const key =
+      (hasVertexColors ? 1 : 0) |
+      (ignoreVertexColors ? 2 : 0) |
+      (ignoreTextures ? 4 : 0);
+
+    let program = this.programCache.get(key);
+    if (program === undefined) {
+      program = this.renderHelper.renderCache.createProgram(
+        new TrackProgram(hasVertexColors, ignoreVertexColors, ignoreTextures),
+      );
+      this.programCache.set(key, program);
+    }
+    return program;
+  }
+
   private fillSceneParams(
     template: GfxRenderInst,
     viewerInput: ViewerRenderInput,
@@ -175,13 +189,7 @@ class RumbleRacingScene implements SceneGfx {
       if (!tex) continue;
 
       const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-      renderInst.setGfxProgram(
-        dc.hasVertexColors
-          ? this.showVertexColors
-            ? this.trackVertexColorProgram
-            : this.trackUnlitProgram
-          : this.trackProgram,
-      );
+      renderInst.setGfxProgram(this.getProgram(dc.hasVertexColors));
       renderInst.setSamplerBindings(0, [
         { gfxTexture: tex, gfxSampler: this.linearSampler },
       ]);
@@ -367,6 +375,16 @@ class RumbleRacingScene implements SceneGfx {
     };
 
     renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
+
+    const showTexturesCheckbox = new UI.Checkbox(
+      "Show Textures",
+      this.showTextures,
+    );
+    showTexturesCheckbox.onchanged = () => {
+      this.showTextures = showTexturesCheckbox.checked;
+    };
+
+    renderSettingsPanel.contents.appendChild(showTexturesCheckbox.elem);
 
     if (this.renderHelper.device.queryLimits().wireframeSupported) {
       const wireframe = new UI.Checkbox("Wireframe", false);

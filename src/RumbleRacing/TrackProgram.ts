@@ -14,13 +14,18 @@ export class TrackProgram extends DeviceProgram {
   // vertex colors which simply modulate the texture. Vertex-colored geometry has
   // no normals, so when the user toggles vertex colors off it draws unlit rather
   // than falling into the lighting path.
-  constructor(hasVertexColors: boolean, ignoreVertexColors: boolean = false) {
+  constructor(
+    hasVertexColors: boolean,
+    ignoreVertexColors: boolean = false,
+    ignoreTextures: boolean = false,
+  ) {
     super();
     this.setDefineBool(
       "USE_VERTEX_COLOR",
       hasVertexColors && !ignoreVertexColors,
     );
     this.setDefineBool("UNLIT", hasVertexColors && ignoreVertexColors);
+    this.setDefineBool("NO_TEXTURE", ignoreTextures);
   }
 
   public override vert = `
@@ -54,7 +59,11 @@ in vec4 v_Color;
 void main() {
     // No alpha testing: the game never writes TEST_1/TEST_2/PABE, so texture
     // alpha only ever feeds the blend equation.
+#if defined(NO_TEXTURE)
+    vec4 color = vec4(1.0);
+#else
     vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
+#endif
 
 #if defined(USE_VERTEX_COLOR)
     gl_FragColor = color * v_Color;
