@@ -35,8 +35,8 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLight, DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
-import { actorModelScale, buildActorMesh, getActorRenderDefinition, updateActorAnimation } from './actor.js';
-import type { ActorAnimationState, ActorMesh, ActorRenderDefinition } from './actor.js';
+import { actorModelScale, buildActorMesh, createActorAnimationPose, getActorRenderDefinition, updateActorAnimation } from './actor.js';
+import type { ActorAnimationPose, ActorAnimationState, ActorMesh, ActorRenderDefinition } from './actor.js';
 import { addModel2Props, buildTerrainTriangles, updatePropAnimation } from './prop.js';
 import type { PropAnimationState } from './prop.js';
 import {
@@ -1281,6 +1281,7 @@ function addSceneActors(
     setupActors: readonly SetupActor[],
     worldScale: number,
     lightingEnvironment: ObjectLightingEnvironment,
+    getActorPose: (definition: ActorRenderDefinition, speed: number) => ActorAnimationPose,
 ): void {
     const actors: { actor: SetupActor, definition: ActorRenderDefinition }[] = [];
     for (const actor of setupActors) {
@@ -1297,8 +1298,7 @@ function addSceneActors(
         if (meshData === undefined) {
             const actorMesh = buildActorMesh(
                 romData.loadActorGeometry(definition.model),
-                definition.animation !== null ? romData.loadAnimation(definition.animation) : null,
-                animationSpeed,
+                getActorPose(definition, animationSpeed),
                 actor.type,
                 romData.TexData,
                 sharedOutput,
@@ -1540,13 +1540,24 @@ class SceneDesc implements Viewer.SceneDesc {
         const map = new DK64Map(decompress(romData.MapData), romData.AnimTexData);
         const setup = parseSetup(romData.loadSetup());
         const scripts = parseInstanceScripts(romData.loadScripts());
+        const actorPoses = new Map<string, ActorAnimationPose>();
+        const getActorPose = (definition: ActorRenderDefinition, speed: number): ActorAnimationPose => {
+            const key = `${definition.model}:${definition.animation ?? -1}:${speed}`;
+            let pose = actorPoses.get(key);
+            if (pose === undefined) {
+                pose = createActorAnimationPose(
+                    romData.loadActorGeometry(definition.model),
+                    definition.animation !== null ? romData.loadAnimation(definition.animation) : null,
+                    speed,
+                );
+                actorPoses.set(key, pose);
+            }
+            return pose;
+        };
         const dynamicLights = buildDynamicLights(
             setup,
             (type) => romData.loadPropGeometry(type).createDataView(),
-            {
-                loadActorGeometry: (model) => romData.ActorGeometryData.has(model) ? romData.loadActorGeometry(model) : null,
-                loadAnimation: (animation) => romData.AnimationData.has(animation) ? romData.loadAnimation(animation) : null,
-            },
+            getActorPose,
         );
         const objectLightingEnvironment = buildObjectLightingEnvironment(map.vertBin, map.chunks, dynamicLights);
 
@@ -1659,7 +1670,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
-        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup.actors, setupWorldScale, objectLightingEnvironment);
+        addSceneActors(device, cache, sceneRenderer, sharedOutput, romData, setup.actors, setupWorldScale, objectLightingEnvironment, getActorPose);
         addEnvironmentalEffects(device, cache, sceneRenderer, sharedOutput, romData, map, sceneID, setup.props, scripts);
         return sceneRenderer;
     }

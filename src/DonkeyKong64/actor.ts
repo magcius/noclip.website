@@ -9,26 +9,32 @@ import { lerp, MathConstants } from '../MathHelpers.js';
 import { computeSkeletalAnimationBoundingBox } from './cull.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 
-export interface ActorAnimation {
+interface ActorAnimation {
     playbackRate: number;
     rotations: readonly Int16Array[];
 }
 
-export interface ActorSkeleton {
+interface ActorSkeleton {
     offsets: vec3[];
     parents: number[];
 }
 
 export const actorModelScale = 0.15;
 
+export interface ActorAnimationPose {
+    speed: number;
+    skeleton: ActorSkeleton;
+    animation: ActorAnimation;
+    boneMatrices: mat4[];
+    lastTick: number;
+}
+
 export interface ActorAnimationState {
     firstVertex: number;
     vertexCount: number;
-    speed: number;
     sourcePositions: Float32Array;
     boneIndices: Uint8Array;
-    skeleton: ActorSkeleton;
-    animation: ActorAnimation;
+    pose: ActorAnimationPose;
     boundingBox: AABB;
 }
 
@@ -66,7 +72,7 @@ export function getActorRenderDefinition(type: number, model: number): ActorRend
     return { model, animation: null, animationSpeed: 0 };
 }
 
-export function parseActorAnimation(data: ArrayBufferSlice, boneCount: number): ActorAnimation {
+function parseActorAnimation(data: ArrayBufferSlice, boneCount: number): ActorAnimation {
     const view = data.createDataView();
     const frameCount = view.getUint8(0x12);
     const frameStride = view.getUint8(0x13);
@@ -192,7 +198,7 @@ function parseActorAnimatedTextures(
     return animatedTextures;
 }
 
-export function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
+function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
     const view = data.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
     const boneCount = view.getUint8(0x20);
@@ -211,10 +217,34 @@ export function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
     return { offsets, parents };
 }
 
-export function buildActorMesh(
+export function createActorAnimationPose(
     geometry: ArrayBufferSlice,
     animationData: ArrayBufferSlice | null,
-    animationSpeed: number,
+    speed: number,
+): ActorAnimationPose {
+    const skeleton = parseActorSkeleton(geometry);
+    if (skeleton.offsets.length === 0) {
+        skeleton.offsets.push(vec3.create());
+        skeleton.parents.push(-1);
+    }
+    const animation = animationData !== null
+        ? parseActorAnimation(animationData, skeleton.offsets.length)
+        : {
+            playbackRate: 0,
+            rotations: [new Int16Array(skeleton.offsets.length)],
+        };
+    return {
+        speed,
+        skeleton,
+        animation,
+        boneMatrices: skeleton.offsets.map(() => mat4.create()),
+        lastTick: -1,
+    };
+}
+
+export function buildActorMesh(
+    geometry: ArrayBufferSlice,
+    pose: ActorAnimationPose,
     actorType: number,
     textureBuffers: ArrayBufferSlice[],
     sharedOutput: RSPSharedOutput,
@@ -251,60 +281,36 @@ export function buildActorMesh(
         sourcePositions[i * 3 + 2] = vertex.z;
         boneIndices[i] = vertex.matrixIndex;
     }
-    const skeleton = parseActorSkeleton(geometry);
-    if (skeleton.offsets.length === 0) {
-        skeleton.offsets.push(vec3.create());
-        skeleton.parents.push(-1);
-    }
-    const animation = animationData !== null
-        ? parseActorAnimation(animationData, skeleton.offsets.length)
-        : {
-            playbackRate: 0,
-            rotations: [new Int16Array(skeleton.offsets.length)],
-        };
     return {
         rspState: state,
         rspOutput: output,
         animation: {
             firstVertex,
             vertexCount,
-            speed: animationSpeed,
             sourcePositions,
             boneIndices,
-            skeleton,
-            animation,
+            pose,
             boundingBox: computeSkeletalAnimationBoundingBox(
-                sourcePositions, boneIndices, skeleton.offsets, skeleton.parents,
+                sourcePositions, boneIndices, pose.skeleton.offsets, pose.skeleton.parents,
             ),
         },
     };
 }
 
-function buildActorBoneMatrices(skeleton: ActorSkeleton, boneAngles: readonly number[]): mat4[] {
-    const boneMatrices: mat4[] = [];
-    for (let i = 0; i < skeleton.offsets.length; i++) {
-        const matrix = mat4.create();
-        boneMatrices.push(matrix);
-        const parent = skeleton.parents[i];
+export function updateActorPose(pose: ActorAnimationPose, tick: number): void {
+    if (pose.lastTick === tick)
+        return;
+    const boneAngles = sampleActorAnimation(pose.animation, pose.speed, tick);
+    for (let i = 0; i < pose.skeleton.offsets.length; i++) {
+        const matrix = pose.boneMatrices[i];
+        mat4.identity(matrix);
+        const parent = pose.skeleton.parents[i];
         if (parent >= 0)
-            mat4.copy(matrix, boneMatrices[parent]);
-        mat4.translate(matrix, matrix, skeleton.offsets[i]);
+            mat4.copy(matrix, pose.boneMatrices[parent]);
+        mat4.translate(matrix, matrix, pose.skeleton.offsets[i]);
         mat4.rotateZ(matrix, matrix, boneAngles[i] ?? 0);
     }
-    return boneMatrices;
-}
-
-export function sampleActorBonePosition(
-    dst: vec3,
-    skeleton: ActorSkeleton,
-    animation: ActorAnimation,
-    speed: number,
-    tick: number,
-    boneIndex: number,
-): void {
-    const boneAngles = sampleActorAnimation(animation, speed, tick);
-    const boneMatrices = buildActorBoneMatrices(skeleton, boneAngles);
-    vec3.set(dst, boneMatrices[boneIndex][12], boneMatrices[boneIndex][13], boneMatrices[boneIndex][14]);
+    pose.lastTick = tick;
 }
 
 export function updateActorAnimation(
@@ -314,8 +320,7 @@ export function updateActorAnimation(
     vertexBufferFirstVertex: number,
     tick: number,
 ): void {
-    const boneAngles = sampleActorAnimation(state.animation, state.speed, tick);
-    const boneMatrices = buildActorBoneMatrices(state.skeleton, boneAngles);
+    updateActorPose(state.pose, tick);
     const sourcePosition = vec3.create();
     const skinnedPosition = vec3.create();
 
@@ -326,7 +331,7 @@ export function updateActorAnimation(
             state.sourcePositions[i * 3 + 1],
             state.sourcePositions[i * 3 + 2],
         );
-        vec3.transformMat4(skinnedPosition, sourcePosition, boneMatrices[bone]);
+        vec3.transformMat4(skinnedPosition, sourcePosition, state.pose.boneMatrices[bone]);
         const vertexIndex = state.firstVertex + i;
         vertices[vertexIndex].x = skinnedPosition[0];
         vertices[vertexIndex].y = skinnedPosition[1];

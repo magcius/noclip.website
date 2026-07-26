@@ -1,10 +1,9 @@
 import { vec3 } from 'gl-matrix';
 
-import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { MathConstants } from '../MathHelpers.js';
-import { actorModelScale, getActorRenderDefinition, parseActorAnimation, parseActorSkeleton, sampleActorBonePosition } from './actor.js';
-import type { ActorAnimation, ActorSkeleton } from './actor.js';
+import { actorModelScale, getActorRenderDefinition, updateActorPose } from './actor.js';
+import type { ActorAnimationPose, ActorRenderDefinition } from './actor.js';
 import type { DrawTextureAnimation } from './f3dex2.js';
 import type { Setup } from './parse.js';
 
@@ -29,11 +28,9 @@ interface DynamicSpotLight {
     color: readonly [number, number, number];
     innerAngle: number;
     outerAngle: number;
-    speed: number;
     rotationY: number;
     maxDistance: number;
-    animation: ActorAnimation;
-    skeleton: ActorSkeleton;
+    pose: ActorAnimationPose;
     scale: number;
     targetBone: number;
 }
@@ -103,11 +100,6 @@ export class ActiveLightCache {
     public get(light: DynamicLight): ActiveLight | undefined {
         return this.activeLights.get(light);
     }
-}
-
-interface ActorLightResources {
-    loadActorGeometry: (model: number) => ArrayBufferSlice | null;
-    loadAnimation: (animation: number) => ArrayBufferSlice | null;
 }
 
 export function buildObjectLightingEnvironment(
@@ -192,7 +184,7 @@ const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
 export function buildDynamicLights(
     setup: Setup,
     loadPropGeometry: (type: number) => DataView,
-    actorResources: ActorLightResources,
+    getActorPose: (definition: ActorRenderDefinition, speed: number) => ActorAnimationPose,
 ): DynamicLight[] {
     const lights: DynamicLight[] = [];
     for (const prop of setup.props) {
@@ -216,9 +208,7 @@ export function buildDynamicLights(
         const definition = getActorRenderDefinition(actor.type, 0);
         if (definition === null || definition.lightBone === undefined || definition.animation === null)
             continue;
-        const actorGeometry = actorResources.loadActorGeometry(definition.model)!;
-        const animationData = actorResources.loadAnimation(definition.animation)!;
-        const skeleton = parseActorSkeleton(actorGeometry);
+        const speed = definition.animationSpeed === 'setup' ? actor.lightSpeed : definition.animationSpeed;
         lights.push({
             kind: 'spot',
             origin: vec3.fromValues((actor.position[0] + 0.3) * 3, actor.position[1] * 3, actor.position[2] * 3),
@@ -229,11 +219,9 @@ export function buildDynamicLights(
             ],
             innerAngle: actor.lightCone[0] !== 0 ? actor.lightCone[0] : 25,
             outerAngle: actor.lightCone[1] !== 0 ? actor.lightCone[1] : 65,
-            speed: actor.lightSpeed,
             rotationY: actor.rotationY / 0x1000 * Math.PI * 2,
             maxDistance: 700,
-            animation: parseActorAnimation(animationData, skeleton.offsets.length),
-            skeleton,
+            pose: getActorPose(definition, speed),
             scale: actor.scale * actorModelScale,
             targetBone: definition.lightBone,
         });
@@ -323,7 +311,9 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
     if (light.kind === 'spot') {
         // func_global_asm_8069AB74: the light is hanging off the 3rd bone
-        sampleActorBonePosition(bonePosition, light.skeleton, light.animation, light.speed, tick, light.targetBone);
+        updateActorPose(light.pose, tick);
+        const boneMatrix = light.pose.boneMatrices[light.targetBone];
+        vec3.set(bonePosition, boneMatrix[12], boneMatrix[13], boneMatrix[14]);
         vec3.scale(bonePosition, bonePosition, light.scale);
         const sinY = Math.sin(light.rotationY);
         const cosY = Math.cos(light.rotationY);
