@@ -20,12 +20,48 @@ interface ActorSkeleton {
 
 export const actorModelScale = 0.15;
 
-export interface ActorAnimationPose {
-    speed: number;
-    skeleton: ActorSkeleton;
-    animation: ActorAnimation;
-    boneMatrices: mat4[];
-    lastTick: number;
+export class ActorAnimationPose {
+    public boneMatrices: mat4[];
+    private skeleton: ActorSkeleton;
+    private animation: ActorAnimation;
+    private lastTick = -1;
+
+    constructor(geometry: ArrayBufferSlice, animationData: ArrayBufferSlice | null, private speed: number) {
+        this.skeleton = parseActorSkeleton(geometry);
+        if (this.skeleton.offsets.length === 0) {
+            this.skeleton.offsets.push(vec3.create());
+            this.skeleton.parents.push(-1);
+        }
+        this.animation = animationData !== null
+            ? parseActorAnimation(animationData, this.skeleton.offsets.length)
+            : {
+                playbackRate: 0,
+                rotations: [new Int16Array(this.skeleton.offsets.length)],
+            };
+        this.boneMatrices = this.skeleton.offsets.map(() => mat4.create());
+    }
+
+    public update(tick: number): void {
+        if (this.lastTick === tick)
+            return;
+        const boneAngles = sampleActorAnimation(this.animation, this.speed, tick);
+        for (let i = 0; i < this.skeleton.offsets.length; i++) {
+            const matrix = this.boneMatrices[i];
+            mat4.identity(matrix);
+            const parent = this.skeleton.parents[i];
+            if (parent >= 0)
+                mat4.copy(matrix, this.boneMatrices[parent]);
+            mat4.translate(matrix, matrix, this.skeleton.offsets[i]);
+            mat4.rotateZ(matrix, matrix, boneAngles[i] ?? 0);
+        }
+        this.lastTick = tick;
+    }
+
+    public computeBoundingBox(sourcePositions: Float32Array, boneIndices: Uint8Array): AABB {
+        return computeSkeletalAnimationBoundingBox(
+            sourcePositions, boneIndices, this.skeleton.offsets, this.skeleton.parents,
+        );
+    }
 }
 
 export interface ActorAnimationState {
@@ -212,31 +248,6 @@ function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
     return { offsets, parents };
 }
 
-export function createActorAnimationPose(
-    geometry: ArrayBufferSlice,
-    animationData: ArrayBufferSlice | null,
-    speed: number,
-): ActorAnimationPose {
-    const skeleton = parseActorSkeleton(geometry);
-    if (skeleton.offsets.length === 0) {
-        skeleton.offsets.push(vec3.create());
-        skeleton.parents.push(-1);
-    }
-    const animation = animationData !== null
-        ? parseActorAnimation(animationData, skeleton.offsets.length)
-        : {
-            playbackRate: 0,
-            rotations: [new Int16Array(skeleton.offsets.length)],
-        };
-    return {
-        speed,
-        skeleton,
-        animation,
-        boneMatrices: skeleton.offsets.map(() => mat4.create()),
-        lastTick: -1,
-    };
-}
-
 export function buildActorMesh(
     geometry: ArrayBufferSlice,
     pose: ActorAnimationPose,
@@ -279,25 +290,7 @@ export function buildActorMesh(
         rspOutput: output,
         animation: {
             pose,
-            boundingBox: computeSkeletalAnimationBoundingBox(
-                sourcePositions, boneIndices, pose.skeleton.offsets, pose.skeleton.parents,
-            ),
+            boundingBox: pose.computeBoundingBox(sourcePositions, boneIndices),
         },
     };
-}
-
-export function updateActorPose(pose: ActorAnimationPose, tick: number): void {
-    if (pose.lastTick === tick)
-        return;
-    const boneAngles = sampleActorAnimation(pose.animation, pose.speed, tick);
-    for (let i = 0; i < pose.skeleton.offsets.length; i++) {
-        const matrix = pose.boneMatrices[i];
-        mat4.identity(matrix);
-        const parent = pose.skeleton.parents[i];
-        if (parent >= 0)
-            mat4.copy(matrix, pose.boneMatrices[parent]);
-        mat4.translate(matrix, matrix, pose.skeleton.offsets[i]);
-        mat4.rotateZ(matrix, matrix, boneAngles[i] ?? 0);
-    }
-    pose.lastTick = tick;
 }

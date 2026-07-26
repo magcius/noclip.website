@@ -161,116 +161,112 @@ interface PropAnimationTrack {
     lastTick: number;
 }
 
-export interface PropAnimationState {
-    firstVertex: number;
-    tracks: PropAnimationTrack[];
-    nodesByMatrixIndex: Map<number, PropAnimationNode>;
-    vertexOffsets: Uint32Array;
-    sourcePositions: Float32Array;
-    vertexModelViewMatrixIndices: number[][];
-    initialMatrices: Map<number, mat4>;
-    translationBounds: AABB;
-}
+export class PropAnimationState {
+    private animationComponent = mat4.create();
+    private animationPosition = vec3.create();
 
-function samplePropAnimation(animation: PropAnimationState, tick: number): void {
-    const animationComponent = mat4.create();
-    for (const track of animation.tracks) {
-        const frameCount = track.timings.length;
-        if (track.triggeredPlaybackPositions !== null) {
-            const playback = track.triggeredPlaybackPositions;
-            const cycleLength = track.endpointHoldTicks * 2 + playback.length;
-            let cycleTick = tick % cycleLength;
-            if (cycleTick < 0)
-                cycleTick += cycleLength;
-            if (cycleTick < track.endpointHoldTicks) {
-                track.framePosition = playback[0];
-            } else if (cycleTick < track.endpointHoldTicks + playback.length) {
-                track.framePosition = playback[cycleTick - track.endpointHoldTicks];
+    constructor(
+        public firstVertex: number,
+        private tracks: PropAnimationTrack[],
+        private nodesByMatrixIndex: Map<number, PropAnimationNode>,
+        public vertexOffsets: Uint32Array,
+        private sourcePositions: Float32Array,
+        private vertexModelViewMatrixIndices: number[][],
+        private initialMatrices: Map<number, mat4>,
+        public translationBounds: AABB,
+    ) {
+    }
+
+    private sample(tick: number): void {
+        for (const track of this.tracks) {
+            const frameCount = track.timings.length;
+            if (track.triggeredPlaybackPositions !== null) {
+                const playback = track.triggeredPlaybackPositions;
+                const cycleLength = track.endpointHoldTicks * 2 + playback.length;
+                let cycleTick = tick % cycleLength;
+                if (cycleTick < 0)
+                    cycleTick += cycleLength;
+                if (cycleTick < track.endpointHoldTicks) {
+                    track.framePosition = playback[0];
+                } else if (cycleTick < track.endpointHoldTicks + playback.length) {
+                    track.framePosition = playback[cycleTick - track.endpointHoldTicks];
+                } else {
+                    track.framePosition = playback[playback.length - 1];
+                }
+                track.lastTick = tick;
             } else {
-                track.framePosition = playback[playback.length - 1];
-            }
-            track.lastTick = tick;
-        } else {
-            if (track.lastTick < 0 || tick < track.lastTick) {
-                track.framePosition = 0;
+                if (track.lastTick < 0 || tick < track.lastTick) {
+                    track.framePosition = 0;
+                    track.lastTick = tick;
+                }
+                for (let animationTick = track.lastTick; animationTick < tick; animationTick++) {
+                    const frame = Math.floor(track.framePosition);
+                    const t = track.framePosition - frame;
+                    // from func_global_asm_806500E0
+                    const timing = track.timings[frame]
+                        + (track.timings[frame + 1] - track.timings[frame]) * t;
+                    track.framePosition += track.speed * timing / 300;
+                    track.framePosition %= frameCount - 1;
+                    if (track.framePosition < 0)
+                        track.framePosition += frameCount - 1;
+                }
                 track.lastTick = tick;
             }
-            for (let animationTick = track.lastTick; animationTick < tick; animationTick++) {
-                const frame = Math.floor(track.framePosition);
+            for (const node of track.nodes) {
+                const frame = Math.min(Math.floor(track.framePosition), frameCount - 2);
                 const t = track.framePosition - frame;
-                // from func_global_asm_806500E0
-                const timing = track.timings[frame]
-                    + (track.timings[frame + 1] - track.timings[frame]) * t;
-                track.framePosition += track.speed * timing / 300;
-                track.framePosition %= frameCount - 1;
-                if (track.framePosition < 0)
-                    track.framePosition += frameCount - 1;
+                const interpolate = (component: number): number => {
+                    const current = node.transforms[frame * 9 + component];
+                    return current + (node.transforms[(frame + 1) * 9 + component] - current) * t;
+                };
+                const interpolateAngle = (component: number): number => {
+                    const current = node.transforms[frame * 9 + component];
+                    let delta = node.transforms[(frame + 1) * 9 + component] - current;
+                    if (delta < -180)
+                        delta += 360;
+                    else if (delta > 180)
+                        delta -= 360;
+                    return (current + delta * t) * Math.PI / 180;
+                };
+
+                mat4.fromScaling(node.outputMatrix, [interpolate(0), interpolate(1), interpolate(2)]);
+                mat4.fromZRotation(this.animationComponent, interpolateAngle(5));
+                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+                mat4.fromYRotation(this.animationComponent, interpolateAngle(4));
+                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+                mat4.fromXRotation(this.animationComponent, interpolateAngle(3));
+                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+                mat4.fromTranslation(this.animationComponent, [interpolate(6), interpolate(7), interpolate(8)]);
+                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+                // from 8064FB64
+                mat4.multiply(node.outputMatrix, node.outputMatrix, node.baseMatrix);
+                mat4.multiply(node.outputMatrix, node.postMatrix, node.outputMatrix);
             }
-            track.lastTick = tick;
-        }
-        for (const node of track.nodes) {
-            const frame = Math.min(Math.floor(track.framePosition), frameCount - 2);
-            const t = track.framePosition - frame;
-            const interpolate = (component: number): number => {
-                const current = node.transforms[frame * 9 + component];
-                return current + (node.transforms[(frame + 1) * 9 + component] - current) * t;
-            };
-            const interpolateAngle = (component: number): number => {
-                const current = node.transforms[frame * 9 + component];
-                let delta = node.transforms[(frame + 1) * 9 + component] - current;
-                if (delta < -180)
-                    delta += 360;
-                else if (delta > 180)
-                    delta -= 360;
-                return (current + delta * t) * Math.PI / 180;
-            };
-
-            mat4.fromScaling(node.outputMatrix, [interpolate(0), interpolate(1), interpolate(2)]);
-            mat4.fromZRotation(animationComponent, interpolateAngle(5));
-            mat4.multiply(node.outputMatrix, animationComponent, node.outputMatrix);
-            mat4.fromYRotation(animationComponent, interpolateAngle(4));
-            mat4.multiply(node.outputMatrix, animationComponent, node.outputMatrix);
-            mat4.fromXRotation(animationComponent, interpolateAngle(3));
-            mat4.multiply(node.outputMatrix, animationComponent, node.outputMatrix);
-            mat4.fromTranslation(animationComponent, [interpolate(6), interpolate(7), interpolate(8)]);
-            mat4.multiply(node.outputMatrix, animationComponent, node.outputMatrix);
-            // from 8064FB64
-            mat4.multiply(node.outputMatrix, node.outputMatrix, node.baseMatrix);
-            mat4.multiply(node.outputMatrix, node.postMatrix, node.outputMatrix);
         }
     }
-}
 
-function forEachPropAnimationVertex(
-    animation: PropAnimationState,
-    callback: (vertexIndex: number, position: vec3) => void,
-): void {
-    const animationPosition = vec3.create();
-    for (let i = 0; i < animation.vertexOffsets.length; i++) {
-        const source = i * 3;
-        vec3.set(animationPosition,
-            animation.sourcePositions[source + 0],
-            animation.sourcePositions[source + 1],
-            animation.sourcePositions[source + 2],
-        );
-        for (const matrixIndex of animation.vertexModelViewMatrixIndices[i]) {
-            const matrix = animation.nodesByMatrixIndex.get(matrixIndex)?.outputMatrix
-                ?? animation.initialMatrices.get(matrixIndex);
-            if (matrix !== undefined)
-                vec3.transformMat4(animationPosition, animationPosition, matrix);
+    public update(vertexBufferData: Float32Array, vertexBufferFirstVertex: number, tick: number): void {
+        this.sample(tick);
+        for (let i = 0; i < this.vertexOffsets.length; i++) {
+            const source = i * 3;
+            vec3.set(this.animationPosition,
+                this.sourcePositions[source + 0],
+                this.sourcePositions[source + 1],
+                this.sourcePositions[source + 2],
+            );
+            for (const matrixIndex of this.vertexModelViewMatrixIndices[i]) {
+                const matrix = this.nodesByMatrixIndex.get(matrixIndex)?.outputMatrix
+                    ?? this.initialMatrices.get(matrixIndex);
+                if (matrix !== undefined)
+                    vec3.transformMat4(this.animationPosition, this.animationPosition, matrix);
+            }
+            const vertexIndex = this.firstVertex + this.vertexOffsets[i];
+            const target = (vertexIndex - vertexBufferFirstVertex) * 10;
+            vertexBufferData[target + 0] = this.animationPosition[0];
+            vertexBufferData[target + 1] = this.animationPosition[1];
+            vertexBufferData[target + 2] = this.animationPosition[2];
         }
-        callback(animation.firstVertex + animation.vertexOffsets[i], animationPosition);
     }
-}
-
-export function updatePropAnimation(animation: PropAnimationState, vertexBufferData: Float32Array, vertexBufferFirstVertex: number, tick: number): void {
-    samplePropAnimation(animation, tick);
-    forEachPropAnimationVertex(animation, (vertexIndex, position) => {
-        const target = (vertexIndex - vertexBufferFirstVertex) * 10;
-        vertexBufferData[target + 0] = position[0];
-        vertexBufferData[target + 1] = position[1];
-        vertexBufferData[target + 2] = position[2];
-    });
 }
 
 function findHighestDetailDisplayListOffset(view: DataView, mainDisplayListStart: number): number {
@@ -516,17 +512,16 @@ function decodePropAnimation(
         initialMatrices.set(matrixOffset >>> 6, readMatrix(matrixBuffer + matrixOffset));
 
     applyPropBindPose(view, state, sharedOutput, firstVertex, vertexCount);
-    const animation: PropAnimationState = {
+    return new PropAnimationState(
         firstVertex,
         tracks,
         nodesByMatrixIndex,
-        vertexOffsets: new Uint32Array(vertexOffsets),
-        sourcePositions: new Float32Array(sourcePositions),
+        new Uint32Array(vertexOffsets),
+        new Float32Array(sourcePositions),
         vertexModelViewMatrixIndices,
         initialMatrices,
         translationBounds,
-    };
-    return animation;
+    );
 }
 
 interface ProjectedDecalVertex {

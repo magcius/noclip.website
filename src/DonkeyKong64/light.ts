@@ -3,7 +3,7 @@ import { vec3 } from 'gl-matrix';
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { MathConstants } from '../MathHelpers.js';
-import { actorModelScale, getActorRenderDefinition, updateActorPose } from './actor.js';
+import { actorModelScale, getActorRenderDefinition } from './actor.js';
 import type { ActorAnimationPose, ActorRenderDefinition } from './actor.js';
 import type { DrawTextureAnimation } from './f3dex2.js';
 import type { Setup } from './parse.js';
@@ -312,7 +312,7 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
     if (light.kind === 'spot') {
         // func_global_asm_8069AB74: the light is hanging off the 3rd bone
-        updateActorPose(light.pose, tick);
+        light.pose.update(tick);
         const boneMatrix = light.pose.boneMatrices[light.targetBone];
         vec3.set(bonePosition, boneMatrix[12], boneMatrix[13], boneMatrix[14]);
         vec3.scale(bonePosition, bonePosition, light.scale);

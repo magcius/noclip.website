@@ -35,9 +35,9 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLight, DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
-import { actorModelScale, buildActorMesh, createActorAnimationPose, getActorRenderDefinition, updateActorPose } from './actor.js';
-import type { ActorAnimationPose, ActorAnimationState, ActorMesh, ActorRenderDefinition } from './actor.js';
-import { addModel2Props, buildTerrainTriangles, updatePropAnimation } from './prop.js';
+import { ActorAnimationPose, actorModelScale, buildActorMesh, getActorRenderDefinition } from './actor.js';
+import type { ActorAnimationState, ActorMesh, ActorRenderDefinition } from './actor.js';
+import { addModel2Props, buildTerrainTriangles } from './prop.js';
 import type { PropAnimationState } from './prop.js';
 import {
     getGeneratedSurfaceAnimatedTextureBindings,
@@ -322,7 +322,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, spriteFades: readonly number[] | null = null): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
         if (!this.visible)
             return;
 
@@ -340,10 +340,10 @@ class DrawCallInstance {
             const frame = (Math.floor(animationTick / frameDuration) + frameOffset) % mappings.length;
             this.textureMappings[i] = mappings[frame];
         }
-        if (spriteFades !== null) {
-            for (let i = 0; i < spriteFades.length; i++) {
-                if (spriteFades[i] > 0)
-                    this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier * spriteFades[i], primColorMultiplier, 6, this.firstIndex + i * 6);
+        if (sprites !== null) {
+            for (let i = 0; i < sprites.length; i++) {
+                if (sprites[i].fade > 0)
+                    this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier * sprites[i].fade, primColorMultiplier, 6, this.firstIndex + i * 6);
             }
         } else {
             this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, this.drawCall.indexCount, this.firstIndex);
@@ -506,6 +506,80 @@ export class RenderData {
     }
 }
 
+class SpriteBillboard {
+    private static readonly signs = [-1, 1, 1, 1, 1, -1, -1, -1];
+    public fade = 1;
+    private spawnTick: number | undefined;
+    private lifetime: number | undefined;
+    private loopTicks: number | undefined;
+    private velocityY: number | undefined;
+    public maxDistance: number | undefined;
+    public fadeStartDistance: number | undefined;
+
+    constructor(
+        public firstVertex: number,
+        public origin: vec3,
+        private halfWidth: number,
+        private halfHeight: number,
+        options: {
+            spawnTick?: number;
+            lifetime?: number;
+            loopTicks?: number;
+            velocityY?: number;
+            maxDistance?: number;
+            fadeStartDistance?: number;
+        },
+    ) {
+        this.spawnTick = options.spawnTick;
+        this.lifetime = options.lifetime;
+        this.loopTicks = options.loopTicks;
+        this.velocityY = options.velocityY;
+        this.maxDistance = options.maxDistance;
+        this.fadeStartDistance = options.fadeStartDistance;
+    }
+
+    public update(vertexBufferData: Float32Array, vertexBufferFirstVertex: number, cameraMatrix: mat4, tick: number): void {
+        const age = this.spawnTick === undefined
+            ? 0
+            : ((tick - this.spawnTick + this.loopTicks!) % this.loopTicks!);
+        const dx = cameraMatrix[12] - this.origin[0];
+        const dy = cameraMatrix[13] - this.origin[1];
+        const dz = cameraMatrix[14] - this.origin[2];
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const withinDistance = this.maxDistance === undefined || distance <= this.maxDistance;
+        const active = withinDistance && (this.spawnTick === undefined || age < this.lifetime!);
+        this.fade = active ? 1 : 0;
+        if (this.fadeStartDistance !== undefined) {
+            this.fade = !active ? 0 : distance < this.fadeStartDistance
+                ? 1
+                : Math.max(0, Math.min(1, (this.maxDistance! - distance) / (this.maxDistance! - this.fadeStartDistance)));
+        }
+        const centerX = this.origin[0];
+        const centerY = this.origin[1] + age * (this.velocityY ?? 0);
+        const centerZ = this.origin[2];
+        for (let i = 0; i < 4; i++) {
+            const vertex = (this.firstVertex + i - vertexBufferFirstVertex) * 10;
+            if (!active) {
+                vertexBufferData[vertex + 0] = this.origin[0];
+                vertexBufferData[vertex + 1] = this.origin[1];
+                vertexBufferData[vertex + 2] = this.origin[2];
+                continue;
+            }
+            const rightOffset = this.halfWidth * SpriteBillboard.signs[i * 2];
+            const upOffset = this.halfHeight * SpriteBillboard.signs[i * 2 + 1];
+            vertexBufferData[vertex + 0] = centerX
+                + cameraMatrix[0] * rightOffset
+                + cameraMatrix[4] * upOffset;
+            vertexBufferData[vertex + 1] = centerY
+                + cameraMatrix[1] * rightOffset
+                + cameraMatrix[5] * upOffset;
+            vertexBufferData[vertex + 2] = centerZ
+                + cameraMatrix[2] * rightOffset
+                + cameraMatrix[6] * upOffset;
+        }
+    }
+}
+
 export interface Mesh {
     sharedOutput: RSPSharedOutput;
     rspState: RSPState;
@@ -518,23 +592,7 @@ export interface Mesh {
     dynamicLighting?: DynamicLighting;
     actorAnimation?: ActorAnimationState;
     propAnimation?: PropAnimationState;
-    spriteBillboards?: {
-        firstVertex: number;
-        origin: vec3;
-        centerX: number;
-        centerY: number;
-        halfWidth: number;
-        halfHeight: number;
-        rightOffsets?: number[];
-        upOffsets?: number[];
-        forwardOffsets?: number[];
-        spawnTick?: number;
-        lifetime?: number;
-        loopTicks?: number;
-        velocityY?: number;
-        maxDistance?: number;
-        fadeStartDistance?: number;
-    }[];
+    spriteBillboards?: SpriteBillboard[];
 }
 
 function getDynamicVertexRange(mesh: Mesh): { start: number, end: number } | null {
@@ -561,11 +619,9 @@ export class MeshData {
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
     public dynamicLightingEnabled = true;
-    public spriteFades: number[] | null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
         this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.propAnimation !== undefined);
-        this.spriteFades = mesh.spriteBillboards !== undefined ? nArray(mesh.spriteBillboards.length, () => 1) : null;
         this.lightingDirty = mesh.dynamicLighting !== undefined;
         this.cullBounds = new MeshBounds(
             mesh.sharedOutput,
@@ -619,66 +675,12 @@ export class MeshData {
             this.lightingDirty = false;
         }
         if (actorAnimation !== undefined)
-            updateActorPose(actorAnimation.pose, tick);
+            actorAnimation.pose.update(tick);
         if (propAnimation !== undefined)
-            updatePropAnimation(propAnimation, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
+            propAnimation.update(this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
-        for (let spriteIndex = 0; spriteIndex < (sprites?.length ?? 0); spriteIndex++) {
-            const sprite = sprites![spriteIndex];
-            const age = sprite.spawnTick === undefined
-                ? 0
-                : ((tick - sprite.spawnTick + sprite.loopTicks!) % sprite.loopTicks!);
-            const dx = viewerInput.camera.worldMatrix[12] - sprite.origin[0];
-            const dy = viewerInput.camera.worldMatrix[13] - sprite.origin[1];
-            const dz = viewerInput.camera.worldMatrix[14] - sprite.origin[2];
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            const withinDistance = sprite.maxDistance === undefined
-                || distance <= sprite.maxDistance;
-            const active = withinDistance && (sprite.spawnTick === undefined || age < sprite.lifetime!);
-            let fade = active ? 1 : 0;
-            if (sprite.fadeStartDistance !== undefined) {
-                fade = !active ? 0 : distance < sprite.fadeStartDistance
-                    ? 1
-                    : Math.max(0, Math.min(1, (sprite.maxDistance! - distance) / (sprite.maxDistance! - sprite.fadeStartDistance)));
-            }
-            this.spriteFades![spriteIndex] = fade;
-            const rightScale = sprite.centerX;
-            const upScale = sprite.centerY;
-            const centerX = sprite.origin[0]
-                + viewerInput.camera.worldMatrix[0] * rightScale
-                + viewerInput.camera.worldMatrix[4] * upScale;
-            const centerY = sprite.origin[1] + age * (sprite.velocityY ?? 0)
-                + viewerInput.camera.worldMatrix[1] * rightScale
-                + viewerInput.camera.worldMatrix[5] * upScale;
-            const centerZ = sprite.origin[2]
-                + viewerInput.camera.worldMatrix[2] * rightScale
-                + viewerInput.camera.worldMatrix[6] * upScale;
-            const signs = [-1, 1, 1, 1, 1, -1, -1, -1];
-            for (let i = 0; i < 4; i++) {
-                const vertex = (sprite.firstVertex + i - this.renderData.vertexStart) * 10;
-                if (!active) {
-                    this.renderData.vertexBufferData[vertex + 0] = sprite.origin[0];
-                    this.renderData.vertexBufferData[vertex + 1] = sprite.origin[1];
-                    this.renderData.vertexBufferData[vertex + 2] = sprite.origin[2];
-                    continue;
-                }
-                const rightOffset = sprite.rightOffsets?.[i] ?? sprite.halfWidth * signs[i * 2];
-                const upOffset = sprite.upOffsets?.[i] ?? sprite.halfHeight * signs[i * 2 + 1];
-                const forwardOffset = sprite.forwardOffsets?.[i] ?? 0;
-                this.renderData.vertexBufferData[vertex + 0] = centerX
-                    + viewerInput.camera.worldMatrix[0] * rightOffset
-                    + viewerInput.camera.worldMatrix[4] * upOffset
-                    + viewerInput.camera.worldMatrix[8] * forwardOffset;
-                this.renderData.vertexBufferData[vertex + 1] = centerY
-                    + viewerInput.camera.worldMatrix[1] * rightOffset
-                    + viewerInput.camera.worldMatrix[5] * upOffset
-                    + viewerInput.camera.worldMatrix[9] * forwardOffset;
-                this.renderData.vertexBufferData[vertex + 2] = centerZ
-                    + viewerInput.camera.worldMatrix[2] * rightOffset
-                    + viewerInput.camera.worldMatrix[6] * upOffset
-                    + viewerInput.camera.worldMatrix[10] * forwardOffset;
-            }
-        }
+        for (const sprite of sprites ?? [])
+            sprite.update(this.renderData.vertexBufferData, this.renderData.vertexStart, viewerInput.camera.worldMatrix, tick);
         if (this.dirtyVertexRange !== null) {
             const byteOffset = this.dirtyVertexRange.start * 10 * 4;
             const byteLength = (this.dirtyVertexRange.end - this.dirtyVertexRange.start) * 10 * 4;
@@ -706,9 +708,9 @@ enum SceneRenderLayer {
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, spriteFades: readonly number[] | null = null): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, spriteFades);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, sprites);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -947,7 +949,7 @@ export class RootMeshRenderer {
         const objectLightColor = this.objectLighting !== null
             ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.spriteFades);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.mesh.spriteBillboards ?? null);
 
         renderInstManager.popTemplate();
     }
@@ -1395,20 +1397,20 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
-                spriteBillboards: batch.map((event, index) => ({
-                    firstVertex: firstVertex + index * 4,
-                    origin: event.origin,
-                    centerX: 0,
-                    centerY: 0,
-                    halfWidth: width / 2,
-                    halfHeight: height / 2,
-                    spawnTick: lifetime === undefined ? undefined : event.spawnTick,
-                    lifetime: lifetime,
-                    loopTicks: lifetime === undefined ? undefined : loopTicks,
-                    velocityY: event.velocityY,
-                    maxDistance,
-                    fadeStartDistance,
-                })),
+                spriteBillboards: batch.map((event, index) => new SpriteBillboard(
+                    firstVertex + index * 4,
+                    event.origin,
+                    width / 2,
+                    height / 2,
+                    {
+                        spawnTick: lifetime === undefined ? undefined : event.spawnTick,
+                        lifetime,
+                        loopTicks: lifetime === undefined ? undefined : loopTicks,
+                        velocityY: event.velocityY,
+                        maxDistance,
+                        fadeStartDistance,
+                    },
+                )),
             };
             const meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);
@@ -1551,7 +1553,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const key = `${definition.model}:${definition.animation ?? -1}:${speed}`;
             let pose = actorPoses.get(key);
             if (pose === undefined) {
-                pose = createActorAnimationPose(
+                pose = new ActorAnimationPose(
                     romData.loadActorGeometry(definition.model),
                     definition.animation !== null ? romData.loadAnimation(definition.animation) : null,
                     speed,
