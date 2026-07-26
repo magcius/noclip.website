@@ -35,7 +35,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLight, DynamicLighting, ObjectLighting, ObjectLightingEnvironment } from './light.js';
-import { actorModelScale, buildActorMesh, createActorAnimationPose, getActorRenderDefinition, updateActorAnimation } from './actor.js';
+import { actorModelScale, buildActorMesh, createActorAnimationPose, getActorRenderDefinition, updateActorPose } from './actor.js';
 import type { ActorAnimationPose, ActorAnimationState, ActorMesh, ActorRenderDefinition } from './actor.js';
 import { addModel2Props, buildTerrainTriangles, updatePropAnimation } from './prop.js';
 import type { PropAnimationState } from './prop.js';
@@ -168,8 +168,6 @@ function createGeneratedSurfaceVertexBuffer(surface: GeneratedSurface): ArrayBuf
     return new ArrayBufferSlice(buffer);
 }
 
-const viewMatrixScratch = mat4.create();
-const texMatrixScratch = mat4.create();
 interface FogParams {
     near: number;
     far: number;
@@ -195,9 +193,12 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     private isTranslucent = false;
     private crossfadeDuration = 0;
+    private viewMatrix = mat4.create();
+    private boneModelViewMatrix = mat4.create();
+    private textureMatrix = mat4.create();
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, gpuTextureCache: GPUTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, gpuTextureCache: GPUTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams, private boneMatrices: mat4[] | undefined) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const textureIndex = drawCall.textureIndices[i];
@@ -237,7 +238,7 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
-        program.defines.set('BONE_MATRIX_COUNT', '1');
+        program.defines.set('BONE_MATRIX_COUNT', (this.boneMatrices?.length ?? 1).toString());
 
         if (this.texturesEnabled && this.textureEntry.length)
             program.defines.set('USE_TEXTURE', '1');
@@ -359,22 +360,30 @@ class DrawCallInstance {
         renderInst.setDrawCount(indexCount, firstIndex);
 
         const usesFog = this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG) !== 0;
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2 + (usesFog ? 8 : 0));
+        const boneMatrixCount = this.boneMatrices?.length ?? 1;
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 * boneMatrixCount + 8*2 + (usesFog ? 8 : 0));
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         if (isSkybox)
-            computeViewMatrixSkybox(viewMatrixScratch, viewerInput.camera);
+            computeViewMatrixSkybox(this.viewMatrix, viewerInput.camera);
         else
-            computeViewMatrix(viewMatrixScratch, viewerInput.camera);
-        mat4.mul(viewMatrixScratch, viewMatrixScratch, modelMatrix);
+            computeViewMatrix(this.viewMatrix, viewerInput.camera);
+        mat4.mul(this.viewMatrix, this.viewMatrix, modelMatrix);
 
-        offs += fillMatrix4x3(mappedF32, offs, viewMatrixScratch); // u_ModelView
+        if (this.boneMatrices !== undefined) {
+            for (const boneMatrix of this.boneMatrices) {
+                mat4.mul(this.boneModelViewMatrix, this.viewMatrix, boneMatrix);
+                offs += fillMatrix4x3(mappedF32, offs, this.boneModelViewMatrix); // u_BoneMatrix
+            }
+        } else {
+            offs += fillMatrix4x3(mappedF32, offs, this.viewMatrix); // u_BoneMatrix
+        }
 
-        this.computeTextureMatrix(texMatrixScratch, 0, viewerInput.time);
-        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[0]
+        this.computeTextureMatrix(this.textureMatrix, 0, viewerInput.time);
+        offs += fillMatrix4x2(mappedF32, offs, this.textureMatrix); // u_TexMatrix[0]
 
-        this.computeTextureMatrix(texMatrixScratch, 1, viewerInput.time);
-        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[1]
+        this.computeTextureMatrix(this.textureMatrix, 1, viewerInput.time);
+        offs += fillMatrix4x2(mappedF32, offs, this.textureMatrix); // u_TexMatrix[1]
 
         if (usesFog) {
             offs += fillVec4(mappedF32, offs, this.fogParams.near, this.fogParams.far, 0, 0);
@@ -405,14 +414,16 @@ class DrawCallInstance {
     }
 }
 
-function makeVertexBufferData(v: Vertex[]): Float32Array {
+function makeVertexBufferData(v: Vertex[], actorAnimation: ActorAnimationState | undefined): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
         buf[j++] = v[i].x;
         buf[j++] = v[i].y;
         buf[j++] = v[i].z;
-        buf[j++] = 1.0;
+        buf[j++] = actorAnimation !== undefined
+            ? Math.min(v[i].matrixIndex, actorAnimation.pose.boneMatrices.length - 1)
+            : 1.0;
 
         buf[j++] = v[i].tx;
         buf[j++] = v[i].ty;
@@ -463,7 +474,7 @@ export class RenderData {
         this.vertexStart = vertexStart;
 
         assert(vertexEnd - this.vertexStart <= 0xFFFFFFFF);
-        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd));
+        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd), mesh.actorAnimation);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
 
         const indexBufferData = Uint32Array.from(sharedIndices, (vertexIndex) => vertexIndex - this.vertexStart);
@@ -534,8 +545,6 @@ function getDynamicVertexRange(mesh: Mesh): { start: number, end: number } | nul
     };
     if (mesh.generatedSurfaceAnimation !== undefined)
         include(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
-    if (mesh.actorAnimation !== undefined)
-        include(mesh.actorAnimation.firstVertex, mesh.actorAnimation.vertexCount);
     if (mesh.propAnimation !== undefined)
         for (const vertexOffset of mesh.propAnimation.vertexOffsets)
             include(mesh.propAnimation.firstVertex + vertexOffset, 1);
@@ -555,7 +564,7 @@ export class MeshData {
     public spriteFades: number[] | null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.actorAnimation !== undefined || mesh.propAnimation !== undefined);
+        this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.propAnimation !== undefined);
         this.spriteFades = mesh.spriteBillboards !== undefined ? nArray(mesh.spriteBillboards.length, () => 1) : null;
         this.lightingDirty = mesh.dynamicLighting !== undefined;
         this.cullBounds = new MeshBounds(
@@ -610,7 +619,7 @@ export class MeshData {
             this.lightingDirty = false;
         }
         if (actorAnimation !== undefined)
-            updateActorAnimation(actorAnimation, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
+            updateActorPose(actorAnimation.pose, tick);
         if (propAnimation !== undefined)
             updatePropAnimation(propAnimation, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
@@ -738,8 +747,6 @@ class MeshRenderer {
     }
 }
 
-const lookatScratch = vec3.create();
-const modelViewScratch = mat4.create();
 export class RootMeshRenderer {
     private visible = true;
     private cullBoundingBox: AABB | null = null;
@@ -758,6 +765,8 @@ export class RootMeshRenderer {
     private cameraBillboard: { origin: vec3; scale: number } | null = null;
     private objectLighting: ObjectLighting | null = null;
     private objectLightColor = vec3.create();
+    private lookAtPosition = vec3.create();
+    private lookAtMatrix = mat4.create();
 
     public objectFlags = 0;
     private rootNodeRenderer: MeshRenderer;
@@ -801,7 +810,7 @@ export class RootMeshRenderer {
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
                 const drawCall = node.rspOutput.drawCalls[i];
-                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams);
+                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams, node.actorAnimation?.pose.boneMatrices);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -927,12 +936,12 @@ export class RootMeshRenderer {
 
         if (this.computeLookAt) {
             // compute lookat X and Y in view space, since that's the transform the shader will have
-            mat4.getTranslation(lookatScratch, this.modelMatrix);
-            vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
+            mat4.getTranslation(this.lookAtPosition, this.modelMatrix);
+            vec3.transformMat4(this.lookAtPosition, this.lookAtPosition, viewerInput.camera.viewMatrix);
 
-            mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
-            offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
-            offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
+            mat4.lookAt(this.lookAtMatrix, Vec3Zero, this.lookAtPosition, Vec3UnitY);
+            offs += fillVec4(mappedF32, offs, this.lookAtMatrix[0], this.lookAtMatrix[4], this.lookAtMatrix[8]);
+            offs += fillVec4(mappedF32, offs, this.lookAtMatrix[1], this.lookAtMatrix[5], this.lookAtMatrix[9]);
         }
 
         const objectLightColor = this.objectLighting !== null
@@ -1303,14 +1312,11 @@ function addSceneActors(
                 romData.TexData,
                 sharedOutput,
             );
-            const actorAnimation = definition.animation !== null ? actorMesh.animation : undefined;
-            if (actorAnimation === undefined)
-                updateActorAnimation(actorMesh.animation, sharedOutput.vertices, null, 0, 0);
             const mesh: Mesh = {
                 sharedOutput,
                 rspState: actorMesh.rspState,
                 rspOutput: actorMesh.rspOutput,
-                actorAnimation,
+                actorAnimation: actorMesh.animation,
             };
             meshData = new MeshData(device, cache, mesh);
             sceneRenderer.meshDatas.push(meshData);

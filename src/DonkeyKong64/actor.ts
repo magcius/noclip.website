@@ -1,7 +1,6 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import type { AABB } from '../Geometry.js';
@@ -30,10 +29,6 @@ export interface ActorAnimationPose {
 }
 
 export interface ActorAnimationState {
-    firstVertex: number;
-    vertexCount: number;
-    sourcePositions: Float32Array;
-    boneIndices: Uint8Array;
     pose: ActorAnimationPose;
     boundingBox: AABB;
 }
@@ -269,11 +264,11 @@ export function buildActorMesh(
     }
     const output = state.finish()!;
 
-    const vertexCount = sharedOutput.vertices.length - firstVertex;
-    const sourcePositions = new Float32Array(vertexCount * 3);
-    const boneIndices = new Uint8Array(vertexCount);
-    for (let i = 0; i < vertexCount; i++) {
-        const vertex = sharedOutput.vertices[firstVertex + i];
+    const vertices = sharedOutput.vertices.slice(firstVertex);
+    const sourcePositions = new Float32Array(vertices.length * 3);
+    const boneIndices = new Uint8Array(vertices.length);
+    for (let i = 0; i < vertices.length; i++) {
+        const vertex = vertices[i];
         sourcePositions[i * 3 + 0] = vertex.x;
         sourcePositions[i * 3 + 1] = vertex.y;
         sourcePositions[i * 3 + 2] = vertex.z;
@@ -283,10 +278,6 @@ export function buildActorMesh(
         rspState: state,
         rspOutput: output,
         animation: {
-            firstVertex,
-            vertexCount,
-            sourcePositions,
-            boneIndices,
             pose,
             boundingBox: computeSkeletalAnimationBoundingBox(
                 sourcePositions, boneIndices, pose.skeleton.offsets, pose.skeleton.parents,
@@ -309,36 +300,4 @@ export function updateActorPose(pose: ActorAnimationPose, tick: number): void {
         mat4.rotateZ(matrix, matrix, boneAngles[i] ?? 0);
     }
     pose.lastTick = tick;
-}
-
-export function updateActorAnimation(
-    state: ActorAnimationState,
-    vertices: Vertex[],
-    vertexBufferData: Float32Array | null,
-    vertexBufferFirstVertex: number,
-    tick: number,
-): void {
-    updateActorPose(state.pose, tick);
-    const sourcePosition = vec3.create();
-    const skinnedPosition = vec3.create();
-
-    for (let i = 0; i < state.vertexCount; i++) {
-        const bone = state.boneIndices[i];
-        vec3.set(sourcePosition,
-            state.sourcePositions[i * 3 + 0],
-            state.sourcePositions[i * 3 + 1],
-            state.sourcePositions[i * 3 + 2],
-        );
-        vec3.transformMat4(skinnedPosition, sourcePosition, state.pose.boneMatrices[bone]);
-        const vertexIndex = state.firstVertex + i;
-        vertices[vertexIndex].x = skinnedPosition[0];
-        vertices[vertexIndex].y = skinnedPosition[1];
-        vertices[vertexIndex].z = skinnedPosition[2];
-        if (vertexBufferData !== null) {
-            const localVertex = (vertexIndex - vertexBufferFirstVertex) * 10;
-            vertexBufferData[localVertex + 0] = skinnedPosition[0];
-            vertexBufferData[localVertex + 1] = skinnedPosition[1];
-            vertexBufferData[localVertex + 2] = skinnedPosition[2];
-        }
-    }
 }
