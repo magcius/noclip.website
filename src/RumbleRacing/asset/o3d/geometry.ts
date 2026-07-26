@@ -3,9 +3,19 @@ import { Color, colorNewFromRGBA } from "../../../Color";
 import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
 
+// The game never writes TEST_1/TEST_2/PABE, so there is no alpha testing
+// anywhere; blending is opted into per buffer with PRMODE's ABE bit, and the
+// ALPHA register picks between plain source-over and additive.
+export const enum BlendMode {
+  None,
+  SourceOver,
+  Additive,
+}
+
 export interface Primitive {
   totalVertsInPrimitive: number;
   primType: number;
+  blendMode: BlendMode;
   vertices: {
     position: vec3;
     // A vertex carries either a normal (lit at runtime) or a baked RGBA color,
@@ -22,6 +32,7 @@ export interface Buffer {
   numStrips: number;
   primitives: Primitive[];
   textureId: number;
+  blendMode: BlendMode;
 }
 
 export interface Geometry {
@@ -37,12 +48,52 @@ interface Triple {
 interface StripChunk {
   gifTagV1: number;
   gifTagV2: number;
+  blendMode: BlendMode;
   dataTriples: Triple[];
 }
 
 interface BufferChunk {
   bufferHeader: { v1: number; v2: number; lastOffset: number }[];
   strips: StripChunk[];
+}
+
+const GS_PRMODE = 0x1b;
+const GS_ALPHA_1 = 0x42;
+const GS_ALPHA_2 = 0x43;
+
+const PRMODE_ABE = 1 << 6;
+
+// GS state that persists across buffers: a buffer that doesn't write these
+// registers inherits whatever the previous one left behind.
+interface GSState {
+  abe: boolean;
+  alphaBlendMode: BlendMode;
+}
+
+// ALPHA is (A - B) * C + D. Only 0x44 (A=Cs B=Cd C=As D=Cd, source-over) and
+// 0x48 (A=Cs B=0 C=As D=Cd, additive) show up in the track data, and they only
+// differ in B, so that's all we key off.
+function decodeAlphaRegister(value: number): BlendMode {
+  const b = (value >>> 2) & 0x03;
+  return b === 2 ? BlendMode.Additive : BlendMode.SourceOver;
+}
+
+// The header quads are GS register writes in A+D form: 64 bits of data in
+// v1/v2, the register address in the low byte of v3.
+function applyGSRegisters(unpack: UnpackData, state: GSState): void {
+  for (const entry of unpack.v4_32) {
+    if (entry.v3 >>> 8 !== 0 || entry.v4 !== 0) continue;
+
+    switch (entry.v3 & 0xff) {
+      case GS_PRMODE:
+        state.abe = (entry.v1 & PRMODE_ABE) !== 0;
+        break;
+      case GS_ALPHA_1:
+      case GS_ALPHA_2:
+        state.alphaBlendMode = decodeAlphaRegister(entry.v1);
+        break;
+    }
+  }
 }
 
 export interface TextureEntry {
@@ -57,6 +108,7 @@ export interface TextureMeta {
 
 function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
   const result: BufferChunk[] = [];
+  const gs: GSState = { abe: false, alphaBlendMode: BlendMode.SourceOver };
   let i = 0;
 
   while (i < filtered.length) {
@@ -70,6 +122,7 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         v2: e.v2,
         lastOffset: e.offset,
       }));
+      applyGSRegisters(filtered[i].unpack!, gs);
       i++;
 
       const strips: StripChunk[] = [];
@@ -88,9 +141,11 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         }
 
         const gifEntries = filtered[i].unpack!.v4_32;
+        applyGSRegisters(filtered[i].unpack!, gs);
         const sChunk: StripChunk = {
           gifTagV1: gifEntries.length > 0 ? gifEntries[0].v1 : 0,
           gifTagV2: gifEntries.length > 0 ? gifEntries[0].v2 : 0,
+          blendMode: gs.abe ? gs.alphaBlendMode : BlendMode.None,
           dataTriples: [],
         };
         i++;
@@ -153,12 +208,14 @@ export function getGeometry(
       numHeaderLines: bChunk.bufferHeader[0]?.v2 ?? 0,
       primitives: [],
       textureId: findTextureId(textures, lastHeader?.lastOffset ?? 0),
+      blendMode: BlendMode.None,
     };
 
     for (const sChunk of bChunk.strips) {
       const strip: Primitive = {
         totalVertsInPrimitive: sChunk.gifTagV1 & 0x7fff,
         primType: (sChunk.gifTagV2 & (0b111 << 15)) >> 15,
+        blendMode: sChunk.blendMode,
         vertices: [],
       };
 
@@ -218,6 +275,10 @@ export function getGeometry(
       }
 
       buf.primitives.push(strip);
+
+      // A buffer draws as one call, so take the heaviest blend its strips ask
+      // for. In practice every strip in a buffer agrees.
+      if (strip.blendMode > buf.blendMode) buf.blendMode = strip.blendMode;
     }
 
     geometry.buffers.push(buf);

@@ -5,6 +5,7 @@ import {
   ParsedAsset,
 } from "./file/track";
 import { ObfNode } from "./asset/o3d/obf";
+import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
 import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { ReadonlyVec3, vec2, vec3 } from "gl-matrix";
@@ -22,7 +23,7 @@ export interface DrawCall {
   indexCount: number;
   textureId: number;
   hasVertexColors: boolean;
-  translucent: boolean;
+  blendMode: BlendMode;
 }
 
 export interface JsonBuffer {
@@ -36,9 +37,9 @@ export interface JsonBuffer {
   // Vertices come with either normals or baked vertex colors; this says which
   // one this buffer's data actually holds.
   hasVertexColors: boolean;
-  // Some vertex colors carry an alpha below 0x80 (a fair few are flat 0x00), so
-  // those buffers have to be blended after the opaque geometry.
-  translucent: boolean;
+  // Straight from PRMODE's ABE bit and the ALPHA register. Vertex alpha alone
+  // says nothing about this: most blended buffers are 100% opaque per-vertex.
+  blendMode: BlendMode;
   indices: number[];
 }
 
@@ -110,7 +111,6 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       const normals: ReadonlyVec3[] = [];
       const colors: Color[] = [];
       let hasVertexColors = false;
-      let translucent = false;
 
       for (const strip of buf.primitives) {
         const base = positions.length;
@@ -120,10 +120,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
           normals.push(vert.normal ?? Vec3Zero);
           colors.push(vert.color ?? White);
           uvs.push(vert.uv);
-          if (vert.color !== null) {
-            hasVertexColors = true;
-            if (vert.color.a < 1.0) translucent = true;
-          }
+          if (vert.color !== null) hasVertexColors = true;
         }
 
         let isFlipped = false;
@@ -157,7 +154,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
         normals,
         colors,
         hasVertexColors,
-        translucent,
+        blendMode: buf.blendMode,
         indices,
       });
     }

@@ -46,10 +46,9 @@ in vec3 v_Normal;
 in vec4 v_Color;
 
 void main() {
+    // No alpha testing: the game never writes TEST_1/TEST_2/PABE, so texture
+    // alpha only ever feeds the blend equation.
     vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
-
-    if (color.a < 0.99)
-        discard;
 
 #ifdef USE_VERTEX_COLOR
     gl_FragColor = color * v_Color;

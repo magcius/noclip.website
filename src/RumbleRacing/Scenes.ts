@@ -36,6 +36,9 @@ import {
   GfxRenderInst,
   GfxRenderInstList,
 } from "../gfx/render/GfxRenderInstManager";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { BlendMode } from "./asset/o3d/geometry";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
@@ -47,10 +50,12 @@ const pathBase = `RumbleRacing`;
 
 const GLOBAL_SCALE = 300.0; // this feels the best
 
+const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
+
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
   private renderInstList = new GfxRenderInstList();
-  private translucentRenderInstList = new GfxRenderInstList();
+  private blendedRenderInstList = new GfxRenderInstList();
   private trackGeometries: ObfGeometry[] = [];
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
   private trackProgram: GfxProgram;
@@ -186,37 +191,31 @@ class RumbleRacingScene implements SceneGfx {
       );
       fillMatrix4x3(meshParams, 0, modelMatrix);
 
-      if (dc.translucent) {
+      if (dc.blendMode === BlendMode.None) {
+        this.renderInstList.submitRenderInst(renderInst);
+      } else {
         // Blended geometry can't own the depth buffer, or it punches holes that
         // reject the opaque geometry sitting behind it.
         renderInst.setMegaStateFlags({ depthWrite: false });
-        this.translucentRenderInstList.submitRenderInst(renderInst);
-      } else {
-        this.renderInstList.submitRenderInst(renderInst);
+        setAttachmentStateSimple(megaStateScratch, {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.SrcAlpha,
+          blendDstFactor:
+            dc.blendMode === BlendMode.Additive
+              ? GfxBlendFactor.One // ALPHA 0x48: Cs * As + Cd
+              : GfxBlendFactor.OneMinusSrcAlpha, // ALPHA 0x44: (Cs - Cd) * As + Cd
+        });
+        renderInst.setMegaStateFlags(megaStateScratch);
+        this.blendedRenderInstList.submitRenderInst(renderInst);
       }
     }
   }
 
   private renderMap(): void {
+    // Blending is opted into per draw call from PRMODE's ABE bit, so the
+    // default here has to be fully opaque.
     const template = this.renderHelper.renderInstManager.pushTemplate();
-    template.setMegaStateFlags({
-      cullMode: GfxCullMode.None,
-      attachmentsState: [
-        {
-          channelWriteMask: GfxChannelWriteMask.AllChannels,
-          rgbBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-          },
-          alphaBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.One,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-          },
-        },
-      ],
-    });
+    template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
     const trackMatrix = mat4.create();
     mat4.scale(trackMatrix, trackMatrix, [
@@ -312,7 +311,7 @@ class RumbleRacingScene implements SceneGfx {
           this.renderHelper.renderCache,
           passRenderer,
         );
-        this.translucentRenderInstList.drawOnPassRenderer(
+        this.blendedRenderInstList.drawOnPassRenderer(
           this.renderHelper.renderCache,
           passRenderer,
         );
