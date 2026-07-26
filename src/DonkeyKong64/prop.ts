@@ -13,7 +13,8 @@ import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
 import type { InstanceScript, SetupProp } from './parse.js';
-import type { DK64Renderer, Mesh, ROMData, RootMeshRenderer } from './scenes.js';
+import type { DK64Renderer, ROMData } from './scenes.js';
+import type { Mesh, RootMeshRenderer } from './render.js';
 import { computeBillboardBoundingBox } from './cull.js';
 
 export interface TerrainTriangle {
