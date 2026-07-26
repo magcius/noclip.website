@@ -109,8 +109,8 @@ export class RSPState {
     private textureScrollSpeeds: number[] = [];
 
     public SP_MatrixIndex = 0;
-    private SP_ModelViewMatrixIndices: number[] = [];
-    private SP_ModelViewMatrixStack: number[][] = [];
+    // Animated props need to recompute a transform each frame: this stores matrix source indices.
+    private matrixStack: number[][] = [];
     public DP_Half1 = 0;
 
     constructor(public textureBuffers: ArrayBufferSlice[], public segmentBuffers: ArrayBufferSlice[], public sharedOutput: RSPSharedOutput, private animatedTextures: AnimatedTexture[] = []) {
@@ -166,7 +166,7 @@ export class RSPState {
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
             this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
-            this.vertexCacheModelViewMatrixIndices[v0 + i] = this.SP_ModelViewMatrixIndices;
+            this.vertexCacheModelViewMatrixIndices[v0 + i] = this.matrixStack[this.matrixStack.length - 1] ?? [];
             this.vertexCacheSourceAddresses[v0 + i] = dramAddr + i * 0x10;
         }
     }
@@ -176,18 +176,19 @@ export class RSPState {
         if (segment !== 0x04 && segment !== 0x09)
             return;
         const matrixIndex = (dramAddr & 0x00FFFFFF) >>> 6;
+        const mvMatrix = this.matrixStack.pop() ?? [];
         if (matrixParams & G_MTX_PUSH)
-            this.SP_ModelViewMatrixStack.push(this.SP_ModelViewMatrixIndices);
-        if (matrixParams & G_MTX_LOAD)
-            this.SP_ModelViewMatrixIndices = [matrixIndex];
-        else
-            this.SP_ModelViewMatrixIndices = [...this.SP_ModelViewMatrixIndices, matrixIndex];
+            this.matrixStack.push(mvMatrix);
+        this.matrixStack.push(
+            matrixParams & G_MTX_LOAD ? [matrixIndex] : [...mvMatrix, matrixIndex],
+        );
         this.SP_MatrixIndex = matrixIndex;
     }
 
     public gSPPopMatrix(): void {
-        this.SP_ModelViewMatrixIndices = this.SP_ModelViewMatrixStack.pop() ?? [];
-        this.SP_MatrixIndex = this.SP_ModelViewMatrixIndices[this.SP_ModelViewMatrixIndices.length - 1] ?? 0;
+        this.matrixStack.pop();
+        const mvMatrix = this.matrixStack[this.matrixStack.length - 1] ?? [];
+        this.SP_MatrixIndex = mvMatrix[mvMatrix.length - 1] ?? 0;
     }
 
     private _translateAnimatedTextureFrames(frames: ArrayBufferSlice[], segment: number, dramAddr: number, tile: RDP.TileState, deinterleave: boolean): number[] {
