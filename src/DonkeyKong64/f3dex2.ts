@@ -260,7 +260,7 @@ export class RSPState {
 
     private _flushTextures(dc: DrawCall): void {
         // If textures are not on, then we have no textures.
-        // G_TEXTURE can remain enabled across untextured actor materials.
+        // If combiners are not reading textures, then we have no textures.
         if (!this.SP_TextureState.on
             || (!RDP.combineParamsUsesT0(dc.DP_Combine) && !RDP.combineParamsUsesT1(dc.DP_Combine)))
             return;
