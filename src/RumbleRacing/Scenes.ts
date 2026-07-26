@@ -105,7 +105,7 @@ class RumbleRacingScene implements SceneGfx {
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
       magFilter: GfxTexFilterMode.Bilinear,
-      mipFilter: GfxMipFilterMode.Nearest,
+      mipFilter: GfxMipFilterMode.Linear,
       wrapS: GfxWrapMode.Repeat,
       wrapT: GfxWrapMode.Repeat,
     });
@@ -136,11 +136,11 @@ class RumbleRacingScene implements SceneGfx {
           GfxFormat.U8_RGBA_NORM,
           texture.width,
           texture.height,
-          1,
+          texture.levels.length,
         ),
       );
 
-      device.uploadTextureData(tex, 0, [texture.pngBytes]);
+      device.uploadTextureData(tex, 0, texture.levels);
       device.setResourceName(tex, `texture_${texture.textureId}`);
 
       this.textureMap.set(texture.textureId, tex);

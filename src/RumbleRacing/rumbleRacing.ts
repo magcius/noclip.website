@@ -82,7 +82,7 @@ export interface ActorData {
 
 export interface TextureData {
   textureId: number;
-  pngBytes: Uint8Array;
+  levels: Uint8Array[];
   width: number;
   height: number;
 }
@@ -241,12 +241,13 @@ export function processTrackFile(
       }
       case "TXF": {
         for (const tex of getTextures(resource)) {
-          const img = tex.files[0];
+          if (tex.files.length === 0) continue;
+          const base = tex.files[0];
           out.textures.push({
             textureId: tex.textureId,
-            pngBytes: img.image.pix,
-            width: img.width,
-            height: img.height,
+            levels: tex.files.map((file) => file.image.pix),
+            width: base.width,
+            height: base.height,
           });
         }
         break;
