@@ -3,9 +3,8 @@ import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
-import type { AABB } from '../Geometry.js';
+import { AABB } from '../Geometry.js';
 import { lerp, MathConstants } from '../MathHelpers.js';
-import { computeSkeletalAnimationBoundingBox } from './cull.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 
 interface ActorAnimation {
@@ -58,8 +57,24 @@ export class ActorAnimationPose {
     }
 
     public computeBoundingBox(sourcePositions: Float32Array, boneIndices: Uint8Array): AABB {
-        return computeSkeletalAnimationBoundingBox(
-            sourcePositions, boneIndices, this.skeleton.offsets, this.skeleton.parents,
+        let radius = 0;
+        for (let i = 0; i < sourcePositions.length / 3; i++) {
+            let vertexRadius = Math.hypot(
+                sourcePositions[i * 3 + 0],
+                sourcePositions[i * 3 + 1],
+                sourcePositions[i * 3 + 2],
+            );
+            let bone = Math.min(boneIndices[i], this.skeleton.offsets.length - 1);
+            for (let depth = 0; bone >= 0 && depth < this.skeleton.offsets.length; depth++) {
+                const offset = this.skeleton.offsets[bone];
+                vertexRadius += Math.hypot(offset[0], offset[1], offset[2]);
+                bone = this.skeleton.parents[bone];
+            }
+            radius = Math.max(radius, vertexRadius);
+        }
+        return new AABB(
+            -radius, -radius, -radius,
+            radius, radius, radius,
         );
     }
 }

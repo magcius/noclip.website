@@ -12,7 +12,6 @@ interface RootTransformCullAnimation {
 
 function computeDisplayListBoundingBox(sharedOutput: RSPSharedOutput, output: RSPOutput): AABB | null {
     const boundingBox = new AABB();
-    let hasVertices = false;
     for (const drawCall of output.drawCalls) {
         const indexEnd = drawCall.firstIndex + drawCall.indexCount;
         for (let index = drawCall.firstIndex; index < indexEnd; index++) {
@@ -23,10 +22,9 @@ function computeDisplayListBoundingBox(sharedOutput: RSPSharedOutput, output: RS
             boundingBox.max[0] = Math.max(boundingBox.max[0], vertex.x);
             boundingBox.max[1] = Math.max(boundingBox.max[1], vertex.y);
             boundingBox.max[2] = Math.max(boundingBox.max[2], vertex.z);
-            hasVertices = true;
         }
     }
-    return hasVertices ? boundingBox : null;
+    return boundingBox.min[0] <= boundingBox.max[0] ? boundingBox : null;
 }
 
 export function computeBillboardBoundingBox(
@@ -49,42 +47,40 @@ export function computeBillboardBoundingBox(
 }
 
 export class MeshBounds {
-    private localBoundingBox: AABB | null | undefined;
+    private localBoundingBox: AABB | null;
 
     constructor(
-        private sharedOutput: RSPSharedOutput,
-        private output: RSPOutput | null,
-        private animationBoundingBox: AABB | undefined,
-        private animationTranslationBounds: AABB | undefined,
-        private paddingRatio: number,
+        sharedOutput: RSPSharedOutput,
+        output: RSPOutput | null,
+        animationBoundingBox: AABB | undefined,
+        animationTranslationBounds: AABB | undefined,
+        paddingRatio: number,
     ) {
+        this.localBoundingBox = output === null
+            ? null
+            : computeDisplayListBoundingBox(sharedOutput, output);
+        if (this.localBoundingBox !== null) {
+            if (animationBoundingBox !== undefined)
+                this.localBoundingBox.union(this.localBoundingBox, animationBoundingBox);
+            if (animationTranslationBounds !== undefined) {
+                for (let axis = 0; axis < 3; axis++) {
+                    this.localBoundingBox.min[axis] += animationTranslationBounds.min[axis];
+                    this.localBoundingBox.max[axis] += animationTranslationBounds.max[axis];
+                }
+            }
+            const padding = Math.max(
+                this.localBoundingBox.max[0] - this.localBoundingBox.min[0],
+                this.localBoundingBox.max[1] - this.localBoundingBox.min[1],
+                this.localBoundingBox.max[2] - this.localBoundingBox.min[2],
+            ) * paddingRatio;
+            for (let axis = 0; axis < 3; axis++) {
+                this.localBoundingBox.min[axis] -= padding;
+                this.localBoundingBox.max[axis] += padding;
+            }
+        }
     }
 
     public getLocal(): AABB | null {
-        if (this.localBoundingBox === undefined) {
-            this.localBoundingBox = this.output === null
-                ? null
-                : computeDisplayListBoundingBox(this.sharedOutput, this.output);
-            if (this.localBoundingBox !== null) {
-                if (this.animationBoundingBox !== undefined)
-                    this.localBoundingBox.union(this.localBoundingBox, this.animationBoundingBox);
-                if (this.animationTranslationBounds !== undefined) {
-                    for (let axis = 0; axis < 3; axis++) {
-                        this.localBoundingBox.min[axis] += this.animationTranslationBounds.min[axis];
-                        this.localBoundingBox.max[axis] += this.animationTranslationBounds.max[axis];
-                    }
-                }
-                const padding = Math.max(
-                    this.localBoundingBox.max[0] - this.localBoundingBox.min[0],
-                    this.localBoundingBox.max[1] - this.localBoundingBox.min[1],
-                    this.localBoundingBox.max[2] - this.localBoundingBox.min[2],
-                ) * this.paddingRatio;
-                for (let axis = 0; axis < 3; axis++) {
-                    this.localBoundingBox.min[axis] -= padding;
-                    this.localBoundingBox.max[axis] += padding;
-                }
-            }
-        }
         return this.localBoundingBox;
     }
 
@@ -113,31 +109,4 @@ export class MeshBounds {
         }
         return worldBoundingBox;
     }
-}
-
-export function computeSkeletalAnimationBoundingBox(
-    sourcePositions: Float32Array,
-    boneIndices: Uint8Array,
-    boneOffsets: readonly ReadonlyVec3[],
-    boneParents: readonly number[],
-): AABB {
-    let boundingRadius = 0;
-    for (let i = 0; i < sourcePositions.length / 3; i++) {
-        let radius = Math.hypot(
-            sourcePositions[i * 3 + 0],
-            sourcePositions[i * 3 + 1],
-            sourcePositions[i * 3 + 2],
-        );
-        let bone = Math.min(boneIndices[i], boneOffsets.length - 1);
-        for (let depth = 0; bone >= 0 && depth < boneOffsets.length; depth++) {
-            const offset = boneOffsets[bone];
-            radius += Math.hypot(offset[0], offset[1], offset[2]);
-            bone = boneParents[bone];
-        }
-        boundingRadius = Math.max(boundingRadius, radius);
-    }
-    return new AABB(
-        -boundingRadius, -boundingRadius, -boundingRadius,
-        boundingRadius, boundingRadius, boundingRadius,
-    );
 }
