@@ -1,5 +1,6 @@
 import { vec3 } from 'gl-matrix';
 
+import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { MathConstants } from '../MathHelpers.js';
 import { actorModelScale, getActorRenderDefinition, updateActorPose } from './actor.js';
