@@ -2,6 +2,7 @@ import { vec3 } from 'gl-matrix';
 
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
+import { MathConstants } from '../MathHelpers.js';
 import { actorModelScale, getActorRenderDefinition, parseActorAnimation, parseActorSkeleton, sampleActorBonePosition } from './actor.js';
 import type { ActorAnimation, ActorSkeleton } from './actor.js';
 import type { DrawTextureAnimation } from './f3dex2.js';
@@ -343,8 +344,8 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
                 light.color[2] * cameraFade,
             ],
             direction,
-            innerConeCos: Math.cos(light.innerAngle * Math.PI / 180),
-            outerConeCos: Math.cos(light.outerAngle * Math.PI / 180),
+            innerConeCos: Math.cos(light.innerAngle * MathConstants.DEG_TO_RAD),
+            outerConeCos: Math.cos(light.outerAngle * MathConstants.DEG_TO_RAD),
         };
     }
     const keyframes = light.animation;

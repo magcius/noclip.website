@@ -3,12 +3,13 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
+import { Color, colorLerp, colorNewFromRGBA8 } from '../Color.js';
 import { decodeTex_RGBA16, TextFilt } from '../Common/N64/Image.js';
 import * as RDP from '../Common/N64/RDP.js';
 import { OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import {
-    fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4,
+    fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4,
 } from '../gfx/helpers/UniformBufferHelpers.js';
 import {
     GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint,
@@ -45,33 +46,30 @@ function wrap01(v: number): number {
     return v - Math.floor(v);
 }
 
-function calcAztecBeetleRaceTint(height: number): readonly [number, number, number] {
+function calcAztecBeetleRaceTint(height: number): Color {
     // From func_global_asm_807065F8 and D_global_asm_80754F58
-    const keys: readonly (readonly [number, number, number, number])[] = [
-        [0, 0xFF, 0x00, 0x00],
-        [1900, 0x00, 0x00, 0xFF],
-        [3600, 0x00, 0xFF, 0x00],
-        [5300, 0xFF, 0x00, 0x00],
+    const keys: readonly (readonly [number, Color])[] = [
+        [0, colorNewFromRGBA8(0xFF0000FF)],
+        [1900, colorNewFromRGBA8(0x0000FFFF)],
+        [3600, colorNewFromRGBA8(0x00FF00FF)],
+        [5300, colorNewFromRGBA8(0xFF0000FF)],
     ];
     if (height <= keys[0][0])
-        return [keys[0][1] / 0xFF, keys[0][2] / 0xFF, keys[0][3] / 0xFF];
+        return keys[0][1];
     for (let i = 1; i < keys.length; i++) {
         if (height <= keys[i][0]) {
             const prev = keys[i - 1];
             const next = keys[i];
             const t = (height - prev[0]) / (next[0] - prev[0]);
-            return [
-                (prev[1] + (next[1] - prev[1]) * t) / 0xFF,
-                (prev[2] + (next[2] - prev[2]) * t) / 0xFF,
-                (prev[3] + (next[3] - prev[3]) * t) / 0xFF,
-            ];
+            const color = colorNewFromRGBA8(0);
+            colorLerp(color, prev[1], next[1], t);
+            return color;
         }
     }
-    const last = keys[keys.length - 1];
-    return [last[1] / 0xFF, last[2] / 0xFF, last[3] / 0xFF];
+    return keys[keys.length - 1][1];
 }
 
-function calcBackdropTint(mapID: number, height: number): readonly [number, number, number] {
+function calcBackdropTint(mapID: number, height: number): Color {
     if (mapID === 0x0E)
         return calcAztecBeetleRaceTint(height);
 
@@ -89,9 +87,9 @@ function calcBackdropTint(mapID: number, height: number): readonly [number, numb
     case 0x7E:
     case 0x7F:
     case 0x80:
-        return [0x3F / 0xFF, 0x3F / 0xFF, 0x3F / 0xFF];
+        return colorNewFromRGBA8(0x3F3F3FFF);
     default:
-        return [1, 1, 1];
+        return colorNewFromRGBA8(0xFFFFFFFF);
     }
 }
 
@@ -208,7 +206,7 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         const tint = calcBackdropTint(this.mapID, camera[13] / 3);
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillVec4(mapped, offs, tint[0], tint[1], tint[2], 1);
+        offs += fillColor(mapped, offs, tint);
         fillVec4(mapped, offs, 1, 1, 1, 1);
 
         renderInstManager.submitRenderInst(renderInst);

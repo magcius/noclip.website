@@ -5,6 +5,7 @@ import { Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import type { AABB } from '../Geometry.js';
+import { lerp, MathConstants } from '../MathHelpers.js';
 import { computeSkeletalAnimationBoundingBox } from './cull.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 
@@ -116,7 +117,7 @@ function sampleActorAnimation(animation: ActorAnimation, speed: number, tick: nu
     for (let bone = 0; bone < boneCount; bone++) {
         const a = animation.rotations[frame][bone];
         const b = animation.rotations[nextFrame][bone];
-        boneAngles.push((a + (b - a) * t) * Math.PI * 2 / 0x10000);
+        boneAngles.push(lerp(a, b, t) * MathConstants.TAU / 0x10000);
     }
     return boneAngles;
 }
@@ -221,19 +222,19 @@ export function buildActorMesh(
     const view = geometry.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
     const displayListCount = view.getUint8(0x21);
-    const displayListTable = view.getUint32(0x04, false) - runtimeBase + 0x28;
+    const displayListTableOffs = view.getUint32(0x04, false) - runtimeBase + 0x28;
     const segmentBuffers: ArrayBufferSlice[] = [];
     segmentBuffers[0x03] = geometry.slice(0x28);
     if (displayListCount > 0) {
-        const firstDisplayList = view.getUint32(displayListTable, false) - runtimeBase + 0x28;
-        installDefaultActorPartSegments(geometry, view, firstDisplayList, displayListTable, segmentBuffers);
+        const firstDisplayList = view.getUint32(displayListTableOffs, false) - runtimeBase + 0x28;
+        installDefaultActorPartSegments(geometry, view, firstDisplayList, displayListTableOffs, segmentBuffers);
     }
     const animatedTextures = parseActorAnimatedTextures(geometry, textureBuffers, actorType);
     const state = new RSPState(textureBuffers, segmentBuffers, sharedOutput, animatedTextures);
     initializeActorDL(state);
     const firstVertex = sharedOutput.vertices.length;
     for (let i = 0; i < displayListCount; i++) {
-        const pointer = view.getUint32(displayListTable + i * 4, false);
+        const pointer = view.getUint32(displayListTableOffs + i * 4, false);
         runDL_F3DEX2(state, 0x03000000 | (pointer - runtimeBase));
     }
     const output = state.finish()!;
