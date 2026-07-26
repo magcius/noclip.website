@@ -2,6 +2,7 @@ import {
   ActorData,
   ActorTransforms,
   ExcludeInfo,
+  ObfData,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
@@ -34,6 +35,7 @@ import {
   GfxFormat,
 } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import {
   GfxRenderInst,
@@ -59,13 +61,39 @@ const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
 // threshold RatchetAndClank's tfrags use for the equivalent split.
 const SOLID_PASS_ALPHA_REF = 0.99;
 
+// Track obfs that get their own visibility toggle instead of being merged into
+// the rest of the track. TRACK is the drivable surface, TRACKPAN the surrounding
+// panorama/terrain.
+const TOGGLEABLE_TRACK_OBFS: { name: string; label: string }[] = [
+  { name: "TRACK", label: "Track" },
+  { name: "TRACKPAN", label: "Track Panorama" },
+];
+
+// Resource names are the original asset paths, right-truncated into a 24 byte
+// field -- ":RESOURCES:TRACKPAN.OBF". Only the leading directories get cut off,
+// so the basename is what's reliably there to match on.
+function resourceBaseName(name: string): string {
+  const upper = name.trim().toUpperCase();
+  const base = upper.slice(upper.lastIndexOf(":") + 1);
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+
+interface TrackGeometryGroup {
+  geometry: MergedGeometry;
+  visible: boolean;
+  // Set for the groups in TOGGLEABLE_TRACK_OBFS; the leftover obfs merge into an
+  // untoggleable group.
+  label: string | null;
+}
+
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
   // Nothing here sets a sort key, so there's no sort to do -- passing null skips
   // re-sorting every inst in the list every frame.
   private renderInstList = new GfxRenderInstList(null);
   private blendedRenderInstList = new GfxRenderInstList(null);
-  private trackGeometry: MergedGeometry;
+  private trackGroups: TrackGeometryGroup[] = [];
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
   private programCache = new Map<number, GfxProgram>();
   private linearSampler: GfxSampler;
@@ -99,13 +127,7 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
-    // Every obf in the track draws with the same matrix, so they all merge
-    // together rather than one batch set per obf.
-    this.trackGeometry = new MergedGeometry(
-      cache,
-      this.trackFile.obfs,
-      this.exclude,
-    );
+    this.buildTrackGroups(cache);
 
     for (let i = 0; i < this.trackFile.o3ds.length; i++) {
       const o3d = this.trackFile.o3ds[i];
@@ -127,6 +149,40 @@ class RumbleRacingScene implements SceneGfx {
     this.resolveBatchTextures();
   }
 
+  // Every obf in the track draws with the same matrix, so obfs sharing a group
+  // merge together rather than one batch set per obf. TRACK and TRACKPAN get a
+  // group each so they can be toggled independently; everything else merges into
+  // one always-visible group.
+  private buildTrackGroups(cache: GfxRenderCache): void {
+    const remaining = this.trackFile.obfs.slice();
+
+    for (const toggle of TOGGLEABLE_TRACK_OBFS) {
+      const obfs: ObfData[] = [];
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        if (resourceBaseName(remaining[i].name) !== toggle.name) continue;
+        obfs.unshift(remaining[i]);
+        remaining.splice(i, 1);
+      }
+
+      // Not every track has both, so only make a toggle for what's really there.
+      if (obfs.length === 0) continue;
+
+      this.trackGroups.push({
+        geometry: new MergedGeometry(cache, obfs, this.exclude),
+        visible: true,
+        label: toggle.label,
+      });
+    }
+
+    if (remaining.length > 0) {
+      this.trackGroups.push({
+        geometry: new MergedGeometry(cache, remaining, this.exclude),
+        visible: true,
+        label: null,
+      });
+    }
+  }
+
   // Batches come out of the merge pointing at a texture id. Resolve those to
   // real sampler bindings once, so submitting a batch doesn't have to build a
   // binding array per draw call per frame. A batch whose texture never turned up
@@ -143,7 +199,7 @@ class RumbleRacingScene implements SceneGfx {
       });
     };
 
-    resolve(this.trackGeometry);
+    for (const group of this.trackGroups) resolve(group.geometry);
     for (const o3dGeom of this.o3dGeometries.values())
       for (const frame of o3dGeom.frames) resolve(frame);
   }
@@ -185,10 +241,7 @@ class RumbleRacingScene implements SceneGfx {
     this.textureHolder.onnewtextures();
   }
 
-  private getProgram(
-    hasVertexColors: boolean,
-    alphaTest: boolean,
-  ): GfxProgram {
+  private getProgram(hasVertexColors: boolean, alphaTest: boolean): GfxProgram {
     const ignoreVertexColors = hasVertexColors && !this.showVertexColors;
     const ignoreTextures = !this.showTextures;
 
@@ -306,7 +359,10 @@ class RumbleRacingScene implements SceneGfx {
       GLOBAL_SCALE,
     ]);
 
-    this.submitBatches(this.trackGeometry, trackMatrix);
+    for (const group of this.trackGroups) {
+      if (!group.visible) continue;
+      this.submitBatches(group.geometry, trackMatrix);
+    }
 
     if (this.showActors) {
       for (const actor of this.trackFile.actors) {
@@ -318,10 +374,7 @@ class RumbleRacingScene implements SceneGfx {
         const frame = o3dGeom.frames[o3dGeom.animationFrame];
         if (frame === undefined) continue;
 
-        this.submitBatches(
-          frame,
-          this.actorMatrices.get(actor.resourceIndex)!,
-        );
+        this.submitBatches(frame, this.actorMatrices.get(actor.resourceIndex)!);
       }
     }
 
@@ -419,11 +472,24 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   public createPanels(): UI.Panel[] {
+    const trackGeometryPanel = new UI.Panel();
+    trackGeometryPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    trackGeometryPanel.setTitle(UI.LAYER_ICON, "Track Geometry");
+
+    for (const group of this.trackGroups) {
+      if (group.label === null) continue;
+      const checkbox = new UI.Checkbox(group.label, group.visible);
+      checkbox.onchanged = () => {
+        group.visible = checkbox.checked;
+      };
+      trackGeometryPanel.contents.appendChild(checkbox.elem);
+    }
+
     const renderSettingsPanel = new UI.Panel();
     renderSettingsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     renderSettingsPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Settings");
 
-    const showActorsCheckbox = new UI.Checkbox("Show Actors", this.showActors);
+    const showActorsCheckbox = new UI.Checkbox("Actors", this.showActors);
     showActorsCheckbox.onchanged = () => {
       this.showActors = showActorsCheckbox.checked;
     };
@@ -431,7 +497,7 @@ class RumbleRacingScene implements SceneGfx {
     renderSettingsPanel.contents.appendChild(showActorsCheckbox.elem);
 
     const showVertexColorsCheckbox = new UI.Checkbox(
-      "Show Vertex Colors",
+      "Vertex Colors",
       this.showVertexColors,
     );
     showVertexColorsCheckbox.onchanged = () => {
@@ -440,10 +506,7 @@ class RumbleRacingScene implements SceneGfx {
 
     renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
 
-    const showTexturesCheckbox = new UI.Checkbox(
-      "Show Textures",
-      this.showTextures,
-    );
+    const showTexturesCheckbox = new UI.Checkbox("Textures", this.showTextures);
     showTexturesCheckbox.onchanged = () => {
       this.showTextures = showTexturesCheckbox.checked;
     };
@@ -459,13 +522,13 @@ class RumbleRacingScene implements SceneGfx {
       renderSettingsPanel.contents.appendChild(wireframe.elem);
     }
 
-    return [renderSettingsPanel];
+    return [trackGeometryPanel, renderSettingsPanel];
   }
 
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
 
-    this.trackGeometry.destroy(device);
+    for (const group of this.trackGroups) group.geometry.destroy(device);
 
     for (const [, o3dGeom] of this.o3dGeometries) {
       o3dGeom.destroy(device);
