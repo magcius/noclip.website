@@ -11,10 +11,16 @@ export class TrackProgram extends DeviceProgram {
   public static ub_MeshParams = 1;
 
   // Geometry either ships normals and gets lit at runtime, or ships baked RGBA
-  // vertex colors which simply modulate the texture.
-  constructor(hasVertexColors: boolean) {
+  // vertex colors which simply modulate the texture. Vertex-colored geometry has
+  // no normals, so when the user toggles vertex colors off it draws unlit rather
+  // than falling into the lighting path.
+  constructor(hasVertexColors: boolean, ignoreVertexColors: boolean = false) {
     super();
-    this.setDefineBool("USE_VERTEX_COLOR", hasVertexColors);
+    this.setDefineBool(
+      "USE_VERTEX_COLOR",
+      hasVertexColors && !ignoreVertexColors,
+    );
+    this.setDefineBool("UNLIT", hasVertexColors && ignoreVertexColors);
   }
 
   public override vert = `
@@ -50,13 +56,20 @@ void main() {
     // alpha only ever feeds the blend equation.
     vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
 
-#ifdef USE_VERTEX_COLOR
+#if defined(USE_VERTEX_COLOR)
     gl_FragColor = color * v_Color;
+#elif defined(UNLIT)
+    gl_FragColor = color;
 #else
     vec3 lightDir = normalize(vec3(0.4, 1.0, 0.2));
-    float NdotL = max(dot(normalize(v_Normal), lightDir), 0.0);
 
-    float lighting = 0.25 + NdotL * 0.75;
+    // Degenerate normals would make normalize() produce NaN, which max() then
+    // silently collapses to 0.0, leaving the surface at flat ambient.
+    float lighting = 1.0;
+    if (dot(v_Normal, v_Normal) > 0.0) {
+        float NdotL = max(dot(normalize(v_Normal), lightDir), 0.0);
+        lighting = 0.25 + NdotL * 0.75;
+    }
 
     gl_FragColor = vec4(color.rgb * lighting, color.a);
 #endif

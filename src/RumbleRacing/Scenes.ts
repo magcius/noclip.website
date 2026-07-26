@@ -60,10 +60,12 @@ class RumbleRacingScene implements SceneGfx {
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
   private trackProgram: GfxProgram;
   private trackVertexColorProgram: GfxProgram;
+  private trackUnlitProgram: GfxProgram;
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
   private wireframe: boolean = false;
+  private showVertexColors: boolean = true;
 
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
@@ -103,6 +105,7 @@ class RumbleRacingScene implements SceneGfx {
 
     this.trackProgram = cache.createProgram(new TrackProgram(false));
     this.trackVertexColorProgram = cache.createProgram(new TrackProgram(true));
+    this.trackUnlitProgram = cache.createProgram(new TrackProgram(true, true));
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -173,7 +176,11 @@ class RumbleRacingScene implements SceneGfx {
 
       const renderInst = this.renderHelper.renderInstManager.newRenderInst();
       renderInst.setGfxProgram(
-        dc.hasVertexColors ? this.trackVertexColorProgram : this.trackProgram,
+        dc.hasVertexColors
+          ? this.showVertexColors
+            ? this.trackVertexColorProgram
+            : this.trackUnlitProgram
+          : this.trackProgram,
       );
       renderInst.setSamplerBindings(0, [
         { gfxTexture: tex, gfxSampler: this.linearSampler },
@@ -349,6 +356,18 @@ class RumbleRacingScene implements SceneGfx {
       this.showActors = showActorsCheckbox.checked;
     };
 
+    renderSettingsPanel.contents.appendChild(showActorsCheckbox.elem);
+
+    const showVertexColorsCheckbox = new UI.Checkbox(
+      "Show Vertex Colors",
+      this.showVertexColors,
+    );
+    showVertexColorsCheckbox.onchanged = () => {
+      this.showVertexColors = showVertexColorsCheckbox.checked;
+    };
+
+    renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
+
     if (this.renderHelper.device.queryLimits().wireframeSupported) {
       const wireframe = new UI.Checkbox("Wireframe", false);
       wireframe.onchanged = () => {
@@ -357,8 +376,6 @@ class RumbleRacingScene implements SceneGfx {
       };
       renderSettingsPanel.contents.appendChild(wireframe.elem);
     }
-
-    renderSettingsPanel.contents.appendChild(showActorsCheckbox.elem);
 
     return [renderSettingsPanel];
   }
