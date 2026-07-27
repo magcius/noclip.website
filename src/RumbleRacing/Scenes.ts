@@ -51,19 +51,8 @@ import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 
 const pathBase = `RumbleRacing`;
-
 const GLOBAL_SCALE = 300.0; // this feels the best
-
-const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
-
 const SOLID_PASS_ALPHA_REF = 0.99;
-
-// function resourceBaseName(name: string): string {
-//   const upper = name.trim().toUpperCase();
-//   const base = upper.slice(upper.lastIndexOf(":") + 1);
-//   const dot = base.lastIndexOf(".");
-//   return dot > 0 ? base.slice(0, dot) : base;
-// }
 
 interface TrackGeometryGroup {
   geometry: MergedGeometry;
@@ -289,7 +278,8 @@ class RumbleRacingScene implements SceneGfx {
         depthWrite: false,
         depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
       });
-      setAttachmentStateSimple(megaStateScratch, {
+      const megaState: Partial<GfxMegaStateDescriptor> = {};
+      setAttachmentStateSimple(megaState, {
         blendMode: GfxBlendMode.Add,
         blendSrcFactor: GfxBlendFactor.SrcAlpha,
         blendDstFactor:
@@ -297,7 +287,7 @@ class RumbleRacingScene implements SceneGfx {
             ? GfxBlendFactor.One
             : GfxBlendFactor.OneMinusSrcAlpha,
       });
-      soft.setMegaStateFlags(megaStateScratch);
+      soft.setMegaStateFlags(megaState);
       this.blendedRenderInstList.submitRenderInst(soft);
     }
   }
