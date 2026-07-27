@@ -2326,9 +2326,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const uboNamesVert = findall(deviceProgram.preprocessedVert, uboNameRegex).map(([m, uboName]) => uboName);
             const uboNamesFrag = deviceProgram.preprocessedFrag !== null ? findall(deviceProgram.preprocessedFrag, uboNameRegex).map(([m, uboName]) => uboName) : [];
             for (let i = 0; i < Math.max(uboNamesVert.length, uboNamesFrag.length); i++) {
-                const blockName = uboNamesVert[i];
-                if (uboNamesFrag[i] !== undefined)
-                    assert(blockName === uboNamesFrag[i]);
+                const blockName = uboNamesVert[i] || uboNamesFrag[i];
+                if (uboNamesVert[i] !== undefined && uboNamesFrag[i] !== undefined)
+                    assert(uboNamesVert[i] === uboNamesFrag[i]);
                 const blockIdx = gl.getUniformBlockIndex(prog, blockName);
                 if (blockIdx !== -1 && blockIdx !== 0xFFFFFFFF)
                     gl.uniformBlockBinding(prog, blockIdx, i);
