@@ -38,13 +38,10 @@ export interface BackdropRenderer {
     destroy(device: GfxDevice): void;
 }
 
-// The panorama backdrop is a 320x240 framebuffer-sized image.
 const backdropWidth = 320;
 const backdropHeight = 240;
-// pos.xyz, bone index, texcoord.st, color.rgba
-const backdropVertexStride = 10;
-// The top and bottom gradient bands extend well past the viewport so they never
-// pull away from the screen edge as the backdrop slides with camera pitch.
+const backdropVertexStride = 10; // pos.xyz, bone index, texcoord.st, color.rgba
+// The gradient bands extend past the viewport so they never disapper.
 const gradientOffscreenNDC = 6;
 // How far the gradient slides vertically between looking straight up and straight down.
 const gradientPitchShift = 2.5;
@@ -91,26 +88,24 @@ function calcBackdropTint(mapID: number, height: number): Color {
 
     // From func_global_asm_807065F8
     switch (mapID) {
-    case 0x41:
-    case 0x42:
-    case 0x43:
-    case 0x44:
-    case 0x45:
-    case 0x4A:
-    case 0x4B:
-    case 0x7C:
-    case 0x7D:
-    case 0x7E:
-    case 0x7F:
-    case 0x80:
-        return dimBackdropTint;
-    default:
-        return fullBackdropTint;
+        case 0x41:
+        case 0x42:
+        case 0x43:
+        case 0x44:
+        case 0x45:
+        case 0x4A:
+        case 0x4B:
+        case 0x7C:
+        case 0x7D:
+        case 0x7E:
+        case 0x7F:
+        case 0x80:
+            return dimBackdropTint;
+        default:
+            return fullBackdropTint;
     }
 }
 
-// Both backdrops are screen-space triangle lists sharing the F3DEX vertex layout;
-// they differ only in how they fill ub_DrawParams and ub_CombineParams each frame.
 abstract class BackdropQuadRenderer implements BackdropRenderer {
     protected textureMappings = [new TextureMapping(), new TextureMapping()];
     private vertexBuffer: GfxBuffer;
@@ -188,12 +183,12 @@ class PanoramaBackdropRenderer extends BackdropQuadRenderer {
 
         const vertices = new Float32Array([
             // pos.xyz, bone index, texcoord, color
-            -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
-             1,  1, 0, 0,  1, 0,  1, 1, 1, 1,
-             1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
-            -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
-             1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
-            -1, -1, 0, 0,  0, 1,  1, 1, 1, 1,
+            -1, 1, 0, 0, 0, 0, 1, 1, 1, 1,
+            1, 1, 0, 0, 1, 0, 1, 1, 1, 1,
+            1, -1, 0, 0, 1, 1, 1, 1, 1, 1,
+            -1, 1, 0, 0, 0, 0, 1, 1, 1, 1,
+            1, -1, 0, 0, 1, 1, 1, 1, 1, 1,
+            -1, -1, 0, 0, 0, 1, 1, 1, 1, 1,
         ]);
         super(device, cache, cache.createProgram(program), vertices);
 
@@ -308,10 +303,10 @@ function pushGradientQuad(
     // pos.xyz, bone index, texcoord, color
     dst.push(
         -1, y0, 0, 0, 0, 0, r0, g0, b0, 1,
-         1, y0, 0, 0, 0, 0, r0, g0, b0, 1,
-         1, y1, 0, 0, 0, 0, r1, g1, b1, 1,
+        1, y0, 0, 0, 0, 0, r0, g0, b0, 1,
+        1, y1, 0, 0, 0, 0, r1, g1, b1, 1,
         -1, y0, 0, 0, 0, 0, r0, g0, b0, 1,
-         1, y1, 0, 0, 0, 0, r1, g1, b1, 1,
+        1, y1, 0, 0, 0, 0, r1, g1, b1, 1,
         -1, y1, 0, 0, 0, 0, r1, g1, b1, 1,
     );
 }
@@ -330,7 +325,7 @@ class GradientBackdropRenderer extends BackdropQuadRenderer {
         const sourceRows = gradientBackdropSourceRows.get(paletteIndex) ?? defaultGradientSourceRows;
         const sourceYToNDC = (sourceY: number): number => 1 - (sourceY - 336) / 120;
         const vertices: number[] = [];
-        // The first and last rows run off-screen so the end colors extend past the gradient band.
+        // the first/last colors extend past the gradient band offscreen
         const rows = [
             gradientOffscreenNDC,
             ...sourceRows.map(sourceYToNDC),
@@ -346,7 +341,7 @@ class GradientBackdropRenderer extends BackdropQuadRenderer {
     protected fillDrawParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
         const camera = viewerInput.camera.worldMatrix;
         mat4.identity(scratchMatrix);
-        // The camera's Z column is normalized, so sin(pitch) is just -camera[9].
+        // the camera's Z column is normalized, so sin(pitch) is -camera[9].
         scratchMatrix[13] = gradientPitchShift * camera[9];
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
         const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);

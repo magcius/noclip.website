@@ -103,8 +103,6 @@ export interface ActorRenderDefinition {
     positionYAmplitude?: number;
 }
 
-// A definition either fixes the playback rate for the actor type, or defers to the
-// per-instance rate stored in the setup entry.
 export function getActorAnimationSpeed(definition: ActorRenderDefinition, actor: SetupActor): number {
     return definition.animationSpeed === 'setup' ? actor.animationSpeed : definition.animationSpeed;
 }
@@ -244,12 +242,12 @@ function parseActorAnimatedTextures(
                 frameIDs.push(view.getUint16(offs, false));
         }
         const frames = frameIDs.map((textureID) => textureBuffers[textureID]!);
-        animatedTextures.push({
+        animatedTextures.push(new AnimatedTexture({
             segment,
             group: descriptor,
-            frames,
             frameDuration: activeFrameCount > 1 ? 2 : 0,
-        });
+            frames,
+        }));
     }
     return animatedTextures;
 }

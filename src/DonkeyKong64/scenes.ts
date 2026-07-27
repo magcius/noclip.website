@@ -18,24 +18,22 @@ import { MathConstants } from '../MathHelpers.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as Deflate from '../Common/Compression/Deflate.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { AnimatedTexture, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import { RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment } from './light.js';
 import type { DynamicLight, ObjectLightingEnvironment } from './light.js';
 import { ActorAnimationPose, actorModelScale, buildActorGeometry, getActorAnimationSpeed, getActorRenderDefinition } from './actors.js';
 import type { ActorRenderDefinition } from './actors.js';
 import { addModel2Props, buildTerrainTriangles } from './props.js';
 import {
-    getGeneratedSurfaceAnimatedTextureBindings,
-    getSceneNodeAnimatedTextureBindings, initDL, initGeneratedSurfaceMaterial,
+    SceneNodeMaterial, initDL,
     initSceneNodeMaterial,
 } from './material.js';
-import type { AnimatedMaterialTextureBinding } from './material.js';
 import { DK64Map, parseInstanceScripts, parseSetup } from './parse.js';
-import type { GeneratedSurface, SetupActor } from './parse.js';
+import type { SetupActor } from './parse.js';
 import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import {
-    bindingLayouts, fogPositionToViewDistance, generatedSurfaceHeight, DK64TextureCache,
+    bindingLayouts, fogPositionToViewDistance, DK64TextureCache,
     GeometryData, GeometryRenderer, DK64Layer,
 } from './render.js';
 import type { FogParams, MeshInput } from './render.js';
@@ -43,43 +41,6 @@ import { addEnvironmentalEffects } from './particles.js';
 import type { EnvironmentParticleData, SpriteData } from './particles.js';
 
 const pathBase = `DonkeyKong64`;
-
-function resolveAnimatedMaterialTextures(bindings: readonly AnimatedMaterialTextureBinding[], textures: ArrayBufferSlice[]): AnimatedTexture[] {
-    return bindings.map((binding) => ({
-        segment: binding.segment,
-        group: 0,
-        frameDuration: binding.frameDuration,
-        frames: binding.textureIDs.map((textureID) => textures[textureID]),
-    }));
-}
-
-function createGeneratedSurfaceVertexBuffer(surface: GeneratedSurface): ArrayBufferSlice {
-    const buffer = new ArrayBuffer(surface.columns * surface.rows * 0x10);
-    const view = new DataView(buffer);
-    let offs = 0;
-    for (let row = 0; row < surface.rows; row++) {
-        const z = Math.min(surface.minZ + row * surface.step, surface.maxZ);
-        for (let column = 0; column < surface.columns; column++) {
-            const x = Math.min(surface.minX + column * surface.step, surface.maxX);
-            const y = generatedSurfaceHeight(surface, x, z, 0);
-            const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
-                ((y - surface.baseY) / (surface.amplitudeS + surface.amplitudeT))
-                * surface.alphaRange + surface.alphaBase,
-            )));
-            view.setInt16(offs + 0x00, x * 3);
-            view.setInt16(offs + 0x02, Math.trunc(y * 3));
-            view.setInt16(offs + 0x04, z * 3);
-            view.setInt16(offs + 0x08, Math.trunc(x * surface.textureScale) % 0x7FFF);
-            view.setInt16(offs + 0x0A, Math.trunc(z * surface.textureScale) % 0x7FFF);
-            view.setUint8(offs + 0x0C, surface.colorR);
-            view.setUint8(offs + 0x0D, surface.colorG);
-            view.setUint8(offs + 0x0E, surface.colorB);
-            view.setUint8(offs + 0x0F, alpha);
-            offs += 0x10;
-        }
-    }
-    return new ArrayBufferSlice(buffer);
-}
 
 export class DK64Renderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
@@ -123,7 +84,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(30/60);
+        c.setSceneMoveSpeedMult(30 / 60);
     }
 
     public createPanels(): UI.Panel[] {
@@ -268,8 +229,7 @@ class TextureData {
         applyTextureEntries(this.AnimTexData, obj.AnimTexData, false);
     }
 
-    // Textures are owned by the scene's DK64TextureCache, so there is nothing to release here.
-    // Required by DataShare's Destroyable.
+    // no-op for DataShare's Destroyable (DK64TextureCache owns the textures).
     public destroy(device: GfxDevice): void {
     }
 }
@@ -498,10 +458,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     ...map.animatedTextures.filter((entry) => entry.group !== dl.textureAnimationGroup),
                 ]
                 : [...map.animatedTextures];
-            animatedTextures.unshift(...resolveAnimatedMaterialTextures(
-                getSceneNodeAnimatedTextureBindings(dl.materialIndex),
-                romData.AnimTexData,
-            ));
+            animatedTextures.unshift(...SceneNodeMaterial.getAnimatedTextureBindings(dl.materialIndex)
+                .map((binding) => binding.resolve(romData.AnimTexData)));
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             // func_global_asm_806592B4: global fog
             initDL(state, true, map.fogEnabled);
@@ -512,7 +470,6 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const output = state.finish();
 
-            // Some display lists emit no draw calls at all (empty or fully degenerate).
             if (output === null)
                 continue;
 
@@ -542,30 +499,17 @@ class SceneDesc implements Viewer.SceneDesc {
         const setupWorldScale = map.chunkCount > 0 ? 3 : 1;
 
         for (const surface of map.generatedSurfaces) {
-            const vertexBuffer = createGeneratedSurfaceVertexBuffer(surface);
+            const vertexBuffer = surface.createVertexBuffer();
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x08] = vertexBuffer;
-            const materialTextures = resolveAnimatedMaterialTextures(
-                getGeneratedSurfaceAnimatedTextureBindings(surface.materialIndex),
-                romData.AnimTexData,
-            );
+            const materialTextures = surface.getAnimatedTextureBindings()
+                .map((binding) => binding.resolve(romData.AnimTexData));
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, materialTextures);
             initDL(state, false);
-            initGeneratedSurfaceMaterial(state, surface.materialIndex, surface);
+            surface.initMaterial(state);
 
             const firstVertex = sharedOutput.vertices.length;
-            for (let row = 0; row < surface.rows - 1; row++) {
-                for (let column = 0; column < surface.columns - 1; column += 15) {
-                    const cellCount = Math.min(15, surface.columns - 1 - column);
-                    const vertexCount = cellCount + 1;
-                    state.gSPVertex(0x08000000 + (row * surface.columns + column) * 0x10, vertexCount, 0);
-                    state.gSPVertex(0x08000000 + ((row + 1) * surface.columns + column) * 0x10, vertexCount, 16);
-                    for (let cell = 0; cell < cellCount; cell++) {
-                        state.gSPTri(cell + 1, cell, 16 + cell);
-                        state.gSPTri(16 + cell, 16 + cell + 1, cell + 1);
-                    }
-                }
-            }
+            surface.emitGeometry(state);
 
             const output = state.finish()!;
             const geo: MeshInput = {

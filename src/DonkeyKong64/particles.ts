@@ -5,8 +5,8 @@ import type { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { RSPState } from './f3dex2.js';
-import type { AnimatedTexture, RSPSharedOutput } from './f3dex2.js';
+import { AnimatedTexture, RSPState } from './f3dex2.js';
+import type { RSPSharedOutput } from './f3dex2.js';
 import { initDL, initSpriteMaterial } from './material.js';
 import type { DK64Map, InstanceScript, ScriptBlock, SetupProp } from './parse.js';
 import { DK64Layer, SpriteBillboard } from './render.js';
@@ -97,14 +97,14 @@ function addSpriteParticleEvents(
             const batch = phaseEvents.slice(eventBase, eventBase + maxSpritesPerBatch);
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[spriteVertexSegment] = createSpriteVertexBuffer(definition, batch.length);
-            const animatedTextures: AnimatedTexture[] = [{
+            // Ensure sprites on the same segment+phase don't overlap in the texture cache.
+            const animatedTextures = [new AnimatedTexture({
                 segment: spriteTextureSegment,
-                // Ensure sprites on the same segment+phase don't overlap in the texture cache.
                 group: definition.id,
                 frameDuration: 1,
-                frameOffset: phase,
                 frames,
-            }];
+                frameOffset: phase,
+            })];
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             initDL(state, false);
             initSpriteMaterial(state, definition, spriteTextureSegment, color);

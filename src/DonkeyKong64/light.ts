@@ -14,21 +14,17 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 
-// Spotlights are cast by actors with a light bone; the game gives them a fixed falloff.
-// See func_global_asm_8065EB10.
+// from func_global_asm_8065EB10 -- spotlights cast from a light bone
 const spotLightInnerRadius = 300;
 const spotLightCullRadius = 1100;
-// Default reach for lights whose prop geometry does not specify one.
 const defaultLightMaxDistance = 700;
 // func_global_asm_8065BAA0 converts setup-space light positions and distances into
-// map-vertex space with a hardcoded 3.0, not with the per-map worldScale that prop
-// and actor placement uses. No worldScale-1 map defines a dynamic light, so the two
-// never disagree.
+// map-vertex space with a hardcoded 3x. No single-segment map uses these lights, so it's fine.
 const lightWorldScale = 3;
-// func_global_asm_8065BAA0: a point light reaches three times its keyframe radius.
+// from func_global_asm_8065BAA0: point lights reach three times their keyframe radius.
 const pointLightOuterRadiusScale = 3;
-// Spotlight origins sit slightly off the actor's X position, and the cone is aimed back
-// through the same offset. Copied from the placement code; the reason for it is unknown.
+// from func_global_asm_8069AB74: createLight() uses actor X + 0.3 as the origin
+// and the animated position of bone 2 as the target.
 const spotLightOffsetX = 0.3;
 
 interface LightAnimationKeyframe {
@@ -208,8 +204,6 @@ const lightAnimations: readonly LightAnimation[] = lightAnimationKeyframes.map((
     totalDuration: keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0),
 }));
 
-// Returns a fractional keyframe index: the integer part picks the keyframe, the fraction
-// is how far it has blended into the next one.
 function getLightAnimFrame(animation: LightAnimation, tick: number): number {
     const keyframes = animation.keyframes;
     let animationTick = tick % animation.totalDuration;
@@ -218,6 +212,7 @@ function getLightAnimFrame(animation: LightAnimation, tick: number): number {
         animationTick -= keyframes[keyframeIndex].duration;
         keyframeIndex++;
     }
+    // handle fractional keyframes for smooth animation
     return keyframeIndex + animationTick / keyframes[keyframeIndex].duration;
 }
 
@@ -416,9 +411,7 @@ function sampleLightAtPosition(light: ActiveLight, position: ReadonlyVec3): numb
     return falloff;
 }
 
-// Accumulates ambient plus every active light reaching position into dst. Unclamped:
-// map chunks tint by the vertex color before clamping, objects clamp directly.
-// dst is a vec3, so accumulation rounds to float32 per light rather than at the end.
+// Accumulates ambient plus every active light reaching position into dst (unclamped).
 function accumulateLighting(dst: vec3, ambientColor: vec3, lights: readonly DynamicLight[], activeLightCache: ActiveLightCache, position: ReadonlyVec3): void {
     vec3.copy(dst, ambientColor);
     for (const dynamicLight of lights) {

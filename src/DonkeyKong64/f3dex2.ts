@@ -8,20 +8,14 @@ import { vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { F3DEX2_GBI, RSP_Geometry } from '../PokemonSnap/f3dex2.js';
 
-// Interpreter for N64 F3DEX2 microcode. The opcode and geometry-mode tables are identical
-// to PokemonSnap's, so they are shared rather than forked.
 export { RSP_Geometry };
-
-// DK64 is the only port that uses opcode 0x00, to delimit map sections within a chunk
-// display list, so it is not part of the shared table.
-export const G_SNOOP = 0x00 as F3DEX2_GBI;
+export const G_NOOP = F3DEX2_GBI.G_NOOP;
 
 const G_MTX_LOAD = 0x02;
 const G_MTX_PUSH = 0x04;
 
-// RDP.TileState.cacheKey is derived from a segmented address, which is 32-bit. Animated
-// texture frames have no single source address, so they are keyed above that range to
-// guarantee they cannot collide with a real one.
+// RDP.TileState.cacheKey is derived from a 32-bit address. Offset animated texture
+// frames above 32-bit address space so they don't collide.
 export const animatedTextureCacheKeyBase = 0x100000000;
 
 export interface DrawTextureAnimation {
@@ -31,7 +25,6 @@ export interface DrawTextureAnimation {
     crossfadeGroup: number | null;
 }
 
-// DK64's per-texture state, parallel to the inherited DrawCall.textureIndices.
 export interface DrawTextureBinding {
     animation: DrawTextureAnimation | undefined;
     scrollSpeed: number;
@@ -44,13 +37,47 @@ export class DrawCall extends F3DEX.DrawCall {
     public textureBindings: DrawTextureBinding[] = [];
 }
 
-export interface AnimatedTexture {
+export interface AnimatedTextureParams {
     segment: number;
     group: number;
     frameDuration: number;
+    frames: ArrayBufferSlice[];
     frameOffset?: number;
     crossfade?: boolean;
-    frames: ArrayBufferSlice[];
+}
+
+export class AnimatedTexture {
+    public segment: number;
+    public group: number;
+    public frameDuration: number;
+    public frames: ArrayBufferSlice[];
+    public frameOffset: number;
+    public crossfade: boolean;
+
+    constructor(params: AnimatedTextureParams) {
+        this.segment = params.segment;
+        this.group = params.group;
+        this.frameDuration = params.frameDuration;
+        this.frames = params.frames;
+        this.frameOffset = params.frameOffset ?? 0;
+        this.crossfade = params.crossfade ?? false;
+    }
+
+    public matches(segment: number, address: number): boolean {
+        return segment === 0
+            ? this.segment === 0 && this.group === address
+            : this.segment === segment;
+    }
+
+    public selectFrame(frame: number): AnimatedTexture {
+        return new AnimatedTexture({
+            segment: this.segment,
+            group: this.group,
+            frameDuration: 0,
+            frames: [this.frames[frame]],
+            crossfade: this.crossfade,
+        });
+    }
 }
 
 export class RSPSharedOutput extends F3DEX.RSPSharedOutput {
@@ -185,9 +212,6 @@ export class RSPState {
     public gSPMatrix(dramAddr: number, matrixParams: number): void {
         const segment = dramAddr >>> 24;
         if (segment !== 0x04 && segment !== 0x09) {
-            // Only segments 4 and 9 hold matrices we index into; anything else is matrix
-            // data we don't emulate. Still mirror the push so a later gSPPopMatrix, which
-            // is counted rather than addressed, lines up with the right entry.
             if (matrixParams & G_MTX_PUSH)
                 this.matrixStack.push(this.matrixStack[this.matrixStack.length - 1] ?? []);
             return;
@@ -225,8 +249,7 @@ export class RSPState {
         const cache = assertExists(this.DP_TMemUploadTracker.get(tile.tmem));
         const segment = (cache.addr >>> 24) & 0xFF;
 
-        const animation = this.animatedTextures.find((entry) =>
-            segment === 0 ? entry.segment === 0 && entry.group === cache.addr : entry.segment === segment);
+        const animation = this.animatedTextures.find((entry) => entry.matches(segment, cache.addr));
         if (animation !== undefined) {
             const textureIndices = this._translateAnimatedTextureFrames(
                 animation.frames,
@@ -240,7 +263,7 @@ export class RSPState {
                 animation: segment !== 0 || textureIndices.length > 1 ? {
                     textureIndices,
                     frameDuration: animation.frameDuration,
-                    frameOffset: animation.frameOffset ?? 0,
+                    frameOffset: animation.frameOffset,
                     crossfadeGroup: segment === 0 && animation.crossfade ? animation.group : null,
                 } : undefined,
             };
@@ -434,7 +457,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             case F3DEX2_GBI.G_GEOMETRYMODE: {
                 state.gSPClearGeometryMode(~(w0 & 0x00FFFFFF));
                 state.gSPSetGeometryMode(w1);
-             } break;
+            } break;
 
             case F3DEX2_GBI.G_SETTIMG: {
                 const fmt = (w0 >>> 21) & 0x07;
@@ -592,7 +615,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             case F3DEX2_GBI.G_RDPTILESYNC:
             case F3DEX2_GBI.G_RDPPIPESYNC:
             case F3DEX2_GBI.G_RDPLOADSYNC:
-            case G_SNOOP:
+            case F3DEX2_GBI.G_NOOP:
                 // Implementation not necessary.
                 break;
 

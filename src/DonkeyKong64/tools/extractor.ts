@@ -12,8 +12,7 @@ import {
     parseInstanceScripts, parseSetup as parseSetupData,
 } from '../parse.js';
 import {
-    GeneratedSurfaceMaterial, SceneNodeMaterial,
-    getGeneratedSurfaceAnimatedTextureBindings, getSceneNodeAnimatedTextureBindings,
+    GeneratedSurface, GeneratedSurfaceMaterial, SceneNodeMaterial,
     isGeneratedSurfaceMaterial, isSceneNodeMaterial,
 } from '../material.js';
 
@@ -273,7 +272,7 @@ function scanGeneratedSurfaceTextureUsage(map: Buffer, usage: TextureUsage): voi
         const offs = generatedSurfaceStart + 4 + i * GeneratedSurfaceEntry.stride;
         const material = map.readUInt8(offs + GeneratedSurfaceEntry.material);
         if (isGeneratedSurfaceMaterial(material)) {
-            for (const binding of getGeneratedSurfaceAnimatedTextureBindings(material)) {
+            for (const binding of GeneratedSurface.getAnimatedTextureBindings(material)) {
                 for (const textureID of binding.textureIDs)
                     usage.animated.add(textureID);
             }
@@ -305,7 +304,7 @@ function scanSceneNodeTextureUsage(map: Buffer, usage: TextureUsage): void {
         if (displayList < 0)
             continue;
         if (supportedSceneNodeMaterials.has(material) && isSceneNodeMaterial(material)) {
-            for (const binding of getSceneNodeAnimatedTextureBindings(material)) {
+            for (const binding of SceneNodeMaterial.getAnimatedTextureBindings(material)) {
                 for (const textureID of binding.textureIDs)
                     usage.animated.add(textureID);
             }

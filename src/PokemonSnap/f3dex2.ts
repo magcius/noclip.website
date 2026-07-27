@@ -339,6 +339,8 @@ export class RSPState {
 }
 
 export enum F3DEX2_GBI {
+    G_NOOP             = 0x00,
+
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,

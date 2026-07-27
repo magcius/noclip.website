@@ -1,4 +1,4 @@
-import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { ImageFormat, ImageSize, TexCM } from '../Common/N64/Image.js';
@@ -17,14 +17,6 @@ import type { InstanceScript, SetupProp } from './parse.js';
 import { DK64Layer } from './render.js';
 import type { GeometryRenderer, MeshInput } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
-
-// The quad faces the camera, so its corners stay on a sphere around the origin.
-function computeBillboardCullRadius(rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): number {
-    let radius = 0;
-    for (let i = 0; i < rightOffsets.length; i++)
-        radius = Math.max(radius, Math.hypot(rightOffsets[i], upOffsets[i], forwardOffsets[i]));
-    return radius;
-}
 
 export interface TerrainTriangle {
     vertices: [vec3, vec3, vec3];
@@ -334,8 +326,8 @@ function findPropAnimationTrackDefinitions(scripts: InstanceScript[], propID: nu
                 };
                 const selected = selectedByChannel.get(channel);
                 // from func_global_asm_8064F450 + func_global_asm_80650A04
-                // Prefer moving animations, then the slowest magnitude. On a
-                // tie, endpoint-holding playback looks closest to the game.
+                // Prefer moving animations with the slowest magnitude.
+                // If tied, endpoint-holding is chosen.
                 if (selected === undefined
                     || (selected.speed === 0 && candidate.speed !== 0)
                     || ((selected.speed === 0) === (candidate.speed === 0)
@@ -682,13 +674,13 @@ function parseModel2IndexedTextures(geometryView: DataView, romData: ROMData): A
             frames.push(romData.AnimTexData[textureID]!);
         }
         // from func_global_asm_806349FC
-        textures.push({
+        textures.push(new AnimatedTexture({
             segment: 0,
             group: targetTextureID,
             frameDuration,
-            crossfade: crossfade !== 0,
             frames,
-        });
+            crossfade: crossfade !== 0,
+        }));
     }
     return textures;
 }
@@ -724,13 +716,7 @@ function applyInitialModel2TextureScripts(textures: AnimatedTexture[], scripts: 
     return textures.map((texture, index) => {
         if (playbackModes[index] !== 0 || texture.crossfade)
             return texture;
-        const selectedFrame = selectedFrames[index];
-        return {
-            ...texture,
-            frameDuration: 0,
-            frameOffset: 0,
-            frames: [texture.frames[selectedFrame]],
-        };
+        return texture.selectFrame(selectedFrames[index]);
     });
 }
 
@@ -757,12 +743,12 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
     const dxt = Math.max(1, Math.ceil(0x0800 / line));
     const maskS = Math.ceil(Math.log2(textureWidth));
     const maskT = Math.ceil(Math.log2(textureHeight));
-    const decalTexture: AnimatedTexture[] = [{
+    const decalTexture = [new AnimatedTexture({
         segment: 0x0E,
         group: textureID,
         frameDuration: 0,
         frames: [romData.TexData[textureID]],
-    }];
+    })];
     const loadSize = size === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
     for (const prop of instances) {
         const worldX = prop.position[0] * worldScale;
@@ -930,6 +916,8 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         // Share draw resources between instances of props.
         const geo: MeshInput = { sharedOutput, rspOutput: output };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
+        const cullRadius = quad.x.reduce((radius, x, i) =>
+            Math.max(radius, Math.hypot(x, quad.y[i], quad.z[i])), 0);
         let sharedRenderer: GeometryRenderer | null = null;
         for (const prop of instances) {
             const scale = prop.scale * worldScale;
@@ -942,11 +930,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             if (sharedRenderer === null)
                 sharedRenderer = renderer;
             renderer.setCameraBillboard(origin, scale);
-            renderer.setCullBoundingSphere(origin, computeBillboardCullRadius(
-                quad.x.map((x) => x * scale),
-                quad.y.map((y) => y * scale),
-                quad.z.map((z) => z * scale),
-            ));
+            renderer.setCullBoundingSphere(origin, cullRadius * Math.abs(scale));
             if (view.getUint8(0x1D) === 0)
                 renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
@@ -998,8 +982,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         );
         const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, indexedTextures);
         initDL(state, true, fogEnabled);
-        // from func_global_asm_80636FFC -- basic inherited state for props.
-        state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
+        state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);  // from func_global_asm_80636FFC
         // TODO: maybe handle LODs with G_BRANCH_Z instead of always using highest?
         const displayListOffset = findHighestDetailDisplayListOffset(view, mainDisplayListStart);
         const firstVertex = sharedOutput.vertices.length;

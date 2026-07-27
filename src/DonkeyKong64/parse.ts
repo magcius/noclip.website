@@ -1,22 +1,16 @@
 import { vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { G_SNOOP } from './f3dex2.js';
-import type { AnimatedTexture } from './f3dex2.js';
+import { AnimatedTexture, G_NOOP } from './f3dex2.js';
 import {
-    GeneratedSurfaceMaterial, SceneNodeMaterial, isGeneratedSurfaceMaterial,
+    GeneratedSurface, SceneNodeMaterial, isGeneratedSurfaceMaterial,
     isSceneNodeMaterial,
 } from './material.js';
 
-// Each chunk carries one display list per level of detail.
-const displayListsPerChunk = 4;
-// Each section records a vertex offset per chunk display list, plus unused slots.
-const vertexOffsetsPerSection = 8;
-// F3DEX2 vertex command stride, matching gSPVertex's 0x10-byte entries.
-const mapVertexStride = 0x10;
+const displayListsPerChunk = 4;  // one DL per LOD
+const vertexOffsetsPerSection = 8;  // offset per DL + extra slots
+const mapVertexStride = 0x10;  // matches gSPVertex
 
-// Map file header. tools/extractor.ts walks the same tables to work out which
-// textures a map needs, so the offsets live here rather than on both sides.
 export const MapHeader = {
     sceneNodeRoot: 0x30,
     displayListStart: 0x34,
@@ -55,7 +49,6 @@ export interface SetupProp {
 export interface SetupActor {
     position: vec3;
     scale: number;
-    // Playback rate for the actor's animation, used when its render definition defers to the setup.
     animationSpeed: number;
     lightColor: readonly [number, number, number];
     lightCone: readonly [number, number];
@@ -195,32 +188,6 @@ export interface DisplayListInfo {
     materialIndex: SceneNodeMaterial | null;
 }
 
-export interface GeneratedSurface {
-    textureScale: number;
-    frequencyS: number;
-    frequencyT: number;
-    amplitudeS: number;
-    amplitudeT: number;
-    phaseSpeedS: number;
-    phaseSpeedT: number;
-    scrollSpeedS: number;
-    scrollSpeedT: number;
-    step: number;
-    minX: number;
-    minZ: number;
-    maxX: number;
-    maxZ: number;
-    baseY: number;
-    colorR: number;
-    colorG: number;
-    colorB: number;
-    alphaBase: number;
-    alphaRange: number;
-    materialIndex: GeneratedSurfaceMaterial;
-    columns: number;
-    rows: number;
-}
-
 export class MapChunk {
     public ambientColor: vec3;
     public modulateVertexColors: boolean;
@@ -333,14 +300,13 @@ export class DK64Map {
                 if (frame !== undefined)
                     frames.push(frame);
             }
-            if (frames.length > 0) {
-                this.animatedTextures.push({
+            if (frames.length > 0)
+                this.animatedTextures.push(new AnimatedTexture({
                     segment: view.getUint8(offs),
                     group: view.getUint8(offs + 1),
                     frameDuration: view.getUint8(offs + 2),
                     frames,
-                });
-            }
+                }));
         }
     }
 
@@ -349,35 +315,10 @@ export class DK64Map {
         const count = view.getUint32(table, false);
         for (let i = 0; i < count; i++) {
             const offs = table + 4 + i * GeneratedSurfaceEntry.stride;
-            const step = view.getInt16(offs + 0x44, false);
-            const minX = view.getInt16(offs + 0x46, false);
-            const minZ = view.getInt16(offs + 0x48, false);
-            const maxX = view.getInt16(offs + 0x4A, false);
-            const maxZ = view.getInt16(offs + 0x4C, false);
             const materialIndex = view.getUint8(offs + GeneratedSurfaceEntry.material);
             if (!isGeneratedSurfaceMaterial(materialIndex))
                 continue;
-            this.generatedSurfaces.push({
-                textureScale: view.getFloat32(offs + 0x00, false),
-                frequencyS: view.getFloat32(offs + 0x04, false),
-                frequencyT: view.getFloat32(offs + 0x08, false),
-                amplitudeS: view.getFloat32(offs + 0x0C, false),
-                amplitudeT: view.getFloat32(offs + 0x10, false),
-                phaseSpeedS: view.getInt32(offs + 0x14, false),
-                phaseSpeedT: view.getInt32(offs + 0x18, false),
-                scrollSpeedS: view.getFloat32(offs + 0x34, false),
-                scrollSpeedT: view.getFloat32(offs + 0x38, false),
-                step, minX, minZ, maxX, maxZ,
-                baseY: view.getInt16(offs + 0x4E, false),
-                colorR: view.getUint8(offs + 0x61),
-                colorG: view.getUint8(offs + 0x62),
-                colorB: view.getUint8(offs + 0x63),
-                alphaBase: view.getUint8(offs + 0x64),
-                alphaRange: view.getUint8(offs + 0x65),
-                materialIndex,
-                columns: Math.trunc((maxX - minX) / step) + 2,
-                rows: Math.trunc((maxZ - minZ) / step) + 2,
-            });
+            this.generatedSurfaces.push(new GeneratedSurface(view, offs, materialIndex));
         }
     }
 
@@ -396,18 +337,17 @@ export class DK64Map {
         this.parseSceneNodeDisplayLists(view);
     }
 
-    // A chunk display list is either split into per-section runs delimited by G_SNOOP
-    // commands, or, when no G_SNOOP is present, submitted whole.
     private parseChunkDisplayList(view: DataView, dlStart: number, chunk: MapChunk, i: number): void {
         const { offset, size } = chunk.displayListRanges[i];
         if (offset === -1 || size === 0)
             return;
 
-        let snoopPresent = false;
+        // chunk display lists are either separated by G_NOOPs
+        let noopPresent = false;
         for (let commandOffs = dlStart + offset, end = commandOffs + size; commandOffs < end; commandOffs += 8) {
-            if (view.getUint8(commandOffs) !== G_SNOOP)
+            if (view.getUint8(commandOffs) !== G_NOOP)
                 continue;
-            snoopPresent = true;
+            noopPresent = true;
             const sectionID = view.getUint32(commandOffs + 4, false);
             const section = this.sections.find((entry) => entry.meshID === sectionID);
             if (section === undefined)
@@ -421,7 +361,8 @@ export class DK64Map {
             });
         }
 
-        if (!snoopPresent) {
+        // or whole (no noops)
+        if (!noopPresent) {
             this.displayLists.push({
                 chunkID: chunk.id,
                 dlStartAddr: offset,

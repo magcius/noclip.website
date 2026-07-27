@@ -24,15 +24,12 @@ import type { ActorAnimationState } from './actors.js';
 import { animatedTextureCacheKeyBase, DrawCall, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState } from './f3dex2.js';
 import { ActiveLightCache, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLighting, ObjectLighting } from './light.js';
-import type { GeneratedSurface } from './parse.js';
+import type { GeneratedSurface } from './material.js';
 import type { PropAnimationState } from './props.js';
 
 const scratchVec3a = vec3.create();
 
-// DK64 has no texture names: geometry textures are slots in pointer table 25, whose
-// index is the segment-zero address the display list loads from, and animated frames
-// are keyed above the 32-bit range. Label them by table and index instead of leaving
-// RDP's bare cache-key hex.
+// DK64 has no texture names. Label them by table and index instead.
 function textureViewerName(texture: Texture): string {
     const key = texture.tile.cacheKey !== 0 ? texture.tile.cacheKey : texture.dramAddr;
     const format = `${ImageFormat[texture.tile.fmt]} / ${ImageSize[texture.tile.siz]}`;
@@ -53,15 +50,12 @@ function translateTexture(device: GfxDevice, texture: Texture, name: string): Gf
 export class DK64TextureCache {
     private textures = new Map<Texture, GfxTexture>();
     private nameUseCount = new Map<string, number>();
-    // Every decoded texture passes through here exactly once, so this doubles as
-    // the backing list for the scene's texture viewer tab.
     public viewerTextures: Viewer.Texture[] = [];
 
     public getTexture(device: GfxDevice, texture: Texture): GfxTexture {
         let gfxTexture = this.textures.get(texture);
         if (gfxTexture === undefined) {
-            // The viewer looks textures up by name, so one tile loaded under several
-            // tile settings needs distinct names to stay individually selectable.
+            // A tile loaded under several tile settings needs distinct names to stay individually selectable.
             const name = textureViewerName(texture);
             const seen = this.nameUseCount.get(name) ?? 0;
             this.nameUseCount.set(name, seen + 1);
@@ -95,16 +89,6 @@ function renderModeIsTranslucent(megaStateFlags: Partial<GfxMegaStateDescriptor>
     return blendState !== undefined
         && (blendState.blendSrcFactor !== GfxBlendFactor.One
             || blendState.blendDstFactor !== GfxBlendFactor.Zero);
-}
-
-export function generatedSurfaceHeight(surface: GeneratedSurface, x: number, z: number, tick: number): number {
-    const phaseS = tick * surface.phaseSpeedS;
-    const phaseT = tick * surface.phaseSpeedT;
-    const angleS = (phaseS + Math.trunc(surface.frequencyS * x)) % 0x0FFF;
-    const angleT = (phaseT + Math.trunc(surface.frequencyT * z)) % 0x0FFF;
-    return surface.baseY
-        + Math.sin(angleS * MathConstants.TAU / 0x1000) * surface.amplitudeS
-        + Math.sin(angleT * MathConstants.TAU / 0x1000) * surface.amplitudeT;
 }
 
 export interface FogParams {
@@ -249,9 +233,6 @@ class DrawCallInstance {
             if (scrollSpeed !== 0) {
                 const tick = Math.floor(time / (1000 / 30));
                 if (tick > 0) {
-                    // The game counts a tile offset down from 255 by scrollSpeed per tick,
-                    // wrapping at the first multiple of scrollSpeed past 255, and shifts T
-                    // by a quarter of that in texel units.
                     const scrollWrap = (Math.floor(255 / scrollSpeed) + 1) * scrollSpeed;
                     const tileOffset = 255 - ((tick - 1) * scrollSpeed) % scrollWrap;
                     m[13] -= tileOffset / 4 / texture.height;
@@ -298,7 +279,7 @@ class DrawCallInstance {
 
         const usesFog = this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG) !== 0;
         const boneMatrixCount = this.boneMatrices?.length ?? 1;
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 * boneMatrixCount + 8*2 + (usesFog ? 8 : 0));
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 * boneMatrixCount + 8 * 2 + (usesFog ? 8 : 0));
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         computeViewMatrix(this.viewMatrix, viewerInput.camera);
@@ -378,8 +359,7 @@ export class RenderData {
     public indexStart: number;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, geo: MeshInput, dynamic = false) {
-        // Every mesh in a file shares one RSPSharedOutput, so this mesh's draw calls occupy
-        // a sub-range of the shared index and vertex arrays; upload only that window.
+        // Meshes share one RSPSharedOutput; upload only that window.
         const sharedOutput = geo.sharedOutput;
         const drawCalls = geo.rspOutput?.drawCalls ?? [];
         this.indexStart = drawCalls.reduce(
@@ -414,13 +394,13 @@ export class RenderData {
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
-            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
-            { location: F3DEX_Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
+            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
+            { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04, },
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = cache.createInputLayout({
@@ -529,13 +509,13 @@ function computeMeshBoundingBox(geo: MeshInput): AABB | null {
     if (geo.rspOutput === null)
         return null;
 
+    const v = vec3.create();
     const boundingBox = new AABB();
     for (const drawCall of geo.rspOutput.drawCalls) {
         const indexEnd = drawCall.firstIndex + drawCall.indexCount;
         for (let index = drawCall.firstIndex; index < indexEnd; index++) {
             const vertex = geo.sharedOutput.vertices[geo.sharedOutput.indices[index]];
-            vec3.set(scratchVec3a, vertex.x, vertex.y, vertex.z);
-            boundingBox.unionPoint(scratchVec3a);
+            boundingBox.unionPoint(vec3.set(v, vertex.x, vertex.y, vertex.z));
         }
     }
     if (boundingBox.min[0] > boundingBox.max[0])
@@ -545,17 +525,16 @@ function computeMeshBoundingBox(geo: MeshInput): AABB | null {
         boundingBox.union(boundingBox, geo.actorAnimation.boundingBox);
     const translationBounds = geo.propAnimation?.translationBounds;
     if (translationBounds !== undefined) {
-        // The animation sweeps the mesh over translationBounds, so grow each side by that side's travel.
+        // expand the mesh based on bounds of translation with padding to handle rotation
         vec3.add(boundingBox.min, boundingBox.min, translationBounds.min);
         vec3.add(boundingBox.max, boundingBox.max, translationBounds.max);
-        // Rotation about the animated nodes can swing geometry outside the swept box; pad to cover it.
         const padding = Math.max(
             boundingBox.max[0] - boundingBox.min[0],
             boundingBox.max[1] - boundingBox.min[1],
             boundingBox.max[2] - boundingBox.min[2],
         ) * 0.5;
-        vec3SetAll(scratchVec3a, padding);
-        boundingBox.expandByExtent(boundingBox, scratchVec3a);
+        vec3SetAll(v, padding);
+        boundingBox.expandByExtent(boundingBox, v);
     }
     return boundingBox;
 }
@@ -606,39 +585,22 @@ export class GeometryData {
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, activeLightCache: ActiveLightCache): void {
         const surfaceAnimation = this.geo.generatedSurfaceAnimation;
-        const sprites = this.geo.spriteBillboards;
         const lighting = this.geo.dynamicLighting;
-        const actorAnimation = this.geo.actorAnimation;
-        const propAnimation = this.geo.propAnimation;
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         const lightingIsDynamic = lighting !== undefined && lighting.lights.length > 0 && this.dynamicLightingEnabled;
 
-        if (surfaceAnimation !== undefined) {
-            const surface = surfaceAnimation.surface;
-            const amplitude = surface.amplitudeS + surface.amplitudeT;
-            for (let i = 0; i < surfaceAnimation.vertexCount; i++) {
-                const vertexIndex = surfaceAnimation.firstVertex + i;
-                const vertex = this.geo.sharedOutput.vertices[vertexIndex];
-                const y = generatedSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
-                const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
-                    ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
-                )));
-                const localVertex = (vertexIndex - this.renderData.vertexStart) * 10;
-                this.renderData.vertexBufferData[localVertex + 1] = Math.trunc(y * 3);
-                this.renderData.vertexBufferData[localVertex + 9] = alpha / 0xFF;
-            }
-        }
+        if (surfaceAnimation !== undefined)
+            surfaceAnimation.surface.updateVertexBuffer(surfaceAnimation.firstVertex, surfaceAnimation.vertexCount, this.geo.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
         if (lighting !== undefined && (lightingIsDynamic || this.lightingDirty)) {
             updateDynamicLighting(lighting, this.geo.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, activeLightCache, this.dynamicLightingEnabled);
             this.lightingDirty = false;
         }
-        if (actorAnimation !== undefined)
-            actorAnimation.pose.update(tick);
-        if (propAnimation !== undefined)
-            propAnimation.update(this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
-        for (const sprite of sprites ?? [])
+        this.geo.actorAnimation?.pose.update(tick);
+        this.geo.propAnimation?.update(this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
+
+        for (const sprite of this.geo.spriteBillboards ?? [])
             sprite.update(this.renderData.vertexBufferData, this.renderData.vertexStart, viewerInput.camera.worldMatrix, tick);
         if (this.dirtyVertexRange !== null) {
             const byteOffset = this.dirtyVertexRange.start * 10 * 4;
@@ -767,8 +729,6 @@ export class GeometryRenderer {
         this.cullBoundingBox = boundingBox;
     }
 
-    // Camera-facing quads sweep the same radius in every direction, so a sphere bounds them
-    // exactly where an AABB would have to cover the worst-case orientation.
     public setCullBoundingSphere(origin: ReadonlyVec3, radius: number): void {
         this.cullBoundingSphere = { origin, radius };
     }

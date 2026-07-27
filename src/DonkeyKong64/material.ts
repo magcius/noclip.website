@@ -1,7 +1,15 @@
+import { vec2, vec3 } from 'gl-matrix';
+
 import { ImageFormat, ImageSize, TextFilt, TextureLUT } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import type { Vertex } from '../BanjoKazooie/f3dex.js';
+import { colorNewFromRGBA, colorToRGBA8 } from '../Color.js';
+import type { Color } from '../Color.js';
+import { AABB } from '../Geometry.js';
+import { MathConstants } from '../MathHelpers.js';
 import { assert } from '../util.js';
-import { RSP_Geometry, RSPState } from './f3dex2.js';
+import { AnimatedTexture, RSP_Geometry, RSPState } from './f3dex2.js';
 
 export enum GeneratedSurfaceMaterial {
     Water = 0,
@@ -25,16 +33,197 @@ export enum SceneNodeMaterial {
     GroundFog = 7,
 }
 
-export interface AnimatedMaterialTextureBinding {
-    segment: number;
-    textureIDs: readonly number[];
-    frameDuration: number;
+export class AnimatedMaterialTextureBinding {
+    constructor(
+        public segment: number,
+        public textureIDs: readonly number[],
+        public frameDuration: number,
+    ) {
+    }
+
+    public resolve(textures: ArrayBufferSlice[]): AnimatedTexture {
+        return new AnimatedTexture({
+            segment: this.segment,
+            group: 0,
+            frameDuration: this.frameDuration,
+            frames: this.textureIDs.map((textureID) => textures[textureID]),
+        });
+    }
 }
 
-export interface GeneratedSurfaceMaterialParams {
-    scrollSpeedS: number;
-    scrollSpeedT: number;
-    alphaBase: number;
+export class GeneratedSurface {
+    public textureScale: number;
+    public frequency: vec2;
+    public amplitude: vec2;
+    public phaseSpeed: vec2;
+    public scrollSpeed: vec2;
+    public step: number;
+    public bounds: AABB;
+    public center: vec3;
+    public color: Color;
+    public alphaRange: number;
+    public columns: number;
+    public rows: number;
+
+    constructor(view: DataView, offs: number, public materialIndex: GeneratedSurfaceMaterial) {
+        this.textureScale = view.getFloat32(offs + 0x00, false);
+        this.frequency = vec2.fromValues(
+            view.getFloat32(offs + 0x04, false),
+            view.getFloat32(offs + 0x08, false),
+        );
+        this.amplitude = vec2.fromValues(
+            view.getFloat32(offs + 0x0C, false),
+            view.getFloat32(offs + 0x10, false),
+        );
+        this.phaseSpeed = vec2.fromValues(
+            view.getInt32(offs + 0x14, false),
+            view.getInt32(offs + 0x18, false),
+        );
+        this.scrollSpeed = vec2.fromValues(
+            view.getFloat32(offs + 0x34, false),
+            view.getFloat32(offs + 0x38, false),
+        );
+        this.step = view.getInt16(offs + 0x44, false);
+        const minX = view.getInt16(offs + 0x46, false);
+        const minZ = view.getInt16(offs + 0x48, false);
+        const maxX = view.getInt16(offs + 0x4A, false);
+        const maxZ = view.getInt16(offs + 0x4C, false);
+        const baseY = view.getInt16(offs + 0x4E, false);
+        const heightRange = Math.abs(this.amplitude[0]) + Math.abs(this.amplitude[1]);
+        this.bounds = new AABB(minX, baseY - heightRange, minZ, maxX, baseY + heightRange, maxZ);
+        this.center = vec3.fromValues((minX + maxX) / 2, baseY, (minZ + maxZ) / 2);
+        this.color = colorNewFromRGBA(
+            view.getUint8(offs + 0x61) / 0xFF,
+            view.getUint8(offs + 0x62) / 0xFF,
+            view.getUint8(offs + 0x63) / 0xFF,
+            view.getUint8(offs + 0x64) / 0xFF,
+        );
+        this.alphaRange = view.getUint8(offs + 0x65);
+        this.columns = Math.trunc((maxX - minX) / this.step) + 2;
+        this.rows = Math.trunc((maxZ - minZ) / this.step) + 2;
+    }
+
+    public static getAnimatedTextureBindings(material: GeneratedSurfaceMaterial): readonly AnimatedMaterialTextureBinding[] {
+        switch (material) {
+            case GeneratedSurfaceMaterial.Water:
+            case GeneratedSurfaceMaterial.WaterFog:
+                return [new AnimatedMaterialTextureBinding(0x0D, [0x3C5], 0)];
+            case GeneratedSurfaceMaterial.LavaBright:
+                return [new AnimatedMaterialTextureBinding(0x0D, [0x3B9], 0)];
+            case GeneratedSurfaceMaterial.Acid:
+                return [new AnimatedMaterialTextureBinding(0x0D, [0x3D2], 0)];
+            case GeneratedSurfaceMaterial.WaterFire:
+                return [
+                    new AnimatedMaterialTextureBinding(0x0C, [0x3BA], 0),
+                    new AnimatedMaterialTextureBinding(0x0D, [0x3DB], 0),
+                ];
+            default:
+                return [];
+        }
+    }
+
+    public getAnimatedTextureBindings(): readonly AnimatedMaterialTextureBinding[] {
+        return GeneratedSurface.getAnimatedTextureBindings(this.materialIndex);
+    }
+
+    private getHeight(x: number, z: number, tick: number): number {
+        const angleS = (tick * this.phaseSpeed[0] + Math.trunc(this.frequency[0] * x)) % 0x0FFF;
+        const angleT = (tick * this.phaseSpeed[1] + Math.trunc(this.frequency[1] * z)) % 0x0FFF;
+        return this.center[1]
+            + Math.sin(angleS * MathConstants.TAU / 0x1000) * this.amplitude[0]
+            + Math.sin(angleT * MathConstants.TAU / 0x1000) * this.amplitude[1];
+    }
+
+    private getAlpha(y: number): number {
+        const alphaBase = Math.round(this.color.a * 0xFF);
+        const alpha = Math.trunc(
+            ((y - this.center[1]) / (this.amplitude[0] + this.amplitude[1]))
+            * this.alphaRange + alphaBase,
+        );
+        return Math.max(0, Math.min(0xFF, alpha)) / 0xFF;
+    }
+
+    public createVertexBuffer(): ArrayBufferSlice {
+        const buffer = new ArrayBuffer(this.columns * this.rows * 0x10);
+        const view = new DataView(buffer);
+        const rgb = colorToRGBA8(this.color) & 0xFFFFFF00;
+        let offs = 0;
+        for (let row = 0; row < this.rows; row++) {
+            const z = Math.min(this.bounds.min[2] + row * this.step, this.bounds.max[2]);
+            for (let column = 0; column < this.columns; column++) {
+                const x = Math.min(this.bounds.min[0] + column * this.step, this.bounds.max[0]);
+                const y = this.getHeight(x, z, 0);
+                view.setInt16(offs + 0x00, x * 3);
+                view.setInt16(offs + 0x02, Math.trunc(y * 3));
+                view.setInt16(offs + 0x04, z * 3);
+                view.setInt16(offs + 0x08, Math.trunc(x * this.textureScale) % 0x7FFF);
+                view.setInt16(offs + 0x0A, Math.trunc(z * this.textureScale) % 0x7FFF);
+                view.setUint32(offs + 0x0C, rgb | Math.round(this.getAlpha(y) * 0xFF));
+                offs += 0x10;
+            }
+        }
+        return new ArrayBufferSlice(buffer);
+    }
+
+    public emitGeometry(rspState: RSPState): void {
+        for (let row = 0; row < this.rows - 1; row++) {
+            for (let column = 0; column < this.columns - 1; column += 15) {
+                const cellCount = Math.min(15, this.columns - 1 - column);
+                const vertexCount = cellCount + 1;
+                rspState.gSPVertex(0x08000000 + (row * this.columns + column) * 0x10, vertexCount, 0);
+                rspState.gSPVertex(0x08000000 + ((row + 1) * this.columns + column) * 0x10, vertexCount, 16);
+                for (let cell = 0; cell < cellCount; cell++) {
+                    rspState.gSPTri(cell + 1, cell, 16 + cell);
+                    rspState.gSPTri(16 + cell, 16 + cell + 1, cell + 1);
+                }
+            }
+        }
+    }
+
+    public initMaterial(rspState: RSPState): void {
+        switch (this.materialIndex) {
+            case GeneratedSurfaceMaterial.Water:
+                initGeneratedWaterSurfaceMaterial(rspState, this.scrollSpeed[0], this.scrollSpeed[1]);
+                break;
+            case GeneratedSurfaceMaterial.Lava:
+                initGeneratedLavaSurfaceMaterial(rspState, this.scrollSpeed[0]);
+                break;
+            case GeneratedSurfaceMaterial.Meadow:
+                initGeneratedMeadowSurfaceMaterial(rspState);
+                break;
+            case GeneratedSurfaceMaterial.WaterFog:
+                initGeneratedWaterFogSurfaceMaterial(rspState, this.scrollSpeed[0], this.scrollSpeed[1], Math.round(this.color.a * 0xFF));
+                break;
+            case GeneratedSurfaceMaterial.Dirt:
+                initGeneratedDirtSurfaceMaterial(rspState);
+                break;
+            case GeneratedSurfaceMaterial.LavaBright:
+                initGeneratedLavaBrightSurfaceMaterial(rspState, this.scrollSpeed[0]);
+                break;
+            case GeneratedSurfaceMaterial.Acid:
+                initGeneratedAcidSurfaceMaterial(rspState, this.scrollSpeed[0]);
+                break;
+            case GeneratedSurfaceMaterial.WaterFire:
+                initGeneratedWaterFireSurfaceMaterial(rspState);
+                break;
+            case GeneratedSurfaceMaterial.DirtCave:
+                initGeneratedDirtCaveSurfaceMaterial(rspState);
+                break;
+            default:
+                assert(false);
+        }
+    }
+
+    public updateVertexBuffer(firstVertex: number, vertexCount: number, vertices: readonly Vertex[], vertexBufferData: Float32Array, vertexBufferFirstVertex: number, tick: number): void {
+        for (let i = 0; i < vertexCount; i++) {
+            const vertexIndex = firstVertex + i;
+            const vertex = vertices[vertexIndex];
+            const y = this.getHeight(vertex.x / 3, vertex.z / 3, tick);
+            const localVertex = (vertexIndex - vertexBufferFirstVertex) * 10;
+            vertexBufferData[localVertex + 1] = Math.trunc(y * 3);
+            vertexBufferData[localVertex + 9] = this.getAlpha(y);
+        }
+    }
 }
 
 export function isGeneratedSurfaceMaterial(material: number): material is GeneratedSurfaceMaterial {
@@ -47,105 +236,54 @@ export function isSceneNodeMaterial(material: number): material is SceneNodeMate
         && material <= SceneNodeMaterial.GroundFog;
 }
 
-export function getGeneratedSurfaceAnimatedTextureBindings(material: GeneratedSurfaceMaterial): readonly AnimatedMaterialTextureBinding[] {
-    switch (material) {
-    case GeneratedSurfaceMaterial.Water:
-    case GeneratedSurfaceMaterial.WaterFog:
-        return [{ segment: 0x0D, textureIDs: [0x3C5], frameDuration: 0 }];
-    case GeneratedSurfaceMaterial.LavaBright:
-        return [{ segment: 0x0D, textureIDs: [0x3B9], frameDuration: 0 }];
-    case GeneratedSurfaceMaterial.Acid:
-        return [{ segment: 0x0D, textureIDs: [0x3D2], frameDuration: 0 }];
-    case GeneratedSurfaceMaterial.WaterFire:
-        return [
-            { segment: 0x0C, textureIDs: [0x3BA], frameDuration: 0 },
-            { segment: 0x0D, textureIDs: [0x3DB], frameDuration: 0 },
-        ];
-    default:
-        return [];
-    }
-}
-
-export function getSceneNodeAnimatedTextureBindings(material: SceneNodeMaterial | null): readonly AnimatedMaterialTextureBinding[] {
-    switch (material) {
-    case SceneNodeMaterial.AnimatedTexture:
-        // from func_global_asm_8063D288 + func_global_asm_8063D468
-        return [{
-            segment: 0x0C,
-            textureIDs: [0x3AC, 0x3AD, 0x3AE, 0x3AF, 0x3B0, 0x3B1, 0x3B2, 0x3B3, 0x3B4, 0x3B5, 0x3B6],
-            frameDuration: 1,
-        }];
-    case SceneNodeMaterial.Water:
-        return [{ segment: 0x0C, textureIDs: [0x3E0], frameDuration: 0 }];
-    case SceneNodeMaterial.WaterStream:
-        return [
-            { segment: 0x0C, textureIDs: [0x3B7], frameDuration: 0 },
-            { segment: 0x0D, textureIDs: [0x3B8], frameDuration: 0 },
-        ];
-    default:
-        return [];
+export namespace SceneNodeMaterial {
+    export function getAnimatedTextureBindings(material: SceneNodeMaterial | null): readonly AnimatedMaterialTextureBinding[] {
+        switch (material) {
+            case SceneNodeMaterial.AnimatedTexture:
+                // from func_global_asm_8063D288 + func_global_asm_8063D468
+                return [new AnimatedMaterialTextureBinding(
+                    0x0C,
+                    [0x3AC, 0x3AD, 0x3AE, 0x3AF, 0x3B0, 0x3B1, 0x3B2, 0x3B3, 0x3B4, 0x3B5, 0x3B6],
+                    1,
+                )];
+            case SceneNodeMaterial.Water:
+                return [new AnimatedMaterialTextureBinding(0x0C, [0x3E0], 0)];
+            case SceneNodeMaterial.WaterStream:
+                return [
+                    new AnimatedMaterialTextureBinding(0x0C, [0x3B7], 0),
+                    new AnimatedMaterialTextureBinding(0x0D, [0x3B8], 0),
+                ];
+            default:
+                return [];
+        }
     }
 }
 
 export function initSceneNodeMaterial(rspState: RSPState, material: SceneNodeMaterial, fogEnabled: boolean, mapID: number): void {
     switch (material) {
-    case SceneNodeMaterial.Clouds:
-        initCloudBackground(rspState);
-        break;
-    case SceneNodeMaterial.Sand:
-        initSandMaterial(rspState, fogEnabled);
-        break;
-    case SceneNodeMaterial.WaterStream:
-        initWaterStreamMaterial(rspState, fogEnabled, mapID);
-        break;
-    case SceneNodeMaterial.Water:
-        initWaterMaterial(rspState);
-        break;
-    case SceneNodeMaterial.AnimatedTexture:
-        initAnimatedBackground(rspState);
-        break;
-    case SceneNodeMaterial.ScrollingTexture:
-        initScrollingBackground(rspState);
-        break;
-    case SceneNodeMaterial.GroundFog:
-        initGroundFogMaterial(rspState, mapID);
-        break;
-    default:
-        assert(false);
-    }
-}
-
-export function initGeneratedSurfaceMaterial(rspState: RSPState, material: GeneratedSurfaceMaterial, params: GeneratedSurfaceMaterialParams): void {
-    switch (material) {
-    case GeneratedSurfaceMaterial.Water:
-        initGeneratedWaterSurfaceMaterial(rspState, params.scrollSpeedS, params.scrollSpeedT);
-        break;
-    case GeneratedSurfaceMaterial.Lava:
-        initGeneratedLavaSurfaceMaterial(rspState, params.scrollSpeedS);
-        break;
-    case GeneratedSurfaceMaterial.Meadow:
-        initGeneratedMeadowSurfaceMaterial(rspState);
-        break;
-    case GeneratedSurfaceMaterial.WaterFog:
-        initGeneratedWaterFogSurfaceMaterial(rspState, params.scrollSpeedS, params.scrollSpeedT, params.alphaBase);
-        break;
-    case GeneratedSurfaceMaterial.Dirt:
-        initGeneratedDirtSurfaceMaterial(rspState);
-        break;
-    case GeneratedSurfaceMaterial.LavaBright:
-        initGeneratedLavaBrightSurfaceMaterial(rspState, params.scrollSpeedS);
-        break;
-    case GeneratedSurfaceMaterial.Acid:
-        initGeneratedAcidSurfaceMaterial(rspState, params.scrollSpeedS);
-        break;
-    case GeneratedSurfaceMaterial.WaterFire:
-        initGeneratedWaterFireSurfaceMaterial(rspState);
-        break;
-    case GeneratedSurfaceMaterial.DirtCave:
-        initGeneratedDirtCaveSurfaceMaterial(rspState);
-        break;
-    default:
-        assert(false);
+        case SceneNodeMaterial.Clouds:
+            initCloudBackground(rspState);
+            break;
+        case SceneNodeMaterial.Sand:
+            initSandMaterial(rspState, fogEnabled);
+            break;
+        case SceneNodeMaterial.WaterStream:
+            initWaterStreamMaterial(rspState, fogEnabled, mapID);
+            break;
+        case SceneNodeMaterial.Water:
+            initWaterMaterial(rspState);
+            break;
+        case SceneNodeMaterial.AnimatedTexture:
+            initAnimatedBackground(rspState);
+            break;
+        case SceneNodeMaterial.ScrollingTexture:
+            initScrollingBackground(rspState);
+            break;
+        case SceneNodeMaterial.GroundFog:
+            initGroundFogMaterial(rspState, mapID);
+            break;
+        default:
+            assert(false);
     }
 }
 
