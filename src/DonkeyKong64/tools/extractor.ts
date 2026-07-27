@@ -22,7 +22,7 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer);
 }
 
-const pathBaseIn  = `./data/DonkeyKong64_Raw`;
+const pathBaseIn = `./data/DonkeyKong64_Raw`;
 const pathBaseOut = `./data/DonkeyKong64`;
 
 function determineSizeOfZlibStream(buffer: ArrayBufferSlice, srcOffs: number): number {
@@ -58,11 +58,7 @@ const MapTableOffset = 0x15232C;
 const TextureTableOffset = 0x118B638;
 const MapCount = 0xD8;
 
-//#region ROM tables
-
-// A pointer table entry is either a compressed file, or, with the high bit set, an
-// index redirecting to another entry in the same table.
-type TableEntry = ArrayBufferSlice | number;
+//X #region ROM tables
 
 class ROMTables {
     private view: DataView;
@@ -79,24 +75,26 @@ class ROMTables {
         return this.view.getUint32(PointerTableOffset + 0x80 + table * 4);
     }
 
-    public extractCompressedTable(table: number): TableEntry[] {
+    private extractCompressedEntry(getPointer: (index: number) => number, index: number): ArrayBufferSlice {
+        let pointer = getPointer(index);
+        while ((pointer & 0x80000000) !== 0) {
+            const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
+            index = this.view.getUint16(offs);
+            pointer = getPointer(index);
+        }
+        return cutZlibBuffer(this.romData, (pointer & 0x7FFFFFFF) + PointerTableOffset);
+    }
+
+    public extractCompressedTable(table: number): ArrayBufferSlice[] {
         const tableOffset = this.getTableOffset(table);
-        const files: TableEntry[] = [];
-        const firstFileForPointer = new Map<number, number>();
+        const files: ArrayBufferSlice[] = [];
+        const getPointer = (index: number) => this.view.getUint32(tableOffset + index * 4);
         for (let i = 0; i < this.getTableCount(table); i++) {
-            const pointer = this.view.getUint32(tableOffset + i * 4);
+            const pointer = getPointer(i);
             const nextTableStart = table < 31 ? this.view.getUint32(PointerTableOffset + (table + 1) * 4) : 0;
             if (!(pointer & 0x80000000) && nextTableStart !== 0 && pointer >= nextTableStart)
                 break;
-            const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
-            if ((pointer & 0x80000000) !== 0)
-                files[i] = this.view.getUint16(offs);
-            else if (firstFileForPointer.has(pointer))
-                files[i] = firstFileForPointer.get(pointer)!;
-            else {
-                firstFileForPointer.set(pointer, i);
-                files[i] = cutZlibBuffer(this.romData, offs);
-            }
+            files[i] = this.extractCompressedEntry(getPointer, i);
         }
         return files;
     }
@@ -113,23 +111,11 @@ class ROMTables {
         return this.romData.subarray(offs, nextOffs - offs);
     }
 
-    // The map table lives outside the pointer table, but uses the same entry encoding.
-    public extractMapTable(): TableEntry[] {
-        const MapData: TableEntry[] = [];
-        let mapTableIdx = MapTableOffset;
+    public extractMapTable(): ArrayBufferSlice[] {
+        const MapData: ArrayBufferSlice[] = [];
         for (let i = 0; i < MapCount; i++) {
-            const mapDataPtr = this.view.getUint32(mapTableIdx + 0x00);
-
-            const offs = (mapDataPtr & 0x7FFFFFFF) + PointerTableOffset;
-            if (!!(mapDataPtr & 0x80000000)) {
-                // Indirect reference to another map.
-                MapData[i] = this.view.getUint16(offs);
-            } else {
-                // TODO(jstpierre): Extract the proper size, and decompress on client.
-                MapData[i] = cutZlibBuffer(this.romData, offs);
-            }
-
-            mapTableIdx += 0x04;
+            // TODO(jstpierre): Extract the proper size, and decompress on client.
+            MapData[i] = this.extractCompressedEntry(idx => this.view.getUint32(MapTableOffset + idx * 4), i);
         }
         return MapData;
     }
@@ -144,18 +130,6 @@ class ROMTables {
         }
         return TexData;
     }
-}
-
-function resolveTableEntry(table: TableEntry[], index: number): ArrayBufferSlice {
-    let entry = table[index];
-    const visited = new Set<number>();
-    while (typeof entry === 'number') {
-        assert(!visited.has(entry));
-        visited.add(entry);
-        entry = table[entry];
-    }
-    assert(entry !== undefined);
-    return entry;
 }
 
 //#endregion
@@ -305,19 +279,19 @@ function scanGeneratedSurfaceTextureUsage(map: Buffer, usage: TextureUsage): voi
             }
         }
         switch (material) {
-        case GeneratedSurfaceMaterial.Lava:
-            usage.geometry.add(0x2EE);
-            usage.geometry.add(0x2EF);
-            break;
-        case GeneratedSurfaceMaterial.Meadow:
-            usage.geometry.add(0xF0);
-            break;
-        case GeneratedSurfaceMaterial.Dirt:
-            usage.geometry.add(0x75C);
-            break;
-        case GeneratedSurfaceMaterial.DirtCave:
-            usage.geometry.add(0xAF4);
-            break;
+            case GeneratedSurfaceMaterial.Lava:
+                usage.geometry.add(0x2EE);
+                usage.geometry.add(0x2EF);
+                break;
+            case GeneratedSurfaceMaterial.Meadow:
+                usage.geometry.add(0xF0);
+                break;
+            case GeneratedSurfaceMaterial.Dirt:
+                usage.geometry.add(0x75C);
+                break;
+            case GeneratedSurfaceMaterial.DirtCave:
+                usage.geometry.add(0xAF4);
+                break;
         }
     }
 }
@@ -337,12 +311,12 @@ function scanSceneNodeTextureUsage(map: Buffer, usage: TextureUsage): void {
             }
         }
         switch (material) {
-        case SceneNodeMaterial.Sand:
-            usage.geometry.add(0x565);
-            break;
-        case SceneNodeMaterial.GroundFog:
-            usage.geometry.add(0x1765);
-            break;
+            case SceneNodeMaterial.Sand:
+                usage.geometry.add(0x565);
+                break;
+            case SceneNodeMaterial.GroundFog:
+                usage.geometry.add(0x1765);
+                break;
         }
     }
 }
@@ -496,7 +470,6 @@ const backdropTextureIDs = new Map<number, number>([
     [0x7D, 0x2E], // Stash Snatch (insane)
 ]);
 
-// Actors whose bind pose comes from an animation rather than the model itself.
 const actorAnimationByType = new Map<number, number>([
     [0x10, 0x402],
     [0x2A, 0x402],
@@ -517,15 +490,14 @@ interface LevelSource {
     textureUsage: TextureUsage;
 }
 
-// Everything buildLevelSource needs that is shared across all maps.
 interface ExtractContext {
     rom: ROMTables;
-    MapData: TableEntry[];
-    SetupData: TableEntry[];
-    ScriptData: TableEntry[];
-    CritterData: TableEntry[];
-    PropGeometryData: TableEntry[];
-    ActorGeometryData: TableEntry[];
+    MapData: ArrayBufferSlice[];
+    SetupData: ArrayBufferSlice[];
+    ScriptData: ArrayBufferSlice[];
+    CritterData: ArrayBufferSlice[];
+    PropGeometryData: ArrayBufferSlice[];
+    ActorGeometryData: ArrayBufferSlice[];
     actorModelByType: Map<number, number>;
     environmentParticles: EnvironmentParticle[];
     spriteByAddress: Map<number, SpriteInfo>;
@@ -534,9 +506,9 @@ interface ExtractContext {
 }
 
 function buildLevelSource(ctx: ExtractContext, mapID: number): LevelSource {
-    const mapData = resolveTableEntry(ctx.MapData, mapID);
-    const setupData = resolveTableEntry(ctx.SetupData, mapID);
-    const scriptData = resolveTableEntry(ctx.ScriptData, mapID);
+    const mapData = ctx.MapData[mapID];
+    const setupData = ctx.SetupData[mapID];
+    const scriptData = ctx.ScriptData[mapID];
     const map = gunzipSync(mapData.createTypedArray(Uint8Array));
     const setup = gunzipSync(setupData.createTypedArray(Uint8Array));
     const scripts = gunzipSync(scriptData.createTypedArray(Uint8Array));
@@ -546,7 +518,7 @@ function buildLevelSource(ctx: ExtractContext, mapID: number): LevelSource {
     const PropGeometry = [];
     for (const type of propTypes) {
         if (type < ctx.PropGeometryData.length)
-            PropGeometry.push({ Type: type, Data: resolveTableEntry(ctx.PropGeometryData, type) });
+            PropGeometry.push({ Type: type, Data: ctx.PropGeometryData[type] });
     }
 
     const actorModels = new Set<number>();
@@ -566,7 +538,7 @@ function buildLevelSource(ctx: ExtractContext, mapID: number): LevelSource {
     for (const model of actorModels) {
         const tableIndex = model - 1; // Actor IDs are 1-based
         if (tableIndex < ctx.ActorGeometryData.length)
-            ActorGeometry.push({ Model: model, Data: resolveTableEntry(ctx.ActorGeometryData, tableIndex) });
+            ActorGeometry.push({ Model: model, Data: ctx.ActorGeometryData[tableIndex] });
     }
     const animations = [...actorAnimations].map((id) => ({
         ID: id,
@@ -600,7 +572,7 @@ function buildLevelSource(ctx: ExtractContext, mapID: number): LevelSource {
             : null,
         SetupData: setupData,
         ScriptData: scriptData,
-        CritterData: mapID < ctx.CritterData.length ? resolveTableEntry(ctx.CritterData, mapID) : null,
+        CritterData: mapID < ctx.CritterData.length ? ctx.CritterData[mapID] : null,
         PropGeometry,
         ActorDefinitions,
         ActorGeometry,
@@ -612,7 +584,7 @@ function buildLevelSource(ctx: ExtractContext, mapID: number): LevelSource {
 
 //#endregion
 
-//#region Common texture sharding
+//#region resource sharding
 
 // Instead of having one big archive for all the DK64 content (~16MB),
 // split it into multiple archives.
@@ -657,21 +629,21 @@ function buildTextureOwners(levels: LevelSource[], kind: keyof TextureUsage): Ma
     return owners;
 }
 
-// A resource is shardable when it is used by more than one map, but not by all of
-// them -- single-owner textures go in the map archive, universal ones in common.crg1.
-function collectSharedResources(kind: keyof TextureUsage, data: ArrayBufferSlice[], owners: Map<number, number[]>, universalOwnerCount: number): SharedTextureResource[] {
+function collectShardableResources(kind: keyof TextureUsage, data: ArrayBufferSlice[], owners: Map<number, number[]>, universalOwnerCount: number): SharedTextureResource[] {
     const resources: SharedTextureResource[] = [];
     for (let id = 0; id < data.length; id++) {
         const resourceOwners = owners.get(id) ?? [];
+        // only resources used by more than one map and not by all maps get sharded
         if (resourceOwners.length > 1 && resourceOwners.length < universalOwnerCount)
             resources.push({ kind, id, data: data[id], owners: resourceOwners });
     }
     return resources;
 }
 
-// Resources with the same owner set always shard together, so group them up front.
-// Canonicalize the subsets for determinism.
-function groupResourcesByOwnerSubset(resources: SharedTextureResource[]): TextureOwnerSubset[] {
+function packSubsetsIntoGroups(resources: SharedTextureResource[]): CommonTextureGroup[] {
+    const groupCount = 0x10;
+
+    // Canonicalize subsets for determinism.
     const subsetByKey = new Map<string, TextureOwnerSubset>();
     for (const resource of resources) {
         const key = resource.owners.join(',');
@@ -689,29 +661,22 @@ function groupResourcesByOwnerSubset(resources: SharedTextureResource[]): Textur
         || b.owners.length - a.owners.length
         || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     );
-    return subsets;
-}
-
-function addSubsetToGroup(group: CommonTextureGroup, subset: TextureOwnerSubset): void {
-    group.resources.push(...subset.resources);
-    group.byteLength += subset.byteLength;
-    for (const owner of subset.owners)
-        group.owners.add(owner);
-}
-
-// Greedy bin-packing: a shard's cost is its size times the number of maps that have
-// to fetch it, so prefer the group where adding this subset grows that product least.
-function packSubsetsIntoGroups(subsets: TextureOwnerSubset[], groupCount: number): CommonTextureGroup[] {
     const groups: CommonTextureGroup[] = Array.from({ length: groupCount }, () => ({
         resources: [],
         owners: new Set<number>(),
         byteLength: 0,
     }));
 
-    // To start, put the largest N subsets into a shard of its own.
+    // To start, put the largest N subsets into shards of their own.
     const seededSubsetCount = Math.min(groupCount, subsets.length);
-    for (let subsetIndex = 0; subsetIndex < seededSubsetCount; subsetIndex++)
-        addSubsetToGroup(groups[subsetIndex], subsets[subsetIndex]);
+    for (let subsetIndex = 0; subsetIndex < seededSubsetCount; subsetIndex++) {
+        const subset = subsets[subsetIndex];
+        const group = groups[subsetIndex];
+        group.resources.push(...subset.resources);
+        group.byteLength += subset.byteLength;
+        for (const owner of subset.owners)
+            group.owners.add(owner);
+    }
 
     // Then add the remaining subsets, attempting to minimize excess costs.
     for (let subsetIndex = seededSubsetCount; subsetIndex < subsets.length; subsetIndex++) {
@@ -738,44 +703,19 @@ function packSubsetsIntoGroups(subsets: TextureOwnerSubset[], groupCount: number
                 bestAddedOwners = addedOwners;
             }
         }
-        addSubsetToGroup(groups[bestGroup], subset);
+        const group = groups[bestGroup];
+        group.resources.push(...subset.resources);
+        group.byteLength += subset.byteLength;
+        for (const owner of subset.owners)
+            group.owners.add(owner);
     }
 
     return groups;
 }
 
-// Every map must be able to reach each of its shared textures through a group it fetches.
-function verifyCommonTextureGroups(levels: LevelSource[], groups: CommonTextureGroup[], geometryOwners: Map<number, number[]>, animatedOwners: Map<number, number[]>, universalOwnerCount: number): void {
-    const groupByTexture = new Map<string, number>();
-    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
-        for (const resource of groups[groupIndex].resources)
-            groupByTexture.set(`${resource.kind}:${resource.id}`, groupIndex);
-    }
-    for (let mapID = 0; mapID < levels.length; mapID++) {
-        for (const kind of ['geometry', 'animated'] as const) {
-            const owners = kind === 'geometry' ? geometryOwners : animatedOwners;
-            for (const textureID of levels[mapID].textureUsage[kind]) {
-                const ownerCount = owners.get(textureID)!.length;
-                if (ownerCount === 1 || ownerCount === universalOwnerCount)
-                    continue;
-                const groupIndex = groupByTexture.get(`${kind}:${textureID}`);
-                assert(groupIndex !== undefined && groups[groupIndex].owners.has(mapID));
-            }
-        }
-    }
-}
-
-function parseCommonTextureGroupCountArg(): number {
-    const prefix = '--common-texture-groups=';
-    const arg = process.argv.find((entry) => entry.startsWith(prefix));
-    const count = arg !== undefined ? Number.parseInt(arg.slice(prefix.length), 10) : 0x10;
-    assert(Number.isInteger(count) && count >= 1 && count <= 0x20);
-    return count;
-}
-
 //#endregion
 
-//#region Archive writing
+//#region archive writing
 
 function makeTextureEntries(data: ArrayBufferSlice[], predicate: (id: number) => boolean): { ID: number, Data: ArrayBufferSlice }[] {
     const entries = [];
@@ -887,7 +827,7 @@ function main() {
     const backdropTextureIndices = new Map<number, number>();
     for (const textureID of new Set(backdropTextureIDs.values())) {
         backdropTextureIndices.set(textureID, TexData.length);
-        TexData.push(resolveTableEntry(HUDTextureData, textureID));
+        TexData.push(HUDTextureData[textureID]);
     }
 
     // Table 7 textures are uncompressed and used for animated map materials.
@@ -925,12 +865,10 @@ function main() {
         assert(textureID >= 0 && textureID < AnimTexData.length);
 
     const sharedResources = [
-        ...collectSharedResources('geometry', TexData, geometryOwners, levels.length),
-        ...collectSharedResources('animated', AnimTexData, animatedOwners, levels.length),
+        ...collectShardableResources('geometry', TexData, geometryOwners, levels.length),
+        ...collectShardableResources('animated', AnimTexData, animatedOwners, levels.length),
     ];
-    const commonTextureGroups = packSubsetsIntoGroups(
-        groupResourcesByOwnerSubset(sharedResources), parseCommonTextureGroupCountArg());
-    verifyCommonTextureGroups(levels, commonTextureGroups, geometryOwners, animatedOwners, levels.length);
+    const commonTextureGroups = packSubsetsIntoGroups(sharedResources);
 
     writeArchives({
         levels, TexData, AnimTexData, SpriteData, CustomScriptFunctionData,
