@@ -15,6 +15,33 @@ const vertexOffsetsPerSection = 8;
 // F3DEX2 vertex command stride, matching gSPVertex's 0x10-byte entries.
 const mapVertexStride = 0x10;
 
+// Map file header. tools/extractor.ts walks the same tables to work out which
+// textures a map needs, so the offsets live here rather than on both sides.
+export const MapHeader = {
+    sceneNodeRoot: 0x30,
+    displayListStart: 0x34,
+    vertexStart: 0x38,
+    animatedTextureTable: 0x48,
+    generatedSurfaceTable: 0x4C,
+} as const;
+
+export const AnimatedTextureEntry = {
+    stride: 0x7C,
+    frameCount: 0x03,
+    frames: 0x0C,
+} as const;
+
+export const GeneratedSurfaceEntry = {
+    stride: 0x6C,
+    material: 0x66,
+} as const;
+
+export const SceneNodeEntry = {
+    displayListCount: 0xC5,
+    displayLists: 0x1C,
+    materials: 0x70,
+} as const;
+
 export interface SetupProp {
     setupIndex: number;
     position: vec3;
@@ -253,8 +280,8 @@ export class DK64Map {
         const view = bin.createDataView();
         this.fogEnabled = (view.getUint8(0x08) & 1) !== 0;
         this.clipFar = view.getInt16(0x0A, false);
-        const dlStart = view.getUint32(0x34, false);
-        const vertStart = view.getUint32(0x38, false);
+        const dlStart = view.getUint32(MapHeader.displayListStart, false);
+        const vertStart = view.getUint32(MapHeader.vertexStart, false);
         const vertEnd = view.getUint32(0x40, false);
         const sectionStart = view.getUint32(0x58, false);
         const sectionEnd = view.getUint32(0x5C, false);
@@ -295,13 +322,13 @@ export class DK64Map {
     }
 
     private parseAnimatedTextures(view: DataView, animTexData: ArrayBufferSlice[]): void {
-        const table = view.getUint32(0x48, false);
+        const table = view.getUint32(MapHeader.animatedTextureTable, false);
         const count = view.getUint32(table, false);
         for (let i = 0; i < count; i++) {
-            const offs = table + 4 + i * 0x7C;
+            const offs = table + 4 + i * AnimatedTextureEntry.stride;
             const frames: ArrayBufferSlice[] = [];
-            for (let j = 0; j < view.getUint8(offs + 3); j++) {
-                const frame = animTexData[view.getUint32(offs + 0x0C + j * 4, false)];
+            for (let j = 0; j < view.getUint8(offs + AnimatedTextureEntry.frameCount); j++) {
+                const frame = animTexData[view.getUint32(offs + AnimatedTextureEntry.frames + j * 4, false)];
                 if (frame !== undefined)
                     frames.push(frame);
             }
@@ -317,16 +344,16 @@ export class DK64Map {
     }
 
     private parseGeneratedSurfaces(view: DataView): void {
-        const table = view.getUint32(0x4C, false);
+        const table = view.getUint32(MapHeader.generatedSurfaceTable, false);
         const count = view.getUint32(table, false);
         for (let i = 0; i < count; i++) {
-            const offs = table + 4 + i * 0x6C;
+            const offs = table + 4 + i * GeneratedSurfaceEntry.stride;
             const step = view.getInt16(offs + 0x44, false);
             const minX = view.getInt16(offs + 0x46, false);
             const minZ = view.getInt16(offs + 0x48, false);
             const maxX = view.getInt16(offs + 0x4A, false);
             const maxZ = view.getInt16(offs + 0x4C, false);
-            const materialIndex = view.getUint8(offs + 0x66);
+            const materialIndex = view.getUint8(offs + GeneratedSurfaceEntry.material);
             if (!isGeneratedSurfaceMaterial(materialIndex))
                 continue;
             this.generatedSurfaces.push({
@@ -405,13 +432,13 @@ export class DK64Map {
     }
 
     private parseSceneNodeDisplayLists(view: DataView): void {
-        const rootNode = view.getUint32(0x30, false);
-        const count = view.getUint8(rootNode + 0xC5);
+        const rootNode = view.getUint32(MapHeader.sceneNodeRoot, false);
+        const count = view.getUint8(rootNode + SceneNodeEntry.displayListCount);
         for (let i = 0; i < count; i++) {
-            const dlStartAddr = view.getInt32(rootNode + 0x1C + i * 4, false);
+            const dlStartAddr = view.getInt32(rootNode + SceneNodeEntry.displayLists + i * 4, false);
             if (dlStartAddr < 0)
                 continue;
-            const materialIndex = view.getUint16(rootNode + 0x70 + i * 2, false);
+            const materialIndex = view.getUint16(rootNode + SceneNodeEntry.materials + i * 2, false);
             if (!isSceneNodeMaterial(materialIndex))
                 continue;
             this.displayLists.push({

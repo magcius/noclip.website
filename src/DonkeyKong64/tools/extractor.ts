@@ -7,7 +7,10 @@ import { assert } from "../../util.js";
 import { Zlib, inflateRawSync } from "zlib";
 import { hexzero } from "../../util.js";
 import { gunzipSync } from "zlib";
-import { parseInstanceScripts, parseSetup as parseSetupData } from '../parse.js';
+import {
+    AnimatedTextureEntry, GeneratedSurfaceEntry, MapHeader, SceneNodeEntry,
+    parseInstanceScripts, parseSetup as parseSetupData,
+} from '../parse.js';
 import {
     GeneratedSurfaceMaterial, SceneNodeMaterial,
     getGeneratedSurfaceAnimatedTextureBindings, getSceneNodeAnimatedTextureBindings,
@@ -49,135 +52,157 @@ const PointerTable = {
     Critters: 22,
 } as const;
 
-function main() {
-    const romData = fetchDataSync(`${pathBaseIn}/rom.z64`);
-    const view = romData.createDataView();
+// USA pointer table locations.
+const PointerTableOffset = 0x101C50;
+const MapTableOffset = 0x15232C;
+const TextureTableOffset = 0x118B638;
+const MapCount = 0xD8;
 
-    // USA pointer table locations
-    const PointerTableOffset = 0x101C50;
-    const MapTableOffset = 0x15232C;
-    const WallTableOffset = 0x43CBEC;
-    const FloorTableOffset = 0x63CA6C;
-    const SetupTableOffset = 0xD0E86C;
-    const StructTableOffset = 0x82A06C;
-    const ActorModelTableOffset = 0x8D3018;
-    const TextureTableOffset = 0x118B638;
+//#region ROM tables
 
-    // Map data table.
-    const MapData: (ArrayBufferSlice | number)[] = [];
-    let mapTableIdx = MapTableOffset;
-    for (let i = 0; i < 0xD8; i++) {
-        const mapDataPtr = view.getUint32(mapTableIdx + 0x00);
+// A pointer table entry is either a compressed file, or, with the high bit set, an
+// index redirecting to another entry in the same table.
+type TableEntry = ArrayBufferSlice | number;
 
-        const offs = (mapDataPtr & 0x7FFFFFFF) + PointerTableOffset;
-        if (!!(mapDataPtr & 0x80000000)) {
-            // Indirect reference to another map.
-            const otherMap = view.getUint16(offs);
-            MapData[i] = otherMap;
-        } else {
-            // TODO(jstpierre): Extract the proper size, and decompress on client.
-            MapData[i] = cutZlibBuffer(romData, offs);
-        }
+class ROMTables {
+    private view: DataView;
 
-        mapTableIdx += 0x04;
+    constructor(private romData: ArrayBufferSlice) {
+        this.view = romData.createDataView();
     }
 
-    const backdropTextureIDs = new Map<number, number>([
-        [0x0E, 0x2D], // Aztec beetle race
-
-        [0x03, 0x2E], // K. Rool barrel: Lanky's maze
-
-        [0x0B, 0x2E], // Stealthy Snoop (normal, no logo)
-        [0x41, 0x2E], // Stealthy Snoop (normal)
-        [0x7E, 0x2E], // Stealthy Snoop (very easy)
-        [0x7F, 0x2E], // Stealthy Snoop (easy)
-        [0x80, 0x2E], // Stealthy Snoop (hard)
-
-        [0x42, 0x2E], // Mad Maze Maul (hard)
-        [0x44, 0x2E], // Mad Maze Maul (easy)
-        [0x45, 0x2E], // Mad Maze Maul (normal)
-        [0x7C, 0x2E], // Mad Maze Maul (insane)
-
-        [0x43, 0x2E], // Stash Snatch (normal)
-        [0x4A, 0x2E], // Stash Snatch (easy)
-        [0x4B, 0x2E], // Stash Snatch (hard)
-        [0x7D, 0x2E], // Stash Snatch (insane)
-    ]);
-
-    function getTableOffset(table: number): number {
-        return PointerTableOffset + view.getUint32(PointerTableOffset + table * 4);
+    public getTableOffset(table: number): number {
+        return PointerTableOffset + this.view.getUint32(PointerTableOffset + table * 4);
     }
 
-    function getTableCount(table: number): number {
-        return view.getUint32(PointerTableOffset + 0x80 + table * 4);
+    public getTableCount(table: number): number {
+        return this.view.getUint32(PointerTableOffset + 0x80 + table * 4);
     }
 
-    function extractCompressedTable(table: number): (ArrayBufferSlice | number)[] {
-        const tableOffset = getTableOffset(table);
-        const files: (ArrayBufferSlice | number)[] = [];
+    public extractCompressedTable(table: number): TableEntry[] {
+        const tableOffset = this.getTableOffset(table);
+        const files: TableEntry[] = [];
         const firstFileForPointer = new Map<number, number>();
-        for (let i = 0; i < getTableCount(table); i++) {
-            const pointer = view.getUint32(tableOffset + i * 4);
-            const nextTableStart = table < 31 ? view.getUint32(PointerTableOffset + (table + 1) * 4) : 0;
+        for (let i = 0; i < this.getTableCount(table); i++) {
+            const pointer = this.view.getUint32(tableOffset + i * 4);
+            const nextTableStart = table < 31 ? this.view.getUint32(PointerTableOffset + (table + 1) * 4) : 0;
             if (!(pointer & 0x80000000) && nextTableStart !== 0 && pointer >= nextTableStart)
                 break;
             const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
             if ((pointer & 0x80000000) !== 0)
-                files[i] = view.getUint16(offs);
+                files[i] = this.view.getUint16(offs);
             else if (firstFileForPointer.has(pointer))
                 files[i] = firstFileForPointer.get(pointer)!;
             else {
                 firstFileForPointer.set(pointer, i);
-                files[i] = cutZlibBuffer(romData, offs);
+                files[i] = cutZlibBuffer(this.romData, offs);
             }
         }
         return files;
     }
 
-    function extractRawTableEntry(table: number, index: number): ArrayBufferSlice {
-        const tableOffset = getTableOffset(table);
-        assert(index >= 0 && index < getTableCount(table));
-        const pointer = view.getUint32(tableOffset + index * 4);
-        const nextPointer = view.getUint32(tableOffset + (index + 1) * 4);
+    public extractRawTableEntry(table: number, index: number): ArrayBufferSlice {
+        const tableOffset = this.getTableOffset(table);
+        assert(index >= 0 && index < this.getTableCount(table));
+        const pointer = this.view.getUint32(tableOffset + index * 4);
+        const nextPointer = this.view.getUint32(tableOffset + (index + 1) * 4);
         assert((pointer & 0x80000000) === 0 && (nextPointer & 0x80000000) === 0);
         const offs = (pointer & 0x7FFFFFFF) + PointerTableOffset;
         const nextOffs = (nextPointer & 0x7FFFFFFF) + PointerTableOffset;
         assert(nextOffs >= offs);
-        return romData.subarray(offs, nextOffs - offs);
+        return this.romData.subarray(offs, nextOffs - offs);
     }
 
-    const PropGeometryData = extractCompressedTable(PointerTable.PropGeometry);
-    const ActorGeometryData = extractCompressedTable(PointerTable.ActorGeometry);
-    const SetupData = extractCompressedTable(PointerTable.Setup);
-    const ScriptData = extractCompressedTable(PointerTable.Scripts);
-    const HUDTextureData = extractCompressedTable(PointerTable.HUDTextures);
-    const CritterData = extractCompressedTable(PointerTable.Critters);
+    // The map table lives outside the pointer table, but uses the same entry encoding.
+    public extractMapTable(): TableEntry[] {
+        const MapData: TableEntry[] = [];
+        let mapTableIdx = MapTableOffset;
+        for (let i = 0; i < MapCount; i++) {
+            const mapDataPtr = this.view.getUint32(mapTableIdx + 0x00);
 
-    function resolveTableEntry(table: (ArrayBufferSlice | number)[], index: number): ArrayBufferSlice {
-        let entry = table[index];
-        const visited = new Set<number>();
-        while (typeof entry === 'number') {
-            assert(!visited.has(entry));
-            visited.add(entry);
-            entry = table[entry];
+            const offs = (mapDataPtr & 0x7FFFFFFF) + PointerTableOffset;
+            if (!!(mapDataPtr & 0x80000000)) {
+                // Indirect reference to another map.
+                MapData[i] = this.view.getUint16(offs);
+            } else {
+                // TODO(jstpierre): Extract the proper size, and decompress on client.
+                MapData[i] = cutZlibBuffer(this.romData, offs);
+            }
+
+            mapTableIdx += 0x04;
         }
-        assert(entry !== undefined);
-        return entry;
+        return MapData;
     }
 
-    const globalASM = Buffer.concat([
+    public extractTextureTable(count: number): ArrayBufferSlice[] {
+        const TexData: ArrayBufferSlice[] = [];
+        let texTableIdx = TextureTableOffset;
+        for (let i = 0; i < count; i++) {
+            const texDataPtr = this.view.getUint32(texTableIdx + 0x00);
+            TexData[i] = cutZlibBuffer(this.romData, (texDataPtr & 0x7FFFFFFF) + PointerTableOffset);
+            texTableIdx += 0x04;
+        }
+        return TexData;
+    }
+}
+
+function resolveTableEntry(table: TableEntry[], index: number): ArrayBufferSlice {
+    let entry = table[index];
+    const visited = new Set<number>();
+    while (typeof entry === 'number') {
+        assert(!visited.has(entry));
+        visited.add(entry);
+        entry = table[entry];
+    }
+    assert(entry !== undefined);
+    return entry;
+}
+
+//#endregion
+
+//#region globalASM tables
+
+interface SpriteInfo {
+    address: number;
+    id: number;
+    imagesPerFrameHorizontal: number;
+    imagesPerFrameVertical: number;
+    flags: number;
+    codec: number;
+    params: number[];
+    table: number;
+    width: number;
+    height: number;
+    images: number[];
+}
+
+interface EnvironmentParticle {
+    map: number;
+    start: number[];
+    end: number[];
+    gap: number;
+    distance: number;
+    baseScale: number;
+    risingScale: number;
+}
+
+function loadGlobalASM(romData: ArrayBufferSlice): Buffer {
+    return Buffer.concat([
         gunzipSync(romData.createTypedArray(Uint8Array, 0x113F0, 0xC29D4 - 0x113F0)),
         gunzipSync(romData.createTypedArray(Uint8Array, 0xC29D4, 0x949C)),
     ]);
-    function globalAddressToOffset(address: number): number {
-        const offs = address - 0x805FB300;
-        assert(offs >= 0 && offs < globalASM.length);
-        return offs;
-    }
+}
 
-    const SpriteData = Array.from({ length: 176 }, (_, i) => {
+function globalAddressToOffset(globalASM: Buffer, address: number): number {
+    const offs = address - 0x805FB300;
+    assert(offs >= 0 && offs < globalASM.length);
+    return offs;
+}
+
+function parseSpriteData(globalASM: Buffer): SpriteInfo[] {
+    return Array.from({ length: 176 }, (_, i) => {
         const address = globalASM.readUInt32BE(0x15A090 + i * 4);
-        const offs = globalAddressToOffset(address);
+        const offs = globalAddressToOffset(globalASM, address);
         const imageCount = globalASM.readUInt16BE(offs + 0x12);
         return {
             address,
@@ -193,9 +218,14 @@ function main() {
             images: Array.from({ length: imageCount }, (_, j) => globalASM.readUInt16BE(offs + 0x14 + j * 2)),
         };
     });
-    const CustomScriptFunctionData = Array.from({ length: 118 }, (_, i) =>
-        globalASM.readUInt32BE(0x14CB70 + i * 4));
-    const EnvironmentParticleData = Array.from({ length: 13 }, (_, i) => {
+}
+
+function parseCustomScriptFunctionData(globalASM: Buffer): number[] {
+    return Array.from({ length: 118 }, (_, i) => globalASM.readUInt32BE(0x14CB70 + i * 4));
+}
+
+function parseEnvironmentParticleData(globalASM: Buffer): EnvironmentParticle[] {
+    return Array.from({ length: 13 }, (_, i) => {
         const offs = 0x14D8A0 + i * 0x20;
         return {
             map: globalASM.readUInt8(offs),
@@ -207,426 +237,443 @@ function main() {
             risingScale: globalASM.readFloatBE(offs + 0x1C),
         };
     });
-    const actorModelByType = new Map(Array.from({ length: 0x80 }, (_, i) => {
-        const offs = globalAddressToOffset(0x8074E8B0) + i * 0x30;
+}
+
+function parseActorModelByType(globalASM: Buffer): Map<number, number> {
+    return new Map(Array.from({ length: 0x80 }, (_, i) => {
+        const offs = globalAddressToOffset(globalASM, 0x8074E8B0) + i * 0x30;
         return [globalASM.readUInt16BE(offs), globalASM.readUInt16BE(offs + 2)] as const;
     }));
+}
 
-    // Texture data table.
-    const TexData: ArrayBufferSlice[] = [];
-    // TODO(jstpierre): Proper count
-    let texTableIdx = TextureTableOffset;
-    const textureCount = Math.max(...SpriteData
-        .filter((sprite) => sprite.table === 1)
-        .flatMap((sprite) => sprite.images)) + 1;
-    for (let i = 0; i < textureCount; i++) {
-        const texDataPtr = view.getUint32(texTableIdx + 0x00);
+//#endregion
 
-        const offs = (texDataPtr & 0x7FFFFFFF) + PointerTableOffset;
-        TexData[i] = cutZlibBuffer(romData, offs);
+//#region Texture usage scanning
 
-        texTableIdx += 0x04;
+interface TextureUsage {
+    geometry: Set<number>;
+    animated: Set<number>;
+}
+
+const supportedSceneNodeMaterials = new Set<number>([
+    SceneNodeMaterial.Sand,
+    SceneNodeMaterial.WaterStream,
+    SceneNodeMaterial.Water,
+    SceneNodeMaterial.GroundFog,
+]);
+
+function scanTextureCommands(data: Buffer, start: number, end: number, output: Set<number>, excluded = new Set<number>()): void {
+    assert(start >= 0 && start <= end && end <= data.byteLength);
+    for (let offs = start; offs + 8 <= end; offs += 8) {
+        if (data.readUInt8(offs) !== 0xFD)
+            continue;
+        const address = data.readUInt32BE(offs + 4);
+        // Segment zero means an index into pointer table 25.
+        if ((address >>> 24) === 0 && !excluded.has(address))
+            output.add(address);
     }
-    // The two panorama backdrops are given normal texture indices for later archive packing.
-    const backdropTextureIndices = new Map<number, number>();
-    for (const textureID of new Set(backdropTextureIDs.values())) {
-        backdropTextureIndices.set(textureID, TexData.length);
-        TexData.push(resolveTableEntry(HUDTextureData, textureID));
+}
+
+function scanMapGeometryTextureUsage(map: Buffer, usage: TextureUsage): void {
+    const dlStart = map.readUInt32BE(MapHeader.displayListStart);
+    const vertStart = map.readUInt32BE(MapHeader.vertexStart);
+    scanTextureCommands(map, dlStart, vertStart, usage.geometry);
+}
+
+function scanMapAnimatedTextureUsage(map: Buffer, usage: TextureUsage): void {
+    const animatedStart = map.readUInt32BE(MapHeader.animatedTextureTable);
+    const animatedCount = map.readUInt32BE(animatedStart);
+    for (let i = 0; i < animatedCount; i++) {
+        const offs = animatedStart + 4 + i * AnimatedTextureEntry.stride;
+        const frameCount = map.readUInt8(offs + AnimatedTextureEntry.frameCount);
+        for (let frame = 0; frame < frameCount; frame++)
+            usage.animated.add(map.readUInt32BE(offs + AnimatedTextureEntry.frames + frame * 4));
     }
+}
 
-    // Table 7 textures are uncompressed and used for animated map materials.
-    const AnimTexData: ArrayBufferSlice[] = [];
-    const uncompressedTextureCount = Math.max(0x3E1, Math.max(...SpriteData
-        .filter((sprite) => sprite.table === 0)
-        .flatMap((sprite) => sprite.images)) + 1);
-    for (let i = 0; i < uncompressedTextureCount; i++)
-        AnimTexData[i] = extractRawTableEntry(PointerTable.TexturesUncompressed, i);
-
-    interface TextureUsage {
-        geometry: Set<number>;
-        animated: Set<number>;
-    }
-
-    interface LevelSource {
-        MapData: ArrayBufferSlice;
-        Backdrop: { TextureID: number, TextureIndex: number } | null;
-        SetupData: ArrayBufferSlice;
-        ScriptData: ArrayBufferSlice;
-        CritterData: ArrayBufferSlice | null;
-        PropGeometry: { Type: number, Data: ArrayBufferSlice }[];
-        ActorDefinitions: { Type: number, Model: number }[];
-        ActorGeometry: { Model: number, Data: ArrayBufferSlice }[];
-        AnimationData: { ID: number, Data: ArrayBufferSlice }[];
-        EnvironmentParticleData: typeof EnvironmentParticleData;
-        textureUsage: TextureUsage;
-    }
-
-    const supportedSceneNodeMaterials = new Set<number>([
-        SceneNodeMaterial.Sand,
-        SceneNodeMaterial.WaterStream,
-        SceneNodeMaterial.Water,
-        SceneNodeMaterial.GroundFog,
-    ]);
-
-    function scanTextureCommands(data: Buffer, start: number, end: number, output: Set<number>, excluded = new Set<number>()): void {
-        assert(start >= 0 && start <= end && end <= data.byteLength);
-        for (let offs = start; offs + 8 <= end; offs += 8) {
-            if (data.readUInt8(offs) !== 0xFD)
-                continue;
-            const address = data.readUInt32BE(offs + 4);
-            // Segment zero means an index into pointer table 25.
-            if ((address >>> 24) === 0 && !excluded.has(address))
-                output.add(address);
+// Surfaces use fixed textures that need to be accounted for.
+function scanGeneratedSurfaceTextureUsage(map: Buffer, usage: TextureUsage): void {
+    const generatedSurfaceStart = map.readUInt32BE(MapHeader.generatedSurfaceTable);
+    const generatedSurfaceCount = map.readUInt32BE(generatedSurfaceStart);
+    for (let i = 0; i < generatedSurfaceCount; i++) {
+        const offs = generatedSurfaceStart + 4 + i * GeneratedSurfaceEntry.stride;
+        const material = map.readUInt8(offs + GeneratedSurfaceEntry.material);
+        if (isGeneratedSurfaceMaterial(material)) {
+            for (const binding of getGeneratedSurfaceAnimatedTextureBindings(material)) {
+                for (const textureID of binding.textureIDs)
+                    usage.animated.add(textureID);
+            }
+        }
+        switch (material) {
+        case GeneratedSurfaceMaterial.Lava:
+            usage.geometry.add(0x2EE);
+            usage.geometry.add(0x2EF);
+            break;
+        case GeneratedSurfaceMaterial.Meadow:
+            usage.geometry.add(0xF0);
+            break;
+        case GeneratedSurfaceMaterial.Dirt:
+            usage.geometry.add(0x75C);
+            break;
+        case GeneratedSurfaceMaterial.DirtCave:
+            usage.geometry.add(0xAF4);
+            break;
         }
     }
+}
 
-    function scanMapTextureUsage(map: Buffer, usage: TextureUsage): void {
-        const dlStart = map.readUInt32BE(0x34);
-        const vertStart = map.readUInt32BE(0x38);
-        scanTextureCommands(map, dlStart, vertStart, usage.geometry);
+function scanSceneNodeTextureUsage(map: Buffer, usage: TextureUsage): void {
+    const rootNode = map.readUInt32BE(MapHeader.sceneNodeRoot);
+    const specialDisplayListCount = map.readUInt8(rootNode + SceneNodeEntry.displayListCount);
+    for (let i = 0; i < specialDisplayListCount; i++) {
+        const displayList = map.readInt32BE(rootNode + SceneNodeEntry.displayLists + i * 4);
+        const material = map.readUInt16BE(rootNode + SceneNodeEntry.materials + i * 2);
+        if (displayList < 0)
+            continue;
+        if (supportedSceneNodeMaterials.has(material) && isSceneNodeMaterial(material)) {
+            for (const binding of getSceneNodeAnimatedTextureBindings(material)) {
+                for (const textureID of binding.textureIDs)
+                    usage.animated.add(textureID);
+            }
+        }
+        switch (material) {
+        case SceneNodeMaterial.Sand:
+            usage.geometry.add(0x565);
+            break;
+        case SceneNodeMaterial.GroundFog:
+            usage.geometry.add(0x1765);
+            break;
+        }
+    }
+}
 
-        const animatedStart = map.readUInt32BE(0x48);
-        const animatedCount = map.readUInt32BE(animatedStart);
-        for (let i = 0; i < animatedCount; i++) {
-            const offs = animatedStart + 4 + i * 0x7C;
-            const frameCount = map.readUInt8(offs + 3);
+function scanMapTextureUsage(map: Buffer, usage: TextureUsage): void {
+    scanMapGeometryTextureUsage(map, usage);
+    scanMapAnimatedTextureUsage(map, usage);
+    scanGeneratedSurfaceTextureUsage(map, usage);
+    scanSceneNodeTextureUsage(map, usage);
+}
+
+function scanPropTextureUsage(prop: Buffer, usage: TextureUsage): void {
+    const decalTexture = prop.readUInt16BE(0x28);
+    if (decalTexture !== 0xFFFF)
+        usage.geometry.add(decalTexture);
+
+    const animatedTargets = new Set<number>();
+    const indexedStart = prop.readUInt32BE(0x6C);
+    if (indexedStart + 4 <= prop.length) {
+        const count = prop.readUInt32BE(indexedStart);
+        for (let i = 0; i < count; i++) {
+            const offs = indexedStart + 4 + i * 0x84;
+            if (offs + 0x84 > prop.length)
+                break;
+            const frameCount = prop.readUInt32BE(offs + 0x0C);
+            if (frameCount === 0 || frameCount > 0x1E)
+                continue;
+            animatedTargets.add(prop.readUInt32BE(offs));
             for (let frame = 0; frame < frameCount; frame++)
-                usage.animated.add(map.readUInt32BE(offs + 0x0C + frame * 4));
-        }
-
-        // Surfaces use fixed textures that need to be accounted for.
-        const generatedSurfaceStart = map.readUInt32BE(0x4C);
-        const generatedSurfaceCount = map.readUInt32BE(generatedSurfaceStart);
-        for (let i = 0; i < generatedSurfaceCount; i++) {
-            const material = map.readUInt8(generatedSurfaceStart + 4 + i * 0x6C + 0x66);
-            if (isGeneratedSurfaceMaterial(material)) {
-                for (const binding of getGeneratedSurfaceAnimatedTextureBindings(material)) {
-                    for (const textureID of binding.textureIDs)
-                        usage.animated.add(textureID);
-                }
-            }
-            switch (material) {
-            case GeneratedSurfaceMaterial.Lava:
-                usage.geometry.add(0x2EE);
-                usage.geometry.add(0x2EF);
-                break;
-            case GeneratedSurfaceMaterial.Meadow:
-                usage.geometry.add(0xF0);
-                break;
-            case GeneratedSurfaceMaterial.Dirt:
-                usage.geometry.add(0x75C);
-                break;
-            case GeneratedSurfaceMaterial.DirtCave:
-                usage.geometry.add(0xAF4);
-                break;
-            }
-        }
-
-        const rootNode = map.readUInt32BE(0x30);
-        const specialDisplayListCount = map.readUInt8(rootNode + 0xC5);
-        for (let i = 0; i < specialDisplayListCount; i++) {
-            const displayList = map.readInt32BE(rootNode + 0x1C + i * 4);
-            const material = map.readUInt16BE(rootNode + 0x70 + i * 2);
-            if (displayList < 0)
-                continue;
-            if (supportedSceneNodeMaterials.has(material) && isSceneNodeMaterial(material)) {
-                for (const binding of getSceneNodeAnimatedTextureBindings(material)) {
-                    for (const textureID of binding.textureIDs)
-                        usage.animated.add(textureID);
-                }
-            }
-            switch (material) {
-            case SceneNodeMaterial.Sand:
-                usage.geometry.add(0x565);
-                break;
-            case SceneNodeMaterial.GroundFog:
-                usage.geometry.add(0x1765);
-                break;
-            }
+                usage.animated.add(frame === 0 ? prop.readUInt32BE(offs) : prop.readUInt32BE(offs + 0x0C + frame * 4));
         }
     }
 
-    function scanPropTextureUsage(prop: Buffer, usage: TextureUsage): void {
-        const decalTexture = prop.readUInt16BE(0x28);
-        if (decalTexture !== 0xFFFF)
-            usage.geometry.add(decalTexture);
-
-        const animatedTargets = new Set<number>();
-        const indexedStart = prop.readUInt32BE(0x6C);
-        if (indexedStart + 4 <= prop.length) {
-            const count = prop.readUInt32BE(indexedStart);
+    const layout = prop.readUInt8(0x1C);
+    if (layout === 2) {
+        // from func_global_asm_8063524C
+        const runtimeStart = prop.readUInt32BE(0x70);
+        if (runtimeStart + 4 <= prop.length) {
+            const count = prop.readUInt32BE(runtimeStart);
             for (let i = 0; i < count; i++) {
-                const offs = indexedStart + 4 + i * 0x84;
-                if (offs + 0x84 > prop.length)
+                const offs = runtimeStart + 4 + i * 0x30;
+                if (offs + 0x30 > prop.length)
                     break;
-                const frameCount = prop.readUInt32BE(offs + 0x0C);
-                if (frameCount === 0 || frameCount > 0x1E)
-                    continue;
-                animatedTargets.add(prop.readUInt32BE(offs));
-                for (let frame = 0; frame < frameCount; frame++)
-                    usage.animated.add(frame === 0 ? prop.readUInt32BE(offs) : prop.readUInt32BE(offs + 0x0C + frame * 4));
+                const texture = prop.readUInt16BE(offs);
+                const palette = prop.readUInt16BE(offs + 2);
+                if (!animatedTargets.has(texture))
+                    usage.geometry.add(texture);
+                if (palette !== 0xFFFF)
+                    usage.geometry.add(palette);
             }
         }
-
-        const layout = prop.readUInt8(0x1C);
-        if (layout === 2) {
-            // from func_global_asm_8063524C
-            const runtimeStart = prop.readUInt32BE(0x70);
-            if (runtimeStart + 4 <= prop.length) {
-                const count = prop.readUInt32BE(runtimeStart);
-                for (let i = 0; i < count; i++) {
-                    const offs = runtimeStart + 4 + i * 0x30;
-                    if (offs + 0x30 > prop.length)
-                        break;
-                    const texture = prop.readUInt16BE(offs);
-                    const palette = prop.readUInt16BE(offs + 2);
-                    if (!animatedTargets.has(texture))
-                        usage.geometry.add(texture);
-                    if (palette !== 0xFFFF)
-                        usage.geometry.add(palette);
-                }
-            }
-            return;
-        }
-        if (layout !== 1)
-            return;
-        scanTextureCommands(
-            prop,
-            Math.min(prop.readUInt32BE(0x40), prop.readUInt32BE(0x44)),
-            prop.readUInt32BE(0x48),
-            usage.geometry,
-            animatedTargets,
-        );
+        return;
     }
+    if (layout !== 1)
+        return;
+    scanTextureCommands(
+        prop,
+        Math.min(prop.readUInt32BE(0x40), prop.readUInt32BE(0x44)),
+        prop.readUInt32BE(0x48),
+        usage.geometry,
+        animatedTargets,
+    );
+}
 
-    function scanActorTextureUsage(actor: Buffer, usage: TextureUsage): void {
-        const runtimeBase = actor.readUInt32BE(0);
-        const visited = new Set<number>();
-        const scanDisplayList = (address: number): void => {
-            if ((address >>> 24) !== 0x03)
+function scanActorTextureUsage(actor: Buffer, usage: TextureUsage): void {
+    const runtimeBase = actor.readUInt32BE(0);
+    const visited = new Set<number>();
+    const scanDisplayList = (address: number): void => {
+        if ((address >>> 24) !== 0x03)
+            return;
+        let offs = (address & 0x00FFFFFF) + 0x28;
+        if (visited.has(offs))
+            return;
+        visited.add(offs);
+        for (; offs + 8 <= actor.byteLength; offs += 8) {
+            const opcode = actor.readUInt8(offs);
+            const target = actor.readUInt32BE(offs + 4);
+            if (opcode === 0xFD && (target >>> 24) === 0)
+                usage.geometry.add(target);
+            else if (opcode === 0xDE)
+                scanDisplayList(target);
+            else if (opcode === 0xDF)
                 return;
-            let offs = (address & 0x00FFFFFF) + 0x28;
-            if (visited.has(offs))
-                return;
-            visited.add(offs);
-            for (; offs + 8 <= actor.byteLength; offs += 8) {
-                const opcode = actor.readUInt8(offs);
-                const target = actor.readUInt32BE(offs + 4);
-                if (opcode === 0xFD && (target >>> 24) === 0)
-                    usage.geometry.add(target);
-                else if (opcode === 0xDE)
-                    scanDisplayList(target);
-                else if (opcode === 0xDF)
-                    return;
-            }
-        };
-        const displayListTable = actor.readUInt32BE(4) - runtimeBase + 0x28;
-        for (let i = 0; i < actor.readUInt8(0x21); i++)
-            scanDisplayList(0x03000000 | (actor.readUInt32BE(displayListTable + i * 4) - runtimeBase));
-        const descriptorPointer = actor.readUInt32BE(0x10);
-        let descriptorOffs = descriptorPointer - runtimeBase + 0x28;
-        if (descriptorPointer !== 0 && descriptorOffs >= 0 && descriptorOffs + 2 <= actor.byteLength) {
-            const descriptorCount = actor.readUInt16BE(descriptorOffs);
-            descriptorOffs += 2;
-            for (let descriptor = 0; descriptor < descriptorCount; descriptor++) {
-                if (descriptorOffs + 6 > actor.byteLength)
-                    break;
-                const frameCount = actor.readUInt16BE(descriptorOffs);
-                descriptorOffs += 6;
-                for (let frame = 0; frame < frameCount && descriptorOffs + 2 <= actor.byteLength; frame++, descriptorOffs += 2)
-                    usage.geometry.add(actor.readUInt16BE(descriptorOffs));
-            }
+        }
+    };
+    const displayListTable = actor.readUInt32BE(4) - runtimeBase + 0x28;
+    for (let i = 0; i < actor.readUInt8(0x21); i++)
+        scanDisplayList(0x03000000 | (actor.readUInt32BE(displayListTable + i * 4) - runtimeBase));
+    const descriptorPointer = actor.readUInt32BE(0x10);
+    let descriptorOffs = descriptorPointer - runtimeBase + 0x28;
+    if (descriptorPointer !== 0 && descriptorOffs >= 0 && descriptorOffs + 2 <= actor.byteLength) {
+        const descriptorCount = actor.readUInt16BE(descriptorOffs);
+        descriptorOffs += 2;
+        for (let descriptor = 0; descriptor < descriptorCount; descriptor++) {
+            if (descriptorOffs + 6 > actor.byteLength)
+                break;
+            const frameCount = actor.readUInt16BE(descriptorOffs);
+            descriptorOffs += 6;
+            for (let frame = 0; frame < frameCount && descriptorOffs + 2 <= actor.byteLength; frame++, descriptorOffs += 2)
+                usage.geometry.add(actor.readUInt16BE(descriptorOffs));
         }
     }
+}
 
-    const spriteByAddress = new Map(SpriteData.map((sprite) => [sprite.address, sprite]));
-    function addSpriteTextureUsage(address: number, usage: TextureUsage): void {
-        const sprite = spriteByAddress.get(address);
-        if (sprite === undefined)
-            return;
-        const output = sprite.table === 0 ? usage.animated : usage.geometry;
-        for (const image of sprite.images)
-            output.add(image);
-    }
+function addSpriteTextureUsage(spriteByAddress: Map<number, SpriteInfo>, address: number, usage: TextureUsage): void {
+    const sprite = spriteByAddress.get(address);
+    if (sprite === undefined)
+        return;
+    const output = sprite.table === 0 ? usage.animated : usage.geometry;
+    for (const image of sprite.images)
+        output.add(image);
+}
 
-    function scanScriptedSpriteUsage(setup: Buffer, scripts: Buffer, usage: TextureUsage): void {
-        const propIDs = new Set(parseSetupData(ArrayBufferSlice.fromView(setup)).props.map(({ id }) => id));
-        for (const script of parseInstanceScripts(ArrayBufferSlice.fromView(scripts))) {
-            for (const block of script.blocks) {
-                const condition = block.conditions.length === 1 ? block.conditions[0] : null;
-                const resetsState = block.executions.some(({ opcode }) => opcode === 1);
-                const usesPointSprite = block.executions.some(({ opcode, args }) =>
-                    opcode === 7 && CustomScriptFunctionData[args[0]] === 0x80644EC8);
-                if (propIDs.has(script.id) && condition?.opcode === 1 && condition.args[0] === 0 && !resetsState && usesPointSprite)
-                    addSpriteTextureUsage(0x80720A7C, usage);
-            }
+function scanScriptedSpriteUsage(ctx: ExtractContext, setup: Buffer, scripts: Buffer, usage: TextureUsage): void {
+    const propIDs = new Set(parseSetupData(ArrayBufferSlice.fromView(setup)).props.map(({ id }) => id));
+    for (const script of parseInstanceScripts(ArrayBufferSlice.fromView(scripts))) {
+        for (const block of script.blocks) {
+            const condition = block.conditions.length === 1 ? block.conditions[0] : null;
+            const resetsState = block.executions.some(({ opcode }) => opcode === 1);
+            const usesPointSprite = block.executions.some(({ opcode, args }) =>
+                opcode === 7 && ctx.customScriptFunctions[args[0]] === 0x80644EC8);
+            if (propIDs.has(script.id) && condition?.opcode === 1 && condition.args[0] === 0 && !resetsState && usesPointSprite)
+                addSpriteTextureUsage(ctx.spriteByAddress, 0x80720A7C, usage);
         }
     }
+}
 
-    // Make self-contained map archives by resolving aliases and storing
-    // appropriate prop geometry in the level archive.
-    const levels: LevelSource[] = [];
-    for (let mapID = 0; mapID < MapData.length; mapID++) {
-        const mapData = resolveTableEntry(MapData, mapID);
-        const setupData = resolveTableEntry(SetupData, mapID);
-        const scriptData = resolveTableEntry(ScriptData, mapID);
-        const map = gunzipSync(mapData.createTypedArray(Uint8Array));
-        const setup = gunzipSync(setupData.createTypedArray(Uint8Array));
-        const scripts = gunzipSync(scriptData.createTypedArray(Uint8Array));
-        const parsedSetup = parseSetupData(ArrayBufferSlice.fromView(setup));
-        const propTypes = new Set(parsedSetup.props.map(({ type }) => type));
+//#endregion
 
-        const PropGeometry = [];
-        for (const type of propTypes) {
-            if (type < PropGeometryData.length)
-                PropGeometry.push({ Type: type, Data: resolveTableEntry(PropGeometryData, type) });
+//#region Level assembly
+
+const backdropTextureIDs = new Map<number, number>([
+    [0x0E, 0x2D], // Aztec beetle race
+
+    [0x03, 0x2E], // K. Rool barrel: Lanky's maze
+
+    [0x0B, 0x2E], // Stealthy Snoop (normal, no logo)
+    [0x41, 0x2E], // Stealthy Snoop (normal)
+    [0x7E, 0x2E], // Stealthy Snoop (very easy)
+    [0x7F, 0x2E], // Stealthy Snoop (easy)
+    [0x80, 0x2E], // Stealthy Snoop (hard)
+
+    [0x42, 0x2E], // Mad Maze Maul (hard)
+    [0x44, 0x2E], // Mad Maze Maul (easy)
+    [0x45, 0x2E], // Mad Maze Maul (normal)
+    [0x7C, 0x2E], // Mad Maze Maul (insane)
+
+    [0x43, 0x2E], // Stash Snatch (normal)
+    [0x4A, 0x2E], // Stash Snatch (easy)
+    [0x4B, 0x2E], // Stash Snatch (hard)
+    [0x7D, 0x2E], // Stash Snatch (insane)
+]);
+
+// Actors whose bind pose comes from an animation rather than the model itself.
+const actorAnimationByType = new Map<number, number>([
+    [0x10, 0x402],
+    [0x2A, 0x402],
+    [0x77, 0x63F],
+]);
+
+interface LevelSource {
+    MapData: ArrayBufferSlice;
+    Backdrop: { TextureID: number, TextureIndex: number } | null;
+    SetupData: ArrayBufferSlice;
+    ScriptData: ArrayBufferSlice;
+    CritterData: ArrayBufferSlice | null;
+    PropGeometry: { Type: number, Data: ArrayBufferSlice }[];
+    ActorDefinitions: { Type: number, Model: number }[];
+    ActorGeometry: { Model: number, Data: ArrayBufferSlice }[];
+    AnimationData: { ID: number, Data: ArrayBufferSlice }[];
+    EnvironmentParticleData: EnvironmentParticle[];
+    textureUsage: TextureUsage;
+}
+
+// Everything buildLevelSource needs that is shared across all maps.
+interface ExtractContext {
+    rom: ROMTables;
+    MapData: TableEntry[];
+    SetupData: TableEntry[];
+    ScriptData: TableEntry[];
+    CritterData: TableEntry[];
+    PropGeometryData: TableEntry[];
+    ActorGeometryData: TableEntry[];
+    actorModelByType: Map<number, number>;
+    environmentParticles: EnvironmentParticle[];
+    spriteByAddress: Map<number, SpriteInfo>;
+    customScriptFunctions: number[];
+    backdropTextureIndices: Map<number, number>;
+}
+
+function buildLevelSource(ctx: ExtractContext, mapID: number): LevelSource {
+    const mapData = resolveTableEntry(ctx.MapData, mapID);
+    const setupData = resolveTableEntry(ctx.SetupData, mapID);
+    const scriptData = resolveTableEntry(ctx.ScriptData, mapID);
+    const map = gunzipSync(mapData.createTypedArray(Uint8Array));
+    const setup = gunzipSync(setupData.createTypedArray(Uint8Array));
+    const scripts = gunzipSync(scriptData.createTypedArray(Uint8Array));
+    const parsedSetup = parseSetupData(ArrayBufferSlice.fromView(setup));
+    const propTypes = new Set(parsedSetup.props.map(({ type }) => type));
+
+    const PropGeometry = [];
+    for (const type of propTypes) {
+        if (type < ctx.PropGeometryData.length)
+            PropGeometry.push({ Type: type, Data: resolveTableEntry(ctx.PropGeometryData, type) });
+    }
+
+    const actorModels = new Set<number>();
+    const actorAnimations = new Set<number>();
+    const actorDefinitions = new Map<number, number>();
+    for (const { type } of parsedSetup.actors) {
+        const model = ctx.actorModelByType.get(type + 0x10) ?? 0;
+        actorDefinitions.set(type, model);
+        if (model !== 0)
+            actorModels.add(model);
+        const animation = actorAnimationByType.get(type);
+        if (animation !== undefined)
+            actorAnimations.add(animation);
+    }
+    const ActorDefinitions = [...actorDefinitions].map(([Type, Model]) => ({ Type, Model }));
+    const ActorGeometry = [];
+    for (const model of actorModels) {
+        const tableIndex = model - 1; // Actor IDs are 1-based
+        if (tableIndex < ctx.ActorGeometryData.length)
+            ActorGeometry.push({ Model: model, Data: resolveTableEntry(ctx.ActorGeometryData, tableIndex) });
+    }
+    const animations = [...actorAnimations].map((id) => ({
+        ID: id,
+        // Table 11 stores uncompressed animations.
+        Data: ctx.rom.extractRawTableEntry(PointerTable.Animations, id),
+    }));
+
+    const environmentParticleData = ctx.environmentParticles.filter((entry) => entry.map === mapID);
+    const textureUsage: TextureUsage = { geometry: new Set(), animated: new Set() };
+    scanMapTextureUsage(map, textureUsage);
+    for (const prop of PropGeometry)
+        scanPropTextureUsage(gunzipSync(prop.Data.createTypedArray(Uint8Array)), textureUsage);
+    for (const actor of ActorGeometry)
+        scanActorTextureUsage(gunzipSync(actor.Data.createTypedArray(Uint8Array)), textureUsage);
+    if (environmentParticleData.length > 0) {
+        addSpriteTextureUsage(ctx.spriteByAddress, 0x8072140C, textureUsage);
+        addSpriteTextureUsage(ctx.spriteByAddress, 0x8071FF18, textureUsage);
+    }
+    scanScriptedSpriteUsage(ctx, setup, scripts, textureUsage);
+
+    const backdropTextureID = backdropTextureIDs.get(mapID);
+    const backdropTextureIndex = backdropTextureID !== undefined
+        ? ctx.backdropTextureIndices.get(backdropTextureID)!
+        : null;
+    if (backdropTextureIndex !== null)
+        textureUsage.geometry.add(backdropTextureIndex);
+    return {
+        MapData: mapData,
+        Backdrop: backdropTextureID !== undefined
+            ? { TextureID: backdropTextureID, TextureIndex: backdropTextureIndex! }
+            : null,
+        SetupData: setupData,
+        ScriptData: scriptData,
+        CritterData: mapID < ctx.CritterData.length ? resolveTableEntry(ctx.CritterData, mapID) : null,
+        PropGeometry,
+        ActorDefinitions,
+        ActorGeometry,
+        AnimationData: animations,
+        EnvironmentParticleData: environmentParticleData,
+        textureUsage,
+    };
+}
+
+//#endregion
+
+//#region Common texture sharding
+
+// Instead of having one big archive for all the DK64 content (~16MB),
+// split it into multiple archives.
+//
+// Structure:
+//        $MAP.crg1: map archive, unique mesh/texture/... data
+//   common_$N.crg1: a shard containing data used by multiple maps
+//      common.crg1: resources used by all maps.
+//
+// This splitting reduces the average map load to ~1.1MB, down from
+// the ~4.25MB baseline for common.crg1 + $MAP.crg1.
+
+interface SharedTextureResource {
+    kind: keyof TextureUsage;
+    id: number;
+    data: ArrayBufferSlice;
+    owners: number[];
+}
+
+interface CommonTextureGroup {
+    resources: SharedTextureResource[];
+    owners: Set<number>;
+    byteLength: number;
+}
+
+interface TextureOwnerSubset {
+    key: string;
+    resources: SharedTextureResource[];
+    owners: number[];
+    byteLength: number;
+}
+
+function buildTextureOwners(levels: LevelSource[], kind: keyof TextureUsage): Map<number, number[]> {
+    const owners = new Map<number, number[]>();
+    for (let mapID = 0; mapID < levels.length; mapID++) {
+        for (const textureID of levels[mapID].textureUsage[kind]) {
+            if (!owners.has(textureID))
+                owners.set(textureID, []);
+            owners.get(textureID)!.push(mapID);
         }
-
-        const actorModels = new Set<number>();
-        const actorAnimations = new Set<number>();
-        const actorDefinitions = new Map<number, number>();
-        for (const { type } of parsedSetup.actors) {
-            const model = actorModelByType.get(type + 0x10) ?? 0;
-            actorDefinitions.set(type, model);
-            if (model !== 0)
-                actorModels.add(model);
-            if (type === 0x10) {
-                actorAnimations.add(0x402);
-            } else if (type === 0x2A) {
-                actorAnimations.add(0x402);
-            } else if (type === 0x77) {
-                actorAnimations.add(0x63F);
-            }
-        }
-        const ActorDefinitions = [...actorDefinitions].map(([Type, Model]) => ({ Type, Model }));
-        const ActorGeometry = [];
-        for (const model of actorModels) {
-            const tableIndex = model - 1; // Actor IDs are 1-based
-            if (tableIndex < ActorGeometryData.length)
-                ActorGeometry.push({ Model: model, Data: resolveTableEntry(ActorGeometryData, tableIndex) });
-        }
-        const animations = [...actorAnimations].map((id) => ({
-            ID: id,
-            // Table 11 stores uncompressed animations.
-            Data: extractRawTableEntry(PointerTable.Animations, id),
-        }));
-
-        const environmentParticleData = EnvironmentParticleData.filter((entry) => entry.map === mapID);
-        const textureUsage: TextureUsage = { geometry: new Set(), animated: new Set() };
-        scanMapTextureUsage(map, textureUsage);
-        for (const prop of PropGeometry)
-            scanPropTextureUsage(gunzipSync(prop.Data.createTypedArray(Uint8Array)), textureUsage);
-        for (const actor of ActorGeometry)
-            scanActorTextureUsage(gunzipSync(actor.Data.createTypedArray(Uint8Array)), textureUsage);
-        if (environmentParticleData.length > 0) {
-            addSpriteTextureUsage(0x8072140C, textureUsage);
-            addSpriteTextureUsage(0x8071FF18, textureUsage);
-        }
-        scanScriptedSpriteUsage(setup, scripts, textureUsage);
-
-        const backdropTextureID = backdropTextureIDs.get(mapID);
-        const backdropTextureIndex = backdropTextureID !== undefined
-            ? backdropTextureIndices.get(backdropTextureID)!
-            : null;
-        if (backdropTextureIndex !== null)
-            textureUsage.geometry.add(backdropTextureIndex);
-        levels.push({
-            MapData: mapData,
-            Backdrop: backdropTextureID !== undefined
-                ? { TextureID: backdropTextureID, TextureIndex: backdropTextureIndex! }
-                : null,
-            SetupData: setupData,
-            ScriptData: scriptData,
-            CritterData: mapID < CritterData.length ? resolveTableEntry(CritterData, mapID) : null,
-            PropGeometry,
-            ActorDefinitions,
-            ActorGeometry,
-            AnimationData: animations,
-            EnvironmentParticleData: environmentParticleData,
-            textureUsage,
-        });
     }
+    return owners;
+}
 
-    // Instead of having one big archive for all the DK64 content (~16MB),
-    // split it into multiple archives.
-    //
-    // Structure:
-    //        $MAP.crg1: map archive, unique mesh/texture/... data
-    //   common_$N.crg1: a shard containing data used by multiple maps
-    //      common.crg1: resources used by all maps.
-    //
-    // This splitting reduces the average map load to ~1.1MB, down from
-    // the ~4.25MB baseline for common.crg1 + $MAP.crg1.
-
-    function buildOwners(kind: keyof TextureUsage): Map<number, number[]> {
-        const owners = new Map<number, number[]>();
-        for (let mapID = 0; mapID < levels.length; mapID++) {
-            for (const textureID of levels[mapID].textureUsage[kind]) {
-                if (!owners.has(textureID))
-                    owners.set(textureID, []);
-                owners.get(textureID)!.push(mapID);
-            }
-        }
-        return owners;
+// A resource is shardable when it is used by more than one map, but not by all of
+// them -- single-owner textures go in the map archive, universal ones in common.crg1.
+function collectSharedResources(kind: keyof TextureUsage, data: ArrayBufferSlice[], owners: Map<number, number[]>, universalOwnerCount: number): SharedTextureResource[] {
+    const resources: SharedTextureResource[] = [];
+    for (let id = 0; id < data.length; id++) {
+        const resourceOwners = owners.get(id) ?? [];
+        if (resourceOwners.length > 1 && resourceOwners.length < universalOwnerCount)
+            resources.push({ kind, id, data: data[id], owners: resourceOwners });
     }
+    return resources;
+}
 
-    function makeTextureEntries(data: ArrayBufferSlice[], predicate: (id: number) => boolean): { ID: number, Data: ArrayBufferSlice }[] {
-        const entries = [];
-        for (let id = 0; id < data.length; id++) {
-            if (predicate(id))
-                entries.push({ ID: id, Data: data[id] });
-        }
-        return entries;
-    }
-
-    const geometryOwners = buildOwners('geometry');
-    const animatedOwners = buildOwners('animated');
-    for (const textureID of geometryOwners.keys())
-        assert(textureID >= 0 && textureID < TexData.length);
-    for (const textureID of animatedOwners.keys())
-        assert(textureID >= 0 && textureID < AnimTexData.length);
-
-    interface SharedTextureResource {
-        kind: keyof TextureUsage;
-        id: number;
-        data: ArrayBufferSlice;
-        owners: number[];
-    }
-
-    interface CommonTextureGroup {
-        resources: SharedTextureResource[];
-        owners: Set<number>;
-        byteLength: number;
-    }
-
-    interface TextureOwnerSubset {
-        key: string;
-        resources: SharedTextureResource[];
-        owners: number[];
-        byteLength: number;
-    }
-
-    const universalTextureOwnerCount = levels.length;
-    const commonTextureGroupCountArg = process.argv.find((arg) => arg.startsWith('--common-texture-groups='));
-    const commonTextureGroupCount = commonTextureGroupCountArg !== undefined
-        ? Number.parseInt(commonTextureGroupCountArg.slice('--common-texture-groups='.length), 10)
-        : 0x10;
-    assert(Number.isInteger(commonTextureGroupCount) && commonTextureGroupCount >= 1 && commonTextureGroupCount <= 0x20);
-    const sharedResources: SharedTextureResource[] = [];
-    for (let id = 0; id < TexData.length; id++) {
-        const owners = geometryOwners.get(id) ?? [];
-        if (owners.length > 1 && owners.length < universalTextureOwnerCount)
-            sharedResources.push({ kind: 'geometry', id, data: TexData[id], owners });
-    }
-    for (let id = 0; id < AnimTexData.length; id++) {
-        const owners = animatedOwners.get(id) ?? [];
-        if (owners.length > 1 && owners.length < universalTextureOwnerCount)
-            sharedResources.push({ kind: 'animated', id, data: AnimTexData[id], owners });
-    }
-
-    // Canonicalize subsets for determinism.
+// Resources with the same owner set always shard together, so group them up front.
+// Canonicalize the subsets for determinism.
+function groupResourcesByOwnerSubset(resources: SharedTextureResource[]): TextureOwnerSubset[] {
     const subsetByKey = new Map<string, TextureOwnerSubset>();
-    for (const resource of sharedResources) {
+    for (const resource of resources) {
         const key = resource.owners.join(',');
         let subset = subsetByKey.get(key);
         if (subset === undefined) {
@@ -636,40 +683,44 @@ function main() {
         subset.resources.push(resource);
         subset.byteLength += resource.data.byteLength;
     }
-    const textureOwnerSubsets = [...subsetByKey.values()];
-    textureOwnerSubsets.sort((a, b) =>
+    const subsets = [...subsetByKey.values()];
+    subsets.sort((a, b) =>
         b.byteLength - a.byteLength
         || b.owners.length - a.owners.length
         || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     );
+    return subsets;
+}
 
-    const commonTextureGroups: CommonTextureGroup[] = Array.from({ length: commonTextureGroupCount }, () => ({
+function addSubsetToGroup(group: CommonTextureGroup, subset: TextureOwnerSubset): void {
+    group.resources.push(...subset.resources);
+    group.byteLength += subset.byteLength;
+    for (const owner of subset.owners)
+        group.owners.add(owner);
+}
+
+// Greedy bin-packing: a shard's cost is its size times the number of maps that have
+// to fetch it, so prefer the group where adding this subset grows that product least.
+function packSubsetsIntoGroups(subsets: TextureOwnerSubset[], groupCount: number): CommonTextureGroup[] {
+    const groups: CommonTextureGroup[] = Array.from({ length: groupCount }, () => ({
         resources: [],
         owners: new Set<number>(),
         byteLength: 0,
     }));
 
-    function addSubsetToGroup(subset: TextureOwnerSubset, groupIndex: number): void {
-        const group = commonTextureGroups[groupIndex];
-        group.resources.push(...subset.resources);
-        group.byteLength += subset.byteLength;
-        for (const owner of subset.owners)
-            group.owners.add(owner);
-    }
-
     // To start, put the largest N subsets into a shard of its own.
-    const seededSubsetCount = Math.min(commonTextureGroupCount, textureOwnerSubsets.length);
+    const seededSubsetCount = Math.min(groupCount, subsets.length);
     for (let subsetIndex = 0; subsetIndex < seededSubsetCount; subsetIndex++)
-        addSubsetToGroup(textureOwnerSubsets[subsetIndex], subsetIndex);
+        addSubsetToGroup(groups[subsetIndex], subsets[subsetIndex]);
 
     // Then add the remaining subsets, attempting to minimize excess costs.
-    for (let subsetIndex = seededSubsetCount; subsetIndex < textureOwnerSubsets.length; subsetIndex++) {
-        const subset = textureOwnerSubsets[subsetIndex];
+    for (let subsetIndex = seededSubsetCount; subsetIndex < subsets.length; subsetIndex++) {
+        const subset = subsets[subsetIndex];
         let bestGroup = 0;
         let bestCost = Infinity;
         let bestAddedOwners = Infinity;
-        for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
-            const group = commonTextureGroups[groupIndex];
+        for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+            const group = groups[groupIndex];
             let addedOwners = 0;
             for (const owner of subset.owners) {
                 if (!group.owners.has(owner))
@@ -681,18 +732,23 @@ function main() {
             if (incrementalCost < bestCost
                 || (incrementalCost === bestCost && addedOwners < bestAddedOwners)
                 || (incrementalCost === bestCost && addedOwners === bestAddedOwners
-                    && group.byteLength < commonTextureGroups[bestGroup].byteLength)) {
+                    && group.byteLength < groups[bestGroup].byteLength)) {
                 bestGroup = groupIndex;
                 bestCost = incrementalCost;
                 bestAddedOwners = addedOwners;
             }
         }
-        addSubsetToGroup(subset, bestGroup);
+        addSubsetToGroup(groups[bestGroup], subset);
     }
 
+    return groups;
+}
+
+// Every map must be able to reach each of its shared textures through a group it fetches.
+function verifyCommonTextureGroups(levels: LevelSource[], groups: CommonTextureGroup[], geometryOwners: Map<number, number[]>, animatedOwners: Map<number, number[]>, universalOwnerCount: number): void {
     const groupByTexture = new Map<string, number>();
-    for (let groupIndex = 0; groupIndex < commonTextureGroups.length; groupIndex++) {
-        for (const resource of commonTextureGroups[groupIndex].resources)
+    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+        for (const resource of groups[groupIndex].resources)
             groupByTexture.set(`${resource.kind}:${resource.id}`, groupIndex);
     }
     for (let mapID = 0; mapID < levels.length; mapID++) {
@@ -700,41 +756,78 @@ function main() {
             const owners = kind === 'geometry' ? geometryOwners : animatedOwners;
             for (const textureID of levels[mapID].textureUsage[kind]) {
                 const ownerCount = owners.get(textureID)!.length;
-                if (ownerCount === 1 || ownerCount === universalTextureOwnerCount)
+                if (ownerCount === 1 || ownerCount === universalOwnerCount)
                     continue;
                 const groupIndex = groupByTexture.get(`${kind}:${textureID}`);
-                assert(groupIndex !== undefined && commonTextureGroups[groupIndex].owners.has(mapID));
+                assert(groupIndex !== undefined && groups[groupIndex].owners.has(mapID));
             }
         }
     }
+}
 
-    function resourcesToArchive(resources: SharedTextureResource[]): {
-        TexData: { ID: number, Data: ArrayBufferSlice }[],
-        AnimTexData: { ID: number, Data: ArrayBufferSlice }[],
-    } {
-        const sortedResources = [...resources].sort((a, b) =>
-            (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0)
-            || a.id - b.id,
-        );
-        return {
-            TexData: sortedResources
-                .filter((resource) => resource.kind === 'geometry')
-                .map((resource) => ({ ID: resource.id, Data: resource.data })),
-            AnimTexData: sortedResources
-                .filter((resource) => resource.kind === 'animated')
-                .map((resource) => ({ ID: resource.id, Data: resource.data })),
-        };
-    }
+function parseCommonTextureGroupCountArg(): number {
+    const prefix = '--common-texture-groups=';
+    const arg = process.argv.find((entry) => entry.startsWith(prefix));
+    const count = arg !== undefined ? Number.parseInt(arg.slice(prefix.length), 10) : 0x10;
+    assert(Number.isInteger(count) && count >= 1 && count <= 0x20);
+    return count;
+}
 
-    function writeArchive(filename: string, archive: any): number {
-        const data = BYML.write(archive, BYML.FileType.CRG1);
-        writeFileSync(`${pathBaseOut}/${filename}`, Buffer.from(data));
-        return data.byteLength;
+//#endregion
+
+//#region Archive writing
+
+function makeTextureEntries(data: ArrayBufferSlice[], predicate: (id: number) => boolean): { ID: number, Data: ArrayBufferSlice }[] {
+    const entries = [];
+    for (let id = 0; id < data.length; id++) {
+        if (predicate(id))
+            entries.push({ ID: id, Data: data[id] });
     }
+    return entries;
+}
+
+function resourcesToArchive(resources: SharedTextureResource[]): {
+    TexData: { ID: number, Data: ArrayBufferSlice }[],
+    AnimTexData: { ID: number, Data: ArrayBufferSlice }[],
+} {
+    const sortedResources = [...resources].sort((a, b) =>
+        (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0)
+        || a.id - b.id,
+    );
+    return {
+        TexData: sortedResources
+            .filter((resource) => resource.kind === 'geometry')
+            .map((resource) => ({ ID: resource.id, Data: resource.data })),
+        AnimTexData: sortedResources
+            .filter((resource) => resource.kind === 'animated')
+            .map((resource) => ({ ID: resource.id, Data: resource.data })),
+    };
+}
+
+function writeArchive(filename: string, archive: any): number {
+    const data = BYML.write(archive, BYML.FileType.CRG1);
+    writeFileSync(`${pathBaseOut}/${filename}`, Buffer.from(data));
+    return data.byteLength;
+}
+
+interface ArchiveSources {
+    levels: LevelSource[];
+    TexData: ArrayBufferSlice[];
+    AnimTexData: ArrayBufferSlice[];
+    SpriteData: SpriteInfo[];
+    CustomScriptFunctionData: number[];
+    geometryOwners: Map<number, number[]>;
+    animatedOwners: Map<number, number[]>;
+    commonTextureGroups: CommonTextureGroup[];
+}
+
+function writeArchives(sources: ArchiveSources): void {
+    const { levels, TexData, AnimTexData, geometryOwners, animatedOwners, commonTextureGroups } = sources;
+    const universalTextureOwnerCount = levels.length;
 
     const common = {
-        SpriteData,
-        CustomScriptFunctionData,
+        SpriteData: sources.SpriteData,
+        CustomScriptFunctionData: sources.CustomScriptFunctionData,
         TexData: makeTextureEntries(TexData, (id) =>
             (geometryOwners.get(id)?.length ?? 0) === universalTextureOwnerCount),
         AnimTexData: makeTextureEntries(AnimTexData, (id) =>
@@ -752,7 +845,10 @@ function main() {
     let totalFetchedBytes = 0;
     for (let mapID = 0; mapID < levels.length; mapID++) {
         const source = levels[mapID];
-        const levelWithoutGroups = {
+        const commonTextureGroupIDs = commonTextureGroups
+            .map((group, groupIndex) => group.owners.has(mapID) ? groupIndex : -1)
+            .filter((groupIndex) => groupIndex >= 0);
+        const level = {
             MapData: source.MapData,
             Backdrop: source.Backdrop,
             SetupData: source.SetupData,
@@ -765,12 +861,6 @@ function main() {
             EnvironmentParticleData: source.EnvironmentParticleData,
             TexData: makeTextureEntries(TexData, (id) => geometryOwners.get(id)?.length === 1 && geometryOwners.get(id)![0] === mapID),
             AnimTexData: makeTextureEntries(AnimTexData, (id) => animatedOwners.get(id)?.length === 1 && animatedOwners.get(id)![0] === mapID),
-        };
-        const commonTextureGroupIDs = commonTextureGroups
-            .map((group, groupIndex) => group.owners.has(mapID) ? groupIndex : -1)
-            .filter((groupIndex) => groupIndex >= 0);
-        const level = {
-            ...levelWithoutGroups,
             CommonTextureGroups: commonTextureGroupIDs,
         };
         const filename = `${hexzero(mapID, 2).toUpperCase()}.crg1`;
@@ -779,7 +869,73 @@ function main() {
             + commonTextureGroupIDs.reduce((sum, groupIndex) => sum + commonTextureGroupArchiveSizes[groupIndex], 0);
     }
     console.log(`DK64 average fetch size: ${(totalFetchedBytes / levels.length / 0x400).toFixed(1)} KiB`);
+}
 
+//#endregion
+
+function main() {
+    const romData = fetchDataSync(`${pathBaseIn}/rom.z64`);
+    const rom = new ROMTables(romData);
+    const globalASM = loadGlobalASM(romData);
+    const SpriteData = parseSpriteData(globalASM);
+
+    const TexData = rom.extractTextureTable(Math.max(...SpriteData
+        .filter((sprite) => sprite.table === 1)
+        .flatMap((sprite) => sprite.images)) + 1);
+    // The two panorama backdrops are given normal texture indices for later archive packing.
+    const HUDTextureData = rom.extractCompressedTable(PointerTable.HUDTextures);
+    const backdropTextureIndices = new Map<number, number>();
+    for (const textureID of new Set(backdropTextureIDs.values())) {
+        backdropTextureIndices.set(textureID, TexData.length);
+        TexData.push(resolveTableEntry(HUDTextureData, textureID));
+    }
+
+    // Table 7 textures are uncompressed and used for animated map materials.
+    const uncompressedTextureCount = Math.max(0x3E1, Math.max(...SpriteData
+        .filter((sprite) => sprite.table === 0)
+        .flatMap((sprite) => sprite.images)) + 1);
+    const AnimTexData = Array.from({ length: uncompressedTextureCount }, (_, i) =>
+        rom.extractRawTableEntry(PointerTable.TexturesUncompressed, i));
+
+    const CustomScriptFunctionData = parseCustomScriptFunctionData(globalASM);
+    const ctx: ExtractContext = {
+        rom,
+        MapData: rom.extractMapTable(),
+        SetupData: rom.extractCompressedTable(PointerTable.Setup),
+        ScriptData: rom.extractCompressedTable(PointerTable.Scripts),
+        CritterData: rom.extractCompressedTable(PointerTable.Critters),
+        PropGeometryData: rom.extractCompressedTable(PointerTable.PropGeometry),
+        ActorGeometryData: rom.extractCompressedTable(PointerTable.ActorGeometry),
+        actorModelByType: parseActorModelByType(globalASM),
+        environmentParticles: parseEnvironmentParticleData(globalASM),
+        spriteByAddress: new Map(SpriteData.map((sprite) => [sprite.address, sprite])),
+        customScriptFunctions: CustomScriptFunctionData,
+        backdropTextureIndices,
+    };
+
+    // Make self-contained map archives by resolving aliases and storing
+    // appropriate prop geometry in the level archive.
+    const levels = Array.from({ length: ctx.MapData.length }, (_, mapID) => buildLevelSource(ctx, mapID));
+
+    const geometryOwners = buildTextureOwners(levels, 'geometry');
+    const animatedOwners = buildTextureOwners(levels, 'animated');
+    for (const textureID of geometryOwners.keys())
+        assert(textureID >= 0 && textureID < TexData.length);
+    for (const textureID of animatedOwners.keys())
+        assert(textureID >= 0 && textureID < AnimTexData.length);
+
+    const sharedResources = [
+        ...collectSharedResources('geometry', TexData, geometryOwners, levels.length),
+        ...collectSharedResources('animated', AnimTexData, animatedOwners, levels.length),
+    ];
+    const commonTextureGroups = packSubsetsIntoGroups(
+        groupResourcesByOwnerSubset(sharedResources), parseCommonTextureGroupCountArg());
+    verifyCommonTextureGroups(levels, commonTextureGroups, geometryOwners, animatedOwners, levels.length);
+
+    writeArchives({
+        levels, TexData, AnimTexData, SpriteData, CustomScriptFunctionData,
+        geometryOwners, animatedOwners, commonTextureGroups,
+    });
 }
 
 main();
