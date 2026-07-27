@@ -18,6 +18,13 @@ const spotLightInnerRadius = 300;
 const spotLightCullRadius = 1100;
 // Default reach for lights whose prop geometry does not specify one.
 const defaultLightMaxDistance = 700;
+// func_global_asm_8065BAA0 converts setup-space light positions and distances into
+// map-vertex space with a hardcoded 3.0, not with the per-map worldScale that prop
+// and actor placement uses. No worldScale-1 map defines a dynamic light, so the two
+// never disagree.
+const lightWorldScale = 3;
+// func_global_asm_8065BAA0: a point light reaches three times its keyframe radius.
+const pointLightOuterRadiusScale = 3;
 
 interface LightAnimationKeyframe {
     intensity: number;
@@ -202,7 +209,11 @@ export function buildDynamicLights(
         const maxDistance = loadPropGeometry(prop.type).getUint16(0x1E, false);
         lights.push({
             kind: 'point',
-            origin: vec3.fromValues(prop.position[0] * 3, prop.position[1] * 3, prop.position[2] * 3),
+            origin: vec3.fromValues(
+                prop.position[0] * lightWorldScale,
+                prop.position[1] * lightWorldScale,
+                prop.position[2] * lightWorldScale,
+            ),
             animation,
             // func_global_asm_8065EB10: vary light animation phase to avoid synchronization.
             phase: prop.setupIndex,
@@ -216,7 +227,11 @@ export function buildDynamicLights(
         const speed = definition.animationSpeed === 'setup' ? actor.lightSpeed : definition.animationSpeed;
         lights.push({
             kind: 'spot',
-            origin: vec3.fromValues((actor.position[0] + 0.3) * 3, actor.position[1] * 3, actor.position[2] * 3),
+            origin: vec3.fromValues(
+                (actor.position[0] + 0.3) * lightWorldScale,
+                actor.position[1] * lightWorldScale,
+                actor.position[2] * lightWorldScale,
+            ),
             color: [
                 actor.lightColor[0] / 0xFF,
                 actor.lightColor[1] / 0xFF,
@@ -243,7 +258,7 @@ function filterDynamicLightsForVertices(sharedOutput: RSPSharedOutput, vertexInd
     }
     return lights.filter((light) => {
         const radius = light.kind === 'point'
-            ? Math.max(...light.animation.map((keyframe) => keyframe.radius)) * 3
+            ? Math.max(...light.animation.map((keyframe) => keyframe.radius)) * pointLightOuterRadiusScale
             : spotLightCullRadius;
         return bounds.sqDistFromClosestPoint(light.origin) < radius * radius;
     });
@@ -299,7 +314,7 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
         camera[12] - light.origin[0],
         camera[13] - light.origin[1],
         camera[14] - light.origin[2],
-    ) / 3;
+    ) / lightWorldScale;
     const distanceRatio = cameraDistance / light.maxDistance;
     const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
     return light.kind === 'spot'
@@ -354,7 +369,7 @@ function samplePointLight(light: DynamicPointLight, cameraFade: number, tick: nu
     return {
         origin: light.origin,
         innerRadius: radius,
-        outerRadius: radius * 3,  // from func_global_asm_8065BAA0
+        outerRadius: radius * pointLightOuterRadiusScale,
         color: [
             lerp(current.color[0], next.color[0], t) / 0xFF * intensity,
             lerp(current.color[1], next.color[1], t) / 0xFF * intensity,
