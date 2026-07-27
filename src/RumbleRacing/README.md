@@ -12,10 +12,8 @@ This pre-processed JSON data should be served alongside the game's data in the D
 
 ## Future Improvements / Cool Ideas
 
-- Render Skybox
-- Fix alternating normals
-- Render lighting correctly, place instanced lights
 - Render Powerups
-- Handle alpha transparency/blending correctly (currently treats pure black pixels as full transparency)
 - Add a render toggle for showing driveable polygons and/or collision geometry
+- Render the Sun/Moon/stars
+- Place instanced "lights" (the star effect/texture on light poles)
 - Would be cool to animate networked actor and move them along their spline paths (Cropduster/Helicopters/Planes/Tornado)
