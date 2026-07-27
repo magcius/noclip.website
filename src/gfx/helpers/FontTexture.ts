@@ -17,7 +17,7 @@ export class FontTexture {
         ctx.textBaseline = `top`;
 
         // Would be nice if stroke width was independent of font size, but that doesn't seem easy.
-        const strokeWidth = strokeAmount * this.baseSize;
+        const strokeWidth = Math.ceil(strokeAmount * this.baseSize);
 
         let cellWidth = 0;
         let cellHeight = 0;
