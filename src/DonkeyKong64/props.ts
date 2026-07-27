@@ -14,7 +14,8 @@ import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
 import { initDL } from './material.js';
 import type { InstanceScript, SetupProp } from './parse.js';
-import type { Geometry, GeometryRenderer } from './render.js';
+import { DK64Layer } from './render.js';
+import type { GeometryRenderer, MeshInput } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 
 const scratchVec3a = vec3.create();
@@ -423,7 +424,7 @@ function decodePropAnimation(
     sharedOutput: RSPSharedOutput,
     firstVertex: number,
     vertexCount: number,
-): Geometry['propAnimation'] {
+): MeshInput['propAnimation'] {
     const trackDefinitions = findPropAnimationTrackDefinitions(scripts, prop.id);
     if (trackDefinitions.length === 0) {
         // Props with no animation commands are still valid, just static.
@@ -809,9 +810,9 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
         }
         const output = state.finish()!;
 
-        const geo: Geometry = { sharedOutput, rspOutput: output };
+        const geo: MeshInput = { sharedOutput, rspOutput: output };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
-        const renderer = sceneRenderer.addPropRenderer(device, cache, geoData);
+        const renderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Props);
         renderer.modelMatrix[12] = worldX;
         renderer.modelMatrix[13] = worldY;
         renderer.modelMatrix[14] = worldZ;
@@ -931,7 +932,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const output = state.finish()!;
 
         // Share draw resources between instances of props.
-        const geo: Geometry = { sharedOutput, rspOutput: output };
+        const geo: MeshInput = { sharedOutput, rspOutput: output };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
         let sharedRenderer: GeometryRenderer | null = null;
         for (const prop of instances) {
@@ -941,7 +942,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
                 prop.position[1] * worldScale,
                 prop.position[2] * worldScale,
             );
-            const renderer = sceneRenderer.addPropRenderer(device, cache, geoData, sharedRenderer);
+            const renderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Props, sharedRenderer);
             if (sharedRenderer === null)
                 sharedRenderer = renderer;
             renderer.setCameraBillboard(origin, scale);
@@ -1017,10 +1018,10 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             : undefined;
         if (usesRuntimeMatrices && propAnimation === undefined)
             applyPropBindPose(view, state, sharedOutput, firstVertex, vertexCount);
-        const geo: Geometry = { sharedOutput, rspOutput: output, propAnimation };
+        const geo: MeshInput = { sharedOutput, rspOutput: output, propAnimation };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
         for (const prop of instances) {
-            const renderer = sceneRenderer.addPropRenderer(device, cache, geoData);
+            const renderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Props);
             const origin = vec3.fromValues(
                 prop.position[0] * worldScale,
                 prop.position[1] * worldScale,

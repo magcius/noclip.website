@@ -35,10 +35,10 @@ import type { GeneratedSurface, SetupActor } from './parse.js';
 import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import {
-    bindingLayouts, fogPositionToViewDistance, generatedSurfaceHeight, GfxTextureCache,
+    bindingLayouts, fogPositionToViewDistance, generatedSurfaceHeight, DK64TextureCache,
     GeometryData, GeometryRenderer, DK64Layer,
 } from './render.js';
-import type { FogParams, Geometry } from './render.js';
+import type { FogParams, MeshInput } from './render.js';
 import { addEnvironmentalEffects } from './particles.js';
 import type { EnvironmentParticleData, SpriteData } from './particles.js';
 
@@ -86,7 +86,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private backdropRenderer: BackdropRenderer | null;
     private activeLightCache: ActiveLightCache;
-    public gfxTextureCache = new GfxTextureCache();
+    public gfxTextureCache = new DK64TextureCache();
 
     public geoDatas: GeometryData[] = [];
     public geoRenderers: GeometryRenderer[] = [];
@@ -110,14 +110,14 @@ export class DK64Renderer implements Viewer.SceneGfx {
         };
     }
 
-    public addGeoData(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): GeometryData {
+    public addGeoData(device: GfxDevice, cache: GfxRenderCache, geo: MeshInput): GeometryData {
         const geoData = new GeometryData(device, cache, geo);
         this.geoDatas.push(geoData);
         return geoData;
     }
 
-    public addPropRenderer(device: GfxDevice, cache: GfxRenderCache, geoData: GeometryData, sharedRenderer: GeometryRenderer | null = null): GeometryRenderer {
-        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Props, this.fogParams, this.gfxTextureCache, sharedRenderer);
+    public addGeometryRenderer(device: GfxDevice, cache: GfxRenderCache, geoData: GeometryData, layer: DK64Layer, sharedRenderer: GeometryRenderer | null = null): GeometryRenderer {
+        const renderer = new GeometryRenderer(device, cache, geoData, layer, this.fogParams, this.gfxTextureCache, sharedRenderer);
         this.geoRenderers.push(renderer);
         return renderer;
     }
@@ -403,17 +403,16 @@ function addSceneActors(
                 romData.TexData,
                 sharedOutput,
             );
-            const geo: Geometry = {
+            const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: actorGeometry.rspOutput,
                 actorAnimation: actorGeometry.animation,
             };
-            geoData = new GeometryData(device, cache, geo);
-            sceneRenderer.geoDatas.push(geoData);
+            geoData = sceneRenderer.addGeoData(device, cache, geo);
             geoDataByDefinition.set(geometryKey, geoData);
         }
         const rendererScale = actor.scale * actorModelScale * worldScale;
-        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Actors, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache);
+        const renderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Actors);
         const origin = vec3.fromValues(
             actor.position[0] * worldScale,
             actor.position[1] * worldScale,
@@ -432,7 +431,6 @@ function addSceneActors(
         if (definition.positionYAmplitude !== undefined)
             renderer.setPositionYAnimation(definition.positionYAmplitude * worldScale, definition.rotationYSpeed ?? 0);
         renderer.setCullBoundingBox(renderer.computeWorldBoundingBox());
-        sceneRenderer.geoRenderers.push(renderer);
     }
 }
 
@@ -520,7 +518,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] ?? null : null;
-            const geo: Geometry = {
+            const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: output,
                 dynamicLighting: buildMapChunkLighting(
@@ -529,16 +527,13 @@ class SceneDesc implements Viewer.SceneDesc {
                     chunk, dynamicLights,
                 ),
             };
-            const geoData = new GeometryData(device, cache, geo);
-            sceneRenderer.geoDatas.push(geoData);
-
+            const geoData = sceneRenderer.addGeoData(device, cache, geo);
             const renderLayer = dl.materialIndex === null
                 ? DK64Layer.MapGeometry
                 : DK64Layer.Surfaces;
-            const geoRenderer = new GeometryRenderer(device, cache, geoData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache);
+            const geoRenderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, renderLayer);
             if (dl.ChunkID >= 0)
                 geoRenderer.setCullBoundingBox(geoData.cullBoundingBox);
-            sceneRenderer.geoRenderers.push(geoRenderer);
         }
 
         // Floor decals need an efficient way to find terrain triangles.
@@ -574,7 +569,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const output = state.finish()!;
-            const geo: Geometry = {
+            const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: output,
                 generatedSurfaceAnimation: {
@@ -583,9 +578,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     vertexCount: sharedOutput.vertices.length - firstVertex,
                 },
             };
-            const geoData = new GeometryData(device, cache, geo);
-            sceneRenderer.geoDatas.push(geoData);
-            sceneRenderer.geoRenderers.push(new GeometryRenderer(device, cache, geoData, DK64Layer.Surfaces, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache));
+            const geoData = sceneRenderer.addGeoData(device, cache, geo);
+            sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Surfaces);
         }
 
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);

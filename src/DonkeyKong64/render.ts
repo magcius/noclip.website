@@ -35,7 +35,7 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     return gfxTexture;
 }
 
-export class GfxTextureCache {
+export class DK64TextureCache {
     private textures = new Map<Texture, GfxTexture>();
 
     public getTexture(device: GfxDevice, texture: Texture): GfxTexture {
@@ -111,7 +111,7 @@ class DrawCallInstance {
     private boneModelViewMatrix = mat4.create();
     private textureMatrix = mat4.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, gfxTextureCache: GfxTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams, private boneMatrices: mat4[] | undefined) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, gfxTextureCache: DK64TextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams, private boneMatrices: mat4[] | undefined) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const textureIndex = drawCall.textureIndices[i];
@@ -349,7 +349,7 @@ export class RenderData {
     public vertexStart: number;
     public indexStart: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, geo: Geometry, dynamic = false) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, geo: MeshInput, dynamic = false) {
         const sharedOutput = geo.sharedOutput;
         const drawCalls = geo.rspOutput?.drawCalls ?? [];
         this.indexStart = drawCalls.reduce(
@@ -481,7 +481,7 @@ export class SpriteBillboard {
     }
 }
 
-export interface Geometry {
+export interface MeshInput {
     sharedOutput: RSPSharedOutput;
     rspOutput: RSPOutput | null;
     generatedSurfaceAnimation?: {
@@ -495,7 +495,7 @@ export interface Geometry {
     spriteBillboards?: SpriteBillboard[];
 }
 
-function computeGeometryBoundingBox(geo: Geometry): AABB | null {
+function computeMeshBoundingBox(geo: MeshInput): AABB | null {
     if (geo.rspOutput === null)
         return null;
 
@@ -530,7 +530,7 @@ function computeGeometryBoundingBox(geo: Geometry): AABB | null {
     return boundingBox;
 }
 
-function getDynamicVertexRange(geo: Geometry): { start: number, end: number } | null {
+function getDynamicVertexRange(geo: MeshInput): { start: number, end: number } | null {
     let rangeStart = Infinity, rangeEnd = -Infinity;
     const include = (start: number, count: number): void => {
         rangeStart = Math.min(rangeStart, start);
@@ -555,10 +555,10 @@ export class GeometryData {
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: MeshInput) {
         this.renderData = new RenderData(device, cache, geo, geo.generatedSurfaceAnimation !== undefined || geo.spriteBillboards !== undefined || geo.dynamicLighting !== undefined || geo.propAnimation !== undefined);
         this.lightingDirty = geo.dynamicLighting !== undefined;
-        this.cullBoundingBox = computeGeometryBoundingBox(geo);
+        this.cullBoundingBox = computeMeshBoundingBox(geo);
 
         const dynamicVertexRange = getDynamicVertexRange(geo);
         if (dynamicVertexRange !== null) {
@@ -663,7 +663,7 @@ export class GeometryRenderer {
         private geometryData: GeometryData,
         public renderLayer: DK64Layer,
         private fogParams: FogParams,
-        private gfxTextureCache: GfxTextureCache,
+        private gfxTextureCache: DK64TextureCache,
         sharedRenderer: GeometryRenderer | null = null,
     ) {
         this.megaStateFlags = {};
@@ -687,7 +687,7 @@ export class GeometryRenderer {
         }
     }
 
-    private buildDrawCallInstances(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): DrawCallInstance[] {
+    private buildDrawCallInstances(device: GfxDevice, cache: GfxRenderCache, geo: MeshInput): DrawCallInstance[] {
         if (geo.rspOutput === null)
             return [];
 

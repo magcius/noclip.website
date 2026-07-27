@@ -11,7 +11,7 @@ import { initDL, initSpriteMaterial } from './material.js';
 import { DK64Map } from './parse.js';
 import type { InstanceScript, ScriptBlock, SetupProp } from './parse.js';
 import { GeometryData, GeometryRenderer, DK64Layer, SpriteBillboard } from './render.js';
-import type { Geometry } from './render.js';
+import type { MeshInput } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 
 function createSpriteVertexBuffer(sprite: SpriteData, quadCount = 1): ArrayBufferSlice {
@@ -106,7 +106,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
 
             const width = definition.width * scale * 3;
             const height = definition.height * scale * 3;
-            const geo: Geometry = {
+            const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: output,
                 spriteBillboards: batch.map((event, index) => new SpriteBillboard(
@@ -124,12 +124,10 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
                     },
                 )),
             };
-            const geoData = new GeometryData(device, cache, geo);
-            sceneRenderer.geoDatas.push(geoData);
-            const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Effects, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache);
+            const geoData = sceneRenderer.addGeoData(device, cache, geo);
+            const renderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Effects);
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             renderer.setBackfaceCullingEnabled(false);
-            sceneRenderer.geoRenderers.push(renderer);
         }
     }
 }
