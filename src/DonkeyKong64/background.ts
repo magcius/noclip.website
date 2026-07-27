@@ -12,20 +12,21 @@ import {
     fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4,
 } from '../gfx/helpers/UniformBufferHelpers.js';
 import {
-    GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint,
+    GfxBuffer, GfxBufferFrequencyHint,
     GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat,
-    GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode,
-    GfxProgram, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor,
+    GfxInputLayout, GfxMipFilterMode,
+    GfxProgram, GfxTexFilterMode, GfxTexture,
     GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode,
     makeTextureDescriptor2D,
 } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import {
-    GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque,
+    GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque,
 } from '../gfx/render/GfxRenderInstManager.js';
 import { MathConstants } from '../MathHelpers.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, hexzero } from '../util.js';
+import { bindingLayouts } from './render.js';
 
 export interface BackdropData {
     TextureID: number;
@@ -37,24 +38,34 @@ export interface BackdropRenderer {
     destroy(device: GfxDevice): void;
 }
 
-const backdropBindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 2 },
-];
+// The panorama backdrop is a 320x240 framebuffer-sized image.
+const backdropWidth = 320;
+const backdropHeight = 240;
+// pos.xyz, bone index, texcoord.st, color.rgba
+const backdropVertexStride = 10;
+// The top and bottom gradient bands extend well past the viewport so they never
+// pull away from the screen edge as the backdrop slides with camera pitch.
+const gradientOffscreenNDC = 6;
 
 const identityMatrix = mat4.create();
+
+const scratchMatrix = mat4.create();
+const scratchColor = colorNewFromRGBA8(0);
 
 function wrap01(v: number): number {
     return v - Math.floor(v);
 }
 
+// From func_global_asm_807065F8 and D_global_asm_80754F58
+const aztecBeetleRaceTintKeys: readonly (readonly [number, Color])[] = [
+    [0, colorNewFromRGBA8(0xFF0000FF)],
+    [1900, colorNewFromRGBA8(0x0000FFFF)],
+    [3600, colorNewFromRGBA8(0x00FF00FF)],
+    [5300, colorNewFromRGBA8(0xFF0000FF)],
+];
+
 function calcAztecBeetleRaceTint(height: number): Color {
-    // From func_global_asm_807065F8 and D_global_asm_80754F58
-    const keys: readonly (readonly [number, Color])[] = [
-        [0, colorNewFromRGBA8(0xFF0000FF)],
-        [1900, colorNewFromRGBA8(0x0000FFFF)],
-        [3600, colorNewFromRGBA8(0x00FF00FF)],
-        [5300, colorNewFromRGBA8(0xFF0000FF)],
-    ];
+    const keys = aztecBeetleRaceTintKeys;
     if (height <= keys[0][0])
         return keys[0][1];
     for (let i = 1; i < keys.length; i++) {
@@ -62,13 +73,15 @@ function calcAztecBeetleRaceTint(height: number): Color {
             const prev = keys[i - 1];
             const next = keys[i];
             const t = (height - prev[0]) / (next[0] - prev[0]);
-            const color = colorNewFromRGBA8(0);
-            colorLerp(color, prev[1], next[1], t);
-            return color;
+            colorLerp(scratchColor, prev[1], next[1], t);
+            return scratchColor;
         }
     }
     return keys[keys.length - 1][1];
 }
+
+const dimBackdropTint = colorNewFromRGBA8(0x3F3F3FFF);
+const fullBackdropTint = colorNewFromRGBA8(0xFFFFFFFF);
 
 function calcBackdropTint(mapID: number, height: number): Color {
     if (mapID === 0x0E)
@@ -88,19 +101,70 @@ function calcBackdropTint(mapID: number, height: number): Color {
     case 0x7E:
     case 0x7F:
     case 0x80:
-        return colorNewFromRGBA8(0x3F3F3FFF);
+        return dimBackdropTint;
     default:
-        return colorNewFromRGBA8(0xFFFFFFFF);
+        return fullBackdropTint;
     }
 }
 
-class PanoramaBackdropRenderer implements BackdropRenderer {
-    private gfxProgram: GfxProgram;
-    private gfxTexture: GfxTexture;
-    private textureMappings = [new TextureMapping(), new TextureMapping()];
+// Both backdrops are screen-space triangle lists sharing the F3DEX vertex layout;
+// they differ only in how they fill ub_DrawParams and ub_CombineParams each frame.
+abstract class BackdropQuadRenderer implements BackdropRenderer {
+    protected textureMappings = [new TextureMapping(), new TextureMapping()];
     private vertexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private vertexCount: number;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, private gfxProgram: GfxProgram, vertices: Float32Array) {
+        this.vertexCount = vertices.length / backdropVertexStride;
+        this.vertexBuffer = createBufferFromData(
+            device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer,
+        );
+        this.inputLayout = cache.createInputLayout({
+            indexBufferFormat: null,
+            vertexBufferDescriptors: [
+                { byteStride: backdropVertexStride * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+            ],
+            vertexAttributeDescriptors: [
+                { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04 },
+                { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04 },
+                { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04 },
+            ],
+        });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+    }
+
+    protected abstract fillDrawParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void;
+    protected abstract fillCombineParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void;
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setDrawCount(this.vertexCount);
+        renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
+        renderInst.setBindingLayouts(bindingLayouts);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+        renderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.Always, depthWrite: false });
+
+        const offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
+        const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        fillMatrix4x4(mapped, offs, identityMatrix);
+
+        this.fillDrawParams(renderInst, viewerInput);
+        this.fillCombineParams(renderInst, viewerInput);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+    }
+}
+
+class PanoramaBackdropRenderer extends BackdropQuadRenderer {
+    private gfxTexture: GfxTexture;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, backdrop: BackdropData, private mapID: number) {
         const width = 320;
@@ -119,7 +183,17 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         );
         program.defines.set('BONE_MATRIX_COUNT', '1');
         program.defines.set('USE_TEXTURE', '1');
-        this.gfxProgram = cache.createProgram(program);
+
+        const vertices = new Float32Array([
+            // pos.xyz, bone index, texcoord, color
+            -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
+             1,  1, 0, 0,  1, 0,  1, 1, 1, 1,
+             1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
+            -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
+             1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
+            -1, -1, 0, 0,  0, 1,  1, 1, 1, 1,
+        ]);
+        super(device, cache, cache.createProgram(program), vertices);
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(
             GfxFormat.U8_RGBA_NORM, width, height, 1,
@@ -136,49 +210,9 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
             minLOD: 0,
             maxLOD: 0,
         });
-
-        const vertices = new Float32Array([
-            // pos.xyz, bone index, texcoord, color
-            -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
-             1,  1, 0, 0,  1, 0,  1, 1, 1, 1,
-             1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
-            -1,  1, 0, 0,  0, 0,  1, 1, 1, 1,
-             1, -1, 0, 0,  1, 1,  1, 1, 1, 1,
-            -1, -1, 0, 0,  0, 1,  1, 1, 1, 1,
-        ]);
-        this.vertexBuffer = createBufferFromData(
-            device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer,
-        );
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04 },
-            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04 },
-            { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04 },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        this.inputLayout = cache.createInputLayout({
-            indexBufferFormat: null,
-            vertexBufferDescriptors,
-            vertexAttributeDescriptors,
-        });
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setDrawCount(6);
-        renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
-        renderInst.setBindingLayouts(backdropBindingLayouts);
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-        renderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.Always, depthWrite: false });
-
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
-        let mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-        fillMatrix4x4(mapped, offs, identityMatrix);
-
+    protected fillDrawParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
         // Translated from func_global_asm_8068BBF8 and func_global_asm_807069A4
         const camera = viewerInput.camera.worldMatrix;
         const forwardX = -camera[8];
@@ -188,33 +222,33 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         const pitch = Math.atan2(forwardY, Math.hypot(forwardX, forwardZ));
         const verticalAngle = Math.PI / 2 - pitch;
         const centerU = horizontalAngle;
-        const centerV = wrap01((verticalAngle / MathConstants.TAU) * (320 / 240));
+        const centerV = wrap01((verticalAngle / MathConstants.TAU) * (backdropWidth / backdropHeight));
         const backdropScale = 5.6;
-        const scaleU = (230 / backdropScale) / 320;
-        const scaleV = (190 / backdropScale) / 240;
+        const scaleU = (230 / backdropScale) / backdropWidth;
+        const scaleV = (190 / backdropScale) / backdropHeight;
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
-        mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
+        const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
         offs += fillMatrix4x3(mapped, offs, identityMatrix);
-        const textureMatrix = mat4.create();
-        textureMatrix[0] = scaleU;
-        textureMatrix[5] = scaleV;
-        textureMatrix[12] = centerU - scaleU / 2;
-        textureMatrix[13] = centerV - scaleV / 2;
-        offs += fillMatrix4x2(mapped, offs, textureMatrix);
+        mat4.identity(scratchMatrix);
+        scratchMatrix[0] = scaleU;
+        scratchMatrix[5] = scaleV;
+        scratchMatrix[12] = centerU - scaleU / 2;
+        scratchMatrix[13] = centerV - scaleV / 2;
+        offs += fillMatrix4x2(mapped, offs, scratchMatrix);
         offs += fillMatrix4x2(mapped, offs, identityMatrix);
-
-        const tint = calcBackdropTint(this.mapID, camera[13] / 3);
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
-        mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillColor(mapped, offs, tint);
-        fillVec4(mapped, offs, 1, 1, 1, 1);
-
-        renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.vertexBuffer);
+    protected fillCombineParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
+        const tint = calcBackdropTint(this.mapID, viewerInput.camera.worldMatrix[13] / 3);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
+        const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        offs += fillColor(mapped, offs, tint);
+        fillVec4(mapped, offs, 1, 1, 1, 1);
+    }
+
+    public override destroy(device: GfxDevice): void {
+        super.destroy(device);
         device.destroyTexture(this.gfxTexture);
     }
 }
@@ -235,6 +269,14 @@ const gradientBackdropPalettes: readonly (readonly BackdropColor[])[] = [
     [[0xFF, 0xFF, 0x00], [0xFF, 0xFF, 0x00], [0xFF, 0xFF, 0x00], [0xFF, 0xFF, 0x00]],
     [[0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0xFF]],
 ];
+
+// Source-space Y of the four gradient stops, per palette. From func_global_asm_80704B20.
+const defaultGradientSourceRows: readonly number[] = [0, 492, 552, 960];
+const gradientBackdropSourceRows = new Map<number, readonly number[]>([
+    [4, [0, 400, 440, 800]],
+    [5, [0, 480, 500, 800]],
+    [7, [0, 480, 500, 800]],
+]);
 
 // From func_global_asm_80707980's gradient assignments.
 const gradientBackdropPaletteByMap = new Map<number, number>([
@@ -272,13 +314,7 @@ function pushGradientQuad(
     );
 }
 
-class GradientBackdropRenderer implements BackdropRenderer {
-    private gfxProgram: GfxProgram;
-    private textureMappings = [new TextureMapping(), new TextureMapping()];
-    private vertexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-
+class GradientBackdropRenderer extends BackdropQuadRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, palette: readonly BackdropColor[], paletteIndex: number) {
         // From func_global_asm_80704B20 + D_global_asm_80754ED8
         const program = new F3DEX_Program(
@@ -288,78 +324,40 @@ class GradientBackdropRenderer implements BackdropRenderer {
         );
         program.defines.set('BONE_MATRIX_COUNT', '1');
         program.defines.set('USE_VERTEX_COLOR', '1');
-        this.gfxProgram = cache.createProgram(program);
 
-        const sourceRows = paletteIndex === 4
-            ? [0, 400, 440, 800]
-            : (paletteIndex === 5 || paletteIndex === 7)
-                ? [0, 480, 500, 800]
-                : [0, 492, 552, 960];
+        const sourceRows = gradientBackdropSourceRows.get(paletteIndex) ?? defaultGradientSourceRows;
         const sourceYToNDC = (sourceY: number): number => 1 - (sourceY - 336) / 120;
         const vertices: number[] = [];
+        // The first and last rows run off-screen so the end colors extend past the gradient band.
         const rows = [
-            6,
-            sourceYToNDC(sourceRows[0]),
-            sourceYToNDC(sourceRows[1]),
-            sourceYToNDC(sourceRows[2]),
-            sourceYToNDC(sourceRows[3]),
-            -6,
+            gradientOffscreenNDC,
+            ...sourceRows.map(sourceYToNDC),
+            -gradientOffscreenNDC,
         ];
         const colors = [palette[0], palette[0], palette[1], palette[2], palette[3], palette[3]];
         for (let i = 0; i < rows.length - 1; i++)
             pushGradientQuad(vertices, rows[i], rows[i + 1], colors[i], colors[i + 1]);
 
-        const vertexData = new Float32Array(vertices);
-        this.vertexBuffer = createBufferFromData(
-            device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer,
-        );
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04 },
-            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04 },
-            { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04 },
-        ];
-        this.inputLayout = cache.createInputLayout({
-            indexBufferFormat: null,
-            vertexBufferDescriptors: [{ byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex }],
-            vertexAttributeDescriptors,
-        });
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        super(device, cache, cache.createProgram(program), new Float32Array(vertices));
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setDrawCount(30);
-        renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
-        renderInst.setBindingLayouts(backdropBindingLayouts);
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-        renderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.Always, depthWrite: false });
-
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
-        let mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-        fillMatrix4x4(mapped, offs, identityMatrix);
-
+    protected fillDrawParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
         const camera = viewerInput.camera.worldMatrix;
         const pitch = Math.atan2(-camera[9], Math.hypot(camera[8], camera[10]));
-        const drawMatrix = mat4.create();
-        drawMatrix[13] = -2.5 * Math.sin(pitch);
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
-        mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
-        offs += fillMatrix4x3(mapped, offs, drawMatrix);
+        mat4.identity(scratchMatrix);
+        scratchMatrix[13] = -2.5 * Math.sin(pitch);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
+        const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
+        offs += fillMatrix4x3(mapped, offs, scratchMatrix);
         offs += fillMatrix4x2(mapped, offs, identityMatrix);
         fillMatrix4x2(mapped, offs, identityMatrix);
-
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
-        mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillVec4(mapped, offs, 1, 1, 1, 1);
-        fillVec4(mapped, offs, 1, 1, 1, 1);
-
-        renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.vertexBuffer);
+    protected fillCombineParams(renderInst: GfxRenderInst, _viewerInput: Viewer.ViewerRenderInput): void {
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
+        const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        offs += fillVec4(mapped, offs, 1, 1, 1, 1);
+        fillVec4(mapped, offs, 1, 1, 1, 1);
     }
 }
 
