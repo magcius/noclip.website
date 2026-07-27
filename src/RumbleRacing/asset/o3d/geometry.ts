@@ -1,13 +1,22 @@
 import { vec2, vec3 } from "gl-matrix";
+import { Color, colorNewFromRGBA } from "../../../Color";
 import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
+
+export const enum BlendMode {
+  None,
+  SourceOver,
+  Additive,
+}
 
 export interface Primitive {
   totalVertsInPrimitive: number;
   primType: number;
+  blendMode: BlendMode;
   vertices: {
     position: vec3;
-    normal: vec3;
+    normal: vec3 | null;
+    color: Color | null;
     uv: vec2;
     adcBitSet: boolean;
   }[];
@@ -18,6 +27,7 @@ export interface Buffer {
   numStrips: number;
   primitives: Primitive[];
   textureId: number;
+  blendMode: BlendMode;
 }
 
 export interface Geometry {
@@ -33,12 +43,45 @@ interface Triple {
 interface StripChunk {
   gifTagV1: number;
   gifTagV2: number;
+  blendMode: BlendMode;
   dataTriples: Triple[];
 }
 
 interface BufferChunk {
   bufferHeader: { v1: number; v2: number; lastOffset: number }[];
   strips: StripChunk[];
+}
+
+const GS_PRMODE = 0x1b;
+const GS_ALPHA_1 = 0x42;
+const GS_ALPHA_2 = 0x43;
+
+const PRMODE_ABE = 1 << 6;
+
+interface GSState {
+  abe: boolean;
+  alphaBlendMode: BlendMode;
+}
+
+function decodeAlphaRegister(value: number): BlendMode {
+  const b = (value >>> 2) & 0x03;
+  return b === 2 ? BlendMode.Additive : BlendMode.SourceOver;
+}
+
+function applyGSRegisters(unpack: UnpackData, state: GSState): void {
+  for (const entry of unpack.v4_32) {
+    if (entry.v3 >>> 8 !== 0 || entry.v4 !== 0) continue;
+
+    switch (entry.v3 & 0xff) {
+      case GS_PRMODE:
+        state.abe = (entry.v1 & PRMODE_ABE) !== 0;
+        break;
+      case GS_ALPHA_1:
+      case GS_ALPHA_2:
+        state.alphaBlendMode = decodeAlphaRegister(entry.v1);
+        break;
+    }
+  }
 }
 
 export interface TextureEntry {
@@ -53,6 +96,7 @@ export interface TextureMeta {
 
 function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
   const result: BufferChunk[] = [];
+  const gs: GSState = { abe: false, alphaBlendMode: BlendMode.SourceOver };
   let i = 0;
 
   while (i < filtered.length) {
@@ -66,6 +110,7 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         v2: e.v2,
         lastOffset: e.offset,
       }));
+      applyGSRegisters(filtered[i].unpack!, gs);
       i++;
 
       const strips: StripChunk[] = [];
@@ -84,9 +129,11 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         }
 
         const gifEntries = filtered[i].unpack!.v4_32;
+        applyGSRegisters(filtered[i].unpack!, gs);
         const sChunk: StripChunk = {
           gifTagV1: gifEntries.length > 0 ? gifEntries[0].v1 : 0,
           gifTagV2: gifEntries.length > 0 ? gifEntries[0].v2 : 0,
+          blendMode: gs.abe ? gs.alphaBlendMode : BlendMode.None,
           dataTriples: [],
         };
         i++;
@@ -108,7 +155,6 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         strips.push(sChunk);
       }
 
-      const lastHeader = bufHeader[bufHeader.length - 1];
       result.push({ bufferHeader: bufHeader, strips });
     } else {
       i++;
@@ -149,12 +195,14 @@ export function getGeometry(
       numHeaderLines: bChunk.bufferHeader[0]?.v2 ?? 0,
       primitives: [],
       textureId: findTextureId(textures, lastHeader?.lastOffset ?? 0),
+      blendMode: BlendMode.None,
     };
 
     for (const sChunk of bChunk.strips) {
       const strip: Primitive = {
         totalVertsInPrimitive: sChunk.gifTagV1 & 0x7fff,
         primType: (sChunk.gifTagV2 & (0b111 << 15)) >> 15,
+        blendMode: sChunk.blendMode,
         vertices: [],
       };
 
@@ -173,6 +221,7 @@ export function getGeometry(
                 cmdA.v3_32[j].v2,
                 cmdA.v3_32[j].v3,
               ),
+              color: null,
               adcBitSet: cmdA.v3_32[j].adcBitSet,
               position: vec3.fromValues(
                 cmdB.v3_32[j].v1,
@@ -185,9 +234,11 @@ export function getGeometry(
         } else if (
           cmdA.type === VifUnpackFormat.V3_32 && // A = vertices
           cmdB.type === VifUnpackFormat.V2_32 && // B = uvs
-          cmdC.type === VifUnpackFormat.V4_8 // C = normals
+          cmdC.type === VifUnpackFormat.V4_8 // C = RGBA vertex colors
         ) {
           for (let j = 0; j < cmdA.v3_32.length; j++) {
+            const rgba = cmdC.v4_8[j];
+
             strip.vertices.push({
               position: vec3.fromValues(
                 cmdA.v3_32[j].v1,
@@ -195,18 +246,22 @@ export function getGeometry(
                 cmdA.v3_32[j].v3,
               ),
               uv: vec2.fromValues(cmdB.v2_32[j].v1, cmdB.v2_32[j].v2),
-              normal: vec3.fromValues(
-                cmdC.v4_8[j].v1 / 255.0,
-                cmdC.v4_8[j].v2 / 255.0,
-                cmdC.v4_8[j].v3 / 255.0,
+              normal: null,
+              color: colorNewFromRGBA(
+                rgba.v1 / 0x80,
+                rgba.v2 / 0x80,
+                (rgba.v3 & ~1) / 0x80,
+                rgba.v4 / 0x80,
               ),
-              adcBitSet: cmdC.v4_8[j].adcBitSet,
+              adcBitSet: rgba.adcBitSet,
             });
           }
         }
       }
 
       buf.primitives.push(strip);
+
+      if (strip.blendMode > buf.blendMode) buf.blendMode = strip.blendMode;
     }
 
     geometry.buffers.push(buf);

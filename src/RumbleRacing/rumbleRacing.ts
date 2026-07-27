@@ -5,20 +5,14 @@ import {
   ParsedAsset,
 } from "./file/track";
 import { ObfNode } from "./asset/o3d/obf";
+import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
-import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
-import { vec2, vec3 } from "gl-matrix";
+import { ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { Color, White } from "../Color";
+import { Vec3Zero } from "../MathHelpers";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
-  nodeIds?: Set<number>;
-}
-
-export interface DrawCall {
-  vertexBuffer: GfxBuffer;
-  indexBuffer: GfxBuffer;
-  indexCount: number;
-  textureId: number;
 }
 
 export interface JsonBuffer {
@@ -27,7 +21,10 @@ export interface JsonBuffer {
   name: string;
   positions: vec3[];
   uvs: vec2[];
-  normals: vec3[];
+  normals: ReadonlyVec3[];
+  colors: Color[];
+  hasVertexColors: boolean;
+  blendMode: BlendMode;
   indices: number[];
 }
 
@@ -71,7 +68,7 @@ export interface ActorData {
 
 export interface TextureData {
   textureId: number;
-  pngBytes: Uint8Array;
+  levels: Uint8Array[];
   width: number;
   height: number;
 }
@@ -96,15 +93,19 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       const indices: number[] = [];
       const positions: vec3[] = [];
       const uvs: vec2[] = [];
-      const normals: vec3[] = [];
+      const normals: ReadonlyVec3[] = [];
+      const colors: Color[] = [];
+      let hasVertexColors = false;
 
       for (const strip of buf.primitives) {
         const base = positions.length;
 
         for (const vert of strip.vertices) {
           positions.push(vert.position);
-          normals.push(vert.normal);
+          normals.push(vert.normal ?? Vec3Zero);
+          colors.push(vert.color ?? White);
           uvs.push(vert.uv);
+          if (vert.color !== null) hasVertexColors = true;
         }
 
         let isFlipped = false;
@@ -136,6 +137,9 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
         positions,
         uvs,
         normals,
+        colors,
+        hasVertexColors,
+        blendMode: buf.blendMode,
         indices,
       });
     }
@@ -223,12 +227,13 @@ export function processTrackFile(
       }
       case "TXF": {
         for (const tex of getTextures(resource)) {
-          const img = tex.files[0];
+          if (tex.files.length === 0) continue;
+          const base = tex.files[0];
           out.textures.push({
             textureId: tex.textureId,
-            pngBytes: img.image.pix,
-            width: img.width,
-            height: img.height,
+            levels: tex.files.map((file) => file.image.pix),
+            width: base.width,
+            height: base.height,
           });
         }
         break;

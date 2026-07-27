@@ -2,6 +2,7 @@ import {
   ActorData,
   ActorTransforms,
   ExcludeInfo,
+  ObfData,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
@@ -14,7 +15,9 @@ import {
 import {
   fillMatrix4x3,
   fillMatrix4x4,
+  fillVec4,
 } from "../gfx/helpers/UniformBufferHelpers";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import {
   GfxCullMode,
   GfxDevice,
@@ -26,37 +29,66 @@ import {
   GfxWrapMode,
   GfxBlendMode,
   GfxBlendFactor,
-  GfxChannelWriteMask,
+  GfxCompareMode,
   makeTextureDescriptor2D,
   GfxFormat,
 } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import {
   GfxRenderInst,
   GfxRenderInstList,
 } from "../gfx/render/GfxRenderInstManager";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { BlendMode } from "./asset/o3d/geometry";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
-import { O3DGeometry, ObfGeometry } from "./Geometry";
+import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 
 const pathBase = `RumbleRacing`;
 
 const GLOBAL_SCALE = 300.0; // this feels the best
 
+const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
+
+const SOLID_PASS_ALPHA_REF = 0.99;
+
+const TOGGLEABLE_TRACK_OBFS: { name: string; label: string }[] = [
+  { name: "TRACK", label: "Track" },
+  { name: "TRACKPAN", label: "Track Panorama" },
+];
+
+function resourceBaseName(name: string): string {
+  const upper = name.trim().toUpperCase();
+  const base = upper.slice(upper.lastIndexOf(":") + 1);
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+
+interface TrackGeometryGroup {
+  geometry: MergedGeometry;
+  visible: boolean;
+  label: string | null;
+}
+
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
-  private renderInstList = new GfxRenderInstList();
-  private trackGeometries: ObfGeometry[] = [];
+  private renderInstList = new GfxRenderInstList(null);
+  private blendedRenderInstList = new GfxRenderInstList(null);
+  private trackGroups: TrackGeometryGroup[] = [];
   private o3dGeometries: Map<number, O3DGeometry> = new Map();
-  private trackProgram: GfxProgram;
+  private programCache = new Map<number, GfxProgram>();
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
   private wireframe: boolean = false;
+  private showVertexColors: boolean = true;
+  private showTextures: boolean = true;
 
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
@@ -70,9 +102,6 @@ class RumbleRacingScene implements SceneGfx {
     this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
     const cache = this.renderHelper.renderCache;
 
-    // we don't want to show these in any map
-    this.exclude.textureIds?.add(3120); // semi-transparent cloud texture, not RE'd properly
-
     this.setActorTransforms();
 
     for (const actor of this.trackFile.actors) {
@@ -82,9 +111,7 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
-    for (const obf of this.trackFile.obfs) {
-      this.trackGeometries.push(new ObfGeometry(cache, obf, this.exclude));
-    }
+    this.buildTrackGroups(cache);
 
     for (let i = 0; i < this.trackFile.o3ds.length; i++) {
       const o3d = this.trackFile.o3ds[i];
@@ -94,17 +121,62 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
-    this.trackProgram = cache.createProgram(new TrackProgram());
-
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
       magFilter: GfxTexFilterMode.Bilinear,
-      mipFilter: GfxMipFilterMode.Nearest,
+      mipFilter: GfxMipFilterMode.Linear,
       wrapS: GfxWrapMode.Repeat,
       wrapT: GfxWrapMode.Repeat,
     });
 
     this.handleTextures();
+    this.resolveBatchTextures();
+  }
+
+  private buildTrackGroups(cache: GfxRenderCache): void {
+    const remaining = this.trackFile.obfs.slice();
+
+    for (const toggle of TOGGLEABLE_TRACK_OBFS) {
+      const obfs: ObfData[] = [];
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        if (resourceBaseName(remaining[i].name) !== toggle.name) continue;
+        obfs.unshift(remaining[i]);
+        remaining.splice(i, 1);
+      }
+
+      if (obfs.length === 0) continue;
+
+      this.trackGroups.push({
+        geometry: new MergedGeometry(cache, obfs, this.exclude),
+        visible: true,
+        label: toggle.label,
+      });
+    }
+
+    if (remaining.length > 0) {
+      this.trackGroups.push({
+        geometry: new MergedGeometry(cache, remaining, this.exclude),
+        visible: true,
+        label: null,
+      });
+    }
+  }
+
+  private resolveBatchTextures(): void {
+    const resolve = (geometry: MergedGeometry) => {
+      geometry.batches = geometry.batches.filter((batch) => {
+        const gfxTexture = this.textureMap.get(batch.textureId);
+        if (gfxTexture === undefined) return false;
+        batch.samplerBindings = [
+          { gfxTexture, gfxSampler: this.linearSampler },
+        ];
+        return true;
+      });
+    };
+
+    for (const group of this.trackGroups) resolve(group.geometry);
+    for (const o3dGeom of this.o3dGeometries.values())
+      for (const frame of o3dGeom.frames) resolve(frame);
   }
 
   private setActorTransforms() {
@@ -130,11 +202,11 @@ class RumbleRacingScene implements SceneGfx {
           GfxFormat.U8_RGBA_NORM,
           texture.width,
           texture.height,
-          1,
+          texture.levels.length,
         ),
       );
 
-      device.uploadTextureData(tex, 0, [texture.pngBytes]);
+      device.uploadTextureData(tex, 0, texture.levels);
       device.setResourceName(tex, `texture_${texture.textureId}`);
 
       this.textureMap.set(texture.textureId, tex);
@@ -142,6 +214,31 @@ class RumbleRacingScene implements SceneGfx {
     }
 
     this.textureHolder.onnewtextures();
+  }
+
+  private getProgram(hasVertexColors: boolean, alphaTest: boolean): GfxProgram {
+    const ignoreVertexColors = hasVertexColors && !this.showVertexColors;
+    const ignoreTextures = !this.showTextures;
+
+    const key =
+      (hasVertexColors ? 1 : 0) |
+      (ignoreVertexColors ? 2 : 0) |
+      (ignoreTextures ? 4 : 0) |
+      (alphaTest ? 8 : 0);
+
+    let program = this.programCache.get(key);
+    if (program === undefined) {
+      program = this.renderHelper.renderCache.createProgram(
+        new TrackProgram(
+          hasVertexColors,
+          alphaTest,
+          ignoreVertexColors,
+          ignoreTextures,
+        ),
+      );
+      this.programCache.set(key, program);
+    }
+    return program;
   }
 
   private fillSceneParams(
@@ -155,56 +252,68 @@ class RumbleRacingScene implements SceneGfx {
     fillMatrix4x4(data, 0, viewerInput.camera.clipFromWorldMatrix);
   }
 
-  private submitGeometryDrawCalls(
-    geometry: ObfGeometry,
+  private newBatchInst(
+    geometry: MergedGeometry,
+    batch: DrawBatch,
     modelMatrix: mat4,
-  ): void {
-    for (const dc of geometry.drawCalls) {
-      const tex = this.textureMap.get(dc.textureId);
-      if (!tex) continue;
+    alphaTestRef: number,
+  ): GfxRenderInst {
+    const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+    renderInst.setGfxProgram(
+      this.getProgram(batch.hasVertexColors, alphaTestRef > 0.0),
+    );
+    renderInst.setSamplerBindings(0, batch.samplerBindings!);
+    renderInst.setVertexInput(
+      geometry.inputLayout,
+      batch.vertexBufferDescriptors,
+      batch.indexBufferDescriptor,
+    );
+    renderInst.setDrawCount(batch.indexCount);
 
-      const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-      renderInst.setSamplerBindings(0, [
-        { gfxTexture: tex, gfxSampler: this.linearSampler },
-      ]);
-      renderInst.setVertexInput(
-        geometry.inputLayout,
-        [{ buffer: dc.vertexBuffer, byteOffset: 0 }],
-        { buffer: dc.indexBuffer, byteOffset: 0 },
+    const meshParams = renderInst.allocateUniformBufferF32(
+      TrackProgram.ub_MeshParams,
+      16,
+    );
+    const offs = fillMatrix4x3(meshParams, 0, modelMatrix);
+    fillVec4(meshParams, offs, alphaTestRef, 0, 0, 0);
+
+    return renderInst;
+  }
+
+  private submitBatches(geometry: MergedGeometry, modelMatrix: mat4): void {
+    for (const batch of geometry.batches) {
+      if (batch.blendMode === BlendMode.None) {
+        this.renderInstList.submitRenderInst(
+          this.newBatchInst(geometry, batch, modelMatrix, 0.0),
+        );
+        continue;
+      }
+
+      this.renderInstList.submitRenderInst(
+        this.newBatchInst(geometry, batch, modelMatrix, SOLID_PASS_ALPHA_REF),
       );
-      renderInst.setDrawCount(dc.indexCount);
 
-      const meshParams = renderInst.allocateUniformBufferF32(
-        TrackProgram.ub_MeshParams,
-        12,
-      );
-      fillMatrix4x3(meshParams, 0, modelMatrix);
-
-      this.renderInstList.submitRenderInst(renderInst);
+      const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0);
+      soft.setMegaStateFlags({
+        depthWrite: false,
+        depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
+      });
+      setAttachmentStateSimple(megaStateScratch, {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor:
+          batch.blendMode === BlendMode.Additive
+            ? GfxBlendFactor.One
+            : GfxBlendFactor.OneMinusSrcAlpha,
+      });
+      soft.setMegaStateFlags(megaStateScratch);
+      this.blendedRenderInstList.submitRenderInst(soft);
     }
   }
 
   private renderMap(): void {
     const template = this.renderHelper.renderInstManager.pushTemplate();
-    template.setGfxProgram(this.trackProgram);
-    template.setMegaStateFlags({
-      cullMode: GfxCullMode.None,
-      attachmentsState: [
-        {
-          channelWriteMask: GfxChannelWriteMask.AllChannels,
-          rgbBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-          },
-          alphaBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.One,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-          },
-        },
-      ],
-    });
+    template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
     const trackMatrix = mat4.create();
     mat4.scale(trackMatrix, trackMatrix, [
@@ -213,8 +322,9 @@ class RumbleRacingScene implements SceneGfx {
       GLOBAL_SCALE,
     ]);
 
-    for (const geometry of this.trackGeometries) {
-      this.submitGeometryDrawCalls(geometry, trackMatrix);
+    for (const group of this.trackGroups) {
+      if (!group.visible) continue;
+      this.submitBatches(group.geometry, trackMatrix);
     }
 
     if (this.showActors) {
@@ -222,16 +332,10 @@ class RumbleRacingScene implements SceneGfx {
         const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
 
-        const actorMatrix = this.actorMatrices.get(actor.resourceIndex)!;
+        const frame = o3dGeom.frames[o3dGeom.animationFrame];
+        if (frame === undefined) continue;
 
-        if (o3dGeom.isAnimated) {
-          const frame = o3dGeom.obfGeometries[o3dGeom.animationFrame];
-          this.submitGeometryDrawCalls(frame, actorMatrix);
-        } else {
-          for (const obfGeom of o3dGeom.obfGeometries) {
-            this.submitGeometryDrawCalls(obfGeom, actorMatrix);
-          }
-        }
+        this.submitBatches(frame, this.actorMatrices.get(actor.resourceIndex)!);
       }
     }
 
@@ -241,8 +345,8 @@ class RumbleRacingScene implements SceneGfx {
   private updateAnimations(viewerInput: ViewerRenderInput): void {
     const halfSecondIndex = Math.floor(viewerInput.time / 100);
     for (const [, o3dGeom] of this.o3dGeometries) {
-      if (o3dGeom.isAnimated && o3dGeom.obfGeometries.length > 0) {
-        o3dGeom.animationFrame = halfSecondIndex % o3dGeom.obfGeometries.length;
+      if (o3dGeom.isAnimated && o3dGeom.frames.length > 0) {
+        o3dGeom.animationFrame = halfSecondIndex % o3dGeom.frames.length;
       }
     }
   }
@@ -300,6 +404,10 @@ class RumbleRacingScene implements SceneGfx {
           this.renderHelper.renderCache,
           passRenderer,
         );
+        this.blendedRenderInstList.drawOnPassRenderer(
+          this.renderHelper.renderCache,
+          passRenderer,
+        );
       });
     });
 
@@ -325,14 +433,46 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   public createPanels(): UI.Panel[] {
+    const trackGeometryPanel = new UI.Panel();
+    trackGeometryPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    trackGeometryPanel.setTitle(UI.LAYER_ICON, "Track Geometry");
+
+    const showActorsCheckbox = new UI.Checkbox("Actors", this.showActors);
+    showActorsCheckbox.onchanged = () => {
+      this.showActors = showActorsCheckbox.checked;
+    };
+
+    trackGeometryPanel.contents.appendChild(showActorsCheckbox.elem);
+
+    for (const group of this.trackGroups) {
+      if (group.label === null) continue;
+      const checkbox = new UI.Checkbox(group.label, group.visible);
+      checkbox.onchanged = () => {
+        group.visible = checkbox.checked;
+      };
+      trackGeometryPanel.contents.appendChild(checkbox.elem);
+    }
+
     const renderSettingsPanel = new UI.Panel();
     renderSettingsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     renderSettingsPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Settings");
 
-    const showActorsCheckbox = new UI.Checkbox("Show Actors", this.showActors);
-    showActorsCheckbox.onchanged = () => {
-      this.showActors = showActorsCheckbox.checked;
+    const showVertexColorsCheckbox = new UI.Checkbox(
+      "Vertex Colors",
+      this.showVertexColors,
+    );
+    showVertexColorsCheckbox.onchanged = () => {
+      this.showVertexColors = showVertexColorsCheckbox.checked;
     };
+
+    renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
+
+    const showTexturesCheckbox = new UI.Checkbox("Textures", this.showTextures);
+    showTexturesCheckbox.onchanged = () => {
+      this.showTextures = showTexturesCheckbox.checked;
+    };
+
+    renderSettingsPanel.contents.appendChild(showTexturesCheckbox.elem);
 
     if (this.renderHelper.device.queryLimits().wireframeSupported) {
       const wireframe = new UI.Checkbox("Wireframe", false);
@@ -343,17 +483,13 @@ class RumbleRacingScene implements SceneGfx {
       renderSettingsPanel.contents.appendChild(wireframe.elem);
     }
 
-    renderSettingsPanel.contents.appendChild(showActorsCheckbox.elem);
-
-    return [renderSettingsPanel];
+    return [trackGeometryPanel, renderSettingsPanel];
   }
 
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
 
-    for (const geometry of this.trackGeometries) {
-      geometry.destroy(device);
-    }
+    for (const group of this.trackGroups) group.geometry.destroy(device);
 
     for (const [, o3dGeom] of this.o3dGeometries) {
       o3dGeom.destroy(device);
@@ -475,44 +611,56 @@ export const sceneGroup: SceneGroup = {
   sceneDescs: [
     "Beach Blast",
     new RumbleRacingSceneDesc("BB1", "SunBurn", "Sun Burn", {
-      textureIds: new Set([32]), // sky texture
+      textureIds: new Set([3120]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("BB2", "SurfAndTurf", "Surf And Turf", {}),
+    new RumbleRacingSceneDesc("BB2", "SurfAndTurf", "Surf And Turf", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     "Bad Lands",
     new RumbleRacingSceneDesc("BL1", "SoRefined", "So Refined", {
-      textureIds: new Set([1584]),
+      textureIds: new Set([1584]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("BL2", "CoalCuts", "Coal Cuts", {}),
+    new RumbleRacingSceneDesc("BL2", "CoalCuts", "Coal Cuts", {
+      // seems like there are no tornado clouds in this level for some reason?
+    }),
     "Daytona",
-    new RumbleRacingSceneDesc("DA1", "FlipOut", "Flip Out", {}),
-    new RumbleRacingSceneDesc("DA2", "TheGauntlet", "The Gauntlet", {}),
-    new RumbleRacingSceneDesc("DA3", "WildKingdom", "Wild Kingdom", {}),
+    new RumbleRacingSceneDesc("DA1", "FlipOut", "Flip Out", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
+    new RumbleRacingSceneDesc("DA2", "TheGauntlet", "The Gauntlet", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
+    new RumbleRacingSceneDesc("DA3", "WildKingdom", "Wild Kingdom", {
+      // no clouds in wild kingdom
+    }),
     "Joke Tracks",
     new RumbleRacingSceneDesc("JT1", "CircusMinimus", "Circus Minimus", {
-      textureIds: new Set([32, 1056]), // sky
+      textureIds: new Set([3120]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("JT2", "OuterLimits", "Outer Limits", {}),
+    new RumbleRacingSceneDesc("JT2", "OuterLimits", "Outer Limits", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     "Mountain Air",
-    new RumbleRacingSceneDesc("MA1", "PassingThrough", "Passing Through", {}),
+    new RumbleRacingSceneDesc("MA1", "PassingThrough", "Passing Through", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     new RumbleRacingSceneDesc("MA2", "FallsDown", "Falls Down", {
-      textureIds: new Set([1584]),
+      textureIds: new Set([1584]), // tornado clouds
     }),
     "Metropolis",
-    new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go", {}),
+    new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
     new RumbleRacingSceneDesc("MP2", "CarGo", "Car Go", {
-      nodeIds: new Set([1408952]), // Some giant angled rectangle on the border of the map/submarine. Not sure what this is for.
+      textureIds: new Set([3120]), // tornado clouds
     }),
     "Southern Exposure",
     new RumbleRacingSceneDesc("SE1", "TrueGrits", "True Grits", {
-      nodeIds: new Set([
-        // some weird box around the barn fence which uses texture 0,
-        // but texture 0 is a legitimate texture so ignore the geometry
-        7001320, 7004664,
-        // weird geometry (potential shadow?) overlaying truck in gas station
-        1957496,
-      ]),
+      textureIds: new Set([3120]), // tornado clouds
     }),
-    new RumbleRacingSceneDesc("SE2", "OverEasy", "Over Easy", {}),
+    new RumbleRacingSceneDesc("SE2", "OverEasy", "Over Easy", {
+      textureIds: new Set([3120]), // tornado clouds
+    }),
   ],
   hidden: !IS_DEVELOPMENT,
 };
