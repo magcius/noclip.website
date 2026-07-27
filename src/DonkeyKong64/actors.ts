@@ -84,7 +84,7 @@ export interface ActorAnimationState {
     boundingBox: AABB;
 }
 
-export interface ActorMesh {
+export interface ActorGeometry {
     rspState: RSPState;
     rspOutput: RSPOutput;
     animation: ActorAnimationState;
@@ -263,13 +263,13 @@ function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
     return { offsets, parents };
 }
 
-export function buildActorMesh(
+export function buildActorGeometry(
     geometry: ArrayBufferSlice,
     pose: ActorAnimationPose,
     actorType: number,
     textureBuffers: ArrayBufferSlice[],
     sharedOutput: RSPSharedOutput,
-): ActorMesh {
+): ActorGeometry {
     const view = geometry.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
     const displayListCount = view.getUint8(0x21);

@@ -25,11 +25,11 @@ import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { ActiveLightCache, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLighting, ObjectLighting } from './light.js';
-import type { ActorAnimationState } from './actor.js';
-import type { PropAnimationState } from './prop.js';
+import type { ActorAnimationState } from './actors.js';
+import type { PropAnimationState } from './props.js';
 import type { GeneratedSurface } from './parse.js';
 import { AABB } from '../Geometry.js';
-import { MeshBounds } from './cull.js';
+import { GeometryBounds } from './cull.js';
 
 function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
@@ -363,9 +363,9 @@ export class RenderData {
     public vertexStart: number;
     public indexStart: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, mesh: Mesh, dynamic = false) {
-        const sharedOutput = mesh.sharedOutput;
-        const drawCalls = mesh.rspOutput?.drawCalls ?? [];
+    constructor(device: GfxDevice, cache: GfxRenderCache, geometry: Geometry, dynamic = false) {
+        const sharedOutput = geometry.sharedOutput;
+        const drawCalls = geometry.rspOutput?.drawCalls ?? [];
         this.indexStart = drawCalls.reduce(
             (start, drawCall) => Math.min(start, drawCall.firstIndex),
             sharedOutput.indices.length,
@@ -383,7 +383,7 @@ export class RenderData {
             (end, vertexIndex) => Math.max(end, vertexIndex + 1),
             vertexStart,
         );
-        const dynamicVertexRange = getDynamicVertexRange(mesh);
+        const dynamicVertexRange = getDynamicVertexRange(geometry);
         if (dynamicVertexRange !== null) {
             vertexStart = Math.min(vertexStart, dynamicVertexRange.start);
             vertexEnd = Math.max(vertexEnd, dynamicVertexRange.end);
@@ -391,7 +391,7 @@ export class RenderData {
         this.vertexStart = vertexStart;
 
         assert(vertexEnd - this.vertexStart <= 0xFFFFFFFF);
-        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd), mesh.actorAnimation);
+        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd), geometry.actorAnimation);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
 
         const indexBufferData = Uint32Array.from(sharedIndices, (vertexIndex) => vertexIndex - this.vertexStart);
@@ -497,7 +497,7 @@ export class SpriteBillboard {
     }
 }
 
-export interface Mesh {
+export interface Geometry {
     sharedOutput: RSPSharedOutput;
     rspState: RSPState;
     rspOutput: RSPOutput | null;
@@ -512,43 +512,43 @@ export interface Mesh {
     spriteBillboards?: SpriteBillboard[];
 }
 
-function getDynamicVertexRange(mesh: Mesh): { start: number, end: number } | null {
+function getDynamicVertexRange(geometry: Geometry): { start: number, end: number } | null {
     let rangeStart = Infinity, rangeEnd = -Infinity;
     const include = (start: number, count: number): void => {
         rangeStart = Math.min(rangeStart, start);
         rangeEnd = Math.max(rangeEnd, start + count);
     };
-    if (mesh.generatedSurfaceAnimation !== undefined)
-        include(mesh.generatedSurfaceAnimation.firstVertex, mesh.generatedSurfaceAnimation.vertexCount);
-    if (mesh.propAnimation !== undefined)
-        for (const vertexOffset of mesh.propAnimation.vertexOffsets)
-            include(mesh.propAnimation.firstVertex + vertexOffset, 1);
-    for (const sprite of mesh.spriteBillboards ?? [])
+    if (geometry.generatedSurfaceAnimation !== undefined)
+        include(geometry.generatedSurfaceAnimation.firstVertex, geometry.generatedSurfaceAnimation.vertexCount);
+    if (geometry.propAnimation !== undefined)
+        for (const vertexOffset of geometry.propAnimation.vertexOffsets)
+            include(geometry.propAnimation.firstVertex + vertexOffset, 1);
+    for (const sprite of geometry.spriteBillboards ?? [])
         include(sprite.firstVertex, 4);
-    for (const vertexIndex of mesh.dynamicLighting?.vertexIndices ?? [])
+    for (const vertexIndex of geometry.dynamicLighting?.vertexIndices ?? [])
         include(vertexIndex, 1);
     return rangeStart <= rangeEnd ? { start: rangeStart, end: rangeEnd } : null;
 }
 
-export class MeshData {
+export class GeometryData {
     public renderData: RenderData;
-    public cullBounds: MeshBounds;
+    public cullBounds: GeometryBounds;
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
     public dynamicLightingEnabled = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
-        this.renderData = new RenderData(device, cache, mesh, mesh.generatedSurfaceAnimation !== undefined || mesh.spriteBillboards !== undefined || mesh.dynamicLighting !== undefined || mesh.propAnimation !== undefined);
-        this.lightingDirty = mesh.dynamicLighting !== undefined;
-        this.cullBounds = new MeshBounds(
-            mesh.sharedOutput,
-            mesh.rspOutput,
-            mesh.actorAnimation?.boundingBox,
-            mesh.propAnimation?.translationBounds,
-            mesh.propAnimation !== undefined ? 0.5 : 0,
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
+        this.renderData = new RenderData(device, cache, geo, geo.generatedSurfaceAnimation !== undefined || geo.spriteBillboards !== undefined || geo.dynamicLighting !== undefined || geo.propAnimation !== undefined);
+        this.lightingDirty = geo.dynamicLighting !== undefined;
+        this.cullBounds = new GeometryBounds(
+            geo.sharedOutput,
+            geo.rspOutput,
+            geo.actorAnimation?.boundingBox,
+            geo.propAnimation?.translationBounds,
+            geo.propAnimation !== undefined ? 0.5 : 0,
         );
 
-        const dynamicVertexRange = getDynamicVertexRange(mesh);
+        const dynamicVertexRange = getDynamicVertexRange(geo);
         if (dynamicVertexRange !== null) {
             this.dirtyVertexRange = {
                 start: dynamicVertexRange.start - this.renderData.vertexStart,
@@ -563,11 +563,11 @@ export class MeshData {
     }
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, activeLightCache: ActiveLightCache): void {
-        const animation = this.mesh.generatedSurfaceAnimation;
-        const sprites = this.mesh.spriteBillboards;
-        const lighting = this.mesh.dynamicLighting;
-        const actorAnimation = this.mesh.actorAnimation;
-        const propAnimation = this.mesh.propAnimation;
+        const animation = this.geo.generatedSurfaceAnimation;
+        const sprites = this.geo.spriteBillboards;
+        const lighting = this.geo.dynamicLighting;
+        const actorAnimation = this.geo.actorAnimation;
+        const propAnimation = this.geo.propAnimation;
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         const lightingIsDynamic = lighting !== undefined && lighting.lights.length > 0 && this.dynamicLightingEnabled;
 
@@ -576,7 +576,7 @@ export class MeshData {
             const amplitude = surface.amplitudeS + surface.amplitudeT;
             for (let i = 0; i < animation.vertexCount; i++) {
                 const vertexIndex = animation.firstVertex + i;
-                const vertex = this.mesh.sharedOutput.vertices[vertexIndex];
+                const vertex = this.geo.sharedOutput.vertices[vertexIndex];
                 const y = generatedSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
                 const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
                     ((y - surface.baseY) / amplitude) * surface.alphaRange + surface.alphaBase,
@@ -588,7 +588,7 @@ export class MeshData {
         }
 
         if (lighting !== undefined && (lightingIsDynamic || this.lightingDirty)) {
-            updateDynamicLighting(lighting, this.mesh.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, activeLightCache, this.dynamicLightingEnabled);
+            updateDynamicLighting(lighting, this.geo.sharedOutput.vertices, this.renderData.vertexBufferData, this.renderData.vertexStart, activeLightCache, this.dynamicLightingEnabled);
             this.lightingDirty = false;
         }
         if (actorAnimation !== undefined)
@@ -614,7 +614,7 @@ export class MeshData {
     }
 }
 
-export enum SceneRenderLayer {
+export enum DK64Layer {
     MapGeometry,
     Props,
     Actors,
@@ -622,7 +622,7 @@ export enum SceneRenderLayer {
     Effects,
 }
 
-class MeshRenderer {
+class GeoNodeRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
@@ -666,7 +666,7 @@ class MeshRenderer {
     }
 }
 
-export class RootMeshRenderer {
+export class GeometryRenderer {
     private visible = true;
     private cullBoundingBox: AABB | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -688,17 +688,17 @@ export class RootMeshRenderer {
     private lookAtMatrix = mat4.create();
 
     public objectFlags = 0;
-    private rootNodeRenderer: MeshRenderer;
+    private rootNodeRenderer: GeoNodeRenderer;
     private ownsRootNodeRenderer: boolean;
 
     constructor(
         device: GfxDevice,
         cache: GfxRenderCache,
-        private geometryData: MeshData,
-        public renderLayer: SceneRenderLayer,
+        private geoData: GeometryData,
+        public renderLayer: DK64Layer,
         private fogParams: FogParams,
         private gpuTextureCache: GPUTextureCache,
-        sharedRenderer: RootMeshRenderer | null = null,
+        sharedRenderer: GeometryRenderer | null = null,
     ) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
@@ -707,14 +707,14 @@ export class RootMeshRenderer {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        const geo = this.geometryData.mesh;
+        const geo = this.geoData.geo;
         this.computeLookAt = geo.rspOutput?.drawCalls.some((drawCall) => {
             const requiredModes = RSP_Geometry.G_LIGHTING | RSP_Geometry.G_TEXTURE_GEN;
             return (drawCall.SP_GeometryMode & requiredModes) === requiredModes;
         }) ?? false;
 
         if (sharedRenderer !== null) {
-            assert(sharedRenderer.geometryData === geometryData);
+            assert(sharedRenderer.geoData === geoData);
             this.rootNodeRenderer = sharedRenderer.rootNodeRenderer;
             this.ownsRootNodeRenderer = false;
         } else {
@@ -723,13 +723,13 @@ export class RootMeshRenderer {
         }
     }
 
-    private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, node: Mesh): MeshRenderer {
-        const geoNodeRenderer = new MeshRenderer();
+    private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, node: Geometry): GeoNodeRenderer {
+        const geoNodeRenderer = new GeoNodeRenderer();
 
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
                 const drawCall = node.rspOutput.drawCalls[i];
-                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams, node.actorAnimation?.pose.boneMatrices);
+                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geoData.renderData.indexStart, this.fogParams, node.actorAnimation?.pose.boneMatrices);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -770,7 +770,7 @@ export class RootMeshRenderer {
     }
 
     public computeWorldBoundingBox(): AABB | null {
-        return this.geometryData.cullBounds.computeWorld(this.modelMatrix, this.rootTransformAnimation);
+        return this.geoData.cullBounds.computeWorld(this.modelMatrix, this.rootTransformAnimation);
     }
 
     public setRotationYAnimation(anglePerTick: number): void {
@@ -837,8 +837,8 @@ export class RootMeshRenderer {
             }
         }
 
-        this.geometryData.update(device, viewerInput, activeLightCache);
-        const renderData = this.geometryData.renderData;
+        this.geoData.update(device, viewerInput, activeLightCache);
+        const renderData = this.geoData.renderData;
 
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
@@ -864,9 +864,9 @@ export class RootMeshRenderer {
         }
 
         const objectLightColor = this.objectLighting !== null
-            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
+            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geoData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.mesh.spriteBillboards ?? null);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geoData.geo.spriteBillboards ?? null);
 
         renderInstManager.popTemplate();
     }

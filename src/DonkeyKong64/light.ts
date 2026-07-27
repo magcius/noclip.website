@@ -3,8 +3,8 @@ import { vec3 } from 'gl-matrix';
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { MathConstants } from '../MathHelpers.js';
-import { actorModelScale, getActorRenderDefinition } from './actor.js';
-import type { ActorAnimationPose, ActorRenderDefinition } from './actor.js';
+import { actorModelScale, getActorRenderDefinition } from './actors.js';
+import type { ActorAnimationPose, ActorRenderDefinition } from './actors.js';
 import type { DrawTextureAnimation } from './f3dex2.js';
 import type { Setup } from './parse.js';
 

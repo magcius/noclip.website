@@ -46,7 +46,7 @@ export function computeBillboardBoundingBox(
     );
 }
 
-export class MeshBounds {
+export class GeometryBounds {
     private localBoundingBox: AABB | null;
 
     constructor(

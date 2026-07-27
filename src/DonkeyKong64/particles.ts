@@ -11,8 +11,8 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { initDL, initSpriteMaterial } from './material.js';
 import { DK64Map } from './parse.js';
 import type { InstanceScript, ScriptBlock, SetupProp } from './parse.js';
-import { MeshData, RootMeshRenderer, SceneRenderLayer, SpriteBillboard } from './render.js';
-import type { Mesh } from './render.js';
+import { GeometryData, GeometryRenderer, DK64Layer, SpriteBillboard } from './render.js';
+import type { Geometry } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 
 function createSpriteVertexBuffer(sprite: SpriteData, quadCount = 1): ArrayBufferSlice {
@@ -107,7 +107,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
 
             const width = definition.width * scale * 3;
             const height = definition.height * scale * 3;
-            const mesh: Mesh = {
+            const geometry: Geometry = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
@@ -126,12 +126,12 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
                     },
                 )),
             };
-            const meshData = new MeshData(device, cache, mesh);
-            sceneRenderer.meshDatas.push(meshData);
-            const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Effects, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
+            const geoData = new GeometryData(device, cache, geometry);
+            sceneRenderer.geoDatas.push(geoData);
+            const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Effects, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             renderer.setBackfaceCullingEnabled(false);
-            sceneRenderer.meshRenderers.push(renderer);
+            sceneRenderer.geoRenderers.push(renderer);
         }
     }
 }

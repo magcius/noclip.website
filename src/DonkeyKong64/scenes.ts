@@ -21,9 +21,9 @@ import * as Deflate from '../Common/Compression/Deflate.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment } from './light.js';
 import type { DynamicLight, ObjectLightingEnvironment } from './light.js';
-import { ActorAnimationPose, actorModelScale, buildActorMesh, getActorRenderDefinition } from './actor.js';
-import type { ActorRenderDefinition } from './actor.js';
-import { addModel2Props, buildTerrainTriangles } from './prop.js';
+import { ActorAnimationPose, actorModelScale, buildActorGeometry, getActorRenderDefinition } from './actors.js';
+import type { ActorRenderDefinition } from './actors.js';
+import { addModel2Props, buildTerrainTriangles } from './props.js';
 import {
     getGeneratedSurfaceAnimatedTextureBindings,
     getSceneNodeAnimatedTextureBindings, initDL, initGeneratedSurfaceMaterial,
@@ -36,9 +36,9 @@ import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import {
     bindingLayouts, fogPositionToViewDistance, generatedSurfaceHeight, GPUTextureCache,
-    MeshData, RootMeshRenderer, SceneRenderLayer,
+    GeometryData, GeometryRenderer, DK64Layer,
 } from './render.js';
-import type { FogParams, Mesh } from './render.js';
+import type { FogParams, Geometry } from './render.js';
 import { addEnvironmentalEffects } from './particles.js';
 import type { EnvironmentParticleData, SpriteData } from './particles.js';
 
@@ -88,21 +88,21 @@ export class DK64Renderer implements Viewer.SceneGfx {
     private activeLightCache: ActiveLightCache;
     public gpuTextureCache = new GPUTextureCache();
 
-    public meshDatas: MeshData[] = [];
-    public meshRenderers: RootMeshRenderer[] = [];
+    public geoDatas: GeometryData[] = [];
+    public geoRenderers: GeometryRenderer[] = [];
     public fogParams: FogParams;
 
     public textureHolder = new FakeTextureHolder([]);
 
-    public addMeshData(device: GfxDevice, cache: GfxRenderCache, mesh: Mesh): MeshData {
-        const meshData = new MeshData(device, cache, mesh);
-        this.meshDatas.push(meshData);
-        return meshData;
+    public addGeoData(device: GfxDevice, cache: GfxRenderCache, geometry: Geometry): GeometryData {
+        const geoData = new GeometryData(device, cache, geometry);
+        this.geoDatas.push(geoData);
+        return geoData;
     }
 
-    public addPropMeshRenderer(device: GfxDevice, cache: GfxRenderCache, meshData: MeshData, sharedRenderer: RootMeshRenderer | null = null): RootMeshRenderer {
-        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
-        this.meshRenderers.push(renderer);
+    public addPropRenderer(device: GfxDevice, cache: GfxRenderCache, geoData: GeometryData, sharedRenderer: GeometryRenderer | null = null): GeometryRenderer {
+        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
+        this.geoRenderers.push(renderer);
         return renderer;
     }
 
@@ -133,68 +133,68 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
         const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+            for (const geoRenderer of this.geoRenderers)
+                geoRenderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
 
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            for (const geoRenderer of this.geoRenderers)
+                geoRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
 
         const enableDynamicLightingCheckbox = new UI.Checkbox('Enable Dynamic Lighting', true);
         enableDynamicLightingCheckbox.onchanged = () => {
-            for (const meshData of this.meshDatas)
-                meshData.setDynamicLightingEnabled(enableDynamicLightingCheckbox.checked);
+            for (const geoData of this.geoDatas)
+                geoData.setDynamicLightingEnabled(enableDynamicLightingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableDynamicLightingCheckbox.elem);
 
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setTexturesEnabled(enableTextures.checked);
+            for (const geoRenderer of this.geoRenderers)
+                geoRenderer.setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
         const enableFog = new UI.Checkbox('Enable Fog', false);
         enableFog.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setFogEnabled(enableFog.checked);
+            for (const geoRenderer of this.geoRenderers)
+                geoRenderer.setFogEnabled(enableFog.checked);
         };
         renderHacksPanel.contents.appendChild(enableFog.elem);
 
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+            for (const geoRenderer of this.geoRenderers)
+                geoRenderer.setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
 
         const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
         enableAlphaVisualizer.onchanged = () => {
-            for (const meshRenderer of this.meshRenderers)
-                meshRenderer.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            for (const geoRenderer of this.geoRenderers)
+                geoRenderer.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
-        const addVisibilityCheckbox = (label: string, layer: SceneRenderLayer): void => {
+        const addVisibilityCheckbox = (label: string, layer: DK64Layer): void => {
             const checkbox = new UI.Checkbox(label, true);
             checkbox.onchanged = () => {
-                for (const meshRenderer of this.meshRenderers) {
-                    if (meshRenderer.renderLayer === layer)
-                        meshRenderer.setVisible(checkbox.checked);
+                for (const geoRenderer of this.geoRenderers) {
+                    if (geoRenderer.renderLayer === layer)
+                        geoRenderer.setVisible(checkbox.checked);
                 }
             };
             renderHacksPanel.contents.appendChild(checkbox.elem);
         };
-        addVisibilityCheckbox('Show Map Geometry', SceneRenderLayer.MapGeometry);
-        addVisibilityCheckbox('Show Actors', SceneRenderLayer.Actors);
-        addVisibilityCheckbox('Show Props', SceneRenderLayer.Props);
-        addVisibilityCheckbox('Show Surfaces', SceneRenderLayer.Surfaces);
-        addVisibilityCheckbox('Show Effects', SceneRenderLayer.Effects);
+        addVisibilityCheckbox('Show Map Geometry', DK64Layer.MapGeometry);
+        addVisibilityCheckbox('Show Actors', DK64Layer.Actors);
+        addVisibilityCheckbox('Show Props', DK64Layer.Props);
+        addVisibilityCheckbox('Show Surfaces', DK64Layer.Surfaces);
+        addVisibilityCheckbox('Show Effects', DK64Layer.Effects);
 
         return [renderHacksPanel];
     }
@@ -208,8 +208,8 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         this.activeLightCache.update(viewerInput.camera.worldMatrix, tick);
-        for (let i = 0; i < this.meshRenderers.length; i++)
-            this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.activeLightCache);
+        for (let i = 0; i < this.geoRenderers.length; i++)
+            this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.activeLightCache);
 
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -242,10 +242,10 @@ export class DK64Renderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.backdropRenderer?.destroy(device);
         this.renderHelper.destroy();
-        for (let i = 0; i < this.meshRenderers.length; i++)
-            this.meshRenderers[i].destroy(device);
-        for (let i = 0; i < this.meshDatas.length; i++)
-            this.meshDatas[i].destroy(device);
+        for (let i = 0; i < this.geoRenderers.length; i++)
+            this.geoRenderers[i].destroy(device);
+        for (let i = 0; i < this.geoDatas.length; i++)
+            this.geoDatas[i].destroy(device);
         this.gpuTextureCache.destroy(device);
     }
 }
@@ -394,31 +394,31 @@ function addSceneActors(
             actors.push({ actor, definition });
     }
 
-    const meshDataByDefinition = new Map<string, MeshData>();
+    const geoDataByDefinition = new Map<string, GeometryData>();
     for (const { actor, definition } of actors) {
         const animationSpeed = definition.animationSpeed === 'setup' ? actor.lightSpeed : definition.animationSpeed;
-        const meshKey = `${definition.model}:${definition.animation ?? -1}:${animationSpeed}`;
-        let meshData = meshDataByDefinition.get(meshKey);
-        if (meshData === undefined) {
-            const actorMesh = buildActorMesh(
+        const geometryKey = `${definition.model}:${definition.animation ?? -1}:${animationSpeed}`;
+        let geoData = geoDataByDefinition.get(geometryKey);
+        if (geoData === undefined) {
+            const actorGeometry = buildActorGeometry(
                 romData.loadActorGeometry(definition.model),
                 getActorPose(definition, animationSpeed),
                 actor.type,
                 romData.TexData,
                 sharedOutput,
             );
-            const mesh: Mesh = {
+            const geometry: Geometry = {
                 sharedOutput,
-                rspState: actorMesh.rspState,
-                rspOutput: actorMesh.rspOutput,
-                actorAnimation: actorMesh.animation,
+                rspState: actorGeometry.rspState,
+                rspOutput: actorGeometry.rspOutput,
+                actorAnimation: actorGeometry.animation,
             };
-            meshData = new MeshData(device, cache, mesh);
-            sceneRenderer.meshDatas.push(meshData);
-            meshDataByDefinition.set(meshKey, meshData);
+            geoData = new GeometryData(device, cache, geometry);
+            sceneRenderer.geoDatas.push(geoData);
+            geoDataByDefinition.set(geometryKey, geoData);
         }
         const rendererScale = actor.scale * actorModelScale * worldScale;
-        const renderer = new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Actors, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
+        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Actors, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
         const origin = vec3.fromValues(
             actor.position[0] * worldScale,
             actor.position[1] * worldScale,
@@ -437,7 +437,7 @@ function addSceneActors(
         if (definition.positionYAmplitude !== undefined)
             renderer.setPositionYAnimation(definition.positionYAmplitude * worldScale, definition.rotationYSpeed ?? 0);
         renderer.setCullBoundingBox(renderer.computeWorldBoundingBox());
-        sceneRenderer.meshRenderers.push(renderer);
+        sceneRenderer.geoRenderers.push(renderer);
     }
 }
 
@@ -525,7 +525,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] ?? null : null;
-            const mesh: Mesh = {
+            const geometry: Geometry = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
@@ -535,16 +535,16 @@ class SceneDesc implements Viewer.SceneDesc {
                     chunk, dynamicLights,
                 ),
             };
-            const meshData = new MeshData(device, cache, mesh);
-            sceneRenderer.meshDatas.push(meshData);
+            const geoData = new GeometryData(device, cache, geometry);
+            sceneRenderer.geoDatas.push(geoData);
 
             const renderLayer = dl.materialIndex === null
-                ? SceneRenderLayer.MapGeometry
-                : SceneRenderLayer.Surfaces;
-            const meshRenderer = new RootMeshRenderer(device, cache, meshData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
+                ? DK64Layer.MapGeometry
+                : DK64Layer.Surfaces;
+            const geoRenderer = new GeometryRenderer(device, cache, geoData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
             if (dl.ChunkID >= 0)
-                meshRenderer.setCullBoundingBox(meshData.cullBounds.getLocal());
-            sceneRenderer.meshRenderers.push(meshRenderer);
+                geoRenderer.setCullBoundingBox(geoData.cullBounds.getLocal());
+            sceneRenderer.geoRenderers.push(geoRenderer);
         }
 
         // Floor decals need an efficient way to find terrain triangles.
@@ -580,7 +580,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const output = state.finish()!;
-            const mesh: Mesh = {
+            const geometry: Geometry = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
@@ -590,9 +590,9 @@ class SceneDesc implements Viewer.SceneDesc {
                     vertexCount: sharedOutput.vertices.length - firstVertex,
                 },
             };
-            const meshData = new MeshData(device, cache, mesh);
-            sceneRenderer.meshDatas.push(meshData);
-            sceneRenderer.meshRenderers.push(new RootMeshRenderer(device, cache, meshData, SceneRenderLayer.Surfaces, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache));
+            const geoData = new GeometryData(device, cache, geometry);
+            sceneRenderer.geoDatas.push(geoData);
+            sceneRenderer.geoRenderers.push(new GeometryRenderer(device, cache, geoData, DK64Layer.Surfaces, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache));
         }
 
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
