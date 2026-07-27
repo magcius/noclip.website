@@ -3,11 +3,10 @@ import { vec3 } from 'gl-matrix';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { RSPState } from './f3dex2.js';
-import { AnimatedTexture, RSPSharedOutput } from './f3dex2.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { AnimatedTexture, RSPSharedOutput, RSPState } from './f3dex2.js';
 import { initDL, initSpriteMaterial } from './material.js';
 import { DK64Map } from './parse.js';
 import type { InstanceScript, ScriptBlock, SetupProp } from './parse.js';

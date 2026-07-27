@@ -15,7 +15,16 @@ import type { ObjectLightingEnvironment } from './light.js';
 import type { InstanceScript, SetupProp } from './parse.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 import type { Geometry, GeometryRenderer } from './render.js';
-import { computeBillboardBoundingBox } from './cull.js';
+
+function computeBillboardBoundingBox(origin: vec3, rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): AABB {
+    let radius = 0;
+    for (let i = 0; i < rightOffsets.length; i++)
+        radius = Math.max(radius, Math.hypot(rightOffsets[i], upOffsets[i], forwardOffsets[i]));
+    return new AABB(
+        origin[0] - radius, origin[1] - radius, origin[2] - radius,
+        origin[0] + radius, origin[1] + radius, origin[2] + radius,
+    );
+}
 
 export interface TerrainTriangle {
     vertices: [vec3, vec3, vec3];

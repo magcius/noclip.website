@@ -1,35 +1,30 @@
+import { mat4, vec3 } from 'gl-matrix';
 
 import * as Viewer from '../viewer.js';
-
-import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
-import { F3DEX_Program } from '../BanjoKazooie/render.js';
-import { nArray, assert } from '../util.js';
-import { DeviceProgram } from '../Program.js';
-import { mat4, vec3 } from 'gl-matrix';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { TextureMapping } from '../TextureHolder.js';
-import { DrawCall, RSP_Geometry, RSPState, RSPOutput, RSPSharedOutput } from './f3dex2.js';
-import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
-import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
-import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { translateCM, Texture, OtherModeH_Layout } from '../Common/N64/RDP.js';
-import { TextFilt } from "../Common/N64/Image.js";
 import { Vertex } from '../BanjoKazooie/f3dex.js';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
-import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
-import { scaleMatrix, setMatrixTranslation } from '../MathHelpers.js';
-
+import { F3DEX_Program } from '../BanjoKazooie/render.js';
+import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
+import { TextFilt } from '../Common/N64/Image.js';
+import { OtherModeH_Layout, Texture, translateCM } from '../Common/N64/RDP.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBlendFactor, GfxBlendMode, GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
+import { AABB } from '../Geometry.js';
+import { scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
+import { DeviceProgram } from '../Program.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { assert, nArray } from '../util.js';
+import type { ActorAnimationState } from './actors.js';
+import { DrawCall, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState } from './f3dex2.js';
 import { ActiveLightCache, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLighting, ObjectLighting } from './light.js';
-import type { ActorAnimationState } from './actors.js';
-import type { PropAnimationState } from './props.js';
 import type { GeneratedSurface } from './parse.js';
-import { AABB } from '../Geometry.js';
-import { GeometryBounds } from './cull.js';
+import type { PropAnimationState } from './props.js';
 
 function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
@@ -512,6 +507,47 @@ export interface Geometry {
     spriteBillboards?: SpriteBillboard[];
 }
 
+function computeGeometryBoundingBox(geometry: Geometry): AABB | null {
+    if (geometry.rspOutput === null)
+        return null;
+
+    const boundingBox = new AABB();
+    for (const drawCall of geometry.rspOutput.drawCalls) {
+        const indexEnd = drawCall.firstIndex + drawCall.indexCount;
+        for (let index = drawCall.firstIndex; index < indexEnd; index++) {
+            const vertex = geometry.sharedOutput.vertices[geometry.sharedOutput.indices[index]];
+            boundingBox.min[0] = Math.min(boundingBox.min[0], vertex.x);
+            boundingBox.min[1] = Math.min(boundingBox.min[1], vertex.y);
+            boundingBox.min[2] = Math.min(boundingBox.min[2], vertex.z);
+            boundingBox.max[0] = Math.max(boundingBox.max[0], vertex.x);
+            boundingBox.max[1] = Math.max(boundingBox.max[1], vertex.y);
+            boundingBox.max[2] = Math.max(boundingBox.max[2], vertex.z);
+        }
+    }
+    if (boundingBox.min[0] > boundingBox.max[0])
+        return null;
+
+    if (geometry.actorAnimation !== undefined)
+        boundingBox.union(boundingBox, geometry.actorAnimation.boundingBox);
+    const translationBounds = geometry.propAnimation?.translationBounds;
+    if (translationBounds !== undefined) {
+        for (let axis = 0; axis < 3; axis++) {
+            boundingBox.min[axis] += translationBounds.min[axis];
+            boundingBox.max[axis] += translationBounds.max[axis];
+        }
+        const padding = Math.max(
+            boundingBox.max[0] - boundingBox.min[0],
+            boundingBox.max[1] - boundingBox.min[1],
+            boundingBox.max[2] - boundingBox.min[2],
+        ) * 0.5;
+        for (let axis = 0; axis < 3; axis++) {
+            boundingBox.min[axis] -= padding;
+            boundingBox.max[axis] += padding;
+        }
+    }
+    return boundingBox;
+}
+
 function getDynamicVertexRange(geometry: Geometry): { start: number, end: number } | null {
     let rangeStart = Infinity, rangeEnd = -Infinity;
     const include = (start: number, count: number): void => {
@@ -532,7 +568,7 @@ function getDynamicVertexRange(geometry: Geometry): { start: number, end: number
 
 export class GeometryData {
     public renderData: RenderData;
-    public cullBounds: GeometryBounds;
+    public cullBoundingBox: AABB | null;
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
     public dynamicLightingEnabled = true;
@@ -540,13 +576,7 @@ export class GeometryData {
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
         this.renderData = new RenderData(device, cache, geo, geo.generatedSurfaceAnimation !== undefined || geo.spriteBillboards !== undefined || geo.dynamicLighting !== undefined || geo.propAnimation !== undefined);
         this.lightingDirty = geo.dynamicLighting !== undefined;
-        this.cullBounds = new GeometryBounds(
-            geo.sharedOutput,
-            geo.rspOutput,
-            geo.actorAnimation?.boundingBox,
-            geo.propAnimation?.translationBounds,
-            geo.propAnimation !== undefined ? 0.5 : 0,
-        );
+        this.cullBoundingBox = computeGeometryBoundingBox(geo);
 
         const dynamicVertexRange = getDynamicVertexRange(geo);
         if (dynamicVertexRange !== null) {
@@ -694,7 +724,7 @@ export class GeometryRenderer {
     constructor(
         device: GfxDevice,
         cache: GfxRenderCache,
-        private geoData: GeometryData,
+        private geometryData: GeometryData,
         public renderLayer: DK64Layer,
         private fogParams: FogParams,
         private gpuTextureCache: GPUTextureCache,
@@ -707,14 +737,14 @@ export class GeometryRenderer {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        const geo = this.geoData.geo;
+        const geo = this.geometryData.geo;
         this.computeLookAt = geo.rspOutput?.drawCalls.some((drawCall) => {
             const requiredModes = RSP_Geometry.G_LIGHTING | RSP_Geometry.G_TEXTURE_GEN;
             return (drawCall.SP_GeometryMode & requiredModes) === requiredModes;
         }) ?? false;
 
         if (sharedRenderer !== null) {
-            assert(sharedRenderer.geoData === geoData);
+            assert(sharedRenderer.geometryData === geometryData);
             this.rootNodeRenderer = sharedRenderer.rootNodeRenderer;
             this.ownsRootNodeRenderer = false;
         } else {
@@ -729,7 +759,7 @@ export class GeometryRenderer {
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
                 const drawCall = node.rspOutput.drawCalls[i];
-                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geoData.renderData.indexStart, this.fogParams, node.actorAnimation?.pose.boneMatrices);
+                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams, node.actorAnimation?.pose.boneMatrices);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -770,7 +800,31 @@ export class GeometryRenderer {
     }
 
     public computeWorldBoundingBox(): AABB | null {
-        return this.geoData.cullBounds.computeWorld(this.modelMatrix, this.rootTransformAnimation);
+        const sourceBoundingBox = this.geometryData.cullBoundingBox;
+        if (sourceBoundingBox === null)
+            return null;
+
+        const localBoundingBox = sourceBoundingBox.clone();
+        const worldBoundingBox = new AABB();
+        const animation = this.rootTransformAnimation;
+        if (animation === null) {
+            worldBoundingBox.transform(localBoundingBox, this.modelMatrix);
+        } else {
+            if (animation.rotationYRadiansPerTick !== 0) {
+                const radiusXZ = Math.hypot(
+                    Math.max(Math.abs(localBoundingBox.min[0]), Math.abs(localBoundingBox.max[0])),
+                    Math.max(Math.abs(localBoundingBox.min[2]), Math.abs(localBoundingBox.max[2])),
+                );
+                localBoundingBox.set(
+                    -radiusXZ, localBoundingBox.min[1], -radiusXZ,
+                    radiusXZ, localBoundingBox.max[1], radiusXZ,
+                );
+            }
+            worldBoundingBox.transform(localBoundingBox, animation.baseMatrix);
+            worldBoundingBox.min[1] -= Math.abs(animation.positionYAmplitude);
+            worldBoundingBox.max[1] += Math.abs(animation.positionYAmplitude);
+        }
+        return worldBoundingBox;
     }
 
     public setRotationYAnimation(anglePerTick: number): void {
@@ -837,8 +891,8 @@ export class GeometryRenderer {
             }
         }
 
-        this.geoData.update(device, viewerInput, activeLightCache);
-        const renderData = this.geoData.renderData;
+        this.geometryData.update(device, viewerInput, activeLightCache);
+        const renderData = this.geometryData.renderData;
 
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
@@ -864,9 +918,9 @@ export class GeometryRenderer {
         }
 
         const objectLightColor = this.objectLighting !== null
-            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geoData.dynamicLightingEnabled)
+            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geoData.geo.spriteBillboards ?? null);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.geo.spriteBillboards ?? null);
 
         renderInstManager.popTemplate();
     }

@@ -10,8 +10,6 @@ import { assert, hexzero } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { FakeTextureHolder } from '../TextureHolder.js';
-import { RSPState, runDL_F3DEX2 } from './f3dex2.js';
-import { AnimatedTexture, RSPSharedOutput } from './f3dex2.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { CameraController } from '../Camera.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -19,6 +17,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as Deflate from '../Common/Compression/Deflate.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { AnimatedTexture, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment } from './light.js';
 import type { DynamicLight, ObjectLightingEnvironment } from './light.js';
 import { ActorAnimationPose, actorModelScale, buildActorGeometry, getActorRenderDefinition } from './actors.js';
@@ -94,18 +93,6 @@ export class DK64Renderer implements Viewer.SceneGfx {
 
     public textureHolder = new FakeTextureHolder([]);
 
-    public addGeoData(device: GfxDevice, cache: GfxRenderCache, geometry: Geometry): GeometryData {
-        const geoData = new GeometryData(device, cache, geometry);
-        this.geoDatas.push(geoData);
-        return geoData;
-    }
-
-    public addPropRenderer(device: GfxDevice, cache: GfxRenderCache, geoData: GeometryData, sharedRenderer: GeometryRenderer | null = null): GeometryRenderer {
-        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
-        this.geoRenderers.push(renderer);
-        return renderer;
-    }
-
     constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null, dynamicLights: readonly DynamicLight[]) {
         this.renderHelper = new GfxRenderHelper(device);
         this.backdropRenderer = createBackdropRenderer(device, this.renderHelper.renderCache, backdrop, sceneID);
@@ -120,6 +107,18 @@ export class DK64Renderer implements Viewer.SceneGfx {
                 ? [0x8A / 0xFF, 0x52 / 0xFF, 0x16 / 0xFF, 0]
                 : [0, 0, 0, 0],
         };
+    }
+
+    public addGeoData(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): GeometryData {
+        const geoData = new GeometryData(device, cache, geo);
+        this.geoDatas.push(geoData);
+        return geoData;
+    }
+
+    public addPropRenderer(device: GfxDevice, cache: GfxRenderCache, geoData: GeometryData, sharedRenderer: GeometryRenderer | null = null): GeometryRenderer {
+        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
+        this.geoRenderers.push(renderer);
+        return renderer;
     }
 
     public adjustCameraController(c: CameraController) {
@@ -543,7 +542,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 : DK64Layer.Surfaces;
             const geoRenderer = new GeometryRenderer(device, cache, geoData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
             if (dl.ChunkID >= 0)
-                geoRenderer.setCullBoundingBox(geoData.cullBounds.getLocal());
+                geoRenderer.setCullBoundingBox(geoData.cullBoundingBox);
             sceneRenderer.geoRenderers.push(geoRenderer);
         }
 
