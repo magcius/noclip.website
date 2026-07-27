@@ -29,7 +29,6 @@ import {
   GfxWrapMode,
   GfxBlendMode,
   GfxBlendFactor,
-  GfxChannelWriteMask,
   GfxCompareMode,
   makeTextureDescriptor2D,
   GfxFormat,
@@ -102,9 +101,6 @@ class RumbleRacingScene implements SceneGfx {
   ) {
     this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
     const cache = this.renderHelper.renderCache;
-
-    // we don't want to show these in any map
-    this.exclude.textureIds?.add(3120); // semi-transparent cloud texture, not RE'd properly
 
     this.setActorTransforms();
 

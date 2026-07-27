@@ -155,7 +155,6 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         strips.push(sChunk);
       }
 
-      const lastHeader = bufHeader[bufHeader.length - 1];
       result.push({ bufferHeader: bufHeader, strips });
     } else {
       i++;
