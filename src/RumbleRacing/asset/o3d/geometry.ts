@@ -3,9 +3,6 @@ import { Color, colorNewFromRGBA } from "../../../Color";
 import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
 
-// The game never writes TEST_1/TEST_2/PABE, so there is no alpha testing
-// anywhere; blending is opted into per buffer with PRMODE's ABE bit, and the
-// ALPHA register picks between plain source-over and additive.
 export const enum BlendMode {
   None,
   SourceOver,
@@ -18,8 +15,6 @@ export interface Primitive {
   blendMode: BlendMode;
   vertices: {
     position: vec3;
-    // A vertex carries either a normal (lit at runtime) or a baked RGBA color,
-    // depending on which of the two unpack layouts the strip was built from.
     normal: vec3 | null;
     color: Color | null;
     uv: vec2;
@@ -63,23 +58,16 @@ const GS_ALPHA_2 = 0x43;
 
 const PRMODE_ABE = 1 << 6;
 
-// GS state that persists across buffers: a buffer that doesn't write these
-// registers inherits whatever the previous one left behind.
 interface GSState {
   abe: boolean;
   alphaBlendMode: BlendMode;
 }
 
-// ALPHA is (A - B) * C + D. Only 0x44 (A=Cs B=Cd C=As D=Cd, source-over) and
-// 0x48 (A=Cs B=0 C=As D=Cd, additive) show up in the track data, and they only
-// differ in B, so that's all we key off.
 function decodeAlphaRegister(value: number): BlendMode {
   const b = (value >>> 2) & 0x03;
   return b === 2 ? BlendMode.Additive : BlendMode.SourceOver;
 }
 
-// The header quads are GS register writes in A+D form: 64 bits of data in
-// v1/v2, the register address in the low byte of v3.
 function applyGSRegisters(unpack: UnpackData, state: GSState): void {
   for (const entry of unpack.v4_32) {
     if (entry.v3 >>> 8 !== 0 || entry.v4 !== 0) continue;
@@ -260,8 +248,6 @@ export function getGeometry(
               ),
               uv: vec2.fromValues(cmdB.v2_32[j].v1, cmdB.v2_32[j].v2),
               normal: null,
-              // GS colors are 0x80 = 1.0, and the ADC bit still lives in the low
-              // bit of the blue channel, so mask it back out of the color.
               color: colorNewFromRGBA(
                 rgba.v1 / 0x80,
                 rgba.v2 / 0x80,
@@ -276,8 +262,6 @@ export function getGeometry(
 
       buf.primitives.push(strip);
 
-      // A buffer draws as one call, so take the heaviest blend its strips ask
-      // for. In practice every strip in a buffer agrees.
       if (strip.blendMode > buf.blendMode) buf.blendMode = strip.blendMode;
     }
 

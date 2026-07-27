@@ -57,21 +57,13 @@ const GLOBAL_SCALE = 300.0; // this feels the best
 
 const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
 
-// Alpha at or above this counts as solid enough to own the depth buffer. Same
-// threshold RatchetAndClank's tfrags use for the equivalent split.
 const SOLID_PASS_ALPHA_REF = 0.99;
 
-// Track obfs that get their own visibility toggle instead of being merged into
-// the rest of the track. TRACK is the drivable surface, TRACKPAN the surrounding
-// panorama/terrain.
 const TOGGLEABLE_TRACK_OBFS: { name: string; label: string }[] = [
   { name: "TRACK", label: "Track" },
   { name: "TRACKPAN", label: "Track Panorama" },
 ];
 
-// Resource names are the original asset paths, right-truncated into a 24 byte
-// field -- ":RESOURCES:TRACKPAN.OBF". Only the leading directories get cut off,
-// so the basename is what's reliably there to match on.
 function resourceBaseName(name: string): string {
   const upper = name.trim().toUpperCase();
   const base = upper.slice(upper.lastIndexOf(":") + 1);
@@ -82,15 +74,11 @@ function resourceBaseName(name: string): string {
 interface TrackGeometryGroup {
   geometry: MergedGeometry;
   visible: boolean;
-  // Set for the groups in TOGGLEABLE_TRACK_OBFS; the leftover obfs merge into an
-  // untoggleable group.
   label: string | null;
 }
 
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
-  // Nothing here sets a sort key, so there's no sort to do -- passing null skips
-  // re-sorting every inst in the list every frame.
   private renderInstList = new GfxRenderInstList(null);
   private blendedRenderInstList = new GfxRenderInstList(null);
   private trackGroups: TrackGeometryGroup[] = [];
@@ -149,10 +137,6 @@ class RumbleRacingScene implements SceneGfx {
     this.resolveBatchTextures();
   }
 
-  // Every obf in the track draws with the same matrix, so obfs sharing a group
-  // merge together rather than one batch set per obf. TRACK and TRACKPAN get a
-  // group each so they can be toggled independently; everything else merges into
-  // one always-visible group.
   private buildTrackGroups(cache: GfxRenderCache): void {
     const remaining = this.trackFile.obfs.slice();
 
@@ -164,7 +148,6 @@ class RumbleRacingScene implements SceneGfx {
         remaining.splice(i, 1);
       }
 
-      // Not every track has both, so only make a toggle for what's really there.
       if (obfs.length === 0) continue;
 
       this.trackGroups.push({
@@ -183,10 +166,6 @@ class RumbleRacingScene implements SceneGfx {
     }
   }
 
-  // Batches come out of the merge pointing at a texture id. Resolve those to
-  // real sampler bindings once, so submitting a batch doesn't have to build a
-  // binding array per draw call per frame. A batch whose texture never turned up
-  // can't be drawn at all, so drop it here instead of re-checking every frame.
   private resolveBatchTextures(): void {
     const resolve = (geometry: MergedGeometry) => {
       geometry.batches = geometry.batches.filter((batch) => {
@@ -284,8 +263,6 @@ class RumbleRacingScene implements SceneGfx {
     alphaTestRef: number,
   ): GfxRenderInst {
     const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-    // A ref of 0.0 can't reject anything, so those draws get the program with no
-    // discard in it and keep early-Z.
     renderInst.setGfxProgram(
       this.getProgram(batch.hasVertexColors, alphaTestRef > 0.0),
     );
@@ -316,18 +293,10 @@ class RumbleRacingScene implements SceneGfx {
         continue;
       }
 
-      // Blended geometry is drawn twice, the way RatchetAndClank's tfrags are.
-      // First the near-opaque texels, with depth writes left on, so the surface
-      // still occludes whatever sits behind it -- a surface that owns no depth at
-      // all gets painted over by anything submitted after it, however far away
-      // that is.
       this.renderInstList.submitRenderInst(
         this.newBatchInst(geometry, batch, modelMatrix, SOLID_PASS_ALPHA_REF),
       );
 
-      // Then the soft remainder. A strict depth compare makes this the exact
-      // complement of the pass above: fragments the solid pass already claimed
-      // sit at equal depth and get rejected, so nothing blends over itself.
       const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0);
       soft.setMegaStateFlags({
         depthWrite: false,
@@ -338,8 +307,8 @@ class RumbleRacingScene implements SceneGfx {
         blendSrcFactor: GfxBlendFactor.SrcAlpha,
         blendDstFactor:
           batch.blendMode === BlendMode.Additive
-            ? GfxBlendFactor.One // ALPHA 0x48: Cs * As + Cd
-            : GfxBlendFactor.OneMinusSrcAlpha, // ALPHA 0x44: (Cs - Cd) * As + Cd
+            ? GfxBlendFactor.One
+            : GfxBlendFactor.OneMinusSrcAlpha,
       });
       soft.setMegaStateFlags(megaStateScratch);
       this.blendedRenderInstList.submitRenderInst(soft);
@@ -347,8 +316,6 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private renderMap(): void {
-    // Blending is opted into per draw call from PRMODE's ABE bit, so the
-    // default here has to be fully opaque.
     const template = this.renderHelper.renderInstManager.pushTemplate();
     template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
@@ -369,8 +336,6 @@ class RumbleRacingScene implements SceneGfx {
         const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
 
-        // A static o3d merged all its obfs into a single entry, so this is the
-        // whole thing either way.
         const frame = o3dGeom.frames[o3dGeom.animationFrame];
         if (frame === undefined) continue;
 

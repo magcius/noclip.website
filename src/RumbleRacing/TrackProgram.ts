@@ -10,10 +10,6 @@ export class TrackProgram extends DeviceProgram {
   public static ub_SceneParams = 0;
   public static ub_MeshParams = 1;
 
-  // Geometry either ships normals and gets lit at runtime, or ships baked RGBA
-  // vertex colors which simply modulate the texture. Vertex-colored geometry has
-  // no normals, so when the user toggles vertex colors off it draws unlit rather
-  // than falling into the lighting path.
   constructor(
     hasVertexColors: boolean,
     alphaTest: boolean,
@@ -69,14 +65,6 @@ void main() {
     color *= v_Color;
 #endif
 
-    // The game itself has no alpha test -- it never writes TEST_1/TEST_2/PABE.
-    // This exists so blended surfaces can be drawn in two passes: the near-opaque
-    // texels once with depth writes, then the soft remainder without. Test the
-    // final alpha, after vertex colour, so the two passes partition cleanly.
-    //
-    // Only the solid pass actually needs it. A discard anywhere in the shader
-    // costs early-Z for the entire draw, so the passes that can't reject a
-    // fragment anyway compile without one.
 #if defined(USE_ALPHA_TEST)
     if (color.a < u_AlphaTestRef)
         discard;
@@ -87,8 +75,6 @@ void main() {
 #else
     vec3 lightDir = normalize(vec3(0.4, 1.0, 0.2));
 
-    // Degenerate normals would make normalize() produce NaN, which max() then
-    // silently collapses to 0.0, leaving the surface at flat ambient.
     float lighting = 1.0;
     if (dot(v_Normal, v_Normal) > 0.0) {
         float NdotL = max(dot(normalize(v_Normal), lightDir), 0.0);
@@ -112,8 +98,6 @@ layout(std140) uniform ub_MeshParams {
     vec4 u_MeshMisc;
 };
 
-// Alpha below this is discarded. 0.0 disables the test, since no texel can be
-// less than fully transparent.
 #define u_AlphaTestRef (u_MeshMisc.x)
 
 layout(location = 0) uniform sampler2D u_Texture;

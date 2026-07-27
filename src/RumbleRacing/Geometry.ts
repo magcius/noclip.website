@@ -21,11 +21,8 @@ import {
 } from "./rumbleRacing";
 import { TrackProgram } from "./TrackProgram";
 
-// position (3), uv (2), normal (3), color (4).
 const VERTEX_STRIDE = 12;
 
-// One merged draw call: every source buffer that shared a material got
-// concatenated into this one vertex/index buffer pair.
 export interface DrawBatch {
   indexCount: number;
   textureId: number;
@@ -35,12 +32,8 @@ export interface DrawBatch {
   vertexBuffer: GfxBuffer;
   indexBuffer: GfxBuffer;
 
-  // The descriptors handed to the render inst every frame. Built once and never
-  // mutated, since GfxRenderInst holds onto the array it's given -- the submit
-  // path shouldn't be allocating per draw call per frame.
   vertexBufferDescriptors: GfxVertexBufferDescriptor[];
   indexBufferDescriptor: GfxIndexBufferDescriptor;
-  // Resolved from textureId once the scene's textures exist.
   samplerBindings: GfxSamplerBinding[] | null;
 }
 
@@ -55,7 +48,6 @@ function collectBuffers(
     for (const buffer of node.buffers) {
       if (buffer.positions.length === 0) continue;
 
-      // don't draw some unhandled textures
       if (exclude.textureIds?.has(buffer.textureId)) continue;
 
       out.push(buffer);
@@ -102,7 +94,6 @@ function buildBatch(device: GfxDevice, group: JsonBuffer[]): DrawBatch {
       vertexData[offs++] = buffer.colors[i].a;
     }
 
-    // Indices are per-buffer, so they have to be rebased onto the merged buffer.
     for (let i = 0; i < buffer.indices.length; i++)
       indexData[indexOffs++] = vertexBase + buffer.indices[i];
 
@@ -183,11 +174,6 @@ export class MergedGeometry {
       if (obf && obf.rootNode) collectBuffers(obf.rootNode, exclude, sourceBuffers);
     }
 
-    // The PS2 split geometry into buffers small enough to fit VU1's 16KB of
-    // data memory, which works out to around 40 triangles apiece. Honouring that
-    // split here costs one draw call per buffer -- several thousand a frame on
-    // the bigger tracks -- for no benefit, so everything that would draw with
-    // the same pipeline and texture gets concatenated into a single batch.
     const groups = new Map<string, JsonBuffer[]>();
     for (const buffer of sourceBuffers) {
       const key = `${buffer.textureId}|${buffer.blendMode}|${buffer.hasVertexColors ? 1 : 0}`;
@@ -212,8 +198,6 @@ export class MergedGeometry {
 }
 
 export class O3DGeometry {
-  // An animated o3d draws exactly one of its obfs per frame, so each one stays
-  // separate. A static one draws all of them together, so they all merge.
   public frames: MergedGeometry[] = [];
   public animationFrame = 0;
   public isAnimated: boolean;

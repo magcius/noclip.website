@@ -50,9 +50,6 @@ function extract16bitRGBA(px: PixelBytes): [number, number, number, number] {
   const G = Math.round((g5 * 255) / 31);
   const B = Math.round((b5 * 255) / 31);
 
-  // TEXA is 0x8080 / 0x40 in every write across every track, so the single
-  // alpha bit indexes TA0 = 0x80 (1.0) or TA1 = 0x40 (0.5) — it does not mean
-  // transparent vs. opaque. AEM = 1 adds the black color key on top of that.
   let A = a1 === 1 ? 127 : 255;
   if (r5 === 0 && g5 === 0 && b5 === 0 && a1 === 0) A = 0;
 

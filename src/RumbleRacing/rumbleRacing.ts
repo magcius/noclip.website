@@ -23,11 +23,7 @@ export interface JsonBuffer {
   uvs: vec2[];
   normals: ReadonlyVec3[];
   colors: Color[];
-  // Vertices come with either normals or baked vertex colors; this says which
-  // one this buffer's data actually holds.
   hasVertexColors: boolean;
-  // Straight from PRMODE's ABE bit and the ALPHA register. Vertex alpha alone
-  // says nothing about this: most blended buffers are 100% opaque per-vertex.
   blendMode: BlendMode;
   indices: number[];
 }
