@@ -1,5 +1,6 @@
 import { vec2, vec3 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../../../Color";
+import { GSRegister, GsPrimitiveType } from "../../../Common/PS2/GS";
 import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
 import { VifCommand, UnpackData } from "./vif";
 
@@ -11,7 +12,7 @@ export const enum BlendMode {
 
 export interface Primitive {
   totalVertsInPrimitive: number;
-  primType: number;
+  primType: GsPrimitiveType;
   blendMode: BlendMode;
   vertices: {
     position: vec3;
@@ -53,8 +54,6 @@ interface BufferChunk {
 }
 
 const GS_PRMODE = 0x1b;
-const GS_ALPHA_1 = 0x42;
-const GS_ALPHA_2 = 0x43;
 
 const PRMODE_ABE = 1 << 6;
 
@@ -76,8 +75,8 @@ function applyGSRegisters(unpack: UnpackData, state: GSState): void {
       case GS_PRMODE:
         state.abe = (entry.v1 & PRMODE_ABE) !== 0;
         break;
-      case GS_ALPHA_1:
-      case GS_ALPHA_2:
+      case GSRegister.ALPHA_1:
+      case GSRegister.ALPHA_2:
         state.alphaBlendMode = decodeAlphaRegister(entry.v1);
         break;
     }
@@ -201,7 +200,7 @@ export function getGeometry(
     for (const sChunk of bChunk.strips) {
       const strip: Primitive = {
         totalVertsInPrimitive: sChunk.gifTagV1 & 0x7fff,
-        primType: (sChunk.gifTagV2 & (0b111 << 15)) >> 15,
+        primType: ((sChunk.gifTagV2 & (0b111 << 15)) >> 15) as GsPrimitiveType,
         blendMode: sChunk.blendMode,
         vertices: [],
       };
