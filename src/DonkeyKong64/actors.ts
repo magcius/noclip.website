@@ -1,6 +1,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import type { Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { AABB } from '../Geometry.js';
@@ -25,8 +26,8 @@ export class ActorAnimationPose {
     private animation: ActorAnimation;
     private lastTick = -1;
 
-    constructor(geometry: ArrayBufferSlice, animationData: ArrayBufferSlice | null, private speed: number) {
-        this.skeleton = parseActorSkeleton(geometry);
+    constructor(geometryBuffer: ArrayBufferSlice, animationData: ArrayBufferSlice | null, private speed: number) {
+        this.skeleton = parseActorSkeleton(geometryBuffer);
         if (this.skeleton.offsets.length === 0) {
             this.skeleton.offsets.push(vec3.create());
             this.skeleton.parents.push(-1);
@@ -45,30 +46,31 @@ export class ActorAnimationPose {
             return;
         const boneAngles = sampleActorAnimation(this.animation, this.speed, tick);
         for (let i = 0; i < this.skeleton.offsets.length; i++) {
-            const matrix = this.boneMatrices[i];
-            mat4.identity(matrix);
-            const parent = this.skeleton.parents[i];
-            if (parent >= 0)
-                mat4.copy(matrix, this.boneMatrices[parent]);
-            mat4.translate(matrix, matrix, this.skeleton.offsets[i]);
-            mat4.rotateZ(matrix, matrix, boneAngles[i] ?? 0);
+            const boneMatrix = this.boneMatrices[i];
+            mat4.identity(boneMatrix);
+            const parentIndex = this.skeleton.parents[i];
+            if (parentIndex >= 0)
+                mat4.copy(boneMatrix, this.boneMatrices[parentIndex]);
+            mat4.translate(boneMatrix, boneMatrix, this.skeleton.offsets[i]);
+            mat4.rotateZ(boneMatrix, boneMatrix, boneAngles[i] ?? 0);
         }
         this.lastTick = tick;
     }
 
-    public computeBoundingBox(sourcePositions: Float32Array, boneIndices: Uint8Array): AABB {
+    public computeBoundingBox(vertices: readonly Vertex[]): AABB {
         let radius = 0;
-        for (let i = 0; i < sourcePositions.length / 3; i++) {
+        for (let i = 0; i < vertices.length; i++) {
+            const vertex = vertices[i];
             let vertexRadius = Math.hypot(
-                sourcePositions[i * 3 + 0],
-                sourcePositions[i * 3 + 1],
-                sourcePositions[i * 3 + 2],
+                vertex.x,
+                vertex.y,
+                vertex.z,
             );
-            let bone = Math.min(boneIndices[i], this.skeleton.offsets.length - 1);
-            for (let depth = 0; bone >= 0 && depth < this.skeleton.offsets.length; depth++) {
-                const offset = this.skeleton.offsets[bone];
+            let boneIndex = Math.min(vertex.matrixIndex, this.skeleton.offsets.length - 1);
+            for (let depth = 0; boneIndex >= 0 && depth < this.skeleton.offsets.length; depth++) {
+                const offset = this.skeleton.offsets[boneIndex];
                 vertexRadius += Math.hypot(offset[0], offset[1], offset[2]);
-                bone = this.skeleton.parents[bone];
+                boneIndex = this.skeleton.parents[boneIndex];
             }
             radius = Math.max(radius, vertexRadius);
         }
@@ -185,7 +187,7 @@ function initializeActorDL(state: RSPState): void {
 }
 
 function installDefaultActorPartSegments(
-    geometry: ArrayBufferSlice,
+    geometryBuffer: ArrayBufferSlice,
     view: DataView,
     displayListStart: number,
     displayListEnd: number,
@@ -204,16 +206,16 @@ function installDefaultActorPartSegments(
             continue;
         const segment = w1 >>> 24;
         if (markers.has(segment) && segmentBuffers[segment] === undefined)
-            segmentBuffers[segment] = geometry.slice(offs + 8);
+            segmentBuffers[segment] = geometryBuffer.slice(offs + 8);
     }
 }
 
 function parseActorAnimatedTextures(
-    geometry: ArrayBufferSlice,
+    geometryBuffer: ArrayBufferSlice,
     textureBuffers: ArrayBufferSlice[],
     actorType: number,
 ): AnimatedTexture[] {
-    const view = geometry.createDataView();
+    const view = geometryBuffer.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
     const descriptorPointer = view.getUint32(0x10, false);
     if (descriptorPointer === 0)
@@ -264,23 +266,23 @@ function parseActorSkeleton(data: ArrayBufferSlice): ActorSkeleton {
 }
 
 export function buildActorGeometry(
-    geometry: ArrayBufferSlice,
+    geometryBuffer: ArrayBufferSlice,
     pose: ActorAnimationPose,
     actorType: number,
     textureBuffers: ArrayBufferSlice[],
     sharedOutput: RSPSharedOutput,
 ): ActorGeometry {
-    const view = geometry.createDataView();
+    const view = geometryBuffer.createDataView();
     const runtimeBase = view.getUint32(0x00, false);
     const displayListCount = view.getUint8(0x21);
     const displayListTableOffs = view.getUint32(0x04, false) - runtimeBase + 0x28;
     const segmentBuffers: ArrayBufferSlice[] = [];
-    segmentBuffers[0x03] = geometry.slice(0x28);
+    segmentBuffers[0x03] = geometryBuffer.slice(0x28);
     if (displayListCount > 0) {
         const firstDisplayList = view.getUint32(displayListTableOffs, false) - runtimeBase + 0x28;
-        installDefaultActorPartSegments(geometry, view, firstDisplayList, displayListTableOffs, segmentBuffers);
+        installDefaultActorPartSegments(geometryBuffer, view, firstDisplayList, displayListTableOffs, segmentBuffers);
     }
-    const animatedTextures = parseActorAnimatedTextures(geometry, textureBuffers, actorType);
+    const animatedTextures = parseActorAnimatedTextures(geometryBuffer, textureBuffers, actorType);
     const state = new RSPState(textureBuffers, segmentBuffers, sharedOutput, animatedTextures);
     initializeActorDL(state);
     const firstVertex = sharedOutput.vertices.length;
@@ -290,22 +292,12 @@ export function buildActorGeometry(
     }
     const output = state.finish()!;
 
-    const vertices = sharedOutput.vertices.slice(firstVertex);
-    const sourcePositions = new Float32Array(vertices.length * 3);
-    const boneIndices = new Uint8Array(vertices.length);
-    for (let i = 0; i < vertices.length; i++) {
-        const vertex = vertices[i];
-        sourcePositions[i * 3 + 0] = vertex.x;
-        sourcePositions[i * 3 + 1] = vertex.y;
-        sourcePositions[i * 3 + 2] = vertex.z;
-        boneIndices[i] = vertex.matrixIndex;
-    }
     return {
         rspState: state,
         rspOutput: output,
         animation: {
             pose,
-            boundingBox: pose.computeBoundingBox(sourcePositions, boneIndices),
+            boundingBox: pose.computeBoundingBox(sharedOutput.vertices.slice(firstVertex)),
         },
     };
 }

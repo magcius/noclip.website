@@ -1,4 +1,4 @@
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { ImageFormat, ImageSize, TexCM } from '../Common/N64/Image.js';
@@ -9,14 +9,14 @@ import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManage
 import { AABB } from '../Geometry.js';
 import { nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
-import { initDL } from './material.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
+import { initDL } from './material.js';
 import type { InstanceScript, SetupProp } from './parse.js';
-import type { DK64Renderer, ROMData } from './scenes.js';
 import type { Geometry, GeometryRenderer } from './render.js';
+import type { DK64Renderer, ROMData } from './scenes.js';
 
-function computeBillboardBoundingBox(origin: vec3, rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): AABB {
+function computeBillboardBoundingBox(origin: ReadonlyVec3, rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): AABB {
     let radius = 0;
     for (let i = 0; i < rightOffsets.length; i++)
         radius = Math.max(radius, Math.hypot(rightOffsets[i], upOffsets[i], forwardOffsets[i]));
@@ -806,8 +806,8 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
         }
         const output = state.finish()!;
 
-        const geometry: Geometry = { sharedOutput, rspState: state, rspOutput: output };
-        const geoData = sceneRenderer.addGeoData(device, cache, geometry);
+        const geo: Geometry = { sharedOutput, rspState: state, rspOutput: output };
+        const geoData = sceneRenderer.addGeoData(device, cache, geo);
         const renderer = sceneRenderer.addPropRenderer(device, cache, geoData);
         renderer.modelMatrix[12] = worldX;
         renderer.modelMatrix[13] = worldY;
@@ -928,8 +928,8 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const output = state.finish()!;
 
         // Share draw resources between instances of props.
-        const geometry: Geometry = { sharedOutput, rspState: state, rspOutput: output };
-        const geoData = sceneRenderer.addGeoData(device, cache, geometry);
+        const geo: Geometry = { sharedOutput, rspState: state, rspOutput: output };
+        const geoData = sceneRenderer.addGeoData(device, cache, geo);
         let sharedRenderer: GeometryRenderer | null = null;
         for (const prop of instances) {
             const scale = prop.scale * worldScale;
@@ -1014,8 +1014,8 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             : undefined;
         if (usesRuntimeMatrices && propAnimation === undefined)
             applyPropBindPose(view, state, sharedOutput, firstVertex, vertexCount);
-        const geometry: Geometry = { sharedOutput, rspState: state, rspOutput: output, propAnimation };
-        const geoData = sceneRenderer.addGeoData(device, cache, geometry);
+        const geo: Geometry = { sharedOutput, rspState: state, rspOutput: output, propAnimation };
+        const geoData = sceneRenderer.addGeoData(device, cache, geo);
         for (const prop of instances) {
             const renderer = sceneRenderer.addPropRenderer(device, cache, geoData);
             const origin = vec3.fromValues(

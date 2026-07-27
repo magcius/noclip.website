@@ -33,7 +33,7 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     return gfxTexture;
 }
 
-export class GPUTextureCache {
+export class GfxTextureCache {
     private textures = new Map<Texture, GfxTexture>();
 
     public getTexture(device: GfxDevice, texture: Texture): GfxTexture {
@@ -104,13 +104,13 @@ class DrawCallInstance {
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
     private isTranslucent = false;
-    private crossfadeDuration = 0;
+    private crossfadeDurationFrames = 0;
     private viewMatrix = mat4.create();
     private boneModelViewMatrix = mat4.create();
     private textureMatrix = mat4.create();
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, gpuTextureCache: GPUTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams, private boneMatrices: mat4[] | undefined) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, gfxTextureCache: GfxTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams, private boneMatrices: mat4[] | undefined) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
         for (let i = 0; i < this.textureMappings.length; i++) {
             const textureIndex = drawCall.textureIndices[i];
@@ -120,30 +120,30 @@ class DrawCallInstance {
 
             if (tex) {
                 this.textureEntry[i] = tex;
-                this.textureMappings[i].gfxTexture = gpuTextureCache.getTexture(device, tex);
+                this.textureMappings[i].gfxTexture = gfxTextureCache.getTexture(device, tex);
                 this.textureMappings[i].gfxSampler = translateSampler(cache, tex, linearFiltering);
             }
 
-            const animation = drawCall.textureAnimations[i];
-            if (animation !== undefined) {
-                const entries = animation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
-                this.animatedTextureMappings[i] = entries.map((entry, frame) => {
+            const textureAnimation = drawCall.textureAnimations[i];
+            if (textureAnimation !== undefined) {
+                const textures = textureAnimation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
+                this.animatedTextureMappings[i] = textures.map((texture, frame) => {
                     if (frame === 0)
                         return this.textureMappings[i];
                     const mapping = new TextureMapping();
-                    mapping.gfxTexture = gpuTextureCache.getTexture(device, entry);
-                    mapping.gfxSampler = translateSampler(cache, entry, linearFiltering);
+                    mapping.gfxTexture = gfxTextureCache.getTexture(device, texture);
+                    mapping.gfxSampler = translateSampler(cache, texture, linearFiltering);
                     return mapping;
                 });
             }
         }
-        const crossfade0 = drawCall.textureAnimations[0]?.crossfadeGroup;
-        const crossfade1 = drawCall.textureAnimations[1]?.crossfadeGroup;
-        if (crossfade0 !== null && crossfade0 !== undefined && crossfade0 === crossfade1)
-            this.crossfadeDuration = Math.max(drawCall.textureAnimations[0]!.frameDuration, 1);
+        const crossfadeGroup0 = drawCall.textureAnimations[0]?.crossfadeGroup;
+        const crossfadeGroup1 = drawCall.textureAnimations[1]?.crossfadeGroup;
+        if (crossfadeGroup0 !== null && crossfadeGroup0 !== undefined && crossfadeGroup0 === crossfadeGroup1)
+            this.crossfadeDurationFrames = Math.max(drawCall.textureAnimations[0]!.frameDuration, 1);
 
         this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
-        this.isTranslucent = this.crossfadeDuration > 0 || renderModeIsTranslucent(this.megaStateFlags);
+        this.isTranslucent = this.crossfadeDurationFrames > 0 || renderModeIsTranslucent(this.megaStateFlags);
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }
@@ -155,7 +155,7 @@ class DrawCallInstance {
         if (this.texturesEnabled && this.textureEntry.length)
             program.defines.set('USE_TEXTURE', '1');
 
-        if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
+        if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING)
             program.defines.set('LIGHTING', '1');
 
         if (this.vertexColorsEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0)
@@ -169,9 +169,8 @@ class DrawCallInstance {
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN_LINEAR)
             program.defines.set('TEXTURE_GEN_LINEAR', '1');
 
-        if (this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG)) {
+        if (this.fogEnabled && (this.drawCall.SP_GeometryMode & RSP_Geometry.G_FOG))
             program.defines.set('USE_FOG', '1');
-        }
 
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
@@ -179,7 +178,7 @@ class DrawCallInstance {
         if (this.alphaVisualizerEnabled)
             program.defines.set('USE_ALPHA_VISUALIZER', '1');
 
-        if (this.crossfadeDuration > 0)
+        if (this.crossfadeDurationFrames > 0)
             program.defines.set('EXTRA_COMBINE', '1');
 
         this.program = program;
@@ -218,15 +217,15 @@ class DrawCallInstance {
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number, time: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
-            const entry = this.textureEntry[textureEntryIndex];
-            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
-            const speed = this.drawCall.textureScrollSpeeds[textureEntryIndex] ?? 0;
-            if (speed !== 0) {
-                const ticks = Math.floor(time / (1000 / 30));
-                if (ticks > 0) {
-                    const cycle = (Math.floor(255 / speed) + 1) * speed;
-                    const tileOffset = 255 - (((ticks - 1) * speed) % cycle);
-                    m[13] -= (tileOffset / 4) / entry.height;
+            const texture = this.textureEntry[textureEntryIndex];
+            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, texture.width, texture.height, texture.tile.shifts, texture.tile.shiftt);
+            const scrollSpeed = this.drawCall.textureScrollSpeeds[textureEntryIndex] ?? 0;
+            if (scrollSpeed !== 0) {
+                const tick = Math.floor(time / (1000 / 30));
+                if (tick > 0) {
+                    const scrollCycle = (Math.floor(255 / scrollSpeed) + 1) * scrollSpeed;
+                    const tileOffset = 255 - (((tick - 1) * scrollSpeed) % scrollCycle);
+                    m[13] -= (tileOffset / 4) / texture.height;
                 }
             }
         } else {
@@ -234,22 +233,22 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
         if (!this.visible)
             return;
 
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
-        const animationTick = viewerInput.time / (1000 / 30);
+        const animationFrame = viewerInput.time / (1000 / 30);
         for (let i = 0; i < this.animatedTextureMappings.length; i++) {
             const mappings = this.animatedTextureMappings[i];
             if (mappings === undefined)
                 continue;
-            const animation = this.drawCall.textureAnimations[i]!;
-            const frameDuration = Math.max(animation.frameDuration, 1);
-            const frameOffset = animation.frameOffset;
-            const frame = (Math.floor(animationTick / frameDuration) + frameOffset) % mappings.length;
+            const textureAnimation = this.drawCall.textureAnimations[i]!;
+            const frameDuration = Math.max(textureAnimation.frameDuration, 1);
+            const frameOffset = textureAnimation.frameOffset;
+            const frame = (Math.floor(animationFrame / frameDuration) + frameOffset) % mappings.length;
             this.textureMappings[i] = mappings[frame];
         }
         if (sprites !== null) {
@@ -303,7 +302,7 @@ class DrawCallInstance {
             offs += fillVec4(mappedF32, offs, fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
         }
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, this.crossfadeDuration > 0 ? 12 : 8);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, this.crossfadeDurationFrames > 0 ? 12 : 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         const primColor = this.drawCall.DP_PrimColor;
         offs += fillVec4(comb, offs,
@@ -313,16 +312,13 @@ class DrawCallInstance {
             primColor[3] * primAlphaMultiplier);
         const envColor = this.drawCall.DP_EnvColor;
         offs += fillVec4(comb, offs, envColor[0], envColor[1], envColor[2], envColor[3]);
-        if (this.crossfadeDuration > 0) {
+        if (this.crossfadeDurationFrames > 0) {
             // Interpolate the 30Hz game tick in PRIM_LOD_FRAC for smoother crossfades.
-            const animationTick = viewerInput.time / (1000 / 30);
-            const blend = (animationTick % this.crossfadeDuration) / this.crossfadeDuration;
+            const animationFrame = viewerInput.time / (1000 / 30);
+            const blend = (animationFrame % this.crossfadeDurationFrames) / this.crossfadeDurationFrames;
             offs += fillVec4(comb, offs, blend, 0, 0, 0);
         }
         renderInstManager.submitRenderInst(renderInst);
-    }
-
-    public destroy(device: GfxDevice): void {
     }
 }
 
@@ -335,7 +331,7 @@ function makeVertexBufferData(v: Vertex[], actorAnimation: ActorAnimationState |
         buf[j++] = v[i].z;
         buf[j++] = actorAnimation !== undefined
             ? Math.min(v[i].matrixIndex, actorAnimation.pose.boneMatrices.length - 1)
-            : 1.0;
+            : 1;
 
         buf[j++] = v[i].tx;
         buf[j++] = v[i].ty;
@@ -358,9 +354,9 @@ export class RenderData {
     public vertexStart: number;
     public indexStart: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, geometry: Geometry, dynamic = false) {
-        const sharedOutput = geometry.sharedOutput;
-        const drawCalls = geometry.rspOutput?.drawCalls ?? [];
+    constructor(device: GfxDevice, cache: GfxRenderCache, geo: Geometry, dynamic = false) {
+        const sharedOutput = geo.sharedOutput;
+        const drawCalls = geo.rspOutput?.drawCalls ?? [];
         this.indexStart = drawCalls.reduce(
             (start, drawCall) => Math.min(start, drawCall.firstIndex),
             sharedOutput.indices.length,
@@ -378,7 +374,7 @@ export class RenderData {
             (end, vertexIndex) => Math.max(end, vertexIndex + 1),
             vertexStart,
         );
-        const dynamicVertexRange = getDynamicVertexRange(geometry);
+        const dynamicVertexRange = getDynamicVertexRange(geo);
         if (dynamicVertexRange !== null) {
             vertexStart = Math.min(vertexStart, dynamicVertexRange.start);
             vertexEnd = Math.max(vertexEnd, dynamicVertexRange.end);
@@ -386,7 +382,7 @@ export class RenderData {
         this.vertexStart = vertexStart;
 
         assert(vertexEnd - this.vertexStart <= 0xFFFFFFFF);
-        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd), geometry.actorAnimation);
+        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices.slice(this.vertexStart, vertexEnd), geo.actorAnimation);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
 
         const indexBufferData = Uint32Array.from(sharedIndices, (vertexIndex) => vertexIndex - this.vertexStart);
@@ -507,15 +503,15 @@ export interface Geometry {
     spriteBillboards?: SpriteBillboard[];
 }
 
-function computeGeometryBoundingBox(geometry: Geometry): AABB | null {
-    if (geometry.rspOutput === null)
+function computeGeometryBoundingBox(geo: Geometry): AABB | null {
+    if (geo.rspOutput === null)
         return null;
 
     const boundingBox = new AABB();
-    for (const drawCall of geometry.rspOutput.drawCalls) {
+    for (const drawCall of geo.rspOutput.drawCalls) {
         const indexEnd = drawCall.firstIndex + drawCall.indexCount;
         for (let index = drawCall.firstIndex; index < indexEnd; index++) {
-            const vertex = geometry.sharedOutput.vertices[geometry.sharedOutput.indices[index]];
+            const vertex = geo.sharedOutput.vertices[geo.sharedOutput.indices[index]];
             boundingBox.min[0] = Math.min(boundingBox.min[0], vertex.x);
             boundingBox.min[1] = Math.min(boundingBox.min[1], vertex.y);
             boundingBox.min[2] = Math.min(boundingBox.min[2], vertex.z);
@@ -527,9 +523,9 @@ function computeGeometryBoundingBox(geometry: Geometry): AABB | null {
     if (boundingBox.min[0] > boundingBox.max[0])
         return null;
 
-    if (geometry.actorAnimation !== undefined)
-        boundingBox.union(boundingBox, geometry.actorAnimation.boundingBox);
-    const translationBounds = geometry.propAnimation?.translationBounds;
+    if (geo.actorAnimation !== undefined)
+        boundingBox.union(boundingBox, geo.actorAnimation.boundingBox);
+    const translationBounds = geo.propAnimation?.translationBounds;
     if (translationBounds !== undefined) {
         for (let axis = 0; axis < 3; axis++) {
             boundingBox.min[axis] += translationBounds.min[axis];
@@ -548,20 +544,20 @@ function computeGeometryBoundingBox(geometry: Geometry): AABB | null {
     return boundingBox;
 }
 
-function getDynamicVertexRange(geometry: Geometry): { start: number, end: number } | null {
+function getDynamicVertexRange(geo: Geometry): { start: number, end: number } | null {
     let rangeStart = Infinity, rangeEnd = -Infinity;
     const include = (start: number, count: number): void => {
         rangeStart = Math.min(rangeStart, start);
         rangeEnd = Math.max(rangeEnd, start + count);
     };
-    if (geometry.generatedSurfaceAnimation !== undefined)
-        include(geometry.generatedSurfaceAnimation.firstVertex, geometry.generatedSurfaceAnimation.vertexCount);
-    if (geometry.propAnimation !== undefined)
-        for (const vertexOffset of geometry.propAnimation.vertexOffsets)
-            include(geometry.propAnimation.firstVertex + vertexOffset, 1);
-    for (const sprite of geometry.spriteBillboards ?? [])
+    if (geo.generatedSurfaceAnimation !== undefined)
+        include(geo.generatedSurfaceAnimation.firstVertex, geo.generatedSurfaceAnimation.vertexCount);
+    if (geo.propAnimation !== undefined)
+        for (const vertexOffset of geo.propAnimation.vertexOffsets)
+            include(geo.propAnimation.firstVertex + vertexOffset, 1);
+    for (const sprite of geo.spriteBillboards ?? [])
         include(sprite.firstVertex, 4);
-    for (const vertexIndex of geometry.dynamicLighting?.vertexIndices ?? [])
+    for (const vertexIndex of geo.dynamicLighting?.vertexIndices ?? [])
         include(vertexIndex, 1);
     return rangeStart <= rangeEnd ? { start: rangeStart, end: rangeEnd } : null;
 }
@@ -569,9 +565,9 @@ function getDynamicVertexRange(geometry: Geometry): { start: number, end: number
 export class GeometryData {
     public renderData: RenderData;
     public cullBoundingBox: AABB | null;
+    public dynamicLightingEnabled = true;
     private lightingDirty: boolean;
     private dirtyVertexRange: { start: number, end: number } | null = null;
-    public dynamicLightingEnabled = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
         this.renderData = new RenderData(device, cache, geo, geo.generatedSurfaceAnimation !== undefined || geo.spriteBillboards !== undefined || geo.dynamicLighting !== undefined || geo.propAnimation !== undefined);
@@ -593,7 +589,7 @@ export class GeometryData {
     }
 
     public update(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, activeLightCache: ActiveLightCache): void {
-        const animation = this.geo.generatedSurfaceAnimation;
+        const surfaceAnimation = this.geo.generatedSurfaceAnimation;
         const sprites = this.geo.spriteBillboards;
         const lighting = this.geo.dynamicLighting;
         const actorAnimation = this.geo.actorAnimation;
@@ -601,11 +597,11 @@ export class GeometryData {
         const tick = Math.floor(viewerInput.time / (1000 / 30));
         const lightingIsDynamic = lighting !== undefined && lighting.lights.length > 0 && this.dynamicLightingEnabled;
 
-        if (animation !== undefined) {
-            const surface = animation.surface;
+        if (surfaceAnimation !== undefined) {
+            const surface = surfaceAnimation.surface;
             const amplitude = surface.amplitudeS + surface.amplitudeT;
-            for (let i = 0; i < animation.vertexCount; i++) {
-                const vertexIndex = animation.firstVertex + i;
+            for (let i = 0; i < surfaceAnimation.vertexCount; i++) {
+                const vertexIndex = surfaceAnimation.firstVertex + i;
                 const vertex = this.geo.sharedOutput.vertices[vertexIndex];
                 const y = generatedSurfaceHeight(surface, vertex.x / 3, vertex.z / 3, tick);
                 const alpha = Math.max(0, Math.min(0xFF, Math.trunc(
@@ -655,9 +651,9 @@ export enum DK64Layer {
 class GeoNodeRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, sprites);
+            this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, sprites);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -689,11 +685,6 @@ class GeoNodeRenderer {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
     }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].destroy(device);
-    }
 }
 
 export class GeometryRenderer {
@@ -719,7 +710,6 @@ export class GeometryRenderer {
 
     public objectFlags = 0;
     private rootNodeRenderer: GeoNodeRenderer;
-    private ownsRootNodeRenderer: boolean;
 
     constructor(
         device: GfxDevice,
@@ -727,7 +717,7 @@ export class GeometryRenderer {
         private geometryData: GeometryData,
         public renderLayer: DK64Layer,
         private fogParams: FogParams,
-        private gpuTextureCache: GPUTextureCache,
+        private gfxTextureCache: GfxTextureCache,
         sharedRenderer: GeometryRenderer | null = null,
     ) {
         this.megaStateFlags = {};
@@ -746,20 +736,18 @@ export class GeometryRenderer {
         if (sharedRenderer !== null) {
             assert(sharedRenderer.geometryData === geometryData);
             this.rootNodeRenderer = sharedRenderer.rootNodeRenderer;
-            this.ownsRootNodeRenderer = false;
         } else {
             this.rootNodeRenderer = this.buildGeoNodeRenderer(device, cache, geo);
-            this.ownsRootNodeRenderer = true;
         }
     }
 
-    private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, node: Geometry): GeoNodeRenderer {
+    private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): GeoNodeRenderer {
         const geoNodeRenderer = new GeoNodeRenderer();
 
-        if (node.rspOutput !== null) {
-            for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                const drawCall = node.rspOutput.drawCalls[i];
-                const drawCallInstance = new DrawCallInstance(device, cache, this.gpuTextureCache, node.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams, node.actorAnimation?.pose.boneMatrices);
+        if (geo.rspOutput !== null) {
+            for (let i = 0; i < geo.rspOutput.drawCalls.length; i++) {
+                const drawCall = geo.rspOutput.drawCalls[i];
+                const drawCallInstance = new DrawCallInstance(device, cache, this.gfxTextureCache, geo.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams, geo.actorAnimation?.pose.boneMatrices);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -806,11 +794,11 @@ export class GeometryRenderer {
 
         const localBoundingBox = sourceBoundingBox.clone();
         const worldBoundingBox = new AABB();
-        const animation = this.rootTransformAnimation;
-        if (animation === null) {
+        const rootAnimation = this.rootTransformAnimation;
+        if (rootAnimation === null) {
             worldBoundingBox.transform(localBoundingBox, this.modelMatrix);
         } else {
-            if (animation.rotationYRadiansPerTick !== 0) {
+            if (rootAnimation.rotationYRadiansPerTick !== 0) {
                 const radiusXZ = Math.hypot(
                     Math.max(Math.abs(localBoundingBox.min[0]), Math.abs(localBoundingBox.max[0])),
                     Math.max(Math.abs(localBoundingBox.min[2]), Math.abs(localBoundingBox.max[2])),
@@ -820,9 +808,9 @@ export class GeometryRenderer {
                     radiusXZ, localBoundingBox.max[1], radiusXZ,
                 );
             }
-            worldBoundingBox.transform(localBoundingBox, animation.baseMatrix);
-            worldBoundingBox.min[1] -= Math.abs(animation.positionYAmplitude);
-            worldBoundingBox.max[1] += Math.abs(animation.positionYAmplitude);
+            worldBoundingBox.transform(localBoundingBox, rootAnimation.baseMatrix);
+            worldBoundingBox.min[1] -= Math.abs(rootAnimation.positionYAmplitude);
+            worldBoundingBox.max[1] += Math.abs(rootAnimation.positionYAmplitude);
         }
         return worldBoundingBox;
     }
@@ -864,12 +852,12 @@ export class GeometryRenderer {
             return;
 
         if (this.rootTransformAnimation !== null) {
-            const animation = this.rootTransformAnimation;
-            mat4.copy(this.modelMatrix, animation.baseMatrix);
+            const rootAnimation = this.rootTransformAnimation;
+            mat4.copy(this.modelMatrix, rootAnimation.baseMatrix);
             const tick = Math.floor(viewerInput.time / (1000 / 30));
-            mat4.rotateY(this.modelMatrix, this.modelMatrix, tick * animation.rotationYRadiansPerTick);
-            this.modelMatrix[13] += Math.sin(tick * animation.positionYRadiansPerTick)
-                * animation.positionYAmplitude;
+            mat4.rotateY(this.modelMatrix, this.modelMatrix, tick * rootAnimation.rotationYRadiansPerTick);
+            this.modelMatrix[13] += Math.sin(tick * rootAnimation.positionYRadiansPerTick)
+                * rootAnimation.positionYAmplitude;
         } else if (this.cameraBillboard !== null) {
             const billboard = this.cameraBillboard;
             scaleMatrix(this.modelMatrix, viewerInput.camera.worldMatrix, billboard.scale);
@@ -920,14 +908,9 @@ export class GeometryRenderer {
         const objectLightColor = this.objectLighting !== null
             ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.geo.spriteBillboards ?? null);
+        this.rootNodeRenderer.prepareToRender(renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.geo.spriteBillboards ?? null);
 
         renderInstManager.popTemplate();
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.ownsRootNodeRenderer)
-            this.rootNodeRenderer.destroy(device);
     }
 }
 

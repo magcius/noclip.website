@@ -85,7 +85,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             const segment = 0x0E;
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x08] = createSpriteVertexBuffer(definition, batch.length);
-            const animation: AnimatedTexture[] = [{
+            const animatedTextures: AnimatedTexture[] = [{
                 segment,
                 // Ensure sprites on the same segment+phase don't overlap in the texture cache.
                 group: definition.id,
@@ -93,7 +93,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
                 frameOffset: phase,
                 frames,
             }];
-            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animation);
+            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             initDL(state, false);
             initSpriteMaterial(state, definition, segment, color);
             const firstVertex = sharedOutput.vertices.length;
@@ -106,7 +106,7 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
 
             const width = definition.width * scale * 3;
             const height = definition.height * scale * 3;
-            const geometry: Geometry = {
+            const geo: Geometry = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
@@ -125,9 +125,9 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
                     },
                 )),
             };
-            const geoData = new GeometryData(device, cache, geometry);
+            const geoData = new GeometryData(device, cache, geo);
             sceneRenderer.geoDatas.push(geoData);
-            const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Effects, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
+            const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Effects, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache);
             renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             renderer.setBackfaceCullingEnabled(false);
             sceneRenderer.geoRenderers.push(renderer);

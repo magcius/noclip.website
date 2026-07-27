@@ -34,7 +34,7 @@ import type { GeneratedSurface, SetupActor } from './parse.js';
 import { createBackdropRenderer } from './background.js';
 import type { BackdropData, BackdropRenderer } from './background.js';
 import {
-    bindingLayouts, fogPositionToViewDistance, generatedSurfaceHeight, GPUTextureCache,
+    bindingLayouts, fogPositionToViewDistance, generatedSurfaceHeight, GfxTextureCache,
     GeometryData, GeometryRenderer, DK64Layer,
 } from './render.js';
 import type { FogParams, Geometry } from './render.js';
@@ -85,7 +85,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private backdropRenderer: BackdropRenderer | null;
     private activeLightCache: ActiveLightCache;
-    public gpuTextureCache = new GPUTextureCache();
+    public gfxTextureCache = new GfxTextureCache();
 
     public geoDatas: GeometryData[] = [];
     public geoRenderers: GeometryRenderer[] = [];
@@ -116,7 +116,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     }
 
     public addPropRenderer(device: GfxDevice, cache: GfxRenderCache, geoData: GeometryData, sharedRenderer: GeometryRenderer | null = null): GeometryRenderer {
-        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Props, this.fogParams, this.gpuTextureCache, sharedRenderer);
+        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Props, this.fogParams, this.gfxTextureCache, sharedRenderer);
         this.geoRenderers.push(renderer);
         return renderer;
     }
@@ -241,11 +241,9 @@ export class DK64Renderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.backdropRenderer?.destroy(device);
         this.renderHelper.destroy();
-        for (let i = 0; i < this.geoRenderers.length; i++)
-            this.geoRenderers[i].destroy(device);
         for (let i = 0; i < this.geoDatas.length; i++)
             this.geoDatas[i].destroy(device);
-        this.gpuTextureCache.destroy(device);
+        this.gfxTextureCache.destroy(device);
     }
 }
 
@@ -406,18 +404,18 @@ function addSceneActors(
                 romData.TexData,
                 sharedOutput,
             );
-            const geometry: Geometry = {
+            const geo: Geometry = {
                 sharedOutput,
                 rspState: actorGeometry.rspState,
                 rspOutput: actorGeometry.rspOutput,
                 actorAnimation: actorGeometry.animation,
             };
-            geoData = new GeometryData(device, cache, geometry);
+            geoData = new GeometryData(device, cache, geo);
             sceneRenderer.geoDatas.push(geoData);
             geoDataByDefinition.set(geometryKey, geoData);
         }
         const rendererScale = actor.scale * actorModelScale * worldScale;
-        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Actors, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
+        const renderer = new GeometryRenderer(device, cache, geoData, DK64Layer.Actors, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache);
         const origin = vec3.fromValues(
             actor.position[0] * worldScale,
             actor.position[1] * worldScale,
@@ -524,7 +522,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] ?? null : null;
-            const geometry: Geometry = {
+            const geo: Geometry = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
@@ -534,13 +532,13 @@ class SceneDesc implements Viewer.SceneDesc {
                     chunk, dynamicLights,
                 ),
             };
-            const geoData = new GeometryData(device, cache, geometry);
+            const geoData = new GeometryData(device, cache, geo);
             sceneRenderer.geoDatas.push(geoData);
 
             const renderLayer = dl.materialIndex === null
                 ? DK64Layer.MapGeometry
                 : DK64Layer.Surfaces;
-            const geoRenderer = new GeometryRenderer(device, cache, geoData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache);
+            const geoRenderer = new GeometryRenderer(device, cache, geoData, renderLayer, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache);
             if (dl.ChunkID >= 0)
                 geoRenderer.setCullBoundingBox(geoData.cullBoundingBox);
             sceneRenderer.geoRenderers.push(geoRenderer);
@@ -579,7 +577,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const output = state.finish()!;
-            const geometry: Geometry = {
+            const geo: Geometry = {
                 sharedOutput,
                 rspState: state,
                 rspOutput: output,
@@ -589,9 +587,9 @@ class SceneDesc implements Viewer.SceneDesc {
                     vertexCount: sharedOutput.vertices.length - firstVertex,
                 },
             };
-            const geoData = new GeometryData(device, cache, geometry);
+            const geoData = new GeometryData(device, cache, geo);
             sceneRenderer.geoDatas.push(geoData);
-            sceneRenderer.geoRenderers.push(new GeometryRenderer(device, cache, geoData, DK64Layer.Surfaces, sceneRenderer.fogParams, sceneRenderer.gpuTextureCache));
+            sceneRenderer.geoRenderers.push(new GeometryRenderer(device, cache, geoData, DK64Layer.Surfaces, sceneRenderer.fogParams, sceneRenderer.gfxTextureCache));
         }
 
         addModel2Props(device, cache, sceneRenderer, sharedOutput, romData, setup.props, scripts, terrainTriangles, setupWorldScale, map.fogEnabled, objectLightingEnvironment);
