@@ -3,13 +3,14 @@ import { mat4, quat, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec3, vec4 } from
 import { AABB, Frustum } from './Geometry.js';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers.js';
 import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers.js';
-import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform.js';
+import { GfxClipSpaceNearZ, GfxPlatform, GfxViewportOrigin } from './gfx/platform/GfxPlatform.js';
 import InputManager from './InputManager.js';
-import { calcUnitSphericalCoordinates, clampRange, computeModelMatrixR, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, lerpAngle, Mat4Identity, MathConstants, projectionMatrixForCuboid, projectionMatrixForFrustum, Vec3UnitY, Vec3Zero } from './MathHelpers.js';
+import { calcUnitSphericalCoordinates, clampRange, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, lerpAngle, Mat4Identity, MathConstants, projectionMatrixForCuboid, projectionMatrixForFrustum, Vec3UnitY, Vec3Zero } from './MathHelpers.js';
 import { GlobalSaveManager } from './SaveManager.js';
 import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio.js';
 import { assert } from './util.js';
 import { WebXRContext, WebXRInputManager } from './WebXR.js';
+import { drawScreenSpaceBox, drawScreenSpaceText, getDebugOverlayCanvas2D } from './DebugJunk.js';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -540,11 +541,9 @@ export class XRCameraController {
             vec3.scaleAndAdd(cameraWorldMatrixTranslation, cameraAdditionalOffset, cameraWorldMatrixTranslation, this.worldScale);
 
             mat4.fromRotationTranslationScale(cameraWorldMatrix, cameraOrientation, cameraWorldMatrixTranslation, cameraScale);
-            
-            camera.isOrthographic = false;
-
             mat4.copy(camera.worldMatrix, cameraWorldMatrix);
-            camera.worldMatrixUpdated();
+
+            camera.isOrthographic = false;
 
             // Unpack the projection matrix to get required parameters for setting clip / frustrum etc...
             const cameraProjectionMatrix = xrView.projectionMatrix;
@@ -552,14 +551,16 @@ export class XRCameraController {
             const fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
 
+            // WebXR doesn't automatically support EXT_clip_control when used with OpenGL. Convert for us.
+            // https://github.com/immersive-web/webxr/issues/1442
+            const vendorInfo = webXRContext.device.queryVendorInfo();
+            if (vendorInfo.platform === GfxPlatform.WebGL2 && vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero)
+                projectionMatrixConvertClipSpaceNearZ(camera.projectionMatrix, vendorInfo.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+
             // Extract camera properties
             // TODO(jstpierre): Just trust the original projection matrix
             camera.fovY = fov;
             camera.aspect = aspect;
-
-            mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
-            projectionMatrixReverseDepth(camera.projectionMatrix);
-
             camera.worldMatrixUpdated();
 
             updated = true;

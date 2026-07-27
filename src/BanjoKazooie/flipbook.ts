@@ -2,7 +2,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { TileState, Texture} from "../Common/N64/RDP.js";
 import { RSPSharedOutput, Vertex } from "./f3dex.js";
 import { align, assert } from "../util.js";
-import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_I8 } from "../Common/N64/Image.js";
+import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_I8, decodeTex_CI8 } from "../Common/N64/Image.js";
 
 enum Flags {
     CI4 = 0x001,
@@ -145,6 +145,7 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
                 bytesPerPixel = 1;
                 const palette = new Uint8Array(256 * 4);
                 parseTLUT(palette, view, paletteStart, ImageSize.G_IM_SIZ_8b, TextureLUT.G_TT_RGBA16);
+                decodeTex_CI8(panelPixels, view, imageStart, panelWidth, panelHeight, palette);
             } else if (flags & Flags.I8) {
                 bytesPerPixel = 1;
                 decodeTex_I8(panelPixels, view, imageStart, panelWidth, panelHeight);

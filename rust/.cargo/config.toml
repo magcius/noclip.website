@@ -3,3 +3,6 @@ git-fetch-with-cli = true
 
 [alias]
 wasm-bindgen = ["run", "--package", "cargo-bin", "--"]
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

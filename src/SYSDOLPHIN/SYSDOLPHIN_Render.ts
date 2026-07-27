@@ -1204,11 +1204,13 @@ class HSD_DObj_Instance {
                 throw new Error("whoops");
             }
 
+            const cullMode = pobj.flags & (HSD_PObjFlags.CULLBACK | HSD_PObjFlags.CULLFRONT);
+            if (cullMode === (HSD_PObjFlags.CULLFRONT | HSD_PObjFlags.CULLBACK)) continue; //front and back culling
+
             const renderInst = renderInstManager.newRenderInst();
             const megaStateFlags = renderInst.getMegaStateFlags();
 
             // Override cull-mode.
-            const cullMode = pobj.flags & (HSD_PObjFlags.CULLBACK | HSD_PObjFlags.CULLFRONT);
             if (cullMode === 0)
                 megaStateFlags.cullMode = GfxCullMode.None;
             else if (cullMode === HSD_PObjFlags.CULLFRONT)
