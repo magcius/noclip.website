@@ -575,7 +575,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
 
             case F3DEX2_GBI.G_TEXTURE: {
                 const level = (w0 >>> 11) & 0x07;
-                let tile = (w0 >>> 8) & 0x07;
+                const tile = (w0 >>> 8) & 0x07;
                 const on = !!((w0 >>> 0) & 0x7F);
                 const s = (w1 >>> 16) & 0xFFFF;
                 const t = (w1 >>> 0) & 0xFFFF;

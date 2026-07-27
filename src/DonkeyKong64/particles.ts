@@ -108,7 +108,6 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             const height = definition.height * scale * 3;
             const geo: Geometry = {
                 sharedOutput,
-                rspState: state,
                 rspOutput: output,
                 spriteBillboards: batch.map((event, index) => new SpriteBillboard(
                     firstVertex + index * 4,

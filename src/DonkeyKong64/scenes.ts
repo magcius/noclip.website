@@ -267,6 +267,8 @@ class TextureData {
         applyTextureEntries(this.AnimTexData, obj.AnimTexData, false);
     }
 
+    // Textures are owned by the scene's DK64TextureCache, so there is nothing to release here.
+    // Required by DataShare's Destroyable.
     public destroy(device: GfxDevice): void {
     }
 }
@@ -367,11 +369,7 @@ export class ROMData {
     public loadScripts(): ArrayBufferSlice {
         return decompress(this.ScriptData);
     }
-
-    public destroy(device: GfxDevice): void {
-    }
 }
-
 
 function addSceneActors(
     device: GfxDevice,
@@ -406,7 +404,6 @@ function addSceneActors(
             );
             const geo: Geometry = {
                 sharedOutput,
-                rspState: actorGeometry.rspState,
                 rspOutput: actorGeometry.rspOutput,
                 actorAnimation: actorGeometry.animation,
             };
@@ -524,7 +521,6 @@ class SceneDesc implements Viewer.SceneDesc {
             const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] ?? null : null;
             const geo: Geometry = {
                 sharedOutput,
-                rspState: state,
                 rspOutput: output,
                 dynamicLighting: buildMapChunkLighting(
                     sharedOutput, output.drawCalls, firstVertex,
@@ -579,7 +575,6 @@ class SceneDesc implements Viewer.SceneDesc {
             const output = state.finish()!;
             const geo: Geometry = {
                 sharedOutput,
-                rspState: state,
                 rspOutput: output,
                 generatedSurfaceAnimation: {
                     surface,
@@ -604,7 +599,6 @@ class SceneDesc implements Viewer.SceneDesc {
 const id = `dk64`;
 const name = "Donkey Kong 64";
 const sceneDescs = [
-
     "DK Isles",
     new SceneDesc(`22`, "DK Isles Overworld"),
     new SceneDesc(`B0`, "Training Grounds"),

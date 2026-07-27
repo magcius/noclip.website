@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Viewer from '../viewer.js';
 import { Vertex } from '../BanjoKazooie/f3dex.js';
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
-import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
+import { computeViewMatrix } from '../Camera.js';
 import { TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_Layout, Texture, translateCM } from '../Common/N64/RDP.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
@@ -108,7 +108,6 @@ class DrawCallInstance {
     private viewMatrix = mat4.create();
     private boneModelViewMatrix = mat4.create();
     private textureMatrix = mat4.create();
-    public visible = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, gfxTextureCache: GfxTextureCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall, private firstIndex: number, private fogParams: FogParams, private boneMatrices: mat4[] | undefined) {
         const linearFiltering = ((drawCall.DP_OtherModeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03) === TextFilt.G_TF_BILERP;
@@ -233,10 +232,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
-        if (!this.visible)
-            return;
-
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
@@ -254,14 +250,14 @@ class DrawCallInstance {
         if (sprites !== null) {
             for (let i = 0; i < sprites.length; i++) {
                 if (sprites[i].fade > 0)
-                    this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier * sprites[i].fade, primColorMultiplier, 6, this.firstIndex + i * 6);
+                    this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier * sprites[i].fade, primColorMultiplier, 6, this.firstIndex + i * 6);
             }
         } else {
-            this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, this.drawCall.indexCount, this.firstIndex);
+            this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier, primColorMultiplier, this.drawCall.indexCount, this.firstIndex);
         }
     }
 
-    private prepareSingleRenderInst(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier: number, primColorMultiplier: vec3 | null, indexCount: number, firstIndex: number): void {
+    private prepareSingleRenderInst(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier: number, primColorMultiplier: vec3 | null, indexCount: number, firstIndex: number): void {
         const renderInst = renderInstManager.newRenderInst();
         if (this.isTranslucent)
             renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
@@ -275,10 +271,7 @@ class DrawCallInstance {
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 * boneMatrixCount + 8*2 + (usesFog ? 8 : 0));
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
-        if (isSkybox)
-            computeViewMatrixSkybox(this.viewMatrix, viewerInput.camera);
-        else
-            computeViewMatrix(this.viewMatrix, viewerInput.camera);
+        computeViewMatrix(this.viewMatrix, viewerInput.camera);
         mat4.mul(this.viewMatrix, this.viewMatrix, modelMatrix);
 
         if (this.boneMatrices !== undefined) {
@@ -490,7 +483,6 @@ export class SpriteBillboard {
 
 export interface Geometry {
     sharedOutput: RSPSharedOutput;
-    rspState: RSPState;
     rspOutput: RSPOutput | null;
     generatedSurfaceAnimation?: {
         surface: GeneratedSurface;
@@ -651,9 +643,9 @@ export enum DK64Layer {
 class GeoNodeRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, modelMatrix, isSkybox, primAlphaMultiplier, primColorMultiplier, sprites);
+            this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier, primColorMultiplier, sprites);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -691,7 +683,6 @@ export class GeometryRenderer {
     private visible = true;
     private cullBoundingBox: AABB | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
-    public isSkybox = false;
     public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
     public modelMatrix = mat4.create();
     public distanceFade: { origin: vec3; startDistance: number; endDistance: number } | null = null;
@@ -708,7 +699,6 @@ export class GeometryRenderer {
     private lookAtPosition = vec3.create();
     private lookAtMatrix = mat4.create();
 
-    public objectFlags = 0;
     private rootNodeRenderer: GeoNodeRenderer;
 
     constructor(
@@ -908,7 +898,7 @@ export class GeometryRenderer {
         const objectLightColor = this.objectLighting !== null
             ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, primAlphaMultiplier, objectLightColor, this.geometryData.geo.spriteBillboards ?? null);
+        this.rootNodeRenderer.prepareToRender(renderInstManager, viewerInput, this.modelMatrix, primAlphaMultiplier, objectLightColor, this.geometryData.geo.spriteBillboards ?? null);
 
         renderInstManager.popTemplate();
     }

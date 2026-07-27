@@ -806,7 +806,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
         }
         const output = state.finish()!;
 
-        const geo: Geometry = { sharedOutput, rspState: state, rspOutput: output };
+        const geo: Geometry = { sharedOutput, rspOutput: output };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
         const renderer = sceneRenderer.addPropRenderer(device, cache, geoData);
         renderer.modelMatrix[12] = worldX;
@@ -928,7 +928,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const output = state.finish()!;
 
         // Share draw resources between instances of props.
-        const geo: Geometry = { sharedOutput, rspState: state, rspOutput: output };
+        const geo: Geometry = { sharedOutput, rspOutput: output };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
         let sharedRenderer: GeometryRenderer | null = null;
         for (const prop of instances) {
@@ -1014,7 +1014,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             : undefined;
         if (usesRuntimeMatrices && propAnimation === undefined)
             applyPropBindPose(view, state, sharedOutput, firstVertex, vertexCount);
-        const geo: Geometry = { sharedOutput, rspState: state, rspOutput: output, propAnimation };
+        const geo: Geometry = { sharedOutput, rspOutput: output, propAnimation };
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
         for (const prop of instances) {
             const renderer = sceneRenderer.addPropRenderer(device, cache, geoData);

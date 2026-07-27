@@ -87,7 +87,6 @@ export interface ActorAnimationState {
 }
 
 export interface ActorGeometry {
-    rspState: RSPState;
     rspOutput: RSPOutput;
     animation: ActorAnimationState;
 }
@@ -293,7 +292,6 @@ export function buildActorGeometry(
     const output = state.finish()!;
 
     return {
-        rspState: state,
         rspOutput: output,
         animation: {
             pose,
