@@ -22,7 +22,7 @@ const G_MTX_PUSH = 0x04;
 // RDP.TileState.cacheKey is derived from a segmented address, which is 32-bit. Animated
 // texture frames have no single source address, so they are keyed above that range to
 // guarantee they cannot collide with a real one.
-const animatedTextureCacheKeyBase = 0x100000000;
+export const animatedTextureCacheKeyBase = 0x100000000;
 
 export interface DrawTextureAnimation {
     textureIndices: number[];

@@ -92,7 +92,7 @@ export class DK64Renderer implements Viewer.SceneGfx {
     public geoRenderers: GeometryRenderer[] = [];
     public fogParams: FogParams;
 
-    public textureHolder = new FakeTextureHolder([]);
+    public textureHolder = new FakeTextureHolder(this.gfxTextureCache.viewerTextures);
 
     constructor(device: GfxDevice, sceneID: number, clipNear: number, clipFar: number, backdrop: BackdropData | null, dynamicLights: readonly DynamicLight[]) {
         this.renderHelper = new GfxRenderHelper(device);

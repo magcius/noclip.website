@@ -4,7 +4,7 @@ import * as Viewer from '../viewer.js';
 import { Vertex } from '../BanjoKazooie/f3dex.js';
 import { F3DEX_Program } from '../BanjoKazooie/render.js';
 import { computeViewMatrix } from '../Camera.js';
-import { TextFilt } from '../Common/N64/Image.js';
+import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_Layout, Texture, translateCM } from '../Common/N64/RDP.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
@@ -18,9 +18,9 @@ import { getMatrixTranslation, MathConstants, scaleMatrix, setMatrixTranslation,
 import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
 import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
-import { assert, nArray } from '../util.js';
+import { assert, hexzero, nArray } from '../util.js';
 import type { ActorAnimationState } from './actors.js';
-import { DrawCall, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState } from './f3dex2.js';
+import { animatedTextureCacheKeyBase, DrawCall, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState } from './f3dex2.js';
 import { ActiveLightCache, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLighting, ObjectLighting } from './light.js';
 import type { GeneratedSurface } from './parse.js';
@@ -28,21 +28,45 @@ import type { PropAnimationState } from './props.js';
 
 const scratchVec3a = vec3.create();
 
-function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
+// DK64 has no texture names: geometry textures are slots in pointer table 25, whose
+// index is the segment-zero address the display list loads from, and animated frames
+// are keyed above the 32-bit range. Label them by table and index instead of leaving
+// RDP's bare cache-key hex.
+function textureViewerName(texture: Texture): string {
+    const key = texture.tile.cacheKey !== 0 ? texture.tile.cacheKey : texture.dramAddr;
+    const format = `${ImageFormat[texture.tile.fmt]} / ${ImageSize[texture.tile.siz]}`;
+    if (key >= animatedTextureCacheKeyBase)
+        return `anim ${hexzero(key - animatedTextureCacheKeyBase, 4)} / ${format}`;
+    if ((key >>> 24) === 0)
+        return `tex ${hexzero(key, 4)} / ${format}`;
+    return `${hexzero(key, 8)} / ${format}`;
+}
+
+function translateTexture(device: GfxDevice, texture: Texture, name: string): GfxTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-    device.setResourceName(gfxTexture, texture.name);
+    device.setResourceName(gfxTexture, name);
     device.uploadTextureData(gfxTexture, 0, [texture.pixels]);
     return gfxTexture;
 }
 
 export class DK64TextureCache {
     private textures = new Map<Texture, GfxTexture>();
+    private nameUseCount = new Map<string, number>();
+    // Every decoded texture passes through here exactly once, so this doubles as
+    // the backing list for the scene's texture viewer tab.
+    public viewerTextures: Viewer.Texture[] = [];
 
     public getTexture(device: GfxDevice, texture: Texture): GfxTexture {
         let gfxTexture = this.textures.get(texture);
         if (gfxTexture === undefined) {
-            gfxTexture = translateTexture(device, texture);
+            // The viewer looks textures up by name, so one tile loaded under several
+            // tile settings needs distinct names to stay individually selectable.
+            const name = textureViewerName(texture);
+            const seen = this.nameUseCount.get(name) ?? 0;
+            this.nameUseCount.set(name, seen + 1);
+            gfxTexture = translateTexture(device, texture, seen === 0 ? name : `${name} (${seen})`);
             this.textures.set(texture, gfxTexture);
+            this.viewerTextures.push({ gfxTexture });
         }
         return gfxTexture;
     }
