@@ -347,8 +347,8 @@ export class AABB {
 
         if (pX < this.min[0])
             sqDist += (this.min[0] - pX) ** 2.0;
-        else if (pX > this.max[1])
-            sqDist += (pX - this.max[1]) ** 2.0;
+        else if (pX > this.max[0])
+            sqDist += (pX - this.max[0]) ** 2.0;
 
         if (pY < this.min[1])
             sqDist += (this.min[1] - pY) ** 2.0;
