@@ -55,10 +55,10 @@ interface BufferChunk {
 
 const GS_PRMODE = 0x1b;
 
-const PRMODE_ABE = 1 << 6;
+const PRMODE_ALPHA_BLEND_ENABLE = 1 << 6;
 
 interface GSState {
-  abe: boolean;
+  alphaBlendEnabled: boolean;
   alphaBlendMode: BlendMode;
 }
 
@@ -73,7 +73,7 @@ function applyGSRegisters(unpack: UnpackData, state: GSState): void {
 
     switch (entry.v3 & 0xff) {
       case GS_PRMODE:
-        state.abe = (entry.v1 & PRMODE_ABE) !== 0;
+        state.alphaBlendEnabled = (entry.v1 & PRMODE_ALPHA_BLEND_ENABLE) !== 0;
         break;
       case GSRegister.ALPHA_1:
       case GSRegister.ALPHA_2:
@@ -95,7 +95,10 @@ export interface TextureMeta {
 
 function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
   const result: BufferChunk[] = [];
-  const gs: GSState = { abe: false, alphaBlendMode: BlendMode.SourceOver };
+  const gs: GSState = {
+    alphaBlendEnabled: false,
+    alphaBlendMode: BlendMode.SourceOver,
+  };
   let i = 0;
 
   while (i < filtered.length) {
@@ -132,7 +135,7 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         const sChunk: StripChunk = {
           gifTagV1: gifEntries.length > 0 ? gifEntries[0].v1 : 0,
           gifTagV2: gifEntries.length > 0 ? gifEntries[0].v2 : 0,
-          blendMode: gs.abe ? gs.alphaBlendMode : BlendMode.None,
+          blendMode: gs.alphaBlendEnabled ? gs.alphaBlendMode : BlendMode.None,
           dataTriples: [],
         };
         i++;
