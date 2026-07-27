@@ -70,8 +70,8 @@ layout(std140) uniform ub_BaseData {
     vec4 u_Misc[1];
 };
 
-layout(location = 0) uniform sampler2D u_TextureFramebufferDepth;
-layout(location = 1) uniform sampler2DArray u_TextureFont;
+layout(binding = 0) uniform sampler2D u_TextureFramebufferDepth;
+layout(binding = 1) uniform sampler2DArray u_TextureFont;
 
 #define u_ScreenSize (u_Misc[0].xy)
 
@@ -142,8 +142,8 @@ in vec4 v_Color;
 in vec3 v_TexCoord;
 flat in uint v_Flags;
 
-layout(location = 0) uniform sampler2D u_TextureFramebufferDepth;
-layout(location = 1) uniform sampler2DArray u_TextureFont;
+layout(binding = 0) uniform sampler2D u_TextureFramebufferDepth;
+layout(binding = 1) uniform sampler2DArray u_TextureFont;
 
 bool IsSomethingInFront(float t_DepthSample) {
     if (t_DepthSample ${IsDepthReversed ? `>` : `<`} gl_FragCoord.z)

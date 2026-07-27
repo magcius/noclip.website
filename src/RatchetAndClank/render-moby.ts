@@ -42,11 +42,11 @@ precision highp sampler2DArray;
 ${GfxShaderLibrary.MatrixLibrary}
 ${RatchetShaderLib.SceneParams}
 
-layout(location = 0) uniform sampler2DArray u_Texture_16;
-layout(location = 1) uniform sampler2DArray u_Texture_32;
-layout(location = 2) uniform sampler2DArray u_Texture_64;
-layout(location = 3) uniform sampler2DArray u_Texture_128;
-layout(location = 4) uniform sampler2DArray u_Texture_256;
+layout(binding = 0) uniform sampler2DArray u_Texture_16;
+layout(binding = 1) uniform sampler2DArray u_Texture_32;
+layout(binding = 2) uniform sampler2DArray u_Texture_64;
+layout(binding = 3) uniform sampler2DArray u_Texture_128;
+layout(binding = 4) uniform sampler2DArray u_Texture_256;
 
 `;
 

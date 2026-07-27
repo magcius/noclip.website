@@ -352,9 +352,9 @@ layout(std140) uniform ub_Params {
 #define u_ViewportSize (u_Params[0].xy)
 #define u_ShadowLayer (u_Params[0].z)
 
-layout(location = 0) uniform sampler2D u_TextureShadow;
-layout(location = 1) uniform sampler2D u_TextureFramebufferDepth; // Depth buffer
-layout(location = 2) uniform sampler2DArray u_TextureShadowMap;
+layout(binding = 0) uniform sampler2D u_TextureShadow;
+layout(binding = 1) uniform sampler2D u_TextureFramebufferDepth; // Depth buffer
+layout(binding = 2) uniform sampler2DArray u_TextureShadowMap;
 
 #if defined VERT
 layout(location = 0) in vec3 a_Position; // Cube coordinates (-1 to 1).
