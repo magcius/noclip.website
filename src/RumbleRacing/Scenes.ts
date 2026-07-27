@@ -441,6 +441,13 @@ class RumbleRacingScene implements SceneGfx {
     trackGeometryPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     trackGeometryPanel.setTitle(UI.LAYER_ICON, "Track Geometry");
 
+    const showActorsCheckbox = new UI.Checkbox("Actors", this.showActors);
+    showActorsCheckbox.onchanged = () => {
+      this.showActors = showActorsCheckbox.checked;
+    };
+
+    trackGeometryPanel.contents.appendChild(showActorsCheckbox.elem);
+
     for (const group of this.trackGroups) {
       if (group.label === null) continue;
       const checkbox = new UI.Checkbox(group.label, group.visible);
@@ -453,13 +460,6 @@ class RumbleRacingScene implements SceneGfx {
     const renderSettingsPanel = new UI.Panel();
     renderSettingsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     renderSettingsPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Settings");
-
-    const showActorsCheckbox = new UI.Checkbox("Actors", this.showActors);
-    showActorsCheckbox.onchanged = () => {
-      this.showActors = showActorsCheckbox.checked;
-    };
-
-    renderSettingsPanel.contents.appendChild(showActorsCheckbox.elem);
 
     const showVertexColorsCheckbox = new UI.Checkbox(
       "Vertex Colors",
