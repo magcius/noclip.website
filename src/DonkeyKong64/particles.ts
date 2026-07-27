@@ -1,37 +1,40 @@
-
 import { vec3 } from 'gl-matrix';
 
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import type { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import type { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { AnimatedTexture, RSPSharedOutput, RSPState } from './f3dex2.js';
+import { RSPState } from './f3dex2.js';
+import type { AnimatedTexture, RSPSharedOutput } from './f3dex2.js';
 import { initDL, initSpriteMaterial } from './material.js';
-import { DK64Map } from './parse.js';
-import type { InstanceScript, ScriptBlock, SetupProp } from './parse.js';
-import { GeometryData, GeometryRenderer, DK64Layer, SpriteBillboard } from './render.js';
+import type { DK64Map, InstanceScript, ScriptBlock, SetupProp } from './parse.js';
+import { DK64Layer, SpriteBillboard } from './render.js';
 import type { MeshInput } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 
-function createSpriteVertexBuffer(sprite: SpriteData, quadCount = 1): ArrayBufferSlice {
-    const buffer = new ArrayBuffer(quadCount * 4 * 0x10);
+const verticesPerSprite = 4;
+const spriteVertexStride = 16;
+const maxSpritesPerBatch = 8;
+const worldScale = 3;
+const spriteVertexSegment = 0x08;
+const spriteTextureSegment = 0x0E;
+
+function createSpriteVertexBuffer(sprite: SpriteData, spriteCount = 1): ArrayBufferSlice {
+    const textureCoordinateOffset = 8;
+    const colorOffset = 12;
+    const buffer = new ArrayBuffer(spriteCount * verticesPerSprite * spriteVertexStride);
     const view = new DataView(buffer);
-    const textureCoordinates = [
-        0, 0,
-        sprite.width << 5, 0,
-        sprite.width << 5, sprite.height << 5,
-        0, sprite.height << 5,
-    ];
-    for (let quad = 0; quad < quadCount; quad++) {
-        for (let i = 0; i < 4; i++) {
-            const offs = (quad * 4 + i) * 0x10;
-            view.setInt16(offs + 0x08, textureCoordinates[i * 2]);
-            view.setInt16(offs + 0x0A, textureCoordinates[i * 2 + 1]);
-            view.setUint8(offs + 0x0C, 0xFF);
-            view.setUint8(offs + 0x0D, 0xFF);
-            view.setUint8(offs + 0x0E, 0xFF);
-            view.setUint8(offs + 0x0F, 0xFF);
+    const maxS = sprite.width << 5;
+    const maxT = sprite.height << 5;
+    const textureCoordinates = [[0, 0], [maxS, 0], [maxS, maxT], [0, maxT]];
+    for (let spriteIndex = 0; spriteIndex < spriteCount; spriteIndex++) {
+        for (let vertex = 0; vertex < verticesPerSprite; vertex++) {
+            const offs = (spriteIndex * verticesPerSprite + vertex) * spriteVertexStride;
+            view.setInt16(offs + textureCoordinateOffset, textureCoordinates[vertex][0]);
+            view.setInt16(offs + textureCoordinateOffset + 2, textureCoordinates[vertex][1]);
+            for (let channel = 0; channel < 4; channel++)
+                view.setUint8(offs + colorOffset + channel, 255);
         }
     }
     return new ArrayBufferSlice(buffer);
@@ -68,11 +71,21 @@ interface SpriteParticleEvent {
     velocityY?: number;
 }
 
-function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, definition: SpriteData, events: SpriteParticleEvent[], scale: number, loopTicks: number, frameDuration = 1, lifetime: number | undefined = definition.images.length * frameDuration, color: readonly number[] = definition.params.slice(0, 4), maxDistance?: number, fadeStartDistance?: number): void {
+function addSpriteParticleEvents(
+    device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer,
+    sharedOutput: RSPSharedOutput, romData: ROMData, definition: SpriteData,
+    events: readonly SpriteParticleEvent[], scale: number, loopTicks: number,
+    frameDuration = 1, lifetime: number | undefined = definition.images.length * frameDuration,
+    color: readonly number[] = definition.params.slice(0, 4),
+    maxDistance?: number, fadeStartDistance?: number,
+): void {
     const sourceTable = definition.table !== 0 ? romData.TexData : romData.AnimTexData;
-    const sourceFrames = definition.images.map((image) => sourceTable[image]);
-    const frames = sourceFrames.flatMap((frame) => new Array(frameDuration).fill(frame));
+    const frames: ArrayBufferSlice[] = definition.images.flatMap((image) =>
+        new Array(frameDuration).fill(sourceTable[image]));
     const animationTickCount = frames.length;
+    const halfWidth = definition.width * scale * worldScale / 2;
+    const halfHeight = definition.height * scale * worldScale / 2;
+    const hasLifetime = lifetime !== undefined;
 
     for (let phase = 0; phase < animationTickCount; phase++) {
         const phaseEvents = events.filter((event) => {
@@ -80,13 +93,12 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             const animationOffset = ((requestedTick - event.spawnTick) % animationTickCount + animationTickCount) % animationTickCount;
             return animationOffset === phase;
         });
-        for (let eventBase = 0; eventBase < phaseEvents.length; eventBase += 8) {
-            const batch = phaseEvents.slice(eventBase, eventBase + 8);
-            const segment = 0x0E;
+        for (let eventBase = 0; eventBase < phaseEvents.length; eventBase += maxSpritesPerBatch) {
+            const batch = phaseEvents.slice(eventBase, eventBase + maxSpritesPerBatch);
             const segmentBuffers: ArrayBufferSlice[] = [];
-            segmentBuffers[0x08] = createSpriteVertexBuffer(definition, batch.length);
+            segmentBuffers[spriteVertexSegment] = createSpriteVertexBuffer(definition, batch.length);
             const animatedTextures: AnimatedTexture[] = [{
-                segment,
+                segment: spriteTextureSegment,
                 // Ensure sprites on the same segment+phase don't overlap in the texture cache.
                 group: definition.id,
                 frameDuration: 1,
@@ -95,29 +107,28 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
             }];
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             initDL(state, false);
-            initSpriteMaterial(state, definition, segment, color);
+            initSpriteMaterial(state, definition, spriteTextureSegment, color);
             const firstVertex = sharedOutput.vertices.length;
             for (let quad = 0; quad < batch.length; quad++) {
-                state.gSPVertex(0x08000000 + quad * 4 * 0x10, 4, 0);
+                const vertexAddress = (spriteVertexSegment << 24) + quad * verticesPerSprite * spriteVertexStride;
+                state.gSPVertex(vertexAddress, verticesPerSprite, 0);
                 state.gSPTri(0, 1, 2);
                 state.gSPTri(0, 2, 3);
             }
             const output = state.finish()!;
 
-            const width = definition.width * scale * 3;
-            const height = definition.height * scale * 3;
             const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: output,
                 spriteBillboards: batch.map((event, index) => new SpriteBillboard(
-                    firstVertex + index * 4,
+                    firstVertex + index * verticesPerSprite,
                     event.origin,
-                    width / 2,
-                    height / 2,
+                    halfWidth,
+                    halfHeight,
                     {
-                        spawnTick: lifetime === undefined ? undefined : event.spawnTick,
+                        spawnTick: hasLifetime ? event.spawnTick : undefined,
                         lifetime,
-                        loopTicks: lifetime === undefined ? undefined : loopTicks,
+                        loopTicks: hasLifetime ? loopTicks : undefined,
                         velocityY: event.velocityY,
                         maxDistance,
                         fadeStartDistance,
@@ -133,9 +144,11 @@ function addSpriteParticleEvents(device: GfxDevice, cache: GfxRenderCache, scene
 }
 
 function isAlwaysRunningInitialBlock(block: ScriptBlock): boolean {
-    return block.conditions.length === 1
-        && block.conditions[0].opcode === 1
-        && block.conditions[0].args[0] === 0
+    if (block.conditions.length !== 1)
+        return false;
+    const condition = block.conditions[0];
+    return condition.opcode === 1
+        && condition.args[0] === 0
         && !block.executions.some((command) => command.opcode === 1);
 }
 
@@ -146,14 +159,15 @@ function nextEffectRandom(state: { value: number }): number {
 }
 
 function interpolateEnvironmentParticle(entry: EnvironmentParticleData, offset: number): vec3 {
-    return vec3.fromValues(
-        (entry.start[0] + (entry.end[0] - entry.start[0]) * offset) * 3,
-        (entry.start[1] + (entry.end[1] - entry.start[1]) * offset) * 3,
-        (entry.start[2] + (entry.end[2] - entry.start[2]) * offset) * 3,
-    );
+    const position = vec3.lerp(vec3.create(), entry.start, entry.end, offset);
+    return vec3.scale(position, position, worldScale);
 }
 
-export function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer, sharedOutput: RSPSharedOutput, romData: ROMData, map: DK64Map, mapID: number, props: readonly SetupProp[], scripts: InstanceScript[]): void {
+export function addEnvironmentalEffects(
+    device: GfxDevice, cache: GfxRenderCache, sceneRenderer: DK64Renderer,
+    sharedOutput: RSPSharedOutput, romData: ROMData, map: DK64Map, mapID: number,
+    props: readonly SetupProp[], scripts: readonly InstanceScript[],
+): void {
     const propsByID = new Map(props.map((prop) => [prop.id, prop]));
     const spriteByAddress = new Map(romData.SpriteData.map((sprite) => [sprite.address, sprite]));
     const loopTicks = 900;
@@ -181,16 +195,18 @@ export function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache
                 }
                 if (tick % 10 === 0) {
                     risingEvents.push({
-                        origin: interpolateEnvironmentParticle(entry, ((nextEffectRandom(random) % 10000) % 1000) / 1000),
+                        origin: interpolateEnvironmentParticle(entry, (nextEffectRandom(random) % 1000) / 1000),
                         spawnTick: tick,
-                        velocityY: 1.7 * 3,
+                        velocityY: 1.7 * worldScale,
                     });
                 }
             }
-            const drawDistance = entry.distance * 3;
+            const sprayColor = [255, 255, 255, 150];
+            const drawDistance = entry.distance * worldScale;
+            const fadeStartDistance = drawDistance * 0.75;
             // from func_global_asm_80717B64: particle spawn alpha control
-            addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, baseSpray, baseEvents, entry.baseScale, loopTicks, 3, 18, [0xFF, 0xFF, 0xFF, 0x96], drawDistance, drawDistance * 3 / 4);
-            addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, risingSpray, risingEvents, entry.risingScale, loopTicks, 3, 30, [0xFF, 0xFF, 0xFF, 0x96], entry.distance * 3);
+            addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, baseSpray, baseEvents, entry.baseScale, loopTicks, 3, 18, sprayColor, drawDistance, fadeStartDistance);
+            addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, risingSpray, risingEvents, entry.risingScale, loopTicks, 3, 30, sprayColor, drawDistance);
         }
     }
 
@@ -207,27 +223,28 @@ export function addEnvironmentalEffects(device: GfxDevice, cache: GfxRenderCache
                 const functionAddress = romData.CustomScriptFunctionData[command.args[0]];
 
                 // from func_global_asm_80644EC8: 2 sprites (D_global_asm_80720A7C) per tick
-                if (functionAddress === 0x80644EC8) {
-                    const definition = spriteByAddress.get(0x80720A7C)!;
-                    const frequency = command.args[1];
-                    const requestedPointCount = command.args[2];
-                    const random = { value: (mapID << 16) ^ script.id ^ 0x44EC8 };
-                    const events: SpriteParticleEvent[] = [];
-                    for (let tick = 0; tick < loopTicks; tick++) {
-                        for (let set = 0; set < 2; set++) {
-                            if ((nextEffectRandom(random) % frequency) !== 0)
-                                continue;
-                            const points = map.effectPointSets[set]!;
-                            const pointCount = Math.min(requestedPointCount, points.length);
-                            const point = points[nextEffectRandom(random) % pointCount];
-                            events.push({
-                                origin: vec3.fromValues(point[0] * 3, point[1] * 3, point[2] * 3),
-                                spawnTick: tick,
-                            });
-                        }
+                if (functionAddress !== 0x80644EC8)
+                    continue;
+
+                const definition = spriteByAddress.get(0x80720A7C)!;
+                const frequency = command.args[1];
+                const requestedPointCount = command.args[2];
+                const random = { value: (mapID << 16) ^ script.id ^ 0x44EC8 };
+                const events: SpriteParticleEvent[] = [];
+                for (let tick = 0; tick < loopTicks; tick++) {
+                    for (let i = 0; i < 2; i++) {
+                        if ((nextEffectRandom(random) % frequency) !== 0)
+                            continue;
+                        const points = map.effectPointSets[i]!;
+                        const pointCount = Math.min(requestedPointCount, points.length);
+                        const point = points[nextEffectRandom(random) % pointCount];
+                        events.push({
+                            origin: vec3.scale(vec3.create(), point, worldScale),
+                            spawnTick: tick,
+                        });
                     }
-                    addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, definition, events, 1.2, loopTicks);
                 }
+                addSpriteParticleEvents(device, cache, sceneRenderer, sharedOutput, romData, definition, events, 1.2, loopTicks);
             }
         }
     }
