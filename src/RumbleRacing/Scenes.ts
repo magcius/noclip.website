@@ -58,17 +58,12 @@ const megaStateScratch: Partial<GfxMegaStateDescriptor> = {};
 
 const SOLID_PASS_ALPHA_REF = 0.99;
 
-const TOGGLEABLE_TRACK_OBFS: { name: string; label: string }[] = [
-  { name: "TRACK", label: "Track" },
-  { name: "TRACKPAN", label: "Track Panorama" },
-];
-
-function resourceBaseName(name: string): string {
-  const upper = name.trim().toUpperCase();
-  const base = upper.slice(upper.lastIndexOf(":") + 1);
-  const dot = base.lastIndexOf(".");
-  return dot > 0 ? base.slice(0, dot) : base;
-}
+// function resourceBaseName(name: string): string {
+//   const upper = name.trim().toUpperCase();
+//   const base = upper.slice(upper.lastIndexOf(":") + 1);
+//   const dot = base.lastIndexOf(".");
+//   return dot > 0 ? base.slice(0, dot) : base;
+// }
 
 interface TrackGeometryGroup {
   geometry: MergedGeometry;
@@ -134,32 +129,28 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private buildTrackGroups(cache: GfxRenderCache): void {
-    const remaining = this.trackFile.obfs.slice();
+    const track: ObfData[] = [];
+    const panorama: ObfData[] = [];
 
-    for (const toggle of TOGGLEABLE_TRACK_OBFS) {
-      const obfs: ObfData[] = [];
-      for (let i = remaining.length - 1; i >= 0; i--) {
-        if (resourceBaseName(remaining[i].name) !== toggle.name) continue;
-        obfs.unshift(remaining[i]);
-        remaining.splice(i, 1);
+    for (const obf of this.trackFile.obfs) {
+      if (obf.name.includes("TRACKPAN")) {
+        panorama.push(obf);
+      } else {
+        track.push(obf);
       }
-
-      if (obfs.length === 0) continue;
-
-      this.trackGroups.push({
-        geometry: new MergedGeometry(cache, obfs, this.exclude),
-        visible: true,
-        label: toggle.label,
-      });
     }
 
-    if (remaining.length > 0) {
-      this.trackGroups.push({
-        geometry: new MergedGeometry(cache, remaining, this.exclude),
-        visible: true,
-        label: null,
-      });
-    }
+    this.trackGroups.push({
+      geometry: new MergedGeometry(cache, track, this.exclude),
+      visible: true,
+      label: "Track",
+    });
+
+    this.trackGroups.push({
+      geometry: new MergedGeometry(cache, panorama, this.exclude),
+      visible: true,
+      label: "Track Panorama",
+    });
   }
 
   private resolveBatchTextures(): void {
