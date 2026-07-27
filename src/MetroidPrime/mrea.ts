@@ -20,6 +20,7 @@ import { AABB } from '../Geometry.js';
 import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color.js';
 import { MathConstants } from '../MathHelpers.js';
 import { CSKR } from './cskr.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 
 export interface MREA {
     materialSet: MaterialSet;
@@ -261,12 +262,24 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             const reflectionIndtexSlot = stream.readUint32();
         }
 
+        const isDepthSorted = !!(flags & MaterialFlags.DEPTH_SORTING);
+        const isOccluder = !!(flags & MaterialFlags.OCCLUDER);
+        const depthWrite = !!(flags & MaterialFlags.DEPTH_WRITE);
+        const useAlphaTest = !!(flags & MaterialFlags.ALPHA_TEST);
+
+        const name = `PrimeGen_${i}`;
+        const mb = new GXMaterialBuilder(name);
+        mb.setBlendMode(blendDstFactor !== GX.BlendFactor.ZERO ? GX.BlendMode.BLEND : GX.BlendMode.NONE, blendSrcFactor, blendDstFactor);
+        mb.setZMode(true, GX.CompareType.LEQUAL, depthWrite && !isDepthSorted);
+        mb.setCullMode(GX.CullMode.FRONT);
+        if (useAlphaTest)
+            mb.setAlphaCompare(GX.CompareType.GREATER, 0.25, GX.AlphaOp.OR, GX.CompareType.NEVER, 0.0);
+
         const colorChannelFlagsTableCount = stream.readUint32();
         assert(colorChannelFlagsTableCount <= 4);
 
-        const lightChannels: GX_Material.LightChannelControl[] = [];
         // Only color channel 1 is stored in the format.
-        for (let j = 0; j < 1; j++) {
+        {
             const colorChannelFlags = stream.readUint32();
             const lightingEnabled = !!(colorChannelFlags & 0x01);
             const ambColorSource: GX.ColorSrc = (colorChannelFlags >>> 1) & 0x01;
@@ -274,23 +287,15 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             const diffuseFunction: GX.DiffuseFunction = (colorChannelFlags >>> 11) & 0x03;
             const attenuationFunction: GX.AttenuationFunction = (colorChannelFlags >>> 13) & 0x03;
 
-            const colorChannel = { lightingEnabled, ambColorSource, matColorSource, litMask: 0xFF, diffuseFunction, attenuationFunction };
-            const alphaChannel = { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE };
-            lightChannels.push({ colorChannel, alphaChannel });
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, lightingEnabled, ambColorSource, matColorSource, 0xFF, diffuseFunction, attenuationFunction);
+            mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         stream.skip(0x04 * (colorChannelFlagsTableCount-1));
-
-        // Fake other channel.
-        lightChannels.push({
-            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-        });
 
         const tevStageCount = stream.readUint32();
         assert(tevStageCount <= 8);
         let tevOrderTableOffs = stream.tell() + tevStageCount * 0x14;
 
-        const tevStages: GX_Material.TevStage[] = [];
         for (let j = 0; j < tevStageCount; j++) {
             const colorInputSel = stream.readUint32();
             const alphaInputSel = stream.readUint32();
@@ -331,25 +336,13 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             stream.goTo(curOffs);
             tevOrderTableOffs += 4;
 
-            const tevStage: GX_Material.TevStage = {
-                colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
-                alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
-                texCoordId, texMap, channelId,
-                konstColorSel, konstAlphaSel,
-
-                // We don't use indtex.
-                indTexStage: GX.IndTexStageID.STAGE0,
-                indTexMatrix: GX.IndTexMtxID.OFF,
-                indTexFormat: GX.IndTexFormat._8,
-                indTexBiasSel: GX.IndTexBiasSel.NONE,
-                indTexAlphaSel: GX.IndTexAlphaSel.OFF,
-                indTexWrapS: GX.IndTexWrap.OFF,
-                indTexWrapT: GX.IndTexWrap.OFF,
-                indTexAddPrev: false,
-                indTexUseOrigLOD: false,
-            };
-
-            tevStages.push(tevStage);
+            mb.setTevColorIn(j, colorInA, colorInB, colorInC, colorInD);
+            mb.setTevColorOp(j, colorOp, colorBias, colorScale, colorClamp, colorRegId);
+            mb.setTevAlphaIn(j, alphaInA, alphaInB, alphaInC, alphaInD);
+            mb.setTevAlphaOp(j, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId);
+            mb.setTevOrder(j, texCoordId, texMap, channelId);
+            mb.setTevKColorSel(j, konstColorSel);
+            mb.setTevKAlphaSel(j, konstAlphaSel);
         }
 
         // Skip past TEV order table.
@@ -358,7 +351,6 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         const texGenCount = stream.readUint32();
         assert(texGenCount <= 8);
 
-        const texGens: GX_Material.TexGen[] = [];
         for (let j = 0; j < texGenCount; j++) {
             const flags = stream.readUint32();
             const type: GX.TexGenType = (flags >>> 0) & 0x0F;
@@ -368,22 +360,13 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             const normalize: boolean = !!((flags >>> 14) & 0x01);
             const postMatrix: GX.PostTexGenMatrix = ((flags >>> 15) & 0x3F) + 64;
 
-            texGens.push({ type, source, matrix, normalize, postMatrix });
+            mb.setTexCoordGen(j, type, source, matrix, normalize, postMatrix);
         }
 
         const uvAnimationsSize = stream.readUint32() - 0x04;
         const uvAnimationsCount = stream.readUint32();
 
         const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(stream, uvAnimationsCount);
-        const index = i;
-
-        const name = `PrimeGen_${i}`;
-        const cullMode = GX.CullMode.FRONT;
-
-        const isDepthSorted = !!(flags & MaterialFlags.DEPTH_SORTING);
-        const isOccluder = !!(flags & MaterialFlags.OCCLUDER);
-        const depthWrite = !!(flags & MaterialFlags.DEPTH_WRITE);
-        const useAlphaTest = !!(flags & MaterialFlags.ALPHA_TEST);
 
         const colorRegisters: Color[] = [];
         colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
@@ -391,38 +374,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
         colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
 
-        const alphaTest: GX_Material.AlphaTest = {
-            op: GX.AlphaOp.OR,
-            compareA: useAlphaTest ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
-            referenceA: 0.25,
-            compareB: GX.CompareType.NEVER,
-            referenceB: 0,
-        };
-
-        const ropInfo: GX_Material.RopInfo = {
-            fogType: GX.FogType.NONE,
-            fogAdjEnabled: false,
-            blendMode: blendDstFactor !== GX.BlendFactor.ZERO ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
-            blendSrcFactor,
-            blendDstFactor,
-            blendLogicOp: GX.LogicOp.CLEAR,
-            depthTest: true,
-            depthFunc: GX.CompareType.LEQUAL,
-            depthWrite: depthWrite && !isDepthSorted,
-            colorUpdate: true,
-            alphaUpdate: false,
-        };
-
-        const gxMaterial: GX_Material.GXMaterial = {
-            name,
-            cullMode,
-            lightChannels,
-            texGens,
-            tevStages,
-            alphaTest,
-            ropInfo,
-            indTexStages: [],
-        };
+        const gxMaterial = mb.finish();
 
         const isUVShort = !!(flags & MaterialFlags.UV_SHORT);
         const isWhiteAmb = false;
@@ -1199,102 +1151,45 @@ export enum MaterialFlags_MP3 {
     WHITE_AMB = 0x80000,
 }
 
-function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasDIFF: boolean, hasOPAC: boolean): GX_Material.TevStage {
-    // Standard texture sample.
-    const tevStage: GX_Material.TevStage = {
-        channelId: GX.RasColorChannelID.COLOR0A0,
-
-        colorInA: GX.CC.ZERO,
-        colorInB: GX.CC.ZERO,
-        colorInC: GX.CC.ZERO,
-        colorInD: GX.CC.CPREV,
-        colorBias: GX.TevBias.ZERO,
-        colorOp: GX.TevOp.ADD,
-        colorClamp: true,
-        colorScale: GX.TevScale.SCALE_1,
-        colorRegId: GX.Register.PREV,
-
-        alphaInA: GX.CA.ZERO,
-        alphaInB: GX.CA.ZERO,
-        alphaInC: GX.CA.ZERO,
-        alphaInD: GX.CA.APREV,
-        alphaBias: GX.TevBias.ZERO,
-        alphaOp: GX.TevOp.ADD,
-        alphaClamp: true,
-        alphaScale: GX.TevScale.SCALE_1,
-        alphaRegId: GX.Register.PREV,
-
-        indTexAddPrev: false,
-        indTexMatrix: GX.IndTexMtxID.OFF,
-        indTexBiasSel: GX.IndTexBiasSel.NONE,
-        indTexAlphaSel: GX.IndTexAlphaSel.OFF,
-        indTexFormat: GX.IndTexFormat._8,
-        indTexStage: GX.IndTexStageID.STAGE0,
-        indTexUseOrigLOD: true,
-        indTexWrapS: GX.IndTexWrap.OFF,
-        indTexWrapT: GX.IndTexWrap.OFF,
-
-        konstColorSel: GX.KonstColorSel.KCSEL_1,
-        konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-        texMap: GX.TexMapID.TEXMAP0 + passIndex,
-        texCoordId: GX.TexCoordID.TEXCOORD0 + passIndex,
-    };
+function makeTevStageFromPass_MP3(mb: GXMaterialBuilder, passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasDIFF: boolean, hasOPAC: boolean): void {
+    mb.setTevOrder(passIndex, GX.TexCoordID.TEXCOORD0 + passIndex, GX.TexMapID.TEXMAP0 + passIndex, GX.RasColorChannelID.COLOR0A0);
+    mb.setTevColorIn(passIndex, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+    mb.setTevAlphaIn(passIndex, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
     if (passType === 'DIFF') {
-        tevStage.konstColorSel = GX.KonstColorSel.KCSEL_K0;
-        tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K0_A;
+        mb.setTevColorIn(passIndex, GX.CC.ZERO, GX.CC.KONST, GX.CC.TEXC, GX.CC.RASC);
+        mb.setTevAlphaIn(passIndex, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
 
-        tevStage.colorInB = GX.CC.KONST;
-        tevStage.colorInC = GX.CC.TEXC;
-        tevStage.colorInD = GX.CC.RASC;
-
-        tevStage.alphaInD = GX.CA.KONST;
+        mb.setTevKColorSel(passIndex, GX.KonstColorSel.KCSEL_K0);
+        mb.setTevKAlphaSel(passIndex, GX.KonstAlphaSel.KASEL_K0_A);
     } else if (passType === 'CLR ') {
-        tevStage.colorInB = (hasDIFF ? GX.CC.CPREV : GX.CC.RASC);
-        tevStage.colorInC = GX.CC.TEXC;
-        tevStage.colorInD = GX.CC.ZERO;
-        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CA.TEXA : GX.CA.APREV;
-        tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K1_A;
+        mb.setTevColorIn(passIndex, GX.CC.ZERO, hasDIFF ? GX.CC.CPREV : GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevAlphaIn(passIndex, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CA.TEXA : GX.CA.APREV);
+        mb.setTevKAlphaSel(passIndex, GX.KonstAlphaSel.KASEL_K1_A);
     } else if (passType === 'TRAN') {
-        tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_1;
-        tevStage.texSwapTable = [ GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R ];
-
-        // Invert.
         if (passFlags & 0x10)
-            tevStage.alphaInA = GX.CA.KONST;
+            mb.setTevAlphaIn(passIndex, GX.CA.KONST, GX.CA.ZERO, GX.CA.TEXA, GX.CA.ZERO);
         else
-            tevStage.alphaInB = GX.CA.KONST;
-        tevStage.alphaInC = GX.CA.TEXA;
-        tevStage.alphaInD = GX.CA.ZERO;
+            mb.setTevAlphaIn(passIndex, GX.CA.ZERO, GX.CA.KONST, GX.CA.TEXA, GX.CA.ZERO);
+
+        mb.setTevSwapMode(passIndex, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R]);
+        mb.setTevKAlphaSel(passIndex, GX.KonstAlphaSel.KASEL_1);
     } else if (passType === 'INCA') {
-        // Emissive.
-        tevStage.colorInB = GX.CC.TEXC;
-        tevStage.colorInC = GX.CC.ONE;
-        tevStage.colorInD = GX.CC.CPREV;
+        mb.setTevColorIn(passIndex, GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE, GX.CC.CPREV);
     } else if (passType === 'BLOL') {
         // Bloom lightmap.
         // This actually works by drawing to the framebuffer alpha channel. During the post-process pass, the alpha channel
         // is sampled to determine the intensity of the bloom effect at this pixel. We don't support bloom for MP3, so instead
         // we just essentially multiply the color by 2 to simulate the increase in brightness that the bloom effect provides.
-        tevStage.texSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
-        tevStage.colorInB = GX.CC.CPREV;
-        tevStage.colorInC = GX.CC.ONE;
-        tevStage.colorInD = GX.CC.CPREV;
+        mb.setTevColorIn(passIndex, GX.CC.ZERO, GX.CC.CPREV, GX.CC.ONE, GX.CC.CPREV);
+        mb.setTevSwapMode(passIndex, undefined, [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G]);
     } else if (passType === 'RFLV') {
-        tevStage.colorInA = GX.CC.ZERO;
-        tevStage.colorInB = GX.CC.ZERO;
-        tevStage.colorInC = GX.CC.ZERO;
-        tevStage.colorInD = GX.CC.TEXC;
-        tevStage.colorRegId = GX.Register.REG2;
-        tevStage.alphaRegId = GX.Register.REG2;
+        mb.setTevColorIn(passIndex, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevColorOp(passIndex, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG2);
+        mb.setTevAlphaOp(passIndex, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG2);
     } else if (passType === 'RFLD') {
-        tevStage.colorInA = GX.CC.ZERO;
-        tevStage.colorInB = GX.CC.C2;
-        tevStage.colorInC = GX.CC.TEXC;
-        tevStage.colorInD = GX.CC.CPREV;
+        mb.setTevColorIn(passIndex, GX.CC.ZERO, GX.CC.C2, GX.CC.TEXC, GX.CC.CPREV);
     }
-
-    return tevStage;
 }
 
 interface Material_MP3 extends Material {
@@ -1323,13 +1218,14 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
         colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
 
-        const texGens: GX_Material.TexGen[] = [];
-        const tevStages: GX_Material.TevStage[] = [];
         const textureIndexes: number[] = [];
         const uvAnimations: (UVAnimation | null)[] = [];
         const passTypes: string[] = [];
         let hasOPAC = false;
         let hasDIFF = false;
+
+        const name = `Prime3Gen_${i}`;
+        const mb = new GXMaterialBuilder(name);
         while (true) {
             const nodeType = stream.readFourCC();
 
@@ -1383,14 +1279,10 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                     }
                 }
 
-                texGens[passIndex] = {
-                    type: GX.TexGenType.MTX2x4,
-                    source: texGenSrc,
-                    matrix: GX.TexGenMatrix.TEXMTX0 + (passIndex * 3),
-                    postMatrix: GX.PostTexGenMatrix.PTTEXMTX0 + (passIndex * 3),
-                    normalize,
-                };
-                tevStages[passIndex] = makeTevStageFromPass_MP3(passIndex, passType, passFlags, materialFlags, hasDIFF, hasOPAC);
+                const texMtx = GX.TexGenMatrix.TEXMTX0 + (passIndex * 3);
+                const ptMtx = GX.PostTexGenMatrix.PTTEXMTX0 + (passIndex * 3);
+                mb.setTexCoordGen(passIndex, GX.TexGenType.MTX2x4, texGenSrc, texMtx, normalize, ptMtx);
+                makeTevStageFromPass_MP3(mb, passIndex, passType, passFlags, materialFlags, hasDIFF, hasOPAC);
                 textureIndexes[passIndex] = txtrIndex;
                 uvAnimations[passIndex] = uvAnimation;
                 passTypes[passIndex] = passType;
@@ -1426,23 +1318,10 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         // some materials don't have any passes apparently?
         // just make a dummy tev stage in this case
         if (passIndex === 0) {
-            texGens[0] = {
-                type: GX.TexGenType.MTX2x4,
-                source: GX.TexGenSrc.TEX0,
-                matrix: GX.TexGenMatrix.TEXMTX0,
-                postMatrix: GX.PostTexGenMatrix.PTTEXMTX0,
-                normalize: false,
-            };
-
-            tevStages[0] = makeTevStageFromPass_MP3(0, 'NULL', 0, materialFlags, hasDIFF, hasOPAC);
             uvAnimations[0] = null;
             passTypes[0] = 'NULL';
             passIndex++;
         }
-
-        const name = `Prime3Gen_${i}`;
-
-        const cullMode = GX.CullMode.FRONT;
 
         const isOccluder = !!(materialFlags & MaterialFlags_MP3.OCCLUDER);
         const blend = !!(materialFlags & MaterialFlags_MP3.BLEND);
@@ -1451,54 +1330,24 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         const isTransparent = blend || additiveBlend;
         const depthWrite = true;
 
-        const lightChannels: GX_Material.LightChannelControl[] = [];
-        lightChannels.push({
-            colorChannel: { lightingEnabled: true,  ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0xFF, diffuseFunction: GX.DiffuseFunction.CLAMP, attenuationFunction: GX.AttenuationFunction.SPOT },
-            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-        });
-        lightChannels.push({
-            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-        });
-
         const colorRegisters: Color[] = [];
         colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
         colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
         colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
         colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
 
-        const alphaTest: GX_Material.AlphaTest = {
-            op: GX.AlphaOp.OR,
-            compareA: masked ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
-            referenceA: 0.75,
-            compareB: GX.CompareType.NEVER,
-            referenceB: 0,
-        };
+        mb.setCullMode(GX.CullMode.FRONT);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xFF, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
 
-        const ropInfo: GX_Material.RopInfo = {
-            fogType: GX.FogType.NONE,
-            fogAdjEnabled: false,
-            blendMode: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
-            blendSrcFactor: additiveBlend ? GX.BlendFactor.ONE :GX.BlendFactor.SRCALPHA,
-            blendDstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,
-            blendLogicOp: GX.LogicOp.CLEAR,
-            depthTest: true,
-            depthFunc: GX.CompareType.LESS,
-            depthWrite: depthWrite && !isTransparent,
-            colorUpdate: true,
-            alphaUpdate: false,
-        };
+        mb.setAlphaCompare(masked ? GX.CompareType.GREATER : GX.CompareType.ALWAYS, 0.75, GX.AlphaOp.OR, GX.CompareType.NEVER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, depthWrite && !isTransparent);
+        if (blend) {
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        } else if (additiveBlend) {
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
+        }
 
-        const gxMaterial: GX_Material.GXMaterial = {
-            name,
-            cullMode,
-            lightChannels,
-            texGens,
-            tevStages,
-            alphaTest,
-            ropInfo,
-            indTexStages: [],
-        };
+        const gxMaterial = mb.finish();
 
         const isUVShort = false;
         const isWhiteAmb = !!(materialFlags & MaterialFlags_MP3.WHITE_AMB);
