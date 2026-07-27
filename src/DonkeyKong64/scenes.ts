@@ -488,7 +488,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const dl = map.displayLists[i];
 
             const segmentBuffers: ArrayBufferSlice[] = [];
-            segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
+            segmentBuffers[0x06] = map.vertBin.slice(dl.vertStartIndex * 0x10);
             segmentBuffers[0x07] = map.f3dexBin;
             // Bindings persist across material display lists. The state
             // must be maintained for proper rendering.
@@ -517,13 +517,13 @@ class SceneDesc implements Viewer.SceneDesc {
                 continue;
             }
 
-            const chunk = dl.ChunkID >= 0 ? map.chunks[dl.ChunkID] ?? null : null;
+            const chunk = dl.chunkID >= 0 ? map.chunks[dl.chunkID] ?? null : null;
             const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: output,
                 dynamicLighting: buildMapChunkLighting(
                     sharedOutput, output.drawCalls, firstVertex,
-                    state.vertexSourceAddresses, dl.VertStartIndex * 0x10,
+                    state.vertexSourceAddresses, dl.vertStartIndex * 0x10,
                     chunk, dynamicLights,
                 ),
             };
@@ -532,7 +532,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 ? DK64Layer.MapGeometry
                 : DK64Layer.Surfaces;
             const geoRenderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, renderLayer);
-            if (dl.ChunkID >= 0)
+            if (dl.chunkID >= 0)
                 geoRenderer.setCullBoundingBox(geoData.cullBoundingBox);
         }
 

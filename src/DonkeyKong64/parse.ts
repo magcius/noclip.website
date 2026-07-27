@@ -160,9 +160,9 @@ export function parseInstanceScripts(data: ArrayBufferSlice): InstanceScript[] {
 }
 
 export interface DisplayListInfo {
-    ChunkID: number;
+    chunkID: number;
     dlStartAddr: number;
-    VertStartIndex: number;
+    vertStartIndex: number;
     textureAnimationGroup: number | null;
     materialIndex: SceneNodeMaterial | null;
 }
@@ -196,8 +196,7 @@ export interface GeneratedSurface {
 export class MapChunk {
     public ambientColor: vec3;
     public modulateVertexColors: boolean;
-    public dlOffsets: number[] = [];
-    public dlSizes: number[] = [];
+    public displayListRanges: { offset: number, size: number }[] = [];
     public vertOffset: number;
     public vertSize: number;
     public static readonly size = 0x34;
@@ -211,8 +210,10 @@ export class MapChunk {
         );
         this.modulateVertexColors = view.getUint32(0x08, false) === 1;
         for (let i = 0, offs = 0x0C; i < displayListsPerChunk; i++, offs += 8) {
-            this.dlOffsets[i] = view.getInt32(offs + 0x00, false);
-            this.dlSizes[i] = view.getUint32(offs + 0x04, false);
+            this.displayListRanges[i] = {
+                offset: view.getInt32(offs + 0x00, false),
+                size: view.getUint32(offs + 0x04, false),
+            };
         }
         this.vertOffset = view.getInt32(0x2C, false);
         this.vertSize = view.getUint32(0x30, false);
@@ -359,7 +360,7 @@ export class DK64Map {
                     this.parseChunkDisplayList(view, dlStart, chunk, i);
         } else {
             this.displayLists.push({
-                ChunkID: -1, dlStartAddr: 0, VertStartIndex: 0,
+                chunkID: -1, dlStartAddr: 0, vertStartIndex: 0,
                 textureAnimationGroup: null, materialIndex: null,
             });
         }
@@ -370,13 +371,12 @@ export class DK64Map {
     // A chunk display list is either split into per-section runs delimited by G_SNOOP
     // commands, or, when no G_SNOOP is present, submitted whole.
     private parseChunkDisplayList(view: DataView, dlStart: number, chunk: MapChunk, i: number): void {
-        const dlOffset = chunk.dlOffsets[i];
-        const dlSize = chunk.dlSizes[i];
-        if (dlOffset === -1 || dlSize === 0)
+        const { offset, size } = chunk.displayListRanges[i];
+        if (offset === -1 || size === 0)
             return;
 
         let snoopPresent = false;
-        for (let commandOffs = dlStart + dlOffset, end = commandOffs + dlSize; commandOffs < end; commandOffs += 8) {
+        for (let commandOffs = dlStart + offset, end = commandOffs + size; commandOffs < end; commandOffs += 8) {
             if (view.getUint8(commandOffs) !== F3DEX2_GBI.G_SNOOP)
                 continue;
             snoopPresent = true;
@@ -385,9 +385,9 @@ export class DK64Map {
             if (section === undefined)
                 continue;
             this.displayLists.push({
-                ChunkID: chunk.id,
+                chunkID: chunk.id,
                 dlStartAddr: commandOffs - dlStart,
-                VertStartIndex: chunk.vertOffset / mapVertexStride + section.vertOffsets[i],
+                vertStartIndex: chunk.vertOffset / mapVertexStride + section.vertOffsets[i],
                 textureAnimationGroup: section.textureAnimationGroup,
                 materialIndex: null,
             });
@@ -395,9 +395,9 @@ export class DK64Map {
 
         if (!snoopPresent) {
             this.displayLists.push({
-                ChunkID: chunk.id,
-                dlStartAddr: dlOffset,
-                VertStartIndex: chunk.vertOffset / mapVertexStride,
+                chunkID: chunk.id,
+                dlStartAddr: offset,
+                vertStartIndex: chunk.vertOffset / mapVertexStride,
                 textureAnimationGroup: null,
                 materialIndex: null,
             });
@@ -415,7 +415,7 @@ export class DK64Map {
             if (!isSceneNodeMaterial(materialIndex))
                 continue;
             this.displayLists.push({
-                ChunkID: -1, dlStartAddr, VertStartIndex: 0,
+                chunkID: -1, dlStartAddr, vertStartIndex: 0,
                 textureAnimationGroup: null, materialIndex,
             });
         }

@@ -6,7 +6,7 @@ import { AABB } from '../Geometry.js';
 import { lerp, MathConstants, saturate } from '../MathHelpers.js';
 import { actorModelScale, getActorRenderDefinition } from './actors.js';
 import type { ActorAnimationPose, ActorRenderDefinition } from './actors.js';
-import type { DrawTextureAnimation } from './f3dex2.js';
+import type { DrawTextureBinding } from './f3dex2.js';
 import type { Setup } from './parse.js';
 
 const scratchVec3a = vec3.create();
@@ -80,7 +80,7 @@ interface RelitMapChunk {
 interface RelitDrawCall {
     firstIndex: number;
     indexCount: number;
-    textureAnimations: readonly (DrawTextureAnimation | undefined)[];
+    textureBindings: readonly DrawTextureBinding[];
 }
 
 export interface ActiveLight {
@@ -263,7 +263,7 @@ export function buildMapChunkLighting(
 
     const animatedMaterialVertices = new Set<number>();
     for (const drawCall of drawCalls) {
-        if (!drawCall.textureAnimations.some((animation) => animation !== undefined))
+        if (!drawCall.textureBindings.some((binding) => binding.animation !== undefined))
             continue;
         const indexEnd = drawCall.firstIndex + drawCall.indexCount;
         for (let index = drawCall.firstIndex; index < indexEnd; index++)

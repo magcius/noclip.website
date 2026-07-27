@@ -125,7 +125,7 @@ class DrawCallInstance {
                 this.textureMappings[i].gfxSampler = translateSampler(cache, tex, linearFiltering);
             }
 
-            const textureAnimation = drawCall.textureAnimations[i];
+            const textureAnimation = drawCall.textureBindings[i]?.animation;
             if (textureAnimation !== undefined) {
                 const textures = textureAnimation.textureIndices.map((index) => sharedOutput.textureCache.textures[index]);
                 this.animatedTextureMappings[i] = textures.map((texture, frame) => {
@@ -138,10 +138,10 @@ class DrawCallInstance {
                 });
             }
         }
-        const crossfadeGroup0 = drawCall.textureAnimations[0]?.crossfadeGroup;
-        const crossfadeGroup1 = drawCall.textureAnimations[1]?.crossfadeGroup;
+        const crossfadeGroup0 = drawCall.textureBindings[0]?.animation?.crossfadeGroup;
+        const crossfadeGroup1 = drawCall.textureBindings[1]?.animation?.crossfadeGroup;
         if (crossfadeGroup0 !== null && crossfadeGroup0 !== undefined && crossfadeGroup0 === crossfadeGroup1)
-            this.crossfadeDurationFrames = Math.max(drawCall.textureAnimations[0]!.frameDuration, 1);
+            this.crossfadeDurationFrames = Math.max(drawCall.textureBindings[0].animation!.frameDuration, 1);
 
         this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
         this.isTranslucent = this.crossfadeDurationFrames > 0 || renderModeIsTranslucent(this.megaStateFlags);
@@ -220,7 +220,7 @@ class DrawCallInstance {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const texture = this.textureEntry[textureEntryIndex];
             calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, texture.width, texture.height, texture.tile.shifts, texture.tile.shiftt);
-            const scrollSpeed = this.drawCall.textureScrollSpeeds[textureEntryIndex] ?? 0;
+            const scrollSpeed = this.drawCall.textureBindings[textureEntryIndex]?.scrollSpeed ?? 0;
             if (scrollSpeed !== 0) {
                 const tick = Math.floor(time / (1000 / 30));
                 if (tick > 0) {
@@ -243,7 +243,7 @@ class DrawCallInstance {
             const mappings = this.animatedTextureMappings[i];
             if (mappings === undefined)
                 continue;
-            const textureAnimation = this.drawCall.textureAnimations[i]!;
+            const textureAnimation = this.drawCall.textureBindings[i].animation!;
             const frameDuration = Math.max(textureAnimation.frameDuration, 1);
             const frameOffset = textureAnimation.frameOffset;
             const frame = (Math.floor(animationFrame / frameDuration) + frameOffset) % mappings.length;

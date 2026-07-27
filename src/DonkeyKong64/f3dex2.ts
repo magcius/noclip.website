@@ -24,6 +24,11 @@ export enum RSP_Geometry {
 const G_MTX_LOAD = 0x02;
 const G_MTX_PUSH = 0x04;
 
+// RDP.TileState.cacheKey is derived from a segmented address, which is 32-bit. Animated
+// texture frames have no single source address, so they are keyed above that range to
+// guarantee they cannot collide with a real one.
+const animatedTextureCacheKeyBase = 0x100000000;
+
 export interface DrawTextureAnimation {
     textureIndices: number[];
     frameDuration: number;
@@ -31,12 +36,17 @@ export interface DrawTextureAnimation {
     crossfadeGroup: number | null;
 }
 
+// DK64's per-texture state, parallel to the inherited DrawCall.textureIndices.
+export interface DrawTextureBinding {
+    animation: DrawTextureAnimation | undefined;
+    scrollSpeed: number;
+}
+
 export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
-    public textureAnimations: (DrawTextureAnimation | undefined)[] = [];
-    public textureScrollSpeeds: number[] = [];
+    public textureBindings: DrawTextureBinding[] = [];
 }
 
 export interface AnimatedTexture {
@@ -58,7 +68,7 @@ export class RSPSharedOutput extends F3DEX.RSPSharedOutput {
             sourceID = this.nextAnimatedTextureSourceID++;
             this.animatedTextureSourceIDs.set(frame, sourceID);
         }
-        return 0x100000000 + sourceID;
+        return animatedTextureCacheKeyBase + sourceID;
     }
 }
 
@@ -76,18 +86,24 @@ export class RSPOutput extends F3DEX.RSPOutput {
     }
 }
 
-class TMemUploadCache {
+class TMemUpload {
     constructor(public addr: number, public dxt: number = -1) {
     }
+}
+
+// DK64 needs to trace each output vertex back to the DRAM address it was loaded from
+// (for animated-texture relighting) and to the modelview matrices in effect when it was
+// loaded (for prop animation), so the vertex cache carries both alongside the vertex.
+class StagingVertex extends F3DEX.StagingVertex {
+    public sourceAddress: number = 0;
+    public modelViewMatrixIndices: number[] = [];
 }
 
 export class RSPState {
     private output = new RSPOutput();
 
     private stateChanged: boolean = false;
-    private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
-    private vertexCacheSourceAddresses = nArray(64, () => 0);
-    private vertexCacheModelViewMatrixIndices = nArray(64, () => [] as number[]);
+    private vertexCache = nArray(64, () => new StagingVertex());
     public vertexSourceAddresses: number[] = [];
     public vertexModelViewMatrixIndices: number[][] = [];
 
@@ -100,7 +116,7 @@ export class RSPState {
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new F3DEX.TextureImageState();
     private DP_TileState = nArray(8, () => new RDP.TileState());
-    private DP_TMemUploadTracker = new Map<number, TMemUploadCache>();
+    private DP_TMemUploadTracker = new Map<number, TMemUpload>();
 
     private DP_PrimColor = vec4.create();
     private DP_EnvColor = vec4.create();
@@ -163,10 +179,11 @@ export class RSPState {
         const view = this.segmentBuffers[(dramAddr >>> 24)].createDataView(dramAddr & 0x00FFFFFF);
 
         for (let i = 0; i < n; i++) {
-            this.vertexCache[v0 + i].setFromView(view, i * 0x10);
-            this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
-            this.vertexCacheModelViewMatrixIndices[v0 + i] = this.matrixStack[this.matrixStack.length - 1] ?? [];
-            this.vertexCacheSourceAddresses[v0 + i] = dramAddr + i * 0x10;
+            const vertex = this.vertexCache[v0 + i];
+            vertex.setFromView(view, i * 0x10);
+            vertex.matrixIndex = this.SP_MatrixIndex;
+            vertex.modelViewMatrixIndices = this.matrixStack[this.matrixStack.length - 1] ?? [];
+            vertex.sourceAddress = dramAddr + i * 0x10;
         }
     }
 
@@ -275,8 +292,7 @@ export class RSPState {
 
             const texture0 = this._translateTileTexture(this.SP_TextureState.tile);
             dc.textureIndices.push(texture0.textureIndex);
-            dc.textureAnimations.push(texture0.animation);
-            dc.textureScrollSpeeds.push(this.textureScrollSpeeds[0] ?? 0);
+            dc.textureBindings.push({ animation: texture0.animation, scrollSpeed: this.textureScrollSpeeds[0] ?? 0 });
 
             if (!lod_en && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
@@ -287,8 +303,7 @@ export class RSPState {
                     && animation1?.crossfadeGroup === crossfadeGroup)
                     animation1.frameOffset++;
                 dc.textureIndices.push(texture1.textureIndex);
-                dc.textureAnimations.push(texture1.animation);
-                dc.textureScrollSpeeds.push(this.textureScrollSpeeds[1] ?? 0);
+                dc.textureBindings.push({ animation: texture1.animation, scrollSpeed: this.textureScrollSpeeds[1] ?? 0 });
             }
         }
     }
@@ -313,21 +328,22 @@ export class RSPState {
 
     public gSPTri(i0: number, i1: number, i2: number): void {
         this._flushDrawCall();
-        this.sharedOutput.loadVertex(this.vertexCache[i0]);
-        this.sharedOutput.loadVertex(this.vertexCache[i1]);
-        this.sharedOutput.loadVertex(this.vertexCache[i2]);
-        this.vertexSourceAddresses[this.vertexCache[i0].outputIndex] = this.vertexCacheSourceAddresses[i0];
-        this.vertexSourceAddresses[this.vertexCache[i1].outputIndex] = this.vertexCacheSourceAddresses[i1];
-        this.vertexSourceAddresses[this.vertexCache[i2].outputIndex] = this.vertexCacheSourceAddresses[i2];
-        this.vertexModelViewMatrixIndices[this.vertexCache[i0].outputIndex] = this.vertexCacheModelViewMatrixIndices[i0];
-        this.vertexModelViewMatrixIndices[this.vertexCache[i1].outputIndex] = this.vertexCacheModelViewMatrixIndices[i1];
-        this.vertexModelViewMatrixIndices[this.vertexCache[i2].outputIndex] = this.vertexCacheModelViewMatrixIndices[i2];
+        this.loadTriVertex(i0);
+        this.loadTriVertex(i1);
+        this.loadTriVertex(i2);
         this.sharedOutput.indices.push(
             this.vertexCache[i0].outputIndex,
             this.vertexCache[i1].outputIndex,
             this.vertexCache[i2].outputIndex,
         );
         this.output.currentDrawCall.indexCount += 3;
+    }
+
+    private loadTriVertex(i: number): void {
+        const vertex = this.vertexCache[i];
+        this.sharedOutput.loadVertex(vertex);
+        this.vertexSourceAddresses[vertex.outputIndex] = vertex.sourceAddress;
+        this.vertexModelViewMatrixIndices[vertex.outputIndex] = vertex.modelViewMatrixIndices;
     }
 
     public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
@@ -341,7 +357,7 @@ export class RSPState {
     public gDPLoadTLUT(tile: number, count: number): void {
         // Track the TMEM destination back to the originating DRAM address.
         const tmemDst = this.DP_TileState[tile].tmem;
-        this.DP_TMemUploadTracker.set(tmemDst, new TMemUploadCache(this.DP_TextureImageState.addr));
+        this.DP_TMemUploadTracker.set(tmemDst, new TMemUpload(this.DP_TextureImageState.addr));
     }
 
     public gDPLoadBlock(tileIndex: number, uls: number, ult: number, texels: number, dxt: number): void {
@@ -353,7 +369,7 @@ export class RSPState {
         const tile = this.DP_TileState[tileIndex];
 
         // Track the TMEM destination back to the originating DRAM address.
-        this.DP_TMemUploadTracker.set(tile.tmem, new TMemUploadCache(this.DP_TextureImageState.addr, dxt));
+        this.DP_TMemUploadTracker.set(tile.tmem, new TMemUpload(this.DP_TextureImageState.addr, dxt));
         this.stateChanged = true;
     }
 
