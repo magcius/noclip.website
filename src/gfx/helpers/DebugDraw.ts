@@ -790,6 +790,13 @@ export class DebugDraw {
         this.drawWorldTextMtx(str, mtx, color, options);
     }
 
+    public drawWorldText(str: string, p: ReadonlyVec3, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
+        const mtx = DebugDraw.scratchMat4;
+        mat4.invert(mtx, this.viewFromWorldMatrix);
+        setMatrixTranslation(mtx, p);
+        this.drawWorldTextMtx(str, mtx, color, options);
+    }
+
     private endFrame(): number {
         vec2.zero(this.screenTextPosition);
 
