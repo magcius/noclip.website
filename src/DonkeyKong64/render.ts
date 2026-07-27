@@ -634,12 +634,68 @@ export enum DK64Layer {
     Effects,
 }
 
-class GeoNodeRenderer {
-    public drawCallInstances: DrawCallInstance[] = [];
+export class GeometryRenderer {
+    private visible = true;
+    private cullBoundingBox: AABB | null = null;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+    public modelMatrix = mat4.create();
+    public distanceFade: { origin: vec3; startDistance: number; endDistance: number } | null = null;
+    private rootTransformAnimation: {
+        baseMatrix: mat4;
+        rotationYRadiansPerTick: number;
+        positionYAmplitude: number;
+        positionYRadiansPerTick: number;
+    } | null = null;
+    private computeLookAt = false;
+    private cameraBillboard: { origin: vec3; scale: number } | null = null;
+    private objectLighting: ObjectLighting | null = null;
+    private objectLightColor = vec3.create();
+    private lookAtPosition = vec3.create();
+    private lookAtMatrix = mat4.create();
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier, primColorMultiplier, sprites);
+    // Shared by reference with any renderer constructed against the same GeometryData.
+    private drawCallInstances: DrawCallInstance[];
+
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        private geometryData: GeometryData,
+        public renderLayer: DK64Layer,
+        private fogParams: FogParams,
+        private gfxTextureCache: GfxTextureCache,
+        sharedRenderer: GeometryRenderer | null = null,
+    ) {
+        this.megaStateFlags = {};
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+
+        const geo = this.geometryData.geo;
+        this.computeLookAt = geo.rspOutput?.drawCalls.some((drawCall) => {
+            const requiredModes = RSP_Geometry.G_LIGHTING | RSP_Geometry.G_TEXTURE_GEN;
+            return (drawCall.SP_GeometryMode & requiredModes) === requiredModes;
+        }) ?? false;
+
+        if (sharedRenderer !== null) {
+            assert(sharedRenderer.geometryData === geometryData);
+            this.drawCallInstances = sharedRenderer.drawCallInstances;
+        } else {
+            this.drawCallInstances = this.buildDrawCallInstances(device, cache, geo);
+        }
+    }
+
+    private buildDrawCallInstances(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): DrawCallInstance[] {
+        if (geo.rspOutput === null)
+            return [];
+
+        return geo.rspOutput.drawCalls.map((drawCall) => new DrawCallInstance(
+            device, cache, this.gfxTextureCache, geo.sharedOutput, drawCall,
+            drawCall.firstIndex - this.geometryData.renderData.indexStart,
+            this.fogParams, geo.actorAnimation?.pose.boneMatrices,
+        ));
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -670,97 +726,6 @@ class GeoNodeRenderer {
     public setAlphaVisualizerEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
-    }
-}
-
-export class GeometryRenderer {
-    private visible = true;
-    private cullBoundingBox: AABB | null = null;
-    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
-    public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
-    public modelMatrix = mat4.create();
-    public distanceFade: { origin: vec3; startDistance: number; endDistance: number } | null = null;
-    private rootTransformAnimation: {
-        baseMatrix: mat4;
-        rotationYRadiansPerTick: number;
-        positionYAmplitude: number;
-        positionYRadiansPerTick: number;
-    } | null = null;
-    private computeLookAt = false;
-    private cameraBillboard: { origin: vec3; scale: number } | null = null;
-    private objectLighting: ObjectLighting | null = null;
-    private objectLightColor = vec3.create();
-    private lookAtPosition = vec3.create();
-    private lookAtMatrix = mat4.create();
-
-    private rootNodeRenderer: GeoNodeRenderer;
-
-    constructor(
-        device: GfxDevice,
-        cache: GfxRenderCache,
-        private geometryData: GeometryData,
-        public renderLayer: DK64Layer,
-        private fogParams: FogParams,
-        private gfxTextureCache: GfxTextureCache,
-        sharedRenderer: GeometryRenderer | null = null,
-    ) {
-        this.megaStateFlags = {};
-        setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
-
-        const geo = this.geometryData.geo;
-        this.computeLookAt = geo.rspOutput?.drawCalls.some((drawCall) => {
-            const requiredModes = RSP_Geometry.G_LIGHTING | RSP_Geometry.G_TEXTURE_GEN;
-            return (drawCall.SP_GeometryMode & requiredModes) === requiredModes;
-        }) ?? false;
-
-        if (sharedRenderer !== null) {
-            assert(sharedRenderer.geometryData === geometryData);
-            this.rootNodeRenderer = sharedRenderer.rootNodeRenderer;
-        } else {
-            this.rootNodeRenderer = this.buildGeoNodeRenderer(device, cache, geo);
-        }
-    }
-
-    private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): GeoNodeRenderer {
-        const geoNodeRenderer = new GeoNodeRenderer();
-
-        if (geo.rspOutput !== null) {
-            for (let i = 0; i < geo.rspOutput.drawCalls.length; i++) {
-                const drawCall = geo.rspOutput.drawCalls[i];
-                const drawCallInstance = new DrawCallInstance(device, cache, this.gfxTextureCache, geo.sharedOutput, drawCall, drawCall.firstIndex - this.geometryData.renderData.indexStart, this.fogParams, geo.actorAnimation?.pose.boneMatrices);
-                geoNodeRenderer.drawCallInstances.push(drawCallInstance);
-            }
-        }
-
-        return geoNodeRenderer;
-    }
-
-    public setBackfaceCullingEnabled(v: boolean): void {
-        this.rootNodeRenderer.setBackfaceCullingEnabled(v);
-    }
-
-    public setVertexColorsEnabled(v: boolean): void {
-        this.rootNodeRenderer.setVertexColorsEnabled(v);
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-        this.rootNodeRenderer.setTexturesEnabled(v);
-    }
-
-    public setFogEnabled(v: boolean): void {
-        this.rootNodeRenderer.setFogEnabled(v);
-    }
-
-    public setMonochromeVertexColorsEnabled(v: boolean): void {
-        this.rootNodeRenderer.setMonochromeVertexColorsEnabled(v);
-    }
-
-    public setAlphaVisualizerEnabled(v: boolean): void {
-        this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
     public setVisible(v: boolean): void {
@@ -889,7 +854,9 @@ export class GeometryRenderer {
         const objectLightColor = this.objectLighting !== null
             ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
             : null;
-        this.rootNodeRenderer.prepareToRender(renderInstManager, viewerInput, this.modelMatrix, primAlphaMultiplier, objectLightColor, this.geometryData.geo.spriteBillboards ?? null);
+        const sprites = this.geometryData.geo.spriteBillboards ?? null;
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, primAlphaMultiplier, objectLightColor, sprites);
 
         renderInstManager.popTemplate();
     }
