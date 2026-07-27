@@ -152,6 +152,7 @@ export class Occlusion_Manager {
                 }
             });
         });
+        builder.pushDebugThumbnail(occlDepthTargetID);
 
         this.submittedFrames.push(frame);
     }

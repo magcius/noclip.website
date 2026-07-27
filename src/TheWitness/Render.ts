@@ -1,7 +1,7 @@
 
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, White } from "../Color.js";
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, Red, White } from "../Color.js";
 import { AABB } from "../Geometry.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -61,9 +61,11 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
     }
 
     protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxRenderProgramDescriptor {
+        const maxSamplerBinding = bindingLayouts[0].numSamplers - 1;
+        const vendorInfo = cache.device.queryVendorInfo();
         const programString = shaderTextOverride ?? this.generateProgramString(variantSettings);
-        const preprocessedVert = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'vert', programString);
-        const preprocessedFrag = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'frag', programString);
+        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', programString, null, maxSamplerBinding);
+        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', programString, null, maxSamplerBinding);
         return { preprocessedVert, preprocessedFrag };
     }
 
@@ -154,9 +156,9 @@ vec3 UnpackLightMapSample(in vec4 t_Sample) {
 vec3 CalcLightMapColor(in vec2 t_TexCoord) {
     vec3 t_LightMapSample = vec3(0.0);
     if (u_LightMap0Blend > 0.0)
-        t_LightMapSample += UnpackLightMapSample(texture(SAMPLER_2D(u_LightMap0), t_TexCoord.xy)) * u_LightMap0Blend;
+        t_LightMapSample += UnpackLightMapSample(textureLod(SAMPLER_2D(u_LightMap0), t_TexCoord.xy, 0.0)) * u_LightMap0Blend;
     if (u_LightMap1Blend > 0.0)
-        t_LightMapSample += UnpackLightMapSample(texture(SAMPLER_2D(u_LightMap1), t_TexCoord.xy)) * u_LightMap1Blend;
+        t_LightMapSample += UnpackLightMapSample(textureLod(SAMPLER_2D(u_LightMap1), t_TexCoord.xy, 0.0)) * u_LightMap1Blend;
     return t_LightMapSample;
 }
 
@@ -196,8 +198,6 @@ layout(location = 3) in vec3 a_Normal;
 layout(location = 4) in vec4 a_TangentS;
 layout(location = 5) in vec4 a_Color0;
 layout(location = 6) in vec4 a_Color1;
-layout(location = 7) in vec4 a_BlendIndices;
-layout(location = 8) in vec4 a_BlendWeights;
 
 void CalcTrunkWind(inout vec3 t_PositionWorld, in vec4 a_WindParam, in vec3 t_ObjectPosition) {
     float t_WindFactor = a_WindParam.x;
@@ -371,12 +371,11 @@ vec4 SampleTerrain() {
     return texture(SAMPLER_2D(u_TerrainColor), t_TerrainTexCoord);
 }
 
-vec4 TintTerrain(in vec4 t_Sample, in vec3 t_AverageColor, in float t_TintAmount) {
+vec4 TintTerrain(in vec4 t_Sample, in vec4 t_TerrainSample, in vec3 t_AverageColor, in float t_TintAmount) {
     bool use_terrain_tint = ${this.is_type(m, Material_Type.Blended3) || this.is_type(m, Material_Type.Tinted) || this.is_type(m, Material_Type.Decal)};
 
     if (use_terrain_tint) {
-        vec3 t_TerrainColor = SampleTerrain().rgb;
-        return TintTexture(t_Sample, t_TerrainColor, t_AverageColor, t_TintAmount);
+        return TintTexture(t_Sample, t_TerrainSample.rgb, t_AverageColor, t_TintAmount);
     } else {
         return t_Sample;
     }
@@ -386,12 +385,16 @@ vec4 CalcAlbedoMap() {
     vec2 t_TexCoord0 = v_TexCoord0.xy;
     vec3 t_BlendWeightAlbedo = CalcBlendWeightAlbedo(t_TexCoord0.xy, v_Color0.rgba, u_BlendFactor);
     vec4 t_Albedo = vec4(0.0);
+    vec4 t_TerrainSample = SampleTerrain();
+    vec4 t_TexSample0 = texture(SAMPLER_2D(u_TextureMap0), t_TexCoord0.xy);
+    vec4 t_TexSample1 = texture(SAMPLER_2D(u_TextureMap1), t_TexCoord0.xy);
+    vec4 t_TexSample2 = texture(SAMPLER_2D(u_TextureMap2), t_TexCoord0.xy);
     if (t_BlendWeightAlbedo.x > 0.0)
-        t_Albedo += TintTerrain(texture(SAMPLER_2D(u_TextureMap0), t_TexCoord0.xy), u_AverageColor[0].rgb, u_TintFactor.x) * t_BlendWeightAlbedo.x;
+        t_Albedo += TintTerrain(t_TexSample0, t_TerrainSample, u_AverageColor[0].rgb, u_TintFactor.x) * t_BlendWeightAlbedo.x;
     if (t_BlendWeightAlbedo.y > 0.0)
-        t_Albedo += TintTerrain(texture(SAMPLER_2D(u_TextureMap1), t_TexCoord0.xy), u_AverageColor[1].rgb, u_TintFactor.y) * t_BlendWeightAlbedo.y;
+        t_Albedo += TintTerrain(t_TexSample1, t_TerrainSample, u_AverageColor[1].rgb, u_TintFactor.y) * t_BlendWeightAlbedo.y;
     if (t_BlendWeightAlbedo.z > 0.0)
-        t_Albedo += TintTerrain(texture(SAMPLER_2D(u_TextureMap2), t_TexCoord0.xy), u_AverageColor[2].rgb, u_TintFactor.z) * t_BlendWeightAlbedo.z;
+        t_Albedo += TintTerrain(t_TexSample2, t_TerrainSample, u_AverageColor[2].rgb, u_TintFactor.z) * t_BlendWeightAlbedo.z;
     return t_Albedo;
 }
 
@@ -399,12 +402,15 @@ vec3 CalcNormalMap() {
     vec2 t_TexCoord0 = v_TexCoord0.xy;
     vec3 t_BlendWeightNormal = CalcBlendWeightNormal(t_TexCoord0.xy, v_Color0.rgba, u_BlendFactor);
     vec3 t_NormalMapSample = vec3(0.0);
+    vec3 t_NormalMap0 = UnpackNormalMap(texture(SAMPLER_2D(u_NormalMap0), t_TexCoord0.xy));
+    vec3 t_NormalMap1 = UnpackNormalMap(texture(SAMPLER_2D(u_NormalMap1), t_TexCoord0.xy));
+    vec3 t_NormalMap2 = UnpackNormalMap(texture(SAMPLER_2D(u_NormalMap2), t_TexCoord0.xy));
     if (t_BlendWeightNormal.x > 0.0)
-        t_NormalMapSample += UnpackNormalMap(texture(SAMPLER_2D(u_NormalMap0), t_TexCoord0.xy)) * t_BlendWeightNormal.x;
+        t_NormalMapSample += t_NormalMap0.rgb * t_BlendWeightNormal.x;
     if (t_BlendWeightNormal.y > 0.0)
-        t_NormalMapSample += UnpackNormalMap(texture(SAMPLER_2D(u_NormalMap1), t_TexCoord0.xy)) * t_BlendWeightNormal.y;
+        t_NormalMapSample += t_NormalMap1.rgb * t_BlendWeightNormal.y;
     if (t_BlendWeightNormal.z > 0.0)
-        t_NormalMapSample += UnpackNormalMap(texture(SAMPLER_2D(u_NormalMap2), t_TexCoord0.xy)) * t_BlendWeightNormal.z;
+        t_NormalMapSample += t_NormalMap2.rgb * t_BlendWeightNormal.z;
     return t_NormalMapSample;
 }
 
@@ -541,6 +547,8 @@ void mainPS() {
     bool use_albedo_alpha = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Translucent) || this.is_type(m, Material_Type.Cloud)};
     if (use_albedo_alpha) {
         t_Alpha *= t_Albedo.a;
+    } else if (${this.is_type(m, Material_Type.Distant_Foliage)}) {
+        t_Alpha *= t_Albedo.r;
     }
 
     bool use_hedge_alpha = ${this.is_type(m, Material_Type.Hedge)};
@@ -574,7 +582,7 @@ void mainPS() {
         t_Alpha = saturate(t_Alpha);
     }
 
-    bool use_alpharef = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Hedge) || this.is_type(m, Material_Type.Grate)};
+    bool use_alpharef = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Hedge) || this.is_type(m, Material_Type.Grate) || this.is_type(m, Material_Type.Distant_Foliage)};
     if (use_alpharef) {
         if (t_Alpha < 0.5)
             discard;
@@ -632,7 +640,7 @@ function material_will_dynamically_override_color(type: Material_Type, flags: Ma
     return false;
 }
 
-function load_texture(globals: TheWitnessGlobals, m: TextureMapping, texture_name: string | null, gfxSampler: GfxSampler): Texture_Asset | null {
+export function load_texture(globals: TheWitnessGlobals, m: TextureMapping, texture_name: string | null, gfxSampler: GfxSampler): Texture_Asset | null {
     m.gfxSampler = gfxSampler;
     if (texture_name === null)
         return null;
@@ -649,6 +657,10 @@ export class Render_Material_Cache {
 
     public create_shader_instance(render_material: Render_Material): TheWitnessShaderInstance {
         return new UberShaderInstance<Render_Material>(this.template, render_material);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.template.destroy(device);
     }
 }
 
@@ -697,6 +709,8 @@ class Device_Material {
             this.load_texture(globals, 3 + i, this.render_material.normal_map_names[i], texture_sampler);
         for (let i = 0; i < 3; i++)
             this.load_texture(globals, 6 + i, this.render_material.blend_map_names[i], texture_sampler);
+        if (material_type == Material_Type.Distant_Foliage)
+            this.load_texture(globals, 0, `${globals.entity_manager.universe_name}_global-atlas`, texture_sampler);
 
         // 9, 10 are LightMap0 / LightMap1. By default, fill with white...
         this.load_texture(globals, 9, 'white', clamp_sampler);
@@ -931,6 +945,8 @@ export class TheWitnessRenderer implements SceneGfx {
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         viewpoint.setupFromCamera(viewerInput.camera);
+        this.renderHelper.debugDraw.beginFrame(viewpoint.clipFromViewMatrix, viewpoint.viewFromWorldMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         let offs = template.allocateUniformBuffer(TheWitnessShaderTemplate.ub_SceneParams, 44);
         const d = template.mapUniformBufferF32(TheWitnessShaderTemplate.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewpoint.clipFromWorldMatrix);
@@ -951,8 +967,10 @@ export class TheWitnessRenderer implements SceneGfx {
         // Go through each entity cluster.
         for (let i = 0; i < globals.entity_render_list.clusters.length; i++) {
             const cluster = globals.entity_render_list.clusters[i];
-            if (!cluster.occlusion_visible)
+            if (!cluster.occlusion_visible) {
+                globals.debug_draw.drawSphereLine(cluster.bounding_center_world, cluster.bounding_radius_world, Red);
                 continue;
+            }
 
             if (!viewpoint.frustum.containsSphere(cluster.bounding_center_world, cluster.bounding_radius_world))
                 continue;
@@ -978,8 +996,6 @@ export class TheWitnessRenderer implements SceneGfx {
         const globals = this.globals;
 
         viewerInput.camera.setClipPlanes(0.1);
-
-        this.renderHelper.debugDraw.beginFrame(globals.viewpoint.clipFromViewMatrix, globals.viewpoint.viewFromWorldMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -1030,6 +1046,7 @@ export class TheWitnessRenderer implements SceneGfx {
             });
         });
         this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
@@ -1040,5 +1057,6 @@ export class TheWitnessRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        this.globals.destroy(device);
     }
 }
