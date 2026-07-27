@@ -7,9 +7,8 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
-import { ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
-import { Vec3Zero } from "../MathHelpers";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
@@ -21,7 +20,7 @@ export interface JsonBuffer {
   name: string;
   positions: vec3[];
   uvs: vec2[];
-  normals: ReadonlyVec3[];
+  normals: vec3[];
   colors: Color[];
   hasVertexColors: boolean;
   blendMode: BlendMode;
@@ -93,7 +92,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       const indices: number[] = [];
       const positions: vec3[] = [];
       const uvs: vec2[] = [];
-      const normals: ReadonlyVec3[] = [];
+      const normals: vec3[] = [];
       const colors: Color[] = [];
       let hasVertexColors = false;
 
@@ -102,7 +101,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
 
         for (const vert of strip.vertices) {
           positions.push(vert.position);
-          normals.push(vert.normal ?? Vec3Zero);
+          normals.push(vert.normal ?? vec3.fromValues(0, 0, 0));
           colors.push(vert.color ?? White);
           uvs.push(vert.uv);
           if (vert.color !== null) hasVertexColors = true;
