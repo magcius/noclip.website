@@ -182,11 +182,11 @@ class RumbleRacingScene implements SceneGfx {
           GfxFormat.U8_RGBA_NORM,
           texture.width,
           texture.height,
-          texture.levels.length,
+          texture.textureData.length,
         ),
       );
 
-      device.uploadTextureData(tex, 0, texture.levels);
+      device.uploadTextureData(tex, 0, texture.textureData);
       device.setResourceName(tex, `texture_${texture.textureId}`);
 
       this.textureMap.set(texture.textureId, tex);

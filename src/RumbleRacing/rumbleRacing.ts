@@ -67,7 +67,7 @@ export interface ActorData {
 
 export interface TextureData {
   textureId: number;
-  levels: Uint8Array[];
+  textureData: Uint8Array[];
   width: number;
   height: number;
 }
@@ -230,7 +230,7 @@ export function processTrackFile(
           const base = tex.files[0];
           out.textures.push({
             textureId: tex.textureId,
-            levels: tex.files.map((file) => file.image.pix),
+            textureData: tex.files.map((file) => file.image.pix),
             width: base.width,
             height: base.height,
           });
