@@ -512,10 +512,9 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const output = state.finish();
 
-            if (output === null) {
-                // TODO(jstpierre): Warn?
+            // Some display lists emit no draw calls at all (empty or fully degenerate).
+            if (output === null)
                 continue;
-            }
 
             const chunk = dl.chunkID >= 0 ? map.chunks[dl.chunkID] ?? null : null;
             const geo: MeshInput = {

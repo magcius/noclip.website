@@ -6,20 +6,15 @@ import { nArray, assert, assertExists, hexzero } from "../util.js";
 import { ImageFormat } from "../Common/N64/Image.js";
 import { vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { F3DEX2_GBI, RSP_Geometry } from '../PokemonSnap/f3dex2.js';
 
-// Interpreter for N64 F3DEX2 microcode.
-export enum RSP_Geometry {
-    G_ZBUFFER            = 1 << 0,
-    G_SHADE              = 1 << 2,
-    G_CULL_FRONT         = 1 << 9,
-    G_CULL_BACK          = 1 << 10,
-    G_FOG                = 1 << 16,
-    G_LIGHTING           = 1 << 17,
-    G_TEXTURE_GEN        = 1 << 18,
-    G_TEXTURE_GEN_LINEAR = 1 << 19,
-    G_SHADING_SMOOTH     = 1 << 21,
-    G_CLIPPING           = 1 << 23,
-}
+// Interpreter for N64 F3DEX2 microcode. The opcode and geometry-mode tables are identical
+// to PokemonSnap's, so they are shared rather than forked.
+export { RSP_Geometry };
+
+// DK64 is the only port that uses opcode 0x00, to delimit map sections within a chunk
+// display list, so it is not part of the shared table.
+export const G_SNOOP = 0x00 as F3DEX2_GBI;
 
 const G_MTX_LOAD = 0x02;
 const G_MTX_PUSH = 0x04;
@@ -416,60 +411,6 @@ export class RSPState {
     }
 }
 
-export enum F3DEX2_GBI {
-    // DK64 marks per-section boundaries inside a chunk display list with G_SNOOP.
-    G_SNOOP             = 0x00,
-    // DMA
-    G_VTX               = 0x01,
-    G_MODIFYVTX         = 0x02,
-    G_CULLDL            = 0x03,
-    G_BRANCH_Z          = 0x04,
-    G_TRI1              = 0x05,
-    G_TRI2              = 0x06,
-    G_QUAD              = 0x07,
-    G_LINE3D            = 0x08,
-
-    G_TEXTURE           = 0xD7,
-    G_POPMTX            = 0xD8,
-    G_GEOMETRYMODE      = 0xD9,
-    G_MTX               = 0xDA,
-    G_MOVEWORD          = 0XDB,
-    G_DL                = 0xDE,
-    G_ENDDL             = 0xDF,
-
-    // RDP
-    G_SETCIMG           = 0xFF,
-    G_SETZIMG           = 0xFE,
-    G_SETTIMG           = 0xFD,
-    G_SETCOMBINE        = 0xFC,
-    G_SETENVCOLOR       = 0xFB,
-    G_SETPRIMCOLOR      = 0xFA,
-    G_SETBLENDCOLOR     = 0xF9,
-    G_SETFOGCOLOR       = 0xF8,
-    G_SETFILLCOLOR      = 0xF7,
-    G_FILLRECT          = 0xF6,
-    G_SETTILE           = 0xF5,
-    G_LOADTILE          = 0xF4,
-    G_LOADBLOCK         = 0xF3,
-    G_SETTILESIZE       = 0xF2,
-    G_LOADTLUT          = 0xF0,
-    G_RDPSETOTHERMODE   = 0xEF,
-    G_SETPRIMDEPTH      = 0xEE,
-    G_SETSCISSOR        = 0xED,
-    G_SETCONVERT        = 0xEC,
-    G_SETKEYR           = 0xEB,
-    G_SETKEYFB          = 0xEA,
-    G_RDPFULLSYNC       = 0xE9,
-    G_RDPTILESYNC       = 0xE8,
-    G_RDPPIPESYNC       = 0xE7,
-    G_RDPLOADSYNC       = 0xE6,
-    G_TEXRECTFLIP       = 0xE5,
-    G_TEXRECT           = 0xE4,
-    G_SETOTHERMODE_H    = 0xE3,
-    G_SETOTHERMODE_L    = 0xE2,
-    G_RDPHALF_1         = 0XE1,
-}
-
 export function runDL_F3DEX2(state: RSPState, addr: number): void {
     const segmentBuffer = state.segmentBuffers[(addr >>> 24) & 0xFF];
     const view = segmentBuffer.createDataView();
@@ -479,7 +420,6 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX2_GBI = w0 >>> 24;
-        // console.log(hexzero(i, 8), F3DEX2_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
             case F3DEX2_GBI.G_ENDDL:
@@ -646,7 +586,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             case F3DEX2_GBI.G_RDPTILESYNC:
             case F3DEX2_GBI.G_RDPPIPESYNC:
             case F3DEX2_GBI.G_RDPLOADSYNC:
-            case F3DEX2_GBI.G_SNOOP:
+            case G_SNOOP:
                 // Implementation not necessary.
                 break;
 
@@ -655,5 +595,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
         }
     }
 
-    throw new Error("whoops");
+    // Every display list must terminate with G_ENDDL; running past the end of the segment
+    // means we mis-parsed a command length or followed a bad branch.
+    throw new Error(`DK64: display list at ${hexzero(addr, 8)} ran past the end of its segment`);
 }

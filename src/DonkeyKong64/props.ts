@@ -1003,7 +1003,7 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         );
         const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, indexedTextures);
         initDL(state, true, fogEnabled);
-        // from func_global_asm_80636FFC -- basic inheritd state for props.
+        // from func_global_asm_80636FFC -- basic inherited state for props.
         state.gSPSetPrimColor(0, 0xFF, 0xFF, 0xFF, 0xFF);
         // TODO: maybe handle LODs with G_BRANCH_Z instead of always using highest?
         const displayListOffset = findHighestDetailDisplayListOffset(view, mainDisplayListStart);

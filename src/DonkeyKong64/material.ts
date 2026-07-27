@@ -345,7 +345,7 @@ function initWaterStreamMaterial(rspState: RSPState, fogEnabled: boolean, mapID:
     rspState.setTextureScrollSpeeds([1.234, 0.45]);
 }
 
-// func_global_asm_8063D638 + D_global_asm_80747D80[SceneNodeMaterial.GroundFog + func_global_asm_8063D608
+// func_global_asm_8063D638 + D_global_asm_80747D80[SceneNodeMaterial.GroundFog] + func_global_asm_8063D608
 function initGroundFogMaterial(rspState: RSPState, mapID: number): void {
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 1 << OtherModeH_Layout.G_MDSFT_TEXTLOD);

@@ -1,7 +1,7 @@
 import { vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { F3DEX2_GBI } from './f3dex2.js';
+import { G_SNOOP } from './f3dex2.js';
 import type { AnimatedTexture } from './f3dex2.js';
 import {
     GeneratedSurfaceMaterial, SceneNodeMaterial, isGeneratedSurfaceMaterial,
@@ -377,7 +377,7 @@ export class DK64Map {
 
         let snoopPresent = false;
         for (let commandOffs = dlStart + offset, end = commandOffs + size; commandOffs < end; commandOffs += 8) {
-            if (view.getUint8(commandOffs) !== F3DEX2_GBI.G_SNOOP)
+            if (view.getUint8(commandOffs) !== G_SNOOP)
                 continue;
             snoopPresent = true;
             const sectionID = view.getUint32(commandOffs + 4, false);
