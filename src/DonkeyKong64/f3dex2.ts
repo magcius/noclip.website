@@ -400,8 +400,9 @@ export class RSPState {
     }
 }
 
-enum F3DEX2_GBI {
-    G_SNOOP             = 0x00, //used in DK64
+export enum F3DEX2_GBI {
+    // DK64 marks per-section boundaries inside a chunk display list with G_SNOOP.
+    G_SNOOP             = 0x00,
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,

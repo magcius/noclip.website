@@ -1,11 +1,19 @@
 import { vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { F3DEX2_GBI } from './f3dex2.js';
 import type { AnimatedTexture } from './f3dex2.js';
 import {
     GeneratedSurfaceMaterial, SceneNodeMaterial, isGeneratedSurfaceMaterial,
     isSceneNodeMaterial,
 } from './material.js';
+
+// Each chunk carries one display list per level of detail.
+const displayListsPerChunk = 4;
+// Each section records a vertex offset per chunk display list, plus unused slots.
+const vertexOffsetsPerSection = 8;
+// F3DEX2 vertex command stride, matching gSPVertex's 0x10-byte entries.
+const mapVertexStride = 0x10;
 
 export interface SetupProp {
     setupIndex: number;
@@ -202,7 +210,7 @@ export class MapChunk {
             view.getUint8(0x02) / 0xFF,
         );
         this.modulateVertexColors = view.getUint32(0x08, false) === 1;
-        for (let i = 0, offs = 0x0C; i < 4; i++, offs += 8) {
+        for (let i = 0, offs = 0x0C; i < displayListsPerChunk; i++, offs += 8) {
             this.dlOffsets[i] = view.getInt32(offs + 0x00, false);
             this.dlSizes[i] = view.getUint32(offs + 0x04, false);
         }
@@ -221,7 +229,7 @@ export class MapSection {
         const view = bin.createDataView();
         this.textureAnimationGroup = view.getUint16(0x00, false);
         this.meshID = view.getUint16(0x02, false);
-        for (let i = 0; i < 8; i++)
+        for (let i = 0; i < vertexOffsetsPerSection; i++)
             this.vertOffsets[i] = view.getUint16(0x08 + i * 2, false);
     }
 }
@@ -346,40 +354,9 @@ export class DK64Map {
 
     private parseDisplayLists(view: DataView, dlStart: number): void {
         if (this.chunkCount > 0) {
-            for (const chunk of this.chunks) {
-                for (let i = 0; i < 4; i++) {
-                    const dlOffset = chunk.dlOffsets[i];
-                    const dlSize = chunk.dlSizes[i];
-                    if (dlOffset === -1 || dlSize === 0)
-                        continue;
-                    let snoopPresent = false;
-                    for (let commandOffs = dlStart + dlOffset, end = commandOffs + dlSize; commandOffs < end; commandOffs += 8) {
-                        if (view.getUint8(commandOffs) !== 0x00)
-                            continue;
-                        snoopPresent = true;
-                        const sectionID = view.getUint32(commandOffs + 4, false);
-                        const section = this.sections.find((entry) => entry.meshID === sectionID);
-                        if (section !== undefined) {
-                            this.displayLists.push({
-                                ChunkID: chunk.id,
-                                dlStartAddr: commandOffs - dlStart,
-                                VertStartIndex: chunk.vertOffset / 0x10 + section.vertOffsets[i],
-                                textureAnimationGroup: section.textureAnimationGroup,
-                                materialIndex: null,
-                            });
-                        }
-                    }
-                    if (!snoopPresent) {
-                        this.displayLists.push({
-                            ChunkID: chunk.id,
-                            dlStartAddr: dlOffset,
-                            VertStartIndex: chunk.vertOffset / 0x10,
-                            textureAnimationGroup: null,
-                            materialIndex: null,
-                        });
-                    }
-                }
-            }
+            for (const chunk of this.chunks)
+                for (let i = 0; i < displayListsPerChunk; i++)
+                    this.parseChunkDisplayList(view, dlStart, chunk, i);
         } else {
             this.displayLists.push({
                 ChunkID: -1, dlStartAddr: 0, VertStartIndex: 0,
@@ -387,6 +364,47 @@ export class DK64Map {
             });
         }
 
+        this.parseSceneNodeDisplayLists(view);
+    }
+
+    // A chunk display list is either split into per-section runs delimited by G_SNOOP
+    // commands, or, when no G_SNOOP is present, submitted whole.
+    private parseChunkDisplayList(view: DataView, dlStart: number, chunk: MapChunk, i: number): void {
+        const dlOffset = chunk.dlOffsets[i];
+        const dlSize = chunk.dlSizes[i];
+        if (dlOffset === -1 || dlSize === 0)
+            return;
+
+        let snoopPresent = false;
+        for (let commandOffs = dlStart + dlOffset, end = commandOffs + dlSize; commandOffs < end; commandOffs += 8) {
+            if (view.getUint8(commandOffs) !== F3DEX2_GBI.G_SNOOP)
+                continue;
+            snoopPresent = true;
+            const sectionID = view.getUint32(commandOffs + 4, false);
+            const section = this.sections.find((entry) => entry.meshID === sectionID);
+            if (section === undefined)
+                continue;
+            this.displayLists.push({
+                ChunkID: chunk.id,
+                dlStartAddr: commandOffs - dlStart,
+                VertStartIndex: chunk.vertOffset / mapVertexStride + section.vertOffsets[i],
+                textureAnimationGroup: section.textureAnimationGroup,
+                materialIndex: null,
+            });
+        }
+
+        if (!snoopPresent) {
+            this.displayLists.push({
+                ChunkID: chunk.id,
+                dlStartAddr: dlOffset,
+                VertStartIndex: chunk.vertOffset / mapVertexStride,
+                textureAnimationGroup: null,
+                materialIndex: null,
+            });
+        }
+    }
+
+    private parseSceneNodeDisplayLists(view: DataView): void {
         const rootNode = view.getUint32(0x30, false);
         const count = view.getUint8(rootNode + 0xC5);
         for (let i = 0; i < count; i++) {

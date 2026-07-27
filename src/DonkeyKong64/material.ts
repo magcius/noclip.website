@@ -540,18 +540,10 @@ export interface SpriteMaterialDefinition {
     height: number;
 }
 
-function getSpriteImageFormat(sprite: SpriteMaterialDefinition): ImageFormat {
-    // from func_global_asm_80714778
-    return sprite.flags & 0x07;
-}
-
-function getSpriteImageSize(sprite: SpriteMaterialDefinition): ImageSize {
-    return sprite.codec as ImageSize;
-}
-
 export function initSpriteMaterial(rspState: RSPState, sprite: SpriteMaterialDefinition, segment: number, color: readonly number[]): void {
-    const fmt = getSpriteImageFormat(sprite);
-    const siz = getSpriteImageSize(sprite);
+    // from func_global_asm_80714778
+    const fmt: ImageFormat = sprite.flags & 0x07;
+    const siz = sprite.codec as ImageSize;
     const bitsPerPixel = 4 << siz;
     const texelCount = sprite.width * sprite.height;
     const loadCount = Math.min(0x07FF, Math.ceil(texelCount * bitsPerPixel / 16) - 1);

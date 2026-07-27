@@ -10,6 +10,7 @@ import type { DrawTextureAnimation } from './f3dex2.js';
 import type { Setup } from './parse.js';
 
 const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 
 // Spotlights are cast by actors with a light bone; the game gives them a fixed falloff.
 // See func_global_asm_8065EB10.
@@ -301,35 +302,42 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     ) / 3;
     const distanceRatio = cameraDistance / light.maxDistance;
     const cameraFade = distanceRatio < .8 ? 1 : Math.max(0, 1 - (distanceRatio - .8) / .2);
-    if (light.kind === 'spot') {
-        // func_global_asm_8069AB74: the light is hanging off the 3rd bone
-        light.pose.update(tick);
-        const boneMatrix = light.pose.boneMatrices[light.targetBone];
-        vec3.set(bonePosition, boneMatrix[12], boneMatrix[13], boneMatrix[14]);
-        vec3.scale(bonePosition, bonePosition, light.scale);
-        const sinY = Math.sin(light.rotationY);
-        const cosY = Math.cos(light.rotationY);
-        const direction = vec3.fromValues(
-            cosY * bonePosition[0] + sinY * bonePosition[2] - 0.3,
-            bonePosition[1],
-            -sinY * bonePosition[0] + cosY * bonePosition[2],
-        );
-        vec3.normalize(direction, direction);
-        return {
-            origin: light.origin,
-            // from func_global_asm_8065C990
-            innerRadius: spotLightInnerRadius,
-            outerRadius: spotLightCullRadius,
-            color: [
-                light.color[0] * cameraFade,
-                light.color[1] * cameraFade,
-                light.color[2] * cameraFade,
-            ],
-            direction,
-            innerConeCos: Math.cos(light.innerAngle * MathConstants.DEG_TO_RAD),
-            outerConeCos: Math.cos(light.outerAngle * MathConstants.DEG_TO_RAD),
-        };
-    }
+    return light.kind === 'spot'
+        ? sampleSpotLight(light, cameraFade, tick, bonePosition)
+        : samplePointLight(light, cameraFade, tick);
+}
+
+function sampleSpotLight(light: DynamicSpotLight, cameraFade: number, tick: number, bonePosition: vec3): ActiveLight {
+    // func_global_asm_8069AB74: the light is hanging off the 3rd bone
+    light.pose.update(tick);
+    const boneMatrix = light.pose.boneMatrices[light.targetBone];
+    vec3.set(bonePosition, boneMatrix[12], boneMatrix[13], boneMatrix[14]);
+    vec3.scale(bonePosition, bonePosition, light.scale);
+    const sinY = Math.sin(light.rotationY);
+    const cosY = Math.cos(light.rotationY);
+    const direction = vec3.fromValues(
+        cosY * bonePosition[0] + sinY * bonePosition[2] - 0.3,
+        bonePosition[1],
+        -sinY * bonePosition[0] + cosY * bonePosition[2],
+    );
+    vec3.normalize(direction, direction);
+    return {
+        origin: light.origin,
+        // from func_global_asm_8065C990
+        innerRadius: spotLightInnerRadius,
+        outerRadius: spotLightCullRadius,
+        color: [
+            light.color[0] * cameraFade,
+            light.color[1] * cameraFade,
+            light.color[2] * cameraFade,
+        ],
+        direction,
+        innerConeCos: Math.cos(light.innerAngle * MathConstants.DEG_TO_RAD),
+        outerConeCos: Math.cos(light.outerAngle * MathConstants.DEG_TO_RAD),
+    };
+}
+
+function samplePointLight(light: DynamicPointLight, cameraFade: number, tick: number): ActiveLight {
     const keyframes = light.animation;
     const totalDuration = keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0);
     let animationTick = (tick + light.phase) % totalDuration;
@@ -373,18 +381,24 @@ function sampleLightAtPosition(light: ActiveLight, x: number, y: number, z: numb
     return falloff;
 }
 
-export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, activeLightCache: ActiveLightCache, enabled: boolean): vec3 {
-    if (!enabled)
-        return vec3.set(dst, 1, 1, 1);
-
-    vec3.copy(dst, lighting.ambientColor);
-    for (const dynamicLight of lighting.lights) {
+// Accumulates ambient plus every active light reaching (x, y, z) into dst. Unclamped:
+// map chunks tint by the vertex color before clamping, objects clamp directly.
+function accumulateLighting(dst: vec3, ambientColor: vec3, lights: readonly DynamicLight[], activeLightCache: ActiveLightCache, x: number, y: number, z: number): void {
+    vec3.copy(dst, ambientColor);
+    for (const dynamicLight of lights) {
         const light = activeLightCache.get(dynamicLight)!;
-        const falloff = sampleLightAtPosition(light, lighting.origin[0], lighting.origin[1], lighting.origin[2]);
+        const falloff = sampleLightAtPosition(light, x, y, z);
         dst[0] += light.color[0] * falloff;
         dst[1] += light.color[1] * falloff;
         dst[2] += light.color[2] * falloff;
     }
+}
+
+export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, activeLightCache: ActiveLightCache, enabled: boolean): vec3 {
+    if (!enabled)
+        return vec3.set(dst, 1, 1, 1);
+
+    accumulateLighting(dst, lighting.ambientColor, lighting.lights, activeLightCache, lighting.origin[0], lighting.origin[1], lighting.origin[2]);
     dst[0] = saturate(dst[0]);
     dst[1] = saturate(dst[1]);
     dst[2] = saturate(dst[2]);
@@ -407,23 +421,14 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
     // props/actors use sampleObjectLighting instead.
     for (const vertexIndex of lighting.vertexIndices) {
         const vertex = vertices[vertexIndex];
-        let red = lighting.ambientColor[0];
-        let green = lighting.ambientColor[1];
-        let blue = lighting.ambientColor[2];
-        for (const dynamicLight of lighting.lights) {
-            const light = activeLightCache.get(dynamicLight)!;
-            const falloff = sampleLightAtPosition(light, vertex.x, vertex.y, vertex.z);
-            red += light.color[0] * falloff;
-            green += light.color[1] * falloff;
-            blue += light.color[2] * falloff;
-        }
+        accumulateLighting(scratchVec3b, lighting.ambientColor, lighting.lights, activeLightCache, vertex.x, vertex.y, vertex.z);
         const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
         const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
         const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;
         // func_global_asm_8065C990: tint before clamping.
-        vertexBufferData[dst + 0] = saturate(red * baseRed);
-        vertexBufferData[dst + 1] = saturate(green * baseGreen);
-        vertexBufferData[dst + 2] = saturate(blue * baseBlue);
+        vertexBufferData[dst + 0] = saturate(scratchVec3b[0] * baseRed);
+        vertexBufferData[dst + 1] = saturate(scratchVec3b[1] * baseGreen);
+        vertexBufferData[dst + 2] = saturate(scratchVec3b[2] * baseBlue);
     }
 }
