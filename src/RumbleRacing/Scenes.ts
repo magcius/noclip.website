@@ -57,7 +57,7 @@ const SOLID_PASS_ALPHA_REF = 0.99;
 interface TrackGeometryGroup {
   geometry: MergedGeometry;
   visible: boolean;
-  label: string | null;
+  label: string;
 }
 
 class RumbleRacingScene implements SceneGfx {
@@ -426,7 +426,6 @@ class RumbleRacingScene implements SceneGfx {
     trackGeometryPanel.contents.appendChild(showActorsCheckbox.elem);
 
     for (const group of this.trackGroups) {
-      if (group.label === null) continue;
       const checkbox = new UI.Checkbox(group.label, group.visible);
       checkbox.onchanged = () => {
         group.visible = checkbox.checked;
