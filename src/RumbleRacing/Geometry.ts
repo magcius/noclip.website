@@ -44,14 +44,12 @@ function collectBuffers(
 ): void {
   if (node === undefined || node === null) return;
 
-  if (node.buffers) {
-    for (const buffer of node.buffers) {
-      if (buffer.positions.length === 0) continue;
+  for (const buffer of node.buffers) {
+    if (buffer.positions.length === 0) continue;
 
-      if (exclude.textureIds?.has(buffer.textureId)) continue;
+    if (exclude.textureIds?.has(buffer.textureId)) continue;
 
-      out.push(buffer);
-    }
+    out.push(buffer);
   }
 
   if (node.children) {
@@ -171,7 +169,8 @@ export class MergedGeometry {
 
     const sourceBuffers: JsonBuffer[] = [];
     for (const obf of obfs) {
-      if (obf && obf.rootNode) collectBuffers(obf.rootNode, exclude, sourceBuffers);
+      if (obf && obf.rootNode)
+        collectBuffers(obf.rootNode, exclude, sourceBuffers);
     }
 
     const groups = new Map<string, JsonBuffer[]>();
