@@ -383,6 +383,7 @@ function sampleLightAtPosition(light: ActiveLight, x: number, y: number, z: numb
 
 // Accumulates ambient plus every active light reaching (x, y, z) into dst. Unclamped:
 // map chunks tint by the vertex color before clamping, objects clamp directly.
+// dst is a vec3, so accumulation rounds to float32 per light rather than at the end.
 function accumulateLighting(dst: vec3, ambientColor: vec3, lights: readonly DynamicLight[], activeLightCache: ActiveLightCache, x: number, y: number, z: number): void {
     vec3.copy(dst, ambientColor);
     for (const dynamicLight of lights) {
