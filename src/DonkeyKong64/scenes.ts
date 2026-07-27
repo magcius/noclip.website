@@ -13,6 +13,7 @@ import { FakeTextureHolder } from '../TextureHolder.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { CameraController } from '../Camera.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { MathConstants } from '../MathHelpers.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as Deflate from '../Common/Compression/Deflate.js';
@@ -423,7 +424,7 @@ function addSceneActors(
             origin[1],
             origin[2],
         ]);
-        mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, actor.rotationY / 0x1000 * Math.PI * 2);
+        mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, actor.rotationY / 0x1000 * MathConstants.TAU);
         mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [rendererScale, rendererScale, rendererScale]);
         renderer.setObjectLighting(buildObjectLighting(lightingEnvironment, origin));
         if (definition.rotationYSpeed !== undefined)

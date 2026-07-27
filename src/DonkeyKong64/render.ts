@@ -14,7 +14,7 @@ import { GfxBlendFactor, GfxBlendMode, GfxBindingLayoutDescriptor, GfxBuffer, Gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
-import { scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { getMatrixTranslation, MathConstants, scaleMatrix, setMatrixTranslation, vec3SetAll, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
 import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
 import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
@@ -25,6 +25,8 @@ import { ActiveLightCache, sampleObjectLighting, updateDynamicLighting } from '.
 import type { DynamicLighting, ObjectLighting } from './light.js';
 import type { GeneratedSurface } from './parse.js';
 import type { PropAnimationState } from './props.js';
+
+const scratchVec3a = vec3.create();
 
 function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
@@ -76,8 +78,8 @@ export function generatedSurfaceHeight(surface: GeneratedSurface, x: number, z: 
     const angleS = (phaseS + Math.trunc(surface.frequencyS * x)) % 0x0FFF;
     const angleT = (phaseT + Math.trunc(surface.frequencyT * z)) % 0x0FFF;
     return surface.baseY
-        + Math.sin(angleS * Math.PI * 2 / 0x1000) * surface.amplitudeS
-        + Math.sin(angleT * Math.PI * 2 / 0x1000) * surface.amplitudeT;
+        + Math.sin(angleS * MathConstants.TAU / 0x1000) * surface.amplitudeS
+        + Math.sin(angleT * MathConstants.TAU / 0x1000) * surface.amplitudeT;
 }
 
 export interface FogParams {
@@ -443,10 +445,8 @@ export class SpriteBillboard {
         const age = this.spawnTick === undefined
             ? 0
             : ((tick - this.spawnTick + this.loopTicks!) % this.loopTicks!);
-        const dx = cameraMatrix[12] - this.origin[0];
-        const dy = cameraMatrix[13] - this.origin[1];
-        const dz = cameraMatrix[14] - this.origin[2];
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        getMatrixTranslation(scratchVec3a, cameraMatrix);
+        const distance = vec3.distance(scratchVec3a, this.origin);
         const withinDistance = this.maxDistance === undefined || distance <= this.maxDistance;
         const active = withinDistance && (this.spawnTick === undefined || age < this.lifetime!);
         this.fade = active ? 1 : 0;
@@ -504,12 +504,8 @@ function computeGeometryBoundingBox(geo: Geometry): AABB | null {
         const indexEnd = drawCall.firstIndex + drawCall.indexCount;
         for (let index = drawCall.firstIndex; index < indexEnd; index++) {
             const vertex = geo.sharedOutput.vertices[geo.sharedOutput.indices[index]];
-            boundingBox.min[0] = Math.min(boundingBox.min[0], vertex.x);
-            boundingBox.min[1] = Math.min(boundingBox.min[1], vertex.y);
-            boundingBox.min[2] = Math.min(boundingBox.min[2], vertex.z);
-            boundingBox.max[0] = Math.max(boundingBox.max[0], vertex.x);
-            boundingBox.max[1] = Math.max(boundingBox.max[1], vertex.y);
-            boundingBox.max[2] = Math.max(boundingBox.max[2], vertex.z);
+            vec3.set(scratchVec3a, vertex.x, vertex.y, vertex.z);
+            boundingBox.unionPoint(scratchVec3a);
         }
     }
     if (boundingBox.min[0] > boundingBox.max[0])
@@ -519,19 +515,17 @@ function computeGeometryBoundingBox(geo: Geometry): AABB | null {
         boundingBox.union(boundingBox, geo.actorAnimation.boundingBox);
     const translationBounds = geo.propAnimation?.translationBounds;
     if (translationBounds !== undefined) {
-        for (let axis = 0; axis < 3; axis++) {
-            boundingBox.min[axis] += translationBounds.min[axis];
-            boundingBox.max[axis] += translationBounds.max[axis];
-        }
+        // The animation sweeps the mesh over translationBounds, so grow each side by that side's travel.
+        vec3.add(boundingBox.min, boundingBox.min, translationBounds.min);
+        vec3.add(boundingBox.max, boundingBox.max, translationBounds.max);
+        // Rotation about the animated nodes can swing geometry outside the swept box; pad to cover it.
         const padding = Math.max(
             boundingBox.max[0] - boundingBox.min[0],
             boundingBox.max[1] - boundingBox.min[1],
             boundingBox.max[2] - boundingBox.min[2],
         ) * 0.5;
-        for (let axis = 0; axis < 3; axis++) {
-            boundingBox.min[axis] -= padding;
-            boundingBox.max[axis] += padding;
-        }
+        vec3SetAll(scratchVec3a, padding);
+        boundingBox.expandByExtent(boundingBox, scratchVec3a);
     }
     return boundingBox;
 }
@@ -807,13 +801,13 @@ export class GeometryRenderer {
 
     public setRotationYAnimation(anglePerTick: number): void {
         this.ensureRootTransformAnimation();
-        this.rootTransformAnimation!.rotationYRadiansPerTick = anglePerTick / 0x1000 * Math.PI * 2;
+        this.rootTransformAnimation!.rotationYRadiansPerTick = anglePerTick / 0x1000 * MathConstants.TAU;
     }
 
     public setPositionYAnimation(amplitude: number, anglePerTick: number): void {
         this.ensureRootTransformAnimation();
         this.rootTransformAnimation!.positionYAmplitude = amplitude;
-        this.rootTransformAnimation!.positionYRadiansPerTick = anglePerTick / 0x1000 * Math.PI * 2;
+        this.rootTransformAnimation!.positionYRadiansPerTick = anglePerTick / 0x1000 * MathConstants.TAU;
     }
 
     public setCameraBillboard(origin: vec3, scale: number): void {
@@ -856,11 +850,8 @@ export class GeometryRenderer {
 
         let primAlphaMultiplier = 1;
         if (this.distanceFade !== null) {
-            const camera = viewerInput.camera.worldMatrix;
-            const dx = camera[12] - this.distanceFade.origin[0];
-            const dy = camera[13] - this.distanceFade.origin[1];
-            const dz = camera[14] - this.distanceFade.origin[2];
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+            const distance = vec3.distance(scratchVec3a, this.distanceFade.origin);
             if (distance >= this.distanceFade.endDistance)
                 return;
             if (distance > this.distanceFade.startDistance) {

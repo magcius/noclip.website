@@ -5,8 +5,10 @@ import type { Vertex } from '../BanjoKazooie/f3dex.js';
 import { ImageFormat, ImageSize, TextFilt } from '../Common/N64/Image.js';
 import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { AABB } from '../Geometry.js';
-import { lerp, MathConstants } from '../MathHelpers.js';
+import { lerp, MathConstants, vec3SetAll, Vec3Zero } from '../MathHelpers.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+
+const scratchVec3a = vec3.create();
 
 interface ActorAnimation {
     playbackRate: number;
@@ -74,10 +76,10 @@ export class ActorAnimationPose {
             }
             radius = Math.max(radius, vertexRadius);
         }
-        return new AABB(
-            -radius, -radius, -radius,
-            radius, radius, radius,
-        );
+        const boundingBox = new AABB();
+        vec3SetAll(scratchVec3a, radius);
+        boundingBox.setFromCenterAndHalfExtents(Vec3Zero, scratchVec3a);
+        return boundingBox;
     }
 }
 

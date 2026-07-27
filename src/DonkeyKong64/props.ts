@@ -7,6 +7,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
+import { MathConstants, vec3SetAll } from '../MathHelpers.js';
 import { nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { buildObjectLighting } from './light.js';
@@ -16,14 +17,16 @@ import type { InstanceScript, SetupProp } from './parse.js';
 import type { Geometry, GeometryRenderer } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 
+const scratchVec3a = vec3.create();
+
 function computeBillboardBoundingBox(origin: ReadonlyVec3, rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): AABB {
     let radius = 0;
     for (let i = 0; i < rightOffsets.length; i++)
         radius = Math.max(radius, Math.hypot(rightOffsets[i], upOffsets[i], forwardOffsets[i]));
-    return new AABB(
-        origin[0] - radius, origin[1] - radius, origin[2] - radius,
-        origin[0] + radius, origin[1] + radius, origin[2] + radius,
-    );
+    const boundingBox = new AABB();
+    vec3SetAll(scratchVec3a, radius);
+    boundingBox.setFromCenterAndHalfExtents(origin, scratchVec3a);
+    return boundingBox;
 }
 
 export interface TerrainTriangle {
@@ -236,7 +239,7 @@ export class PropAnimationState {
                         delta += 360;
                     else if (delta > 180)
                         delta -= 360;
-                    return (current + delta * t) * Math.PI / 180;
+                    return (current + delta * t) * MathConstants.DEG_TO_RAD;
                 };
 
                 mat4.fromScaling(node.outputMatrix, [interpolate(0), interpolate(1), interpolate(2)]);
@@ -768,7 +771,7 @@ function addModel2PropDecals(device: GfxDevice, cache: GfxRenderCache, sceneRend
         const worldX = prop.position[0] * worldScale;
         const worldY = prop.position[1] * worldScale;
         const worldZ = prop.position[2] * worldScale;
-        const yaw = prop.rotation[1] * Math.PI / 180;
+        const yaw = prop.rotation[1] * MathConstants.DEG_TO_RAD;
         const projectedVertices = buildProjectedDecalVertices(
             terrainGrid,
             worldX,
@@ -1028,9 +1031,9 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
                 origin[1],
                 origin[2],
             ]);
-            mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[0] * Math.PI / 180);
-            mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[1] * Math.PI / 180);
-            mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[2] * Math.PI / 180);
+            mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[0] * MathConstants.DEG_TO_RAD);
+            mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[1] * MathConstants.DEG_TO_RAD);
+            mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[2] * MathConstants.DEG_TO_RAD);
             mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [
                 prop.scale * worldScale,
                 prop.scale * worldScale,

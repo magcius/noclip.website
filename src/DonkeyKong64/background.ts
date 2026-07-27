@@ -23,6 +23,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import {
     GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque,
 } from '../gfx/render/GfxRenderInstManager.js';
+import { MathConstants } from '../MathHelpers.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, hexzero } from '../util.js';
 
@@ -183,11 +184,11 @@ class PanoramaBackdropRenderer implements BackdropRenderer {
         const forwardX = -camera[8];
         const forwardY = -camera[9];
         const forwardZ = -camera[10];
-        const horizontalAngle = wrap01(Math.atan2(-forwardZ, -forwardX) / (Math.PI * 2));
+        const horizontalAngle = wrap01(Math.atan2(-forwardZ, -forwardX) / MathConstants.TAU);
         const pitch = Math.atan2(forwardY, Math.hypot(forwardX, forwardZ));
         const verticalAngle = Math.PI / 2 - pitch;
         const centerU = horizontalAngle;
-        const centerV = wrap01((verticalAngle / (Math.PI * 2)) * (320 / 240));
+        const centerV = wrap01((verticalAngle / MathConstants.TAU) * (320 / 240));
         const backdropScale = 5.6;
         const scaleU = (230 / backdropScale) / 320;
         const scaleV = (190 / backdropScale) / 240;

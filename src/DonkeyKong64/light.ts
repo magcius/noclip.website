@@ -2,11 +2,21 @@ import { vec3 } from 'gl-matrix';
 
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
-import { MathConstants } from '../MathHelpers.js';
+import { AABB } from '../Geometry.js';
+import { lerp, MathConstants, saturate } from '../MathHelpers.js';
 import { actorModelScale, getActorRenderDefinition } from './actors.js';
 import type { ActorAnimationPose, ActorRenderDefinition } from './actors.js';
 import type { DrawTextureAnimation } from './f3dex2.js';
 import type { Setup } from './parse.js';
+
+const scratchVec3a = vec3.create();
+
+// Spotlights are cast by actors with a light bone; the game gives them a fixed falloff.
+// See func_global_asm_8065EB10.
+const spotLightInnerRadius = 300;
+const spotLightCullRadius = 1100;
+// Default reach for lights whose prop geometry does not specify one.
+const defaultLightMaxDistance = 700;
 
 interface LightAnimationKeyframe {
     intensity: number;
@@ -53,8 +63,7 @@ export interface ObjectLighting {
 
 export interface ObjectLightingEnvironment {
     chunks: readonly {
-        min: vec3;
-        max: vec3;
+        bounds: AABB;
         ambientColor: vec3;
     }[];
     lights: readonly DynamicLight[];
@@ -111,17 +120,17 @@ export function buildObjectLightingEnvironment(
     const view = vertexData.createDataView();
     return {
         chunks: chunks.map((chunk) => {
-            const min = vec3.fromValues(Infinity, Infinity, Infinity);
-            const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
+            const bounds = new AABB();
             const end = Math.min(view.byteLength, chunk.vertOffset + chunk.vertSize);
             for (let offs = chunk.vertOffset; offs + 6 <= end; offs += 0x10) {
-                for (let axis = 0; axis < 3; axis++) {
-                    const value = view.getInt16(offs + axis * 2, false);
-                    min[axis] = Math.min(min[axis], value);
-                    max[axis] = Math.max(max[axis], value);
-                }
+                vec3.set(scratchVec3a,
+                    view.getInt16(offs + 0, false),
+                    view.getInt16(offs + 2, false),
+                    view.getInt16(offs + 4, false),
+                );
+                bounds.unionPoint(scratchVec3a);
             }
-            return { min, max, ambientColor: chunk.ambientColor };
+            return { bounds, ambientColor: chunk.ambientColor };
         }),
         lights,
     };
@@ -131,13 +140,7 @@ export function buildObjectLighting(environment: ObjectLightingEnvironment, orig
     let bestChunk = environment.chunks[0];
     let bestDistanceSquared = Infinity;
     for (const chunk of environment.chunks) {
-        let distanceSquared = 0;
-        for (let axis = 0; axis < 3; axis++) {
-            const delta = origin[axis] < chunk.min[axis]
-                ? chunk.min[axis] - origin[axis]
-                : origin[axis] > chunk.max[axis] ? origin[axis] - chunk.max[axis] : 0;
-            distanceSquared += delta * delta;
-        }
+        const distanceSquared = chunk.bounds.sqDistFromClosestPoint(origin);
         if (distanceSquared < bestDistanceSquared) {
             bestChunk = chunk;
             bestDistanceSquared = distanceSquared;
@@ -202,7 +205,7 @@ export function buildDynamicLights(
             animation,
             // func_global_asm_8065EB10: vary light animation phase to avoid synchronization.
             phase: prop.setupIndex,
-            maxDistance: maxDistance > 0 ? maxDistance : 700,
+            maxDistance: maxDistance > 0 ? maxDistance : defaultLightMaxDistance,
         });
     }
     for (const actor of setup.actors) {
@@ -220,8 +223,8 @@ export function buildDynamicLights(
             ],
             innerAngle: actor.lightCone[0] !== 0 ? actor.lightCone[0] : 25,
             outerAngle: actor.lightCone[1] !== 0 ? actor.lightCone[1] : 65,
-            rotationY: actor.rotationY / 0x1000 * Math.PI * 2,
-            maxDistance: 700,
+            rotationY: actor.rotationY / 0x1000 * MathConstants.TAU,
+            maxDistance: defaultLightMaxDistance,
             pose: getActorPose(definition, speed),
             scale: actor.scale * actorModelScale,
             targetBone: definition.lightBone,
@@ -231,29 +234,17 @@ export function buildDynamicLights(
 }
 
 function filterDynamicLightsForVertices(sharedOutput: RSPSharedOutput, vertexIndices: readonly number[], lights: readonly DynamicLight[]): DynamicLight[] {
-    const min = vec3.fromValues(Infinity, Infinity, Infinity);
-    const max = vec3.fromValues(-Infinity, -Infinity, -Infinity);
+    const bounds = new AABB();
     for (const vertexIndex of vertexIndices) {
         const vertex = sharedOutput.vertices[vertexIndex];
-        min[0] = Math.min(min[0], vertex.x);
-        min[1] = Math.min(min[1], vertex.y);
-        min[2] = Math.min(min[2], vertex.z);
-        max[0] = Math.max(max[0], vertex.x);
-        max[1] = Math.max(max[1], vertex.y);
-        max[2] = Math.max(max[2], vertex.z);
+        vec3.set(scratchVec3a, vertex.x, vertex.y, vertex.z);
+        bounds.unionPoint(scratchVec3a);
     }
     return lights.filter((light) => {
         const radius = light.kind === 'point'
             ? Math.max(...light.animation.map((keyframe) => keyframe.radius)) * 3
-            : 1100;
-        let distanceSquared = 0;
-        for (let axis = 0; axis < 3; axis++) {
-            const delta = light.origin[axis] < min[axis]
-                ? min[axis] - light.origin[axis]
-                : light.origin[axis] > max[axis] ? light.origin[axis] - max[axis] : 0;
-            distanceSquared += delta * delta;
-        }
-        return distanceSquared < radius * radius;
+            : spotLightCullRadius;
+        return bounds.sqDistFromClosestPoint(light.origin) < radius * radius;
     });
 }
 
@@ -327,8 +318,8 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
         return {
             origin: light.origin,
             // from func_global_asm_8065C990
-            innerRadius: 300,
-            outerRadius: 1100,
+            innerRadius: spotLightInnerRadius,
+            outerRadius: spotLightCullRadius,
             color: [
                 light.color[0] * cameraFade,
                 light.color[1] * cameraFade,
@@ -350,17 +341,16 @@ function sampleActiveLight(light: DynamicLight, camera: ArrayLike<number>, tick:
     const current = keyframes[keyframeIndex];
     const next = keyframes[(keyframeIndex + 1) % keyframes.length];
     const t = animationTick / current.duration;
-    const radius = current.radius + (next.radius - current.radius) * t;
-    const intensity = (current.intensity + (next.intensity - current.intensity) * t) * cameraFade;
+    const radius = lerp(current.radius, next.radius, t);
+    const intensity = lerp(current.intensity, next.intensity, t) * cameraFade;
     return {
         origin: light.origin,
-
         innerRadius: radius,
         outerRadius: radius * 3,  // from func_global_asm_8065BAA0
         color: [
-            (current.color[0] + (next.color[0] - current.color[0]) * t) / 0xFF * intensity,
-            (current.color[1] + (next.color[1] - current.color[1]) * t) / 0xFF * intensity,
-            (current.color[2] + (next.color[2] - current.color[2]) * t) / 0xFF * intensity,
+            lerp(current.color[0], next.color[0], t) / 0xFF * intensity,
+            lerp(current.color[1], next.color[1], t) / 0xFF * intensity,
+            lerp(current.color[2], next.color[2], t) / 0xFF * intensity,
         ],
     };
 }
@@ -395,9 +385,9 @@ export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, active
         dst[1] += light.color[1] * falloff;
         dst[2] += light.color[2] * falloff;
     }
-    dst[0] = Math.min(1, dst[0]);
-    dst[1] = Math.min(1, dst[1]);
-    dst[2] = Math.min(1, dst[2]);
+    dst[0] = saturate(dst[0]);
+    dst[1] = saturate(dst[1]);
+    dst[2] = saturate(dst[2]);
     return dst;
 }
 
@@ -432,8 +422,8 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
         const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;
         // func_global_asm_8065C990: tint before clamping.
-        vertexBufferData[dst + 0] = Math.min(1, red * baseRed);
-        vertexBufferData[dst + 1] = Math.min(1, green * baseGreen);
-        vertexBufferData[dst + 2] = Math.min(1, blue * baseBlue);
+        vertexBufferData[dst + 0] = saturate(red * baseRed);
+        vertexBufferData[dst + 1] = saturate(green * baseGreen);
+        vertexBufferData[dst + 2] = saturate(blue * baseBlue);
     }
 }
