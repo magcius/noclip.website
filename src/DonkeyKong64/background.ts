@@ -46,6 +46,8 @@ const backdropVertexStride = 10;
 // The top and bottom gradient bands extend well past the viewport so they never
 // pull away from the screen edge as the backdrop slides with camera pitch.
 const gradientOffscreenNDC = 6;
+// How far the gradient slides vertically between looking straight up and straight down.
+const gradientPitchShift = 2.5;
 
 const identityMatrix = mat4.create();
 
@@ -343,9 +345,9 @@ class GradientBackdropRenderer extends BackdropQuadRenderer {
 
     protected fillDrawParams(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
         const camera = viewerInput.camera.worldMatrix;
-        const pitch = Math.atan2(-camera[9], Math.hypot(camera[8], camera[10]));
         mat4.identity(scratchMatrix);
-        scratchMatrix[13] = -2.5 * Math.sin(pitch);
+        // The camera's Z column is normalized, so sin(pitch) is just -camera[9].
+        scratchMatrix[13] = gradientPitchShift * camera[9];
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
         const mapped = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
         offs += fillMatrix4x3(mapped, offs, scratchMatrix);

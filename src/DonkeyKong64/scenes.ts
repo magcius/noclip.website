@@ -21,7 +21,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { AnimatedTexture, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { ActiveLightCache, buildDynamicLights, buildMapChunkLighting, buildObjectLighting, buildObjectLightingEnvironment } from './light.js';
 import type { DynamicLight, ObjectLightingEnvironment } from './light.js';
-import { ActorAnimationPose, actorModelScale, buildActorGeometry, getActorRenderDefinition } from './actors.js';
+import { ActorAnimationPose, actorModelScale, buildActorGeometry, getActorAnimationSpeed, getActorRenderDefinition } from './actors.js';
 import type { ActorRenderDefinition } from './actors.js';
 import { addModel2Props, buildTerrainTriangles } from './props.js';
 import {
@@ -392,7 +392,7 @@ function addSceneActors(
 
     const geoDataByDefinition = new Map<string, GeometryData>();
     for (const { actor, definition } of actors) {
-        const animationSpeed = definition.animationSpeed === 'setup' ? actor.lightSpeed : definition.animationSpeed;
+        const animationSpeed = getActorAnimationSpeed(definition, actor);
         const geometryKey = `${definition.model}:${definition.animation ?? -1}:${animationSpeed}`;
         let geoData = geoDataByDefinition.get(geometryKey);
         if (geoData === undefined) {

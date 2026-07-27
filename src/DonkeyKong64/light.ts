@@ -1,16 +1,18 @@
 import { vec3 } from 'gl-matrix';
+import type { ReadonlyVec3 } from 'gl-matrix';
 
 import type ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { AABB } from '../Geometry.js';
-import { lerp, MathConstants, saturate } from '../MathHelpers.js';
-import { actorModelScale, getActorRenderDefinition } from './actors.js';
+import { getMatrixTranslation, lerp, MathConstants, saturate } from '../MathHelpers.js';
+import { actorModelScale, getActorAnimationSpeed, getActorRenderDefinition } from './actors.js';
 import type { ActorAnimationPose, ActorRenderDefinition } from './actors.js';
 import type { DrawTextureBinding } from './f3dex2.js';
 import type { Setup } from './parse.js';
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 // Spotlights are cast by actors with a light bone; the game gives them a fixed falloff.
 // See func_global_asm_8065EB10.
@@ -25,6 +27,9 @@ const defaultLightMaxDistance = 700;
 const lightWorldScale = 3;
 // func_global_asm_8065BAA0: a point light reaches three times its keyframe radius.
 const pointLightOuterRadiusScale = 3;
+// Spotlight origins sit slightly off the actor's X position, and the cone is aimed back
+// through the same offset. Copied from the placement code; the reason for it is unknown.
+const spotLightOffsetX = 0.3;
 
 interface LightAnimationKeyframe {
     intensity: number;
@@ -33,10 +38,15 @@ interface LightAnimationKeyframe {
     duration: number;
 }
 
+interface LightAnimation {
+    keyframes: readonly LightAnimationKeyframe[];
+    totalDuration: number;
+}
+
 interface DynamicPointLight {
     kind: 'point';
     origin: vec3;
-    animation: readonly LightAnimationKeyframe[];
+    animation: LightAnimation;
     phase: number;
     maxDistance: number;
 }
@@ -162,7 +172,7 @@ export function buildObjectLighting(environment: ObjectLightingEnvironment, orig
 }
 
 // From func_global_asm_8065EB10 + D_global_asm_80748430
-const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
+const lightAnimationKeyframes: readonly (readonly LightAnimationKeyframe[])[] = [
     [],
     [{ intensity: .4, color: [255, 0, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 0, 255], radius: 150, duration: 15 }],
     [{ intensity: .4, color: [255, 255, 255], radius: 150, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 150, duration: 15 }],
@@ -192,6 +202,24 @@ const lightAnimations: readonly (readonly LightAnimationKeyframe[])[] = [
     [{ intensity: .4, color: [255, 255, 255], radius: 180, duration: 15 }, { intensity: 1, color: [255, 255, 255], radius: 225, duration: 15 }],
     [{ intensity: .4, color: [255, 255, 255], radius: 250, duration: 20 }, { intensity: 1, color: [255, 255, 255], radius: 300, duration: 20 }],
 ];
+
+const lightAnimations: readonly LightAnimation[] = lightAnimationKeyframes.map((keyframes) => ({
+    keyframes,
+    totalDuration: keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0),
+}));
+
+// Returns a fractional keyframe index: the integer part picks the keyframe, the fraction
+// is how far it has blended into the next one.
+function getLightAnimFrame(animation: LightAnimation, tick: number): number {
+    const keyframes = animation.keyframes;
+    let animationTick = tick % animation.totalDuration;
+    let keyframeIndex = 0;
+    while (animationTick >= keyframes[keyframeIndex].duration) {
+        animationTick -= keyframes[keyframeIndex].duration;
+        keyframeIndex++;
+    }
+    return keyframeIndex + animationTick / keyframes[keyframeIndex].duration;
+}
 
 export function buildDynamicLights(
     setup: Setup,
@@ -224,11 +252,10 @@ export function buildDynamicLights(
         const definition = getActorRenderDefinition(actor.type, 0);
         if (definition === null || definition.lightBone === undefined || definition.animation === null)
             continue;
-        const speed = definition.animationSpeed === 'setup' ? actor.lightSpeed : definition.animationSpeed;
         lights.push({
             kind: 'spot',
             origin: vec3.fromValues(
-                (actor.position[0] + 0.3) * lightWorldScale,
+                (actor.position[0] + spotLightOffsetX) * lightWorldScale,
                 actor.position[1] * lightWorldScale,
                 actor.position[2] * lightWorldScale,
             ),
@@ -241,7 +268,7 @@ export function buildDynamicLights(
             outerAngle: actor.lightCone[1] !== 0 ? actor.lightCone[1] : 65,
             rotationY: actor.rotationY / 0x1000 * MathConstants.TAU,
             maxDistance: defaultLightMaxDistance,
-            pose: getActorPose(definition, speed),
+            pose: getActorPose(definition, getActorAnimationSpeed(definition, actor)),
             scale: actor.scale * actorModelScale,
             targetBone: definition.lightBone,
         });
@@ -258,7 +285,7 @@ function filterDynamicLightsForVertices(sharedOutput: RSPSharedOutput, vertexInd
     }
     return lights.filter((light) => {
         const radius = light.kind === 'point'
-            ? Math.max(...light.animation.map((keyframe) => keyframe.radius)) * pointLightOuterRadiusScale
+            ? Math.max(...light.animation.keyframes.map((keyframe) => keyframe.radius)) * pointLightOuterRadiusScale
             : spotLightCullRadius;
         return bounds.sqDistFromClosestPoint(light.origin) < radius * radius;
     });
@@ -326,12 +353,12 @@ function sampleSpotLight(light: DynamicSpotLight, cameraFade: number, tick: numb
     // func_global_asm_8069AB74: the light is hanging off the 3rd bone
     light.pose.update(tick);
     const boneMatrix = light.pose.boneMatrices[light.targetBone];
-    vec3.set(bonePosition, boneMatrix[12], boneMatrix[13], boneMatrix[14]);
+    getMatrixTranslation(bonePosition, boneMatrix);
     vec3.scale(bonePosition, bonePosition, light.scale);
     const sinY = Math.sin(light.rotationY);
     const cosY = Math.cos(light.rotationY);
     const direction = vec3.fromValues(
-        cosY * bonePosition[0] + sinY * bonePosition[2] - 0.3,
+        cosY * bonePosition[0] + sinY * bonePosition[2] - spotLightOffsetX,
         bonePosition[1],
         -sinY * bonePosition[0] + cosY * bonePosition[2],
     );
@@ -353,17 +380,12 @@ function sampleSpotLight(light: DynamicSpotLight, cameraFade: number, tick: numb
 }
 
 function samplePointLight(light: DynamicPointLight, cameraFade: number, tick: number): ActiveLight {
-    const keyframes = light.animation;
-    const totalDuration = keyframes.reduce((sum, keyframe) => sum + keyframe.duration, 0);
-    let animationTick = (tick + light.phase) % totalDuration;
-    let keyframeIndex = 0;
-    while (animationTick >= keyframes[keyframeIndex].duration) {
-        animationTick -= keyframes[keyframeIndex].duration;
-        keyframeIndex++;
-    }
+    const keyframes = light.animation.keyframes;
+    const frame = getLightAnimFrame(light.animation, tick + light.phase);
+    const keyframeIndex = frame | 0;
+    const t = frame - keyframeIndex;
     const current = keyframes[keyframeIndex];
     const next = keyframes[(keyframeIndex + 1) % keyframes.length];
-    const t = animationTick / current.duration;
     const radius = lerp(current.radius, next.radius, t);
     const intensity = lerp(current.intensity, next.intensity, t) * cameraFade;
     return {
@@ -378,16 +400,14 @@ function samplePointLight(light: DynamicPointLight, cameraFade: number, tick: nu
     };
 }
 
-function sampleLightAtPosition(light: ActiveLight, x: number, y: number, z: number): number {
-    const dx = x - light.origin[0];
-    const dy = y - light.origin[1];
-    const dz = z - light.origin[2];
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+function sampleLightAtPosition(light: ActiveLight, position: ReadonlyVec3): number {
+    const delta = vec3.sub(scratchVec3c, position, light.origin);
+    const distance = vec3.length(delta);
     if (distance >= light.outerRadius)
         return 0;
     let falloff = distance < light.innerRadius ? 1 : 1 - (distance - light.innerRadius) / (light.outerRadius - light.innerRadius);
     if (light.direction !== undefined) {
-        const coneDot = (dx * light.direction[0] + dy * light.direction[1] + dz * light.direction[2]) / distance;
+        const coneDot = vec3.dot(delta, light.direction) / distance;
         if (coneDot < light.outerConeCos!)
             return 0;
         if (coneDot < light.innerConeCos!)
@@ -396,17 +416,15 @@ function sampleLightAtPosition(light: ActiveLight, x: number, y: number, z: numb
     return falloff;
 }
 
-// Accumulates ambient plus every active light reaching (x, y, z) into dst. Unclamped:
+// Accumulates ambient plus every active light reaching position into dst. Unclamped:
 // map chunks tint by the vertex color before clamping, objects clamp directly.
 // dst is a vec3, so accumulation rounds to float32 per light rather than at the end.
-function accumulateLighting(dst: vec3, ambientColor: vec3, lights: readonly DynamicLight[], activeLightCache: ActiveLightCache, x: number, y: number, z: number): void {
+function accumulateLighting(dst: vec3, ambientColor: vec3, lights: readonly DynamicLight[], activeLightCache: ActiveLightCache, position: ReadonlyVec3): void {
     vec3.copy(dst, ambientColor);
     for (const dynamicLight of lights) {
         const light = activeLightCache.get(dynamicLight)!;
-        const falloff = sampleLightAtPosition(light, x, y, z);
-        dst[0] += light.color[0] * falloff;
-        dst[1] += light.color[1] * falloff;
-        dst[2] += light.color[2] * falloff;
+        const falloff = sampleLightAtPosition(light, position);
+        vec3.scaleAndAdd(dst, dst, light.color, falloff);
     }
 }
 
@@ -414,7 +432,7 @@ export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, active
     if (!enabled)
         return vec3.set(dst, 1, 1, 1);
 
-    accumulateLighting(dst, lighting.ambientColor, lighting.lights, activeLightCache, lighting.origin[0], lighting.origin[1], lighting.origin[2]);
+    accumulateLighting(dst, lighting.ambientColor, lighting.lights, activeLightCache, lighting.origin);
     dst[0] = saturate(dst[0]);
     dst[1] = saturate(dst[1]);
     dst[2] = saturate(dst[2]);
@@ -437,7 +455,8 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
     // props/actors use sampleObjectLighting instead.
     for (const vertexIndex of lighting.vertexIndices) {
         const vertex = vertices[vertexIndex];
-        accumulateLighting(scratchVec3b, lighting.ambientColor, lighting.lights, activeLightCache, vertex.x, vertex.y, vertex.z);
+        vec3.set(scratchVec3a, vertex.x, vertex.y, vertex.z);
+        accumulateLighting(scratchVec3b, lighting.ambientColor, lighting.lights, activeLightCache, scratchVec3a);
         const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
         const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;

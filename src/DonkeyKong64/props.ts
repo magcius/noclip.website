@@ -7,7 +7,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
-import { MathConstants, vec3SetAll } from '../MathHelpers.js';
+import { MathConstants } from '../MathHelpers.js';
 import { nArray } from '../util.js';
 import { AnimatedTexture, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
 import { buildObjectLighting } from './light.js';
@@ -18,16 +18,12 @@ import { DK64Layer } from './render.js';
 import type { GeometryRenderer, MeshInput } from './render.js';
 import type { DK64Renderer, ROMData } from './scenes.js';
 
-const scratchVec3a = vec3.create();
-
-function computeBillboardBoundingBox(origin: ReadonlyVec3, rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): AABB {
+// The quad faces the camera, so its corners stay on a sphere around the origin.
+function computeBillboardCullRadius(rightOffsets: readonly number[], upOffsets: readonly number[], forwardOffsets: readonly number[]): number {
     let radius = 0;
     for (let i = 0; i < rightOffsets.length; i++)
         radius = Math.max(radius, Math.hypot(rightOffsets[i], upOffsets[i], forwardOffsets[i]));
-    const boundingBox = new AABB();
-    vec3SetAll(scratchVec3a, radius);
-    boundingBox.setFromCenterAndHalfExtents(origin, scratchVec3a);
-    return boundingBox;
+    return radius;
 }
 
 export interface TerrainTriangle {
@@ -946,8 +942,7 @@ function addRuntimeModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
             if (sharedRenderer === null)
                 sharedRenderer = renderer;
             renderer.setCameraBillboard(origin, scale);
-            renderer.setCullBoundingBox(computeBillboardBoundingBox(
-                origin,
+            renderer.setCullBoundingSphere(origin, computeBillboardCullRadius(
                 quad.x.map((x) => x * scale),
                 quad.y.map((y) => y * scale),
                 quad.z.map((z) => z * scale),

@@ -55,7 +55,8 @@ export interface SetupProp {
 export interface SetupActor {
     position: vec3;
     scale: number;
-    lightSpeed: number;
+    // Playback rate for the actor's animation, used when its render definition defers to the setup.
+    animationSpeed: number;
     lightColor: readonly [number, number, number];
     lightCone: readonly [number, number];
     rotationY: number;
@@ -109,7 +110,7 @@ export function parseSetup(data: ArrayBufferSlice): Setup {
                 view.getFloat32(offs + 0x08, false),
             ),
             scale: view.getFloat32(offs + 0x0C, false),
-            lightSpeed: view.getFloat32(offs + 0x10, false),
+            animationSpeed: view.getFloat32(offs + 0x10, false),
             lightColor: [
                 view.getInt32(offs + 0x14, false) & 0xFF,
                 view.getInt32(offs + 0x18, false) & 0xFF,

@@ -7,6 +7,7 @@ import { OtherModeH_CycleType, OtherModeH_Layout } from '../Common/N64/RDP.js';
 import { AABB } from '../Geometry.js';
 import { lerp, MathConstants, vec3SetAll, Vec3Zero } from '../MathHelpers.js';
 import { AnimatedTexture, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import type { SetupActor } from './parse.js';
 
 const scratchVec3a = vec3.create();
 
@@ -100,6 +101,12 @@ export interface ActorRenderDefinition {
     lightBone?: number;
     rotationYSpeed?: number;
     positionYAmplitude?: number;
+}
+
+// A definition either fixes the playback rate for the actor type, or defers to the
+// per-instance rate stored in the setup entry.
+export function getActorAnimationSpeed(definition: ActorRenderDefinition, actor: SetupActor): number {
+    return definition.animationSpeed === 'setup' ? actor.animationSpeed : definition.animationSpeed;
 }
 
 export function getActorRenderDefinition(type: number, model: number): ActorRenderDefinition | null {

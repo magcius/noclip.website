@@ -184,8 +184,14 @@ export class RSPState {
 
     public gSPMatrix(dramAddr: number, matrixParams: number): void {
         const segment = dramAddr >>> 24;
-        if (segment !== 0x04 && segment !== 0x09)
+        if (segment !== 0x04 && segment !== 0x09) {
+            // Only segments 4 and 9 hold matrices we index into; anything else is matrix
+            // data we don't emulate. Still mirror the push so a later gSPPopMatrix, which
+            // is counted rather than addressed, lines up with the right entry.
+            if (matrixParams & G_MTX_PUSH)
+                this.matrixStack.push(this.matrixStack[this.matrixStack.length - 1] ?? []);
             return;
+        }
         const matrixIndex = (dramAddr & 0x00FFFFFF) >>> 6;
         const mvMatrix = this.matrixStack.pop() ?? [];
         if (matrixParams & G_MTX_PUSH)

@@ -1,4 +1,5 @@
 import { mat4, vec3 } from 'gl-matrix';
+import type { ReadonlyVec3 } from 'gl-matrix';
 
 import * as Viewer from '../viewer.js';
 import { Vertex } from '../BanjoKazooie/f3dex.js';
@@ -248,9 +249,12 @@ class DrawCallInstance {
             if (scrollSpeed !== 0) {
                 const tick = Math.floor(time / (1000 / 30));
                 if (tick > 0) {
-                    const scrollCycle = (Math.floor(255 / scrollSpeed) + 1) * scrollSpeed;
-                    const tileOffset = 255 - (((tick - 1) * scrollSpeed) % scrollCycle);
-                    m[13] -= (tileOffset / 4) / texture.height;
+                    // The game counts a tile offset down from 255 by scrollSpeed per tick,
+                    // wrapping at the first multiple of scrollSpeed past 255, and shifts T
+                    // by a quarter of that in texel units.
+                    const scrollWrap = (Math.floor(255 / scrollSpeed) + 1) * scrollSpeed;
+                    const tileOffset = 255 - ((tick - 1) * scrollSpeed) % scrollWrap;
+                    m[13] -= tileOffset / 4 / texture.height;
                 }
             }
         } else {
@@ -374,6 +378,8 @@ export class RenderData {
     public indexStart: number;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, geo: MeshInput, dynamic = false) {
+        // Every mesh in a file shares one RSPSharedOutput, so this mesh's draw calls occupy
+        // a sub-range of the shared index and vertex arrays; upload only that window.
         const sharedOutput = geo.sharedOutput;
         const drawCalls = geo.rspOutput?.drawCalls ?? [];
         this.indexStart = drawCalls.reduce(
@@ -661,6 +667,7 @@ export enum DK64Layer {
 export class GeometryRenderer {
     private visible = true;
     private cullBoundingBox: AABB | null = null;
+    private cullBoundingSphere: { origin: ReadonlyVec3; radius: number } | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
     public modelMatrix = mat4.create();
@@ -760,6 +767,12 @@ export class GeometryRenderer {
         this.cullBoundingBox = boundingBox;
     }
 
+    // Camera-facing quads sweep the same radius in every direction, so a sphere bounds them
+    // exactly where an AABB would have to cover the worst-case orientation.
+    public setCullBoundingSphere(origin: ReadonlyVec3, radius: number): void {
+        this.cullBoundingSphere = { origin, radius };
+    }
+
     public computeWorldBoundingBox(): AABB | null {
         const sourceBoundingBox = this.geometryData.cullBoundingBox;
         if (sourceBoundingBox === null)
@@ -822,6 +835,8 @@ export class GeometryRenderer {
         if (!this.visible)
             return;
         if (this.cullBoundingBox !== null && !viewerInput.camera.frustum.contains(this.cullBoundingBox))
+            return;
+        if (this.cullBoundingSphere !== null && !viewerInput.camera.frustum.containsSphere(this.cullBoundingSphere.origin, this.cullBoundingSphere.radius))
             return;
 
         if (this.rootTransformAnimation !== null) {
