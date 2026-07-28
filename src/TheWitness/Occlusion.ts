@@ -120,7 +120,7 @@ export class Occlusion_Manager {
         this.updateFromFinishedFrames(globals.device);
 
         const occlDepthBufferDesc = new GfxrRenderTargetDescription(GfxFormat.D24);
-        occlDepthBufferDesc.setDimensions(128, 64, 1);
+        occlDepthBufferDesc.setDimensions(256, 128, 1);
         occlDepthBufferDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
 
         const cache = renderInstManager.gfxRenderCache;

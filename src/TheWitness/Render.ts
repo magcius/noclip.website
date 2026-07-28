@@ -967,10 +967,8 @@ export class TheWitnessRenderer implements SceneGfx {
         // Go through each entity cluster.
         for (let i = 0; i < globals.entity_render_list.clusters.length; i++) {
             const cluster = globals.entity_render_list.clusters[i];
-            if (!cluster.occlusion_visible) {
-                globals.debug_draw.drawSphereLine(cluster.bounding_center_world, cluster.bounding_radius_world, Red);
+            if (!cluster.occlusion_visible)
                 continue;
-            }
 
             if (!viewpoint.frustum.containsSphere(cluster.bounding_center_world, cluster.bounding_radius_world))
                 continue;
