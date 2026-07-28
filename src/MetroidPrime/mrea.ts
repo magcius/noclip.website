@@ -1318,6 +1318,9 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         // some materials don't have any passes apparently?
         // just make a dummy tev stage in this case
         if (passIndex === 0) {
+            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0, false, GX.PostTexGenMatrix.PTTEXMTX0);
+            makeTevStageFromPass_MP3(mb, 0, 'NULL', 0, materialFlags, hasDIFF, hasOPAC);
+
             uvAnimations[0] = null;
             passTypes[0] = 'NULL';
             passIndex++;
