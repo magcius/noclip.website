@@ -3,17 +3,19 @@ import { mat4, quat, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { assert, assertExists, readString } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { MPHAnimation, parseMPHAnimation } from './mph_anim.js';
-import { MPHbin, parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
-import { MPHLighting, MPHRenderer, MPHRendererOptions, MPHSceneMode, MPH_VIEWER_SCALE } from './render.js';
 import { fx32, TEX0 } from '../nns_g3d/NNS_G3D.js';
+import { MPHAnimation, parseMPHAnimation } from './mph_anim.js';
+import { fxAngle, MPHbin, parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
+import { MPHLighting, MPHRenderer, MPHRendererOptions, MPHSceneMode, MPH_VIEWER_SCALE } from './render.js';
 
 const ENTITY_HEADER_SIZE = 0x24;
 const ENTITY_ENTRY_SIZE = 0x18;
 const ENTITY_TYPE_PLATFORM = 0;
 const ENTITY_TYPE_DOOR = 3;
+const ENTITY_TYPE_ITEM_SPAWN = 4;
 const PLATFORM_DATA_SIZE = 0x24C;
 const DOOR_DATA_SIZE = 0x68;
+const ITEM_SPAWN_DATA_SIZE = 0x48;
 
 interface MPHEntityEntry {
     nodeName: string;
@@ -50,9 +52,17 @@ interface MPHDoorEntity extends MPHEntityEntry {
     doorType: number;
 }
 
+interface MPHItemSpawnEntity extends MPHEntityEntry {
+    position: ReadonlyVec3;
+    parentEntityId: number;
+    itemId: number;
+    initialState: number;
+}
+
 interface MPHEntities {
     platforms: MPHPlatformEntity[];
     doors: MPHDoorEntity[];
+    itemSpawns: MPHItemSpawnEntity[];
 }
 
 interface MPHEntityModelSpec {
@@ -128,6 +138,18 @@ function parseDoor(entry: MPHEntityEntry, view: DataView): MPHDoorEntity {
     };
 }
 
+function parseItemSpawn(entry: MPHEntityEntry, view: DataView): MPHItemSpawnEntity {
+    assert(entry.dataLength === ITEM_SPAWN_DATA_SIZE);
+    const offs = entry.dataOffset;
+    return {
+        ...entry,
+        position: readVec3Fx(view, offs + 0x04),
+        parentEntityId: view.getInt16(offs + 0x28, true),
+        itemId: view.getUint32(offs + 0x2C, true),
+        initialState: view.getUint8(offs + 0x30),
+    };
+}
+
 export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPHEntities {
     const view = buffer.createDataView();
     assert(view.getUint32(0x00, true) === 2);
@@ -135,6 +157,7 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
 
     const platforms: MPHPlatformEntity[] = [];
     const doors: MPHDoorEntity[] = [];
+    const itemSpawns: MPHItemSpawnEntity[] = [];
     let entryCount = 0;
     for (let offs = ENTITY_HEADER_SIZE; offs + ENTITY_ENTRY_SIZE <= view.byteLength; offs += ENTITY_ENTRY_SIZE) {
         const dataOffset = view.getUint32(offs + 0x14, true);
@@ -160,10 +183,12 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
             platforms.push(parsePlatform(entry, view));
         else if (entry.type === ENTITY_TYPE_DOOR)
             doors.push(parseDoor(entry, view));
+        else if (entry.type === ENTITY_TYPE_ITEM_SPAWN)
+            itemSpawns.push(parseItemSpawn(entry, view));
     }
 
     assert(entryCount === view.getUint16(0x04 + layerId * 2, true));
-    return { platforms, doors };
+    return { platforms, doors, itemSpawns };
 }
 
 export interface MPHPlatformMetadata {
@@ -177,10 +202,16 @@ export interface MPHDoorMetadata {
     animationName: string;
 }
 
+export interface MPHItemMetadata {
+    modelName: string;
+    animated: boolean;
+}
+
 export interface MPHEntityMetadata {
     platforms: readonly MPHPlatformMetadata[];
     doors: readonly MPHDoorMetadata[];
     doorLockPaletteIds: readonly number[];
+    items: readonly MPHItemMetadata[];
 }
 
 // The morph ball door draws its textures from a shared model.
@@ -219,6 +250,15 @@ function getPlatformModelSpec(metadata: MPHEntityMetadata, platform: MPHPlatform
         modelFilename: `${platform_.modelName}_Model.bin`,
         animationFilename: platform_.animationName !== null ? `${platform_.animationName}_Anim.bin` : undefined,
         animationId: platform_.animationName !== null ? platform_.animationId : undefined,
+    };
+}
+
+function getItemModelSpec(metadata: MPHEntityMetadata, item: MPHItemSpawnEntity): MPHEntityModelSpec {
+    const item_ = assertExists(metadata.items[item.itemId], `item type ${item.itemId}`);
+    return {
+        modelFilename: `${item_.modelName}_Model.bin`,
+        animationFilename: item_.animated ? `${item_.modelName}_Anim.bin` : undefined,
+        animationId: item_.animated ? 0 : undefined,
     };
 }
 
@@ -406,6 +446,24 @@ function calcPlatformModelMatrix(dst: mat4, platform: MPHPlatformEntity, timeInM
     mat4.fromRotationTranslationScale(dst, scratchRotation, scratchPosition, scratchScale);
 }
 
+// Stagger spawning to avoid synchronized bobs.
+const ITEM_SPAWN_PREVIEW_PHASE_STEP = 0x2000;
+
+function calcItemSpawnModelMatrix(dst: mat4, item: MPHItemSpawnEntity, phaseAngle: number, timeInMilliseconds: number, modelScale: number): void {
+    const baseY = item.position[1] + 2662 / 0x1000;
+    // UpdateItemInstance advances rotation by 0x300 angle units per tick and
+    // uses the same phase for a 0x200-FX32 vertical bob.
+    const ticks = timeInMilliseconds * 30 / 1000;
+    const angle = fxAngle(phaseAngle + ticks * 0x300);
+    const bob = Math.sin(angle) * (0x200 / 0x1000);
+    mat4.fromYRotation(dst, angle);
+    dst[12] = item.position[0] * MPH_VIEWER_SCALE;
+    dst[13] = (baseY + bob) * MPH_VIEWER_SCALE;
+    dst[14] = item.position[2] * MPH_VIEWER_SCALE;
+    vec3.set(scratchScale, modelScale, modelScale, modelScale);
+    mat4.scale(dst, dst, scratchScale);
+}
+
 // Max door animation length is 2s, 6s lets us cycle open/hold/close for both
 // doors across a connector without enabling visibility through.
 const DOOR_OPEN_HOLD_DURATION = 2000;
@@ -425,6 +483,8 @@ export class MPHEntityFile {
         }
         for (const door of this.entities.doors)
             requestEntityModel(this.cache, getDoorModelSpec(this.metadata, door));
+        for (const item of this.entities.itemSpawns)
+            requestEntityModel(this.cache, getItemModelSpec(this.metadata, item));
     }
 
     public createRenderers(device: GfxDevice, renderCache: GfxRenderCache, lighting: MPHLighting): MPHRenderer[] {
@@ -467,6 +527,16 @@ export class MPHEntityFile {
                 };
             });
             calcOrientedModelMatrix(renderer.modelMatrix, door.position, door.facing, door.up, renderer.modelScale);
+            renderers.push(renderer);
+        }
+        for (let index = 0; index < this.entities.itemSpawns.length; index++) {
+            const item = this.entities.itemSpawns[index];
+            const phaseAngle = index * ITEM_SPAWN_PREVIEW_PHASE_STEP;
+            const renderer = createEntityModelRenderer(device, this.cache, renderCache, getItemModelSpec(this.metadata, item), {
+                sceneMode: this.sceneMode,
+                lighting,
+            });
+            this.movers.push((time) => calcItemSpawnModelMatrix(renderer.modelMatrix, item, phaseAngle, time, renderer.modelScale));
             renderers.push(renderer);
         }
         return renderers;

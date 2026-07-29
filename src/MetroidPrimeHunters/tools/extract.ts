@@ -11,6 +11,7 @@ const ENTITY_OVERLAY = 2, WORLD_OVERLAY = 15;
 const PLATFORM_TABLE = 0x021712D0, PLATFORM_COUNT = 45, PLATFORM_STRIDE = 0x28;
 const DOOR_MODEL_TABLE = 0x0211FEEC, DOOR_ANIM_TABLE = 0x0211FF0C, DOOR_COUNT = 4;
 const DOOR_LOCK_PALETTES = 0x0211FE90, DOOR_LOCK_COUNT = 10;
+const ITEM_TABLE = 0x02120460, ITEM_COUNT = 22;
 const u16 = (b: Buffer, o: number) => b.readUInt16LE(o);
 const u32 = (b: Buffer, o: number) => b.readUInt32LE(o);
 const i32 = (b: Buffer, o: number) => b.readInt32LE(o);
@@ -103,7 +104,7 @@ function assetStem(name: string): string {
     return path.parse(name).name.replace(/_(model|anim)$/i, '').toLowerCase();
 }
 
-function entityMetadata(images: Map<number, Image>): object {
+function entityMetadata(images: Map<number, Image>, hasFile: (name: string) => boolean): object {
     const read = (overlay: number, address: number) => {
         const image = images.get(overlay)!;
         const offset = address - image.ram;
@@ -141,7 +142,14 @@ function entityMetadata(images: Map<number, Image>): object {
     const lock = read(ENTITY_OVERLAY, DOOR_LOCK_PALETTES);
     const doorLockPaletteIds = [...lock.image.data.subarray(lock.offset, lock.offset + DOOR_LOCK_COUNT)];
 
-    return { platforms, doors, doorLockPaletteIds };
+    const items = [];
+    for (let i = 0; i < ITEM_COUNT; i++) {
+        const modelName = name(ENTITY_OVERLAY, pointer(ENTITY_OVERLAY, ITEM_TABLE + i * 4));
+        // The game animates exactly those pickups that ship with an anim file.
+        items.push({ modelName, animated: hasFile(`models/${modelName}_anim.bin`) });
+    }
+
+    return { platforms, doors, doorLockPaletteIds, items };
 }
 
 function extract(rom: Buffer): [object[], object, Record<string, string>, Record<string, string>, Map<string, Buffer>] {
@@ -191,7 +199,7 @@ function extract(rom: Buffer): [object[], object, Record<string, string>, Record
 
         areas.push(area);
     }
-    const entities = entityMetadata(overlays(rom));
+    const entities = entityMetadata(overlays(rom), (name) => output.has(name));
     return [areas, entities, archiveTextures, modelArchives, output];
 }
 
