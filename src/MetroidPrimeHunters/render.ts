@@ -225,7 +225,7 @@ enum BillboardMode {
 }
 
 export type MPHSceneMode =
-    { kind: 'singlePlayer', area: number } |
+    { kind: 'singlePlayer', geometrySet: number } |
     { kind: 'multiplayer', layout: 0 | 1, captureTheFlag?: boolean };
 
 function nodeIsVisibleInMode(name: string, mode: MPHSceneMode): boolean {
@@ -238,8 +238,8 @@ function nodeIsVisibleInMode(name: string, mode: MPHSceneMode): boolean {
         hasModeTag = true;
         const tag = name.slice(offs, offs + 4).toLowerCase();
         if (tag.startsWith('_s')) {
-            const area = Number.parseInt(tag.slice(2), 10);
-            matchesMode ||= mode.kind === 'singlePlayer' && area === mode.area;
+            const geometrySet = Number.parseInt(tag.slice(2), 10);
+            matchesMode ||= mode.kind === 'singlePlayer' && geometrySet === mode.geometrySet;
         } else if (tag === '_mpu') {
             matchesMode ||= mode.kind === 'multiplayer';
         } else if (tag === '_ml0') {
@@ -265,7 +265,7 @@ export class MPHRenderer {
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null = null, private sceneMode: MPHSceneMode = { kind: 'singlePlayer', area: 1 }) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null = null, private sceneMode: MPHSceneMode = { kind: 'singlePlayer', geometrySet: 1 }) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
