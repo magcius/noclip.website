@@ -1,10 +1,10 @@
 ﻿
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Model } from "../nns_g3d/NNS_G3D.js";
+import { TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material } from "../nns_g3d/NNS_G3D.js";
 import { mat4, mat2d, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex.js";
 import { readString } from "../util.js";
-import { colorNewFromRGBA } from "../Color.js";
+import { Color, colorNewFromRGBA } from "../Color.js";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
 
 export function fxAngle(n: number): number {
@@ -22,10 +22,10 @@ export function calcMPHTexMtx(dst: mat2d, texScaleS: number, texScaleT: number, 
     mat2d.scale(dst, dst, [texScaleS * scaleS, texScaleT * scaleT]);
 }
 
-export type MPHModel = Omit<MDL0Model, 'nodes'>;
-
 export interface MPHbin {
-    model: MPHModel;
+    materials: MPHMaterial[];
+    shapes: MPHShape[];
+    posScale: number;
     tex0: TEX0 | null;
     mphTex: MPHTexture;
     meshs: MPHMesh[];
@@ -34,6 +34,18 @@ export interface MPHbin {
     matrixNodeIndices: number[];
     matrixBlendCounts: number[];
     scaleFactor: number;
+}
+
+export interface MPHMaterial extends MDL0Material {
+    diffuseColor: Color;
+    ambientColor: Color;
+    specularColor: Color;
+    lightingEnabled: boolean;
+}
+
+export interface MPHShape {
+    name: string;
+    dlBuffer: ArrayBufferSlice;
 }
 
 interface MPHMesh {
@@ -68,19 +80,20 @@ export interface MPHTexture {
     texs: MPHTex[];
 }
 
-function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
+function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MPHMaterial {
     const view = buffer.createDataView();
 
     const name = readString(buffer, 0x00, 0x40, true);
+    const lightingEnabled = view.getUint8(0x40) !== 0;
     const cullMode = view.getUint8(0x41);
     const alpha = view.getInt8(0x42);
     const wireFrame = view.getInt8(0x43);
     const palletIndex = view.getUint16(0x44, true);
     const textureIndex = view.getUint16(0x46, true);
     const texParams = view.getUint16(0x48, true);
-    const diffuse = colorNewFromRGBA(view.getInt8(0x4A), view.getInt8(0x4B), view.getInt8(0x4C));
-    const ambient = colorNewFromRGBA(view.getInt8(0x4D), view.getInt8(0x4E), view.getInt8(0x4F));
-    const specular = colorNewFromRGBA(view.getInt8(0x50), view.getInt8(0x51), view.getInt8(0x52));
+    const diffuse = colorNewFromRGBA(view.getUint8(0x4A) / 31, view.getUint8(0x4B) / 31, view.getUint8(0x4C) / 31);
+    const ambient = colorNewFromRGBA(view.getUint8(0x4D) / 31, view.getUint8(0x4E) / 31, view.getUint8(0x4F) / 31);
+    const specular = colorNewFromRGBA(view.getUint8(0x50) / 31, view.getUint8(0x51) / 31, view.getUint8(0x52) / 31);
     const field_0x53 = view.getInt8(0x53);
     const polyAttribs = view.getInt32(0x54, true);
 
@@ -122,10 +135,13 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const texScaleT = scaleT / height;
     calcMPHTexMtx(texMatrix, 1 / width, 1 / height, scaleS, scaleT, rot_Z, scaleWidth, scaleHeight);
 
-    return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
+    return {
+        name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT,
+        diffuseColor: diffuse, ambientColor: ambient, specularColor: specular, lightingEnabled,
+    };
 }
 
-function parseShape(buffer: ArrayBufferSlice, shapeBuff: ArrayBufferSlice ,index: number): MDL0Shape {
+function parseShape(buffer: ArrayBufferSlice, shapeBuff: ArrayBufferSlice ,index: number): MPHShape {
     const view = buffer.createDataView();
 
     const dlOffs = view.getUint32(0x00, true);
@@ -348,7 +364,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice, sharedTexture: MPHTextu
     }
 
     // Material
-    const materials: MDL0Material[] = [];
+    const materials: MPHMaterial[] = [];
     // Entities without a texture table use the room's texture table.
     const materialTexs = texs.length !== 0 ? texs : (sharedTexture?.texs ?? []);
     for (let i = 0; i < materialCount; i++) {
@@ -358,7 +374,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice, sharedTexture: MPHTextu
     }
 
     // Dlist
-    const shapes: MDL0Shape[] = [];
+    const shapes: MPHShape[] = [];
     for (let i = 0; i < meshCount; i++) {
         const shapeOffs = i * 0x20 + shapeOffset;
         shapes.push( parseShape(buffer.slice(shapeOffs), buffer, i) );
@@ -375,13 +391,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice, sharedTexture: MPHTextu
 
     let tex0: TEX0 | null = null;
 
-    // Model
-    const texMtxMode = TexMtxMode.MAYA;
-    const sbcBuffer = buffer.slice(0, 0x10); // dummy sbc for reuse MDL0 codes
-
-    const model: MPHModel = { name: '', materials, shapes, sbcBuffer, posScale: scaleBase, texMtxMode };
-
-    return { model, tex0, mphTex, meshs, nodes: mphNode, matrixCount, matrixNodeIndices, matrixBlendCounts, scaleFactor };
+    return { materials, shapes, posScale: scaleBase, tex0, mphTex, meshs, nodes: mphNode, matrixCount, matrixNodeIndices, matrixBlendCounts, scaleFactor };
 }
 
 export function parseTEX0Texture(buffer: ArrayBufferSlice, tex: MPHTexture): TEX0 {

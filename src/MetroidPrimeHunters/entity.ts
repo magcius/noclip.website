@@ -1,16 +1,18 @@
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { mat4, quat, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { assert, assertExists, readString } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { MPHAnimation, parseMPHAnimation } from './mph_anim.js';
 import { MPHbin, parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
-import { MPHRenderer, MPHRendererOptions, MPHSceneMode, MPH_VIEWER_SCALE } from './render.js';
+import { MPHLighting, MPHRenderer, MPHRendererOptions, MPHSceneMode, MPH_VIEWER_SCALE } from './render.js';
 import { fx32, TEX0 } from '../nns_g3d/NNS_G3D.js';
 
 const ENTITY_HEADER_SIZE = 0x24;
 const ENTITY_ENTRY_SIZE = 0x18;
+const ENTITY_TYPE_PLATFORM = 0;
 const ENTITY_TYPE_DOOR = 3;
+const PLATFORM_DATA_SIZE = 0x24C;
 const DOOR_DATA_SIZE = 0x68;
 
 interface MPHEntityEntry {
@@ -22,6 +24,24 @@ interface MPHEntityEntry {
     entityId: number;
 }
 
+interface MPHPlatformEntity extends MPHEntityEntry {
+    modelId: number;
+    active: boolean;
+    delay: number;
+    position: ReadonlyVec3;
+    up: ReadonlyVec3;
+    facing: ReadonlyVec3;
+    positions: ReadonlyVec3[];
+    rotations: ReadonlyQuat[];
+    positionOffset: ReadonlyVec3;
+    forwardSpeed: number;
+    backwardSpeed: number;
+    movementType: number;
+    reverseType: number;
+    flags: number;
+    path: MPHPlatformPath;
+}
+
 interface MPHDoorEntity extends MPHEntityEntry {
     position: ReadonlyVec3;
     up: ReadonlyVec3;
@@ -31,16 +51,17 @@ interface MPHDoorEntity extends MPHEntityEntry {
 }
 
 interface MPHEntities {
+    platforms: MPHPlatformEntity[];
     doors: MPHDoorEntity[];
 }
 
 interface MPHEntityModelSpec {
     modelFilename: string;
-    animationFilename: string;
+    animationFilename?: string;
     sharedTextureFilename?: string;
     paletteFilename?: string;
     paletteOverrides?: readonly { target: number; source: number }[];
-    animationId: number;
+    animationId?: number;
 }
 
 export interface MPHEntityResourceCache {
@@ -54,6 +75,44 @@ function readFx32(view: DataView, offs: number): number {
 
 function readVec3Fx(view: DataView, offs: number): vec3 {
     return vec3.fromValues(readFx32(view, offs + 0x00), readFx32(view, offs + 0x04), readFx32(view, offs + 0x08));
+}
+
+function readQuatFx(view: DataView, offs: number): quat {
+    const dst = quat.fromValues(readFx32(view, offs + 0x00), readFx32(view, offs + 0x04), readFx32(view, offs + 0x08), readFx32(view, offs + 0x0C));
+    return quat.normalize(dst, dst);
+}
+
+function parsePlatform(entry: MPHEntityEntry, view: DataView): MPHPlatformEntity {
+    assert(entry.dataLength === PLATFORM_DATA_SIZE);
+    const offs = entry.dataOffset;
+    const positionCount = view.getUint16(offs + 0x3E, true);
+    assert(positionCount <= 10);
+
+    const positions: vec3[] = [];
+    const rotations: quat[] = [];
+    for (let i = 0; i < positionCount; i++) {
+        positions.push(readVec3Fx(view, offs + 0x40 + i * 0x0C));
+        rotations.push(readQuatFx(view, offs + 0xB8 + i * 0x10));
+    }
+
+    const platform: MPHPlatformPathSource = {
+        ...entry,
+        modelId: view.getUint32(offs + 0x2C, true),
+        active: view.getUint8(offs + 0x32) !== 0,
+        delay: view.getUint8(offs + 0x33),
+        position: readVec3Fx(view, offs + 0x04),
+        up: readVec3Fx(view, offs + 0x10),
+        facing: readVec3Fx(view, offs + 0x1C),
+        positions,
+        rotations,
+        positionOffset: readVec3Fx(view, offs + 0x158),
+        forwardSpeed: readFx32(view, offs + 0x164),
+        backwardSpeed: readFx32(view, offs + 0x168),
+        movementType: view.getUint32(offs + 0x17C, true),
+        reverseType: view.getUint32(offs + 0x184, true),
+        flags: view.getUint32(offs + 0x188, true),
+    };
+    return { ...platform, path: buildPlatformPath(platform) };
 }
 
 function parseDoor(entry: MPHEntityEntry, view: DataView): MPHDoorEntity {
@@ -74,6 +133,7 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
     assert(view.getUint32(0x00, true) === 2);
     assert(layerId >= 0 && layerId < 16);
 
+    const platforms: MPHPlatformEntity[] = [];
     const doors: MPHDoorEntity[] = [];
     let entryCount = 0;
     for (let offs = ENTITY_HEADER_SIZE; offs + ENTITY_ENTRY_SIZE <= view.byteLength; offs += ENTITY_ENTRY_SIZE) {
@@ -96,12 +156,20 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
             type: view.getUint16(dataOffset + 0x00, true),
             entityId: view.getInt16(dataOffset + 0x02, true),
         };
-        if (entry.type === ENTITY_TYPE_DOOR)
+        if (entry.type === ENTITY_TYPE_PLATFORM)
+            platforms.push(parsePlatform(entry, view));
+        else if (entry.type === ENTITY_TYPE_DOOR)
             doors.push(parseDoor(entry, view));
     }
 
     assert(entryCount === view.getUint16(0x04 + layerId * 2, true));
-    return { doors };
+    return { platforms, doors };
+}
+
+export interface MPHPlatformMetadata {
+    modelName: string | null;
+    animationName: string | null;
+    animationId: number;
 }
 
 export interface MPHDoorMetadata {
@@ -110,6 +178,7 @@ export interface MPHDoorMetadata {
 }
 
 export interface MPHEntityMetadata {
+    platforms: readonly MPHPlatformMetadata[];
     doors: readonly MPHDoorMetadata[];
     doorLockPaletteIds: readonly number[];
 }
@@ -142,9 +211,21 @@ function getDoorModelSpec(metadata: MPHEntityMetadata, door: MPHDoorEntity): MPH
     };
 }
 
+function getPlatformModelSpec(metadata: MPHEntityMetadata, platform: MPHPlatformEntity): MPHEntityModelSpec | null {
+    const platform_ = metadata.platforms[platform.modelId];
+    if (platform_ === undefined || platform_.modelName === null)
+        return null;
+    return {
+        modelFilename: `${platform_.modelName}_Model.bin`,
+        animationFilename: platform_.animationName !== null ? `${platform_.animationName}_Anim.bin` : undefined,
+        animationId: platform_.animationName !== null ? platform_.animationId : undefined,
+    };
+}
+
 function requestEntityModel(cache: MPHEntityResourceCache, spec: MPHEntityModelSpec): void {
     cache.fetchMPFile(`models/${spec.modelFilename}`);
-    cache.fetchMPFile(`models/${spec.animationFilename}`);
+    if (spec.animationFilename !== undefined)
+        cache.fetchMPFile(`models/${spec.animationFilename}`);
     if (spec.sharedTextureFilename !== undefined)
         cache.fetchMPFile(`models/${spec.sharedTextureFilename}`);
     if (spec.paletteFilename !== undefined)
@@ -156,7 +237,7 @@ interface MPHSharedTexture {
     bin: MPHbin;
 }
 
-function createEntityModelRenderer(device: GfxDevice, cache: MPHEntityResourceCache, renderCache: GfxRenderCache, spec: MPHEntityModelSpec, options: (animation: MPHAnimation) => MPHRendererOptions): MPHRenderer {
+function createEntityModelRenderer(device: GfxDevice, cache: MPHEntityResourceCache, renderCache: GfxRenderCache, spec: MPHEntityModelSpec, options: MPHRendererOptions | ((animation: MPHAnimation | null) => MPHRendererOptions)): MPHRenderer {
     const modelFile = assertExists(cache.getFileData(`models/${spec.modelFilename}`));
     let shared: MPHSharedTexture | null = null;
     if (spec.sharedTextureFilename !== undefined) {
@@ -179,16 +260,150 @@ function createEntityModelRenderer(device: GfxDevice, cache: MPHEntityResourceCa
         for (const override of spec.paletteOverrides ?? [])
             texture.palettes[override.target] = { ...assertExists(paletteTexture.palettes[override.source]), name: `pallet_${override.target}` };
     }
-    const animationFile = assertExists(cache.getFileData(`models/${spec.animationFilename}`));
-    const animation = parseMPHAnimation(animationFile, spec.animationId, model.nodes.length);
-    return new MPHRenderer(device, renderCache, model, texture, animation, { entityModel: true, ...options(animation) });
+    const animationFile = spec.animationFilename !== undefined ?
+        cache.getFileData(`models/${spec.animationFilename}`) : null;
+    const animation = animationFile !== null && spec.animationId !== undefined ?
+        parseMPHAnimation(animationFile, spec.animationId, model.nodes.length) : null;
+    const rendererOptions = typeof options === 'function' ? options(animation) : options;
+    return new MPHRenderer(device, renderCache, model, texture, animation, { entityModel: true, ...rendererOptions });
 }
 
-function calcDoorModelMatrix(dst: mat4, door: MPHDoorEntity, modelScale: number): void {
-    const position = vec3.scale(vec3.create(), door.position, MPH_VIEWER_SCALE);
-    const target = vec3.sub(vec3.create(), position, door.facing);
-    mat4.targetTo(dst, position, target, door.up);
+const scratchPosition = vec3.create();
+const scratchRotation = quat.create();
+const scratchScale = vec3.create();
+
+function calcOrientedModelMatrix(dst: mat4, position: ReadonlyVec3, facing: ReadonlyVec3, up: ReadonlyVec3, modelScale: number): void {
+    const scaledPosition = vec3.scale(vec3.create(), position, MPH_VIEWER_SCALE);
+    const target = vec3.sub(vec3.create(), scaledPosition, facing);
+    mat4.targetTo(dst, scaledPosition, target, up);
     mat4.scale(dst, dst, [modelScale, modelScale, modelScale]);
+}
+
+interface MPHPlatformPathStep {
+    fromIndex: number;
+    toIndex: number;
+    durationInFrames: number;
+}
+
+interface MPHPlatformPath {
+    steps: MPHPlatformPathStep[];
+    cycleFrames: number;
+    // Non-looping platforms hold their final keys.
+    looping: boolean;
+    phaseOffsetFrames: number;
+}
+
+type MPHPlatformPathSource = Omit<MPHPlatformEntity, 'path'>;
+
+function segmentDuration(a: ReadonlyVec3, b: ReadonlyVec3, speed: number): number {
+    return speed > 0 ? vec3.distance(a, b) / speed : 0;
+}
+
+// Alinos landing site lava rocks sink on player step. Simulate random sinking
+// to make the viewer more interesting.
+function calcPreviewPhaseFrames(platform: MPHPlatformPathSource, cycleFrames: number): number {
+    const isInactiveLavaRock = !platform.active && platform.modelId >= 24 && platform.modelId <= 28;
+    if (!isInactiveLavaRock || cycleFrames === 0)
+        return 0;
+    return (platform.entityId * 17 % 31) / 31 * cycleFrames;
+}
+
+function buildPlatformPath(platform: MPHPlatformPathSource): MPHPlatformPath {
+    const { positions, delay, forwardSpeed, backwardSpeed } = platform;
+    const steps: MPHPlatformPathStep[] = [];
+    // Don't divide by zero on zero-delay platforms.
+    const addStep = (fromIndex: number, toIndex: number, durationInFrames: number): void => {
+        if (durationInFrames > 0)
+            steps.push({ fromIndex, toIndex, durationInFrames });
+    };
+    const addMove = (fromIndex: number, toIndex: number, speed: number): void =>
+        addStep(fromIndex, toIndex, segmentDuration(positions[fromIndex], positions[toIndex], speed));
+
+    if (platform.reverseType === 2) {
+        // Follow path once.
+        for (let i = 0; i < positions.length - 1; i++) {
+            addStep(i, i, delay);
+            addMove(i, i + 1, forwardSpeed);
+        }
+    } else if (platform.reverseType === 1) {
+        // Loop from last to first.
+        for (let i = 0; i < positions.length; i++) {
+            addStep(i, i, delay);
+            addMove(i, (i + 1) % positions.length, forwardSpeed);
+        }
+    } else {
+        // Alternate between endpoints.
+        const last = positions.length - 1;
+        addStep(0, 0, delay);
+        for (let i = 0; i < last; i++)
+            addMove(i, i + 1, forwardSpeed);
+        addStep(last, last, delay);
+        for (let i = last; i > 0; i--)
+            addMove(i, i - 1, backwardSpeed);
+    }
+
+    let cycleFrames = 0;
+    for (let i = 0; i < steps.length; i++)
+        cycleFrames += steps[i].durationInFrames;
+    const phaseOffsetFrames = calcPreviewPhaseFrames(platform, cycleFrames);
+    return { steps, cycleFrames, looping: platform.reverseType !== 2, phaseOffsetFrames };
+}
+
+function setPlatformKey(dstPosition: vec3, dstRotation: quat, platform: MPHPlatformEntity, index: number): void {
+    vec3.copy(dstPosition, platform.positions[index]);
+    quat.copy(dstRotation, platform.rotations[index]);
+}
+
+function samplePlatformPath(dstPosition: vec3, dstRotation: quat, platform: MPHPlatformEntity, timeInMilliseconds: number): void {
+    if (platform.positions.length === 0) {
+        vec3.copy(dstPosition, platform.position);
+        quat.identity(dstRotation);
+        return;
+    }
+
+    const path = platform.path;
+    if (path.cycleFrames === 0) {
+        setPlatformKey(dstPosition, dstRotation, platform, 0);
+        return;
+    }
+
+    const frameTime = timeInMilliseconds * 30 / 1000;
+    let frame = path.looping ?
+        (frameTime + path.phaseOffsetFrames) % path.cycleFrames :
+        platform.active ? frameTime : 0;
+
+    for (let i = 0; i < path.steps.length; i++) {
+        const step = path.steps[i];
+        if (frame <= step.durationInFrames) {
+            const t = frame / step.durationInFrames;
+            vec3.lerp(dstPosition, platform.positions[step.fromIndex], platform.positions[step.toIndex], t);
+            quat.slerp(dstRotation, platform.rotations[step.fromIndex], platform.rotations[step.toIndex], t);
+            return;
+        }
+        frame -= step.durationInFrames;
+    }
+
+    setPlatformKey(dstPosition, dstRotation, platform, path.looping ? 0 : platform.positions.length - 1);
+}
+
+function setupPlatformModelMatrix(dst: mat4, platform: MPHPlatformEntity, modelScale: number): void {
+    if (platform.positions.length === 0) {
+        const position = vec3.add(vec3.create(), platform.position, platform.positionOffset);
+        calcOrientedModelMatrix(dst, position, platform.facing, platform.up, modelScale);
+        return;
+    }
+
+    const position = vec3.add(vec3.create(), platform.positions[0], platform.positionOffset);
+    vec3.scale(position, position, MPH_VIEWER_SCALE);
+    mat4.fromRotationTranslationScale(dst, platform.rotations[0], position, [modelScale, modelScale, modelScale]);
+}
+
+function calcPlatformModelMatrix(dst: mat4, platform: MPHPlatformEntity, timeInMilliseconds: number, modelScale: number): void {
+    samplePlatformPath(scratchPosition, scratchRotation, platform, timeInMilliseconds);
+    vec3.add(scratchPosition, scratchPosition, platform.positionOffset);
+    vec3.scale(scratchPosition, scratchPosition, MPH_VIEWER_SCALE);
+    vec3.set(scratchScale, modelScale, modelScale, modelScale);
+    mat4.fromRotationTranslationScale(dst, scratchRotation, scratchPosition, scratchScale);
 }
 
 // Max door animation length is 2s, 6s lets us cycle open/hold/close for both
@@ -197,19 +412,42 @@ const DOOR_OPEN_HOLD_DURATION = 2000;
 const DOOR_HALF_CYCLE_DURATION = 6050;
 
 export class MPHEntityFile {
+    private movers: ((timeInMilliseconds: number) => void)[] = [];
+
     constructor(private entities: MPHEntities, private metadata: MPHEntityMetadata, private cache: MPHEntityResourceCache, private sceneMode: MPHSceneMode) {
     }
 
     public requestResources(): void {
+        for (const platform of this.entities.platforms) {
+            const spec = getPlatformModelSpec(this.metadata, platform);
+            if (spec !== null)
+                requestEntityModel(this.cache, spec);
+        }
         for (const door of this.entities.doors)
             requestEntityModel(this.cache, getDoorModelSpec(this.metadata, door));
     }
 
-    public createRenderers(device: GfxDevice, renderCache: GfxRenderCache): MPHRenderer[] {
-        return this.entities.doors.map((door, index) => {
+    public createRenderers(device: GfxDevice, renderCache: GfxRenderCache, lighting: MPHLighting): MPHRenderer[] {
+        const renderers: MPHRenderer[] = [];
+        for (const platform of this.entities.platforms) {
+            const spec = getPlatformModelSpec(this.metadata, platform);
+            if (spec === null)
+                continue;
+            const renderer = createEntityModelRenderer(device, this.cache, renderCache, spec, {
+                sceneMode: this.sceneMode,
+                lighting,
+            });
+            if (platform.positions.length > 1)
+                this.movers.push((time) => calcPlatformModelMatrix(renderer.modelMatrix, platform, time, renderer.modelScale));
+            else
+                setupPlatformModelMatrix(renderer.modelMatrix, platform, renderer.modelScale);
+            renderers.push(renderer);
+        }
+        for (let index = 0; index < this.entities.doors.length; index++) {
+            const door = this.entities.doors[index];
             const spec = getDoorModelSpec(this.metadata, door);
             const renderer = createEntityModelRenderer(device, this.cache, renderCache, spec, (animation) => {
-                const animationDuration = Math.max(0, (animation.node?.frameCount ?? 1) - 1) * 1000 / 30;
+                const animationDuration = Math.max(0, (animation?.node?.frameCount ?? 1) - 1) * 1000 / 30;
                 return {
                     sceneMode: this.sceneMode,
                     mapAnimationTime: (time) => {
@@ -228,8 +466,14 @@ export class MPHEntityFile {
                     },
                 };
             });
-            calcDoorModelMatrix(renderer.modelMatrix, door, renderer.modelScale);
-            return renderer;
-        });
+            calcOrientedModelMatrix(renderer.modelMatrix, door.position, door.facing, door.up, renderer.modelScale);
+            renderers.push(renderer);
+        }
+        return renderers;
+    }
+
+    public update(timeInMilliseconds: number): void {
+        for (let i = 0; i < this.movers.length; i++)
+            this.movers[i](timeInMilliseconds);
     }
 }

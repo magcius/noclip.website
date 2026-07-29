@@ -12,7 +12,7 @@ import { MPHEntityFile, MPHEntityMetadata, parseMPHEntities } from './entity.js'
 import { DataFetcher } from '../DataFetcher.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { MPHRenderer, MPHSceneMode } from './render.js';
+import { MPHLighting, MPHRenderer, MPHSceneMode } from './render.js';
 import { assertExists } from '../util.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { FakeTextureHolder } from '../TextureHolder.js';
@@ -89,6 +89,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
 
     public stageRenderer: MPHRenderer;
     public objectRenderers: MPHRenderer[] = [];
+    public entities: MPHEntityFile | null = null;
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -107,6 +108,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         renderInstManager.setCurrentList(this.renderInstListMain);
         this.stageRenderer.prepareToRender(renderInstManager, viewerInput);
+        this.entities?.update(viewerInput.time);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
         renderInstManager.popTemplate();
@@ -194,6 +196,16 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         const renderer = new MPHSceneRenderer(device);
+        const lighting: MPHLighting | null = area !== null ? {
+            colors: [
+                [area.lightColor0[0] / 31, area.lightColor0[1] / 31, area.lightColor0[2] / 31],
+                [area.lightColor1[0] / 31, area.lightColor1[1] / 31, area.lightColor1[2] / 31],
+            ],
+            directions: [
+                [-area.lightVector0[0] / 0x1000, -area.lightVector0[1] / 0x1000, -area.lightVector0[2] / 0x1000],
+                [-area.lightVector1[0] / 0x1000, -area.lightVector1[1] / 0x1000, -area.lightVector1[2] / 0x1000],
+            ],
+        } : null;
 
         const textureFile = textureFilename !== null ? modelCache.getFileData(`levels/textures/${textureFilename}`) : null;
         const stageTex = textureFile !== null ? parseTEX0Texture(textureFile, stageBin.mphTex) : parseTEX0Texture(assertExists(bin_Model), stageBin.mphTex);
@@ -202,8 +214,10 @@ class SceneDesc implements Viewer.SceneDesc {
         renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex), animation, {
             sceneMode,
         });
-        if (entities !== null)
-            renderer.objectRenderers.push(...entities.createRenderers(device, renderer.getCache()));
+        if (entities !== null) {
+            renderer.objectRenderers.push(...entities.createRenderers(device, renderer.getCache(), assertExists(lighting)));
+            renderer.entities = entities;
+        }
 
         return renderer;
     }

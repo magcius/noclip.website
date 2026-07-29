@@ -1,5 +1,5 @@
 
-import { mat4, mat2d } from "gl-matrix";
+import { mat4, mat2d, vec4 } from "gl-matrix";
 import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import * as Viewer from '../viewer.js';
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx.js';
@@ -7,15 +7,15 @@ import { readTexture, getFormatName, Texture, textureFormatIsTranslucent } from 
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render.js';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillColor, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { computeViewMatrix } from "../Camera.js";
 import AnimationController from "../AnimationController.js";
 import { bindMPHT, MPHAnimation, MPHNodeAnimator, MPHTexCoordAnimator } from "./mph_anim.js";
 import { nArray, assertExists } from "../util.js";
-import { TEX0Texture, PAT0TexAnimator, TEX0, MDL0Material, MDL0Shape } from "../nns_g3d/NNS_G3D.js";
+import { TEX0Texture, PAT0TexAnimator, TEX0 } from "../nns_g3d/NNS_G3D.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { MPHbin, MPHNode } from "./mph_binModel.js";
-import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
+import { MPHbin, MPHMaterial, MPHNode, MPHShape } from "./mph_binModel.js";
+import { CalcBillboardFlags, Vec3Zero, calcBillboardMatrix } from "../MathHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { White, colorNewCopy } from "../Color.js";
 
@@ -58,7 +58,7 @@ class MaterialInstance {
     public specularColor = colorNewCopy(White);
     public emissionColor = colorNewCopy(White);
 
-    constructor(cache: GfxRenderCache, tex0: TEX0, public material: MDL0Material, private texCoordAnimator: MPHTexCoordAnimator | null, entityModel: boolean) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, public material: MPHMaterial, private texCoordAnimator: MPHTexCoordAnimator | null, entityModel: boolean) {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
@@ -68,8 +68,14 @@ class MaterialInstance {
         this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName, entityModel);
         this.baseCtx = { color: White, alpha: expand5to8(this.material.alpha) };
-        if (entityModel)
-            this.lightMask = 0;
+        if (entityModel) {
+            this.diffuseColor = colorNewCopy(this.material.diffuseColor);
+            this.ambientColor = colorNewCopy(this.material.ambientColor);
+            this.specularColor = colorNewCopy(this.material.specularColor);
+            this.lightMask = this.material.lightingEnabled ? 0x03 : 0;
+            if (this.material.lightingEnabled)
+                this.emissionColor.r = this.emissionColor.g = this.emissionColor.b = 0;
+        }
 
         if (this.gfxTextures.length > 0) {
             this.gfxSampler = cache.createSampler({
@@ -201,12 +207,14 @@ class Node {
 }
 
 const scratchViewMatrix = mat4.create();
+const scratchLightDirection = vec4.create();
+const scratchLightViewMatrix = mat4.create();
 const MAX_MATRICES = 32;
 class ShapeInstance {
     private vertexData: VertexData;
     private matrixNodes: Node[] = [];
 
-    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, matrixNodes: Map<number, Node>, numMatrices: number) {
+    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MPHShape, matrixNodes: Map<number, Node>, numMatrices: number) {
         const baseCtx = this.materialInstance.baseCtx;
         for (let i = 0; i < numMatrices; i++)
             this.matrixNodes.push(matrixNodes.get(i) ?? node);
@@ -245,10 +253,15 @@ export type MPHSceneMode =
     { kind: 'singlePlayer', geometrySet: number } |
     { kind: 'multiplayer', layout: 0 | 1, captureTheFlag?: boolean };
 
+export interface MPHLighting {
+    colors: readonly [readonly [number, number, number], readonly [number, number, number]];
+    directions: readonly [readonly [number, number, number], readonly [number, number, number]];
+}
+
 export interface MPHRendererOptions {
     sceneMode?: MPHSceneMode;
     entityModel?: boolean;
-    calcModelMatrix?: (dst: mat4, timeInMilliseconds: number, modelScale: number) => void;
+    lighting?: MPHLighting;
     mapAnimationTime?: (timeInMilliseconds: number) => number;
 }
 
@@ -294,29 +307,28 @@ export class MPHRenderer {
     private nodeDrawOrder: Node[] = [];
     private nodeAnimator: MPHNodeAnimator | null;
     private sceneMode: MPHSceneMode;
-    private calcModelMatrix: MPHRendererOptions['calcModelMatrix'];
+    private lighting: MPHLighting | undefined;
     private mapAnimationTime: MPHRendererOptions['mapAnimationTime'];
     public viewerTextures: Viewer.Texture[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null, options: MPHRendererOptions) {
         this.sceneMode = options.sceneMode ?? { kind: 'singlePlayer', geometrySet: 1 };
-        this.calcModelMatrix = options.calcModelMatrix;
+        this.lighting = options.lighting;
         this.mapAnimationTime = options.mapAnimationTime;
         const entityModel = options.entityModel ?? false;
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
         this.gfxProgram = cache.createProgram(program);
-        const model = mphModel.model;
         const nodeAnimation = mphAnimation?.node ?? null;
         this.nodeAnimator = nodeAnimation !== null ? new MPHNodeAnimator(this.animationController, nodeAnimation) : null;
-        this.modelScale = model.posScale * (1 << mphModel.scaleFactor) * MPH_VIEWER_SCALE;
+        this.modelScale = mphModel.posScale * (1 << mphModel.scaleFactor) * MPH_VIEWER_SCALE;
         mat4.fromScaling(this.modelMatrix, [this.modelScale, this.modelScale, this.modelScale]);
 
         const texCoordAnimation = mphAnimation?.texCoord ?? null;
 
-        for (let i = 0; i < model.materials.length; i++) {
-            const material = model.materials[i];
+        for (let i = 0; i < mphModel.materials.length; i++) {
+            const material = mphModel.materials[i];
             const texCoordAnimator = texCoordAnimation !== null ?
                 bindMPHT(this.animationController, texCoordAnimation, material.name) : null;
             this.materialInstances.push(new MaterialInstance(cache, this.tex0, material, texCoordAnimator, entityModel));
@@ -354,7 +366,7 @@ export class MPHRenderer {
 
             for (let j = 0; j < node.node.meshCount; j++) {
                 const mesh = mphModel.meshs[node.node.meshStart + j];
-                const shape = model.shapes[mesh.shapeID];
+                const shape = mphModel.shapes[mesh.shapeID];
                 this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[mesh.matID], node, shape, matrixNodes, numMatrices));
             }
         }
@@ -363,9 +375,6 @@ export class MPHRenderer {
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(this.mapAnimationTime !== undefined ?
             this.mapAnimationTime(viewerInput.time) : viewerInput.time);
-        if (this.calcModelMatrix !== undefined)
-            this.calcModelMatrix(this.modelMatrix, viewerInput.time, this.modelScale);
-
         computeViewMatrix(scratchViewMatrix, viewerInput.camera);
         for (const node of this.nodeDrawOrder)
             node.calcMatrix(this.modelMatrix, scratchViewMatrix, this.nodeAnimator);
@@ -377,6 +386,21 @@ export class MPHRenderer {
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16+32);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        computeViewMatrix(scratchLightViewMatrix, viewerInput.camera);
+        for (let i = 0; i < 4; i++) {
+            const source = this.lighting?.directions[i];
+            if (source !== undefined) {
+                vec4.set(scratchLightDirection, source[0], source[1], source[2], 0);
+                vec4.transformMat4(scratchLightDirection, scratchLightDirection, scratchLightViewMatrix);
+            } else {
+                vec4.zero(scratchLightDirection);
+            }
+            offs += fillVec4v(sceneParamsMapped, offs, scratchLightDirection);
+        }
+        for (let i = 0; i < 4; i++) {
+            const color = this.lighting?.colors[i] ?? Vec3Zero;
+            offs += fillVec4(sceneParamsMapped, offs, color[0], color[1], color[2], 1);
+        }
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput);
 

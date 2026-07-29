@@ -7,7 +7,8 @@ const RAM = 0x02004000, START = 0x020B8794, END = 0x020BAFD4, STRIDE = 0x70;
 
 // The entity metadata tables live in overlays rather than in the ARM9. Overlay
 // load addresses overlap, so each table names the overlay it belongs to.
-const ENTITY_OVERLAY = 2;
+const ENTITY_OVERLAY = 2, WORLD_OVERLAY = 15;
+const PLATFORM_TABLE = 0x021712D0, PLATFORM_COUNT = 45, PLATFORM_STRIDE = 0x28;
 const DOOR_MODEL_TABLE = 0x0211FEEC, DOOR_ANIM_TABLE = 0x0211FF0C, DOOR_COUNT = 4;
 const DOOR_LOCK_PALETTES = 0x0211FE90, DOOR_LOCK_COUNT = 10;
 const u16 = (b: Buffer, o: number) => b.readUInt16LE(o);
@@ -121,6 +122,15 @@ function entityMetadata(images: Map<number, Image>): object {
         return assetStem(readCString(image.data, offset));
     };
 
+    const platforms = [];
+    for (let i = 0; i < PLATFORM_COUNT; i++) {
+        const entry = PLATFORM_TABLE + i * PLATFORM_STRIDE;
+        const animationName = name(WORLD_OVERLAY, pointer(WORLD_OVERLAY, entry + 0x04));
+        // Of the four per-state animation slots, the game renders the third.
+        const animationId = animationName !== null ? pointer(WORLD_OVERLAY, entry + 0x14) : 0;
+        platforms.push({ modelName: name(WORLD_OVERLAY, pointer(WORLD_OVERLAY, entry)), animationName, animationId });
+    }
+
     const doors = [];
     for (let i = 0; i < DOOR_COUNT; i++)
         doors.push({
@@ -131,7 +141,7 @@ function entityMetadata(images: Map<number, Image>): object {
     const lock = read(ENTITY_OVERLAY, DOOR_LOCK_PALETTES);
     const doorLockPaletteIds = [...lock.image.data.subarray(lock.offset, lock.offset + DOOR_LOCK_COUNT)];
 
-    return { doors, doorLockPaletteIds };
+    return { platforms, doors, doorLockPaletteIds };
 }
 
 function extract(rom: Buffer): [object[], object, Record<string, string>, Record<string, string>, Map<string, Buffer>] {
