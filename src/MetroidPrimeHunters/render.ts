@@ -224,6 +224,36 @@ enum BillboardMode {
     NONE, BB, BBY,
 }
 
+export type MPHSceneMode =
+    { kind: 'singlePlayer', area: number } |
+    { kind: 'multiplayer', layout: 0 | 1, captureTheFlag?: boolean };
+
+function nodeIsVisibleInMode(name: string, mode: MPHSceneMode): boolean {
+    let hasModeTag = false;
+    let matchesMode = false;
+
+    // FilterModelNodesByGameModeTags @ 0x0211B004:
+    // check consecutive four-byte tags at the beginning of each node name.
+    for (let offs = 0; name.charAt(offs) === '_'; offs += 4) {
+        hasModeTag = true;
+        const tag = name.slice(offs, offs + 4).toLowerCase();
+        if (tag.startsWith('_s')) {
+            const area = Number.parseInt(tag.slice(2), 10);
+            matchesMode ||= mode.kind === 'singlePlayer' && area === mode.area;
+        } else if (tag === '_mpu') {
+            matchesMode ||= mode.kind === 'multiplayer';
+        } else if (tag === '_ml0') {
+            matchesMode ||= mode.kind === 'multiplayer' && mode.layout === 0;
+        } else if (tag === '_ml1') {
+            matchesMode ||= mode.kind === 'multiplayer' && mode.layout === 1;
+        } else if (tag === '_ctf') {
+            matchesMode ||= mode.kind === 'multiplayer' && mode.captureTheFlag === true;
+        }
+    }
+
+    return !hasModeTag || matchesMode;
+}
+
 export class MPHRenderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
@@ -235,7 +265,7 @@ export class MPHRenderer {
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null = null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null = null, private sceneMode: MPHSceneMode = { kind: 'singlePlayer', area: 1 }) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -266,23 +296,25 @@ export class MPHRenderer {
             if (this.materialInstances[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
 
-        function getNodeIndex(shape: MDL0Shape): number{
+        function getNodeIndex(shape: MDL0Shape): number {
             const view = shape.dlBuffer.createDataView();
             const nodeIndex = view.getInt8(0x04);
             return nodeIndex;
         }
 
-        for (let i = 0; i < mphModel.meshs.length; i++) {
+        for (let i = 0; i < this.nodes.length; i++) {
+            if (!nodeIsVisibleInMode(this.nodes[i].node.name, this.sceneMode))
+                continue;
 
-            const matIndex = mphModel.meshs[i].matID;
-            const shapeIndex = mphModel.meshs[i].shapeID;
-            const shape = model.shapes[shapeIndex];
-            let index = getNodeIndex(shape);
-            if(index >= this.nodes.length){
-                index = 0;
+            const range = mphModel.nodeMeshRanges[i];
+            for (let j = 0; j < range.meshCount; j++) {
+                const mesh = mphModel.meshs[range.meshStart + j];
+                const shape = model.shapes[mesh.shapeID];
+                let transformNodeIndex = getNodeIndex(shape);
+                if (transformNodeIndex >= this.nodes.length)
+                    transformNodeIndex = 0;
+                this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[mesh.matID], this.nodes[transformNodeIndex], shape, posScale));
             }
-            const nodeIndex = index;
-            this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
     }
 
