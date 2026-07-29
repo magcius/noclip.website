@@ -4,6 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const RAM = 0x02004000, START = 0x020B8794, END = 0x020BAFD4, STRIDE = 0x70;
+
+// The entity metadata tables live in overlays rather than in the ARM9. Overlay
+// load addresses overlap, so each table names the overlay it belongs to.
+const ENTITY_OVERLAY = 2;
+const DOOR_MODEL_TABLE = 0x0211FEEC, DOOR_ANIM_TABLE = 0x0211FF0C, DOOR_COUNT = 4;
+const DOOR_LOCK_PALETTES = 0x0211FE90, DOOR_LOCK_COUNT = 10;
 const u16 = (b: Buffer, o: number) => b.readUInt16LE(o);
 const u32 = (b: Buffer, o: number) => b.readUInt32LE(o);
 const i32 = (b: Buffer, o: number) => b.readInt32LE(o);
@@ -75,7 +81,60 @@ function readCString(data: Buffer, offset: number): string {
     return data.toString('ascii', offset, data.indexOf(0, offset));
 }
 
-function extract(rom: Buffer): [object[], Record<string, string>, Record<string, string>, Map<string, Buffer>] {
+interface Image {
+    ram: number;
+    data: Buffer;
+}
+
+function overlays(rom: Buffer): Map<number, Image> {
+    const table = u32(rom, 0x50), size = u32(rom, 0x54), fat = u32(rom, 0x48);
+    const images = new Map<number, Image>();
+    for (let offs = table; offs < table + size; offs += 0x20) {
+        const fileId = u32(rom, offs + 0x18), compressed = (u32(rom, offs + 0x1C) >>> 24) & 1;
+        const data = rom.subarray(u32(rom, fat + fileId * 8), u32(rom, fat + fileId * 8 + 4));
+        images.set(u32(rom, offs), { ram: u32(rom, offs + 0x04), data: compressed ? blz(data) : data });
+    }
+    return images;
+}
+
+// Model and animation names are stored either bare or as a full NitroFS path.
+function assetStem(name: string): string {
+    return path.parse(name).name.replace(/_(model|anim)$/i, '').toLowerCase();
+}
+
+function entityMetadata(images: Map<number, Image>): object {
+    const read = (overlay: number, address: number) => {
+        const image = images.get(overlay)!;
+        const offset = address - image.ram;
+        if (offset < 0 || offset >= image.data.length)
+            throw new Error(`overlay ${overlay} does not cover ${address.toString(16)}`);
+        return { image, offset };
+    };
+    const pointer = (overlay: number, address: number) => {
+        const { image, offset } = read(overlay, address);
+        return u32(image.data, offset);
+    };
+    const name = (overlay: number, address: number): string | null => {
+        if (address === 0)
+            return null;
+        const { image, offset } = read(overlay, address);
+        return assetStem(readCString(image.data, offset));
+    };
+
+    const doors = [];
+    for (let i = 0; i < DOOR_COUNT; i++)
+        doors.push({
+            modelName: name(ENTITY_OVERLAY, pointer(ENTITY_OVERLAY, DOOR_MODEL_TABLE + i * 4)),
+            animationName: name(ENTITY_OVERLAY, pointer(ENTITY_OVERLAY, DOOR_ANIM_TABLE + i * 4)),
+        });
+
+    const lock = read(ENTITY_OVERLAY, DOOR_LOCK_PALETTES);
+    const doorLockPaletteIds = [...lock.image.data.subarray(lock.offset, lock.offset + DOOR_LOCK_COUNT)];
+
+    return { doors, doorLockPaletteIds };
+}
+
+function extract(rom: Buffer): [object[], object, Record<string, string>, Record<string, string>, Map<string, Buffer>] {
     if (rom.toString('ascii', 0x0C, 0x10) !== 'AMHE')
         throw new Error('expected the US Metroid Prime Hunters ROM (AMHE)');
     if (u32(rom, 0x28) !== RAM)
@@ -122,19 +181,21 @@ function extract(rom: Buffer): [object[], Record<string, string>, Record<string,
 
         areas.push(area);
     }
-    return [areas, archiveTextures, modelArchives, output];
+    const entities = entityMetadata(overlays(rom));
+    return [areas, entities, archiveTextures, modelArchives, output];
 }
 
 const [romName, outDir] = process.argv.slice(2);
 if (romName === undefined || outDir === undefined)
     throw new Error(`usage: ${path.basename(process.argv[1])} ROM OUT`);
-const [areas, archiveTextures, modelArchives, files] = extract(fs.readFileSync(romName));
+const [areas, entities, archiveTextures, modelArchives, files] = extract(fs.readFileSync(romName));
 for (const [filename, data] of files) {
     const target = path.join(outDir, filename);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, data);
 }
 fs.writeFileSync(path.join(outDir, 'area_metadata.json'), `${JSON.stringify(areas, null, 2)}\n`);
+fs.writeFileSync(path.join(outDir, 'entity_metadata.json'), `${JSON.stringify(entities, null, 2)}\n`);
 fs.writeFileSync(path.join(outDir, 'archive_textures.json'), `${JSON.stringify(archiveTextures, null, 2)}\n`);
 fs.writeFileSync(path.join(outDir, 'model_archives.json'), `${JSON.stringify(modelArchives, null, 2)}\n`);
 console.log(`wrote ${areas.length} areas and ${files.size} files to ${outDir}`);

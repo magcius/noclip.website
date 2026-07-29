@@ -1,11 +1,11 @@
-import { mat2d } from 'gl-matrix';
+import { mat2d, mat4, vec3 } from 'gl-matrix';
 
 import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { lerp, lerpAngle } from '../MathHelpers.js';
+import { computeModelMatrixSRT, lerp, lerpAngle } from '../MathHelpers.js';
 import { fx32 } from '../nns_g3d/NNS_G3D.js';
 import { assert, readString } from '../util.js';
-import { calcMPHTexMtx } from './mph_binModel.js';
+import { calcMPHTexMtx, fxAngle } from './mph_binModel.js';
 
 interface AnimationChannel {
     interpolation: number;
@@ -32,7 +32,29 @@ export interface MPHTexCoordAnimation {
 }
 
 export interface MPHAnimation {
+    node: MPHNodeAnimation | null;
     texCoord: MPHTexCoordAnimation | null;
+}
+
+interface MPHNodeAnimationEntry {
+    scaleX: AnimationChannel;
+    scaleY: AnimationChannel;
+    scaleZ: AnimationChannel;
+    rotationX: AnimationChannel;
+    rotationY: AnimationChannel;
+    rotationZ: AnimationChannel;
+    translationX: AnimationChannel;
+    translationY: AnimationChannel;
+    translationZ: AnimationChannel;
+}
+
+export interface MPHNodeAnimation {
+    frameCount: number;
+    scaleDataOffset: number;
+    rotationDataOffset: number;
+    translationDataOffset: number;
+    entries: MPHNodeAnimationEntry[];
+    buffer: ArrayBufferSlice;
 }
 
 function parseChannel(view: DataView, entryOffset: number, interpolationOffset: number, countOffset: number, indexOffset: number): AnimationChannel {
@@ -71,24 +93,79 @@ function parseTexCoordAnimation(buffer: ArrayBufferSlice, trackOffset: number): 
     };
 }
 
-export function parseMPHAnimation(buffer: ArrayBufferSlice): MPHAnimation {
+function parseNodeAnimation(buffer: ArrayBufferSlice, trackOffset: number, nodeCount: number): MPHNodeAnimation {
+    const view = buffer.createDataView();
+    const entriesOffset = view.getUint32(trackOffset + 0x10, true);
+    const entries: MPHNodeAnimationEntry[] = [];
+    for (let i = 0; i < nodeCount; i++) {
+        const entryOffset = entriesOffset + i * 0x30;
+        entries.push({
+            scaleX: parseChannel(view, entryOffset, 0x00, 0x04, 0x0A),
+            scaleY: parseChannel(view, entryOffset, 0x01, 0x06, 0x0C),
+            scaleZ: parseChannel(view, entryOffset, 0x02, 0x08, 0x0E),
+            rotationX: parseChannel(view, entryOffset, 0x10, 0x14, 0x1A),
+            rotationY: parseChannel(view, entryOffset, 0x11, 0x16, 0x1C),
+            rotationZ: parseChannel(view, entryOffset, 0x12, 0x18, 0x1E),
+            translationX: parseChannel(view, entryOffset, 0x20, 0x24, 0x2A),
+            translationY: parseChannel(view, entryOffset, 0x21, 0x26, 0x2C),
+            translationZ: parseChannel(view, entryOffset, 0x22, 0x28, 0x2E),
+        });
+    }
+    return {
+        frameCount: view.getUint32(trackOffset + 0x00, true),
+        scaleDataOffset: view.getUint32(trackOffset + 0x04, true),
+        rotationDataOffset: view.getUint32(trackOffset + 0x08, true),
+        translationDataOffset: view.getUint32(trackOffset + 0x0C, true),
+        entries,
+        buffer,
+    };
+}
+
+export function parseMPHAnimation(buffer: ArrayBufferSlice, animationIndex: number = 0, nodeCount: number = 0): MPHAnimation {
     const view = buffer.createDataView();
     const animationCount = view.getUint16(0x14, true);
     if (animationCount === 0)
-        return { texCoord: null };
+        return { node: null, texCoord: null };
+    if (animationIndex >= animationCount)
+        animationIndex = 0;
 
-    // The five file-header tables correspond to node, an unused/unknown slot,
-    // material, TexCoord, and texture/palette tracks. The selected animation
-    // indexes each table. TexCoord animation is table 3.
+    // SetModelAnimation @ 0x02044CDC indexes five parallel pointer tables.
+    // Tables 0 and 3 contain node and texture-coordinate animation.
+    const nodeTableOffset = view.getUint32(0x00, true);
     const texCoordTableOffset = view.getUint32(0x0C, true);
-    if (texCoordTableOffset === 0)
-        return { texCoord: null };
-
-    const trackOffset = view.getUint32(texCoordTableOffset, true);
+    const nodeTrackOffset = nodeTableOffset !== 0 ? view.getUint32(nodeTableOffset + animationIndex * 4, true) : 0;
+    const texCoordTrackOffset = texCoordTableOffset !== 0 ? view.getUint32(texCoordTableOffset + animationIndex * 4, true) : 0;
     return {
-        texCoord: trackOffset !== 0 ? parseTexCoordAnimation(buffer, trackOffset) : null,
+        node: nodeTrackOffset !== 0 && nodeCount !== 0 ? parseNodeAnimation(buffer, nodeTrackOffset, nodeCount) : null,
+        texCoord: texCoordTrackOffset !== 0 ? parseTexCoordAnimation(buffer, texCoordTrackOffset) : null,
     };
 }
+
+export class MPHNodeAnimator {
+    constructor(private animationController: AnimationController, private animation: MPHNodeAnimation) {
+    }
+
+    public calcNodeMatrix(dst: mat4, nodeIndex: number): void {
+        const entry = this.animation.entries[nodeIndex];
+        if (entry === undefined) {
+            mat4.identity(dst);
+            return;
+        }
+        const view = this.animation.buffer.createDataView();
+        const frame = this.animationController.getTimeInFrames() % this.animation.frameCount;
+        sampleVec3Smooth(scratchScale, view, this.animation.scaleDataOffset, [entry.scaleX, entry.scaleY, entry.scaleZ], frame, this.animation.frameCount, 4, true);
+        sampleVec3Smooth(scratchRotation, view, this.animation.rotationDataOffset, [entry.rotationX, entry.rotationY, entry.rotationZ], frame, this.animation.frameCount, 2, false, 0x10000);
+        sampleVec3Smooth(scratchTranslation, view, this.animation.translationDataOffset, [entry.translationX, entry.translationY, entry.translationZ], frame, this.animation.frameCount, 4, true);
+        computeModelMatrixSRT(dst,
+            fx32(scratchScale[0]), fx32(scratchScale[1]), fx32(scratchScale[2]),
+            fxAngle(scratchRotation[0]), fxAngle(scratchRotation[1]), fxAngle(scratchRotation[2]),
+            fx32(scratchTranslation[0]), fx32(scratchTranslation[1]), fx32(scratchTranslation[2]));
+    }
+}
+
+const scratchScale = vec3.create();
+const scratchRotation = vec3.create();
+const scratchTranslation = vec3.create();
 
 function sampleChannelFrame(view: DataView, dataOffset: number, channel: AnimationChannel, frame: number, frameCount: number, stride: number, signed: boolean): number {
     assert(stride !== 4 || signed);
@@ -151,6 +228,11 @@ function sampleChannelSmooth(view: DataView, dataOffset: number, channel: Animat
     return wrap !== 0 ? lerpAngle(value0, value1, t, wrap) : lerp(value0, value1, t);
 }
 
+function sampleVec3Smooth(dst: vec3, view: DataView, dataOffset: number, channels: readonly AnimationChannel[], frame: number, frameCount: number, stride: number, signed: boolean, wrap = 0): void {
+    for (let i = 0; i < 3; i++)
+        dst[i] = sampleChannelSmooth(view, dataOffset, channels[i], frame, frameCount, stride, signed, wrap);
+}
+
 export class MPHTexCoordAnimator {
     constructor(private animationController: AnimationController, private animation: MPHTexCoordAnimation, private entry: MPHTexCoordAnimationEntry) {
     }
@@ -160,7 +242,7 @@ export class MPHTexCoordAnimator {
         const frame = this.animationController.getTimeInFrames() % this.animation.frameCount;
         const scaleS = fx32(sampleChannelSmooth(view, this.animation.scaleDataOffset, this.entry.scaleS, frame, this.animation.frameCount, 4, true));
         const scaleT = fx32(sampleChannelSmooth(view, this.animation.scaleDataOffset, this.entry.scaleT, frame, this.animation.frameCount, 4, true));
-        const rotation = sampleChannelSmooth(view, this.animation.rotationDataOffset, this.entry.rotation, frame, this.animation.frameCount, 2, false, 0x10000) / 0x10000 * Math.PI * 2;
+        const rotation = fxAngle(sampleChannelSmooth(view, this.animation.rotationDataOffset, this.entry.rotation, frame, this.animation.frameCount, 2, false, 0x10000));
         const translationS = fx32(sampleChannelSmooth(view, this.animation.translationDataOffset, this.entry.translationS, frame, this.animation.frameCount, 4, true, 0x1000));
         const translationT = fx32(sampleChannelSmooth(view, this.animation.translationDataOffset, this.entry.translationT, frame, this.animation.frameCount, 4, true, 0x1000));
 

@@ -7,12 +7,13 @@ import * as ARC from './mph_arc.js';
 import { parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
 import { parseMPHAnimation } from './mph_anim.js';
 import { findAreaMetadata, MPHAreaMetadata, sceneIdToModelStem } from './area_metadata.js';
+import { MPHEntityFile, MPHEntityMetadata, parseMPHEntities } from './entity.js';
 
 import { DataFetcher } from '../DataFetcher.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { MPHRenderer, MPHSceneMode } from './render.js';
-import { assert, assertExists } from '../util.js';
+import { assertExists } from '../util.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { FakeTextureHolder } from '../TextureHolder.js';
 import { SceneContext } from '../SceneBase.js';
@@ -155,8 +156,9 @@ class SceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const modelCache = new ModelCache(dataFetcher);
-        const [areaMetadata, archiveTextures, modelArchives] = await Promise.all([
+        const [areaMetadata, entityMetadata, archiveTextures, modelArchives] = await Promise.all([
             modelCache.fetchJSON<readonly MPHAreaMetadata[]>('area_metadata.json'),
+            modelCache.fetchJSON<MPHEntityMetadata>('entity_metadata.json'),
             modelCache.fetchJSON<Record<string, string>>('archive_textures.json'),
             modelCache.fetchJSON<Record<string, string>>('model_archives.json'),
         ]);
@@ -177,19 +179,31 @@ class SceneDesc implements Viewer.SceneDesc {
         } else {
             modelCache.fetchMPFile(modelFilename);
         }
+        if (area !== null)
+            modelCache.fetchMPFile(`levels/entities/${area.entityFilename}`);
         await modelCache.waitForLoad();
 
         const bin_Model = modelCache.getFileData(modelFilename);
         const stageBin = parseMPH_Model(assertExists(bin_Model));
+        const entityLayerId = sceneMode.kind === 'multiplayer' && sceneMode.captureTheFlag === true ? 12 : 0;
+        const entityFile = area !== null ? assertExists(modelCache.getFileData(`levels/entities/${area.entityFilename}`)) : null;
+        const entities = entityFile !== null ? new MPHEntityFile(parseMPHEntities(entityFile, entityLayerId), entityMetadata, modelCache, sceneMode) : null;
+        if (entities !== null) {
+            entities.requestResources();
+            await modelCache.waitForLoad();
+        }
 
-        assert(stageBin.models.length === 1);
         const renderer = new MPHSceneRenderer(device);
 
         const textureFile = textureFilename !== null ? modelCache.getFileData(`levels/textures/${textureFilename}`) : null;
         const stageTex = textureFile !== null ? parseTEX0Texture(textureFile, stageBin.mphTex) : parseTEX0Texture(assertExists(bin_Model), stageBin.mphTex);
         const animationFile = modelCache.getFileData(animationFilename);
         const animation = animationFile !== null ? parseMPHAnimation(animationFile) : null;
-        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex), animation, sceneMode);
+        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex), animation, {
+            sceneMode,
+        });
+        if (entities !== null)
+            renderer.objectRenderers.push(...entities.createRenderers(device, renderer.getCache()));
 
         return renderer;
     }

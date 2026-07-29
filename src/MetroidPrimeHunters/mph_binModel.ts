@@ -1,10 +1,15 @@
 ﻿
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D.js";
+import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Model } from "../nns_g3d/NNS_G3D.js";
 import { mat4, mat2d, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex.js";
 import { readString } from "../util.js";
 import { colorNewFromRGBA } from "../Color.js";
+import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
+
+export function fxAngle(n: number): number {
+    return n / 0x10000 * MathConstants.TAU;
+}
 
 export function calcMPHTexMtx(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     mat2d.identity(dst);
@@ -17,18 +22,18 @@ export function calcMPHTexMtx(dst: mat2d, texScaleS: number, texScaleT: number, 
     mat2d.scale(dst, dst, [texScaleS * scaleS, texScaleT * scaleT]);
 }
 
+export type MPHModel = Omit<MDL0Model, 'nodes'>;
+
 export interface MPHbin {
-    models: MDL0Model[];
+    model: MPHModel;
     tex0: TEX0 | null;
     mphTex: MPHTexture;
     meshs: MPHMesh[];
-    nodeMeshRanges: MPHNodeMeshRange[];
-    mtx_shmat: number;
-}
-
-export interface MPHNodeMeshRange {
-    meshStart: number;
-    meshCount: number;
+    nodes: MPHNode[];
+    matrixCount: number;
+    matrixNodeIndices: number[];
+    matrixBlendCounts: number[];
+    scaleFactor: number;
 }
 
 interface MPHMesh {
@@ -36,18 +41,15 @@ interface MPHMesh {
     shapeID: number;
 }
 
-interface MPHNode {
+export interface MPHNode {
     name: string;
     parent: number;
     child: number;
     next: number;
     meshCount: number;
-    meshID: number;
+    meshStart: number;
     transform: mat4;
-    scale: vec3;
-    rotation: vec3;
-    position: vec3;
-    billboad_type: number;
+    billboardType: number;
 }
 
 interface MPHPal {
@@ -110,7 +112,6 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
         width = 1.0;
         height = 1.0;
     } else {
-        //texs[textureIndex].color0 = true;
         paletteName = `pallet_${palletIndex}`;
         textureName = `texture_${textureIndex}`;
         width = texs[textureIndex].width;
@@ -168,31 +169,13 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     vec3.set(vec1, fx32(view.getInt32(0x74, true)), fx32(view.getInt32(0x78, true)), fx32(view.getInt32(0x7C, true)));
     vec3.set(vec2, fx32(view.getInt32(0x80, true)), fx32(view.getInt32(0x84, true)), fx32(view.getInt32(0x88, true)));
 
-    const billboad_type = view.getUint8(0x8C);
+    const billboardType = view.getUint8(0x8C);
     const field_8D = view.getInt8(0x8D);
     const field_8E = view.getInt16(0x8E, true);
 
-    
-    transform[0] = fx32(view.getInt32(0x90, true));
-    transform[1] = fx32(view.getInt32(0x94, true));
-    transform[2] = fx32(view.getInt32(0x98, true));
-    
-    transform[4] = fx32(view.getInt32(0x9C, true));
-    transform[5] = fx32(view.getInt32(0xA0, true));
-    transform[6] = fx32(view.getInt32(0xA4, true));
-    
-    transform[8] = fx32(view.getInt32(0xA8, true));
-    transform[9] = fx32(view.getInt32(0xAC, true));
-    transform[10] = fx32(view.getInt32(0xB0, true));
-    
-    transform[12] = fx32(view.getInt32(0xB4, true));
-    transform[13] = fx32(view.getInt32(0xB8, true));
-    transform[14] = fx32(view.getInt32(0xBC, true));
-    
-    transform[3] = 0;
-    transform[7] = 0;
-    transform[11] = 0;
-    transform[15] = 1;
+    // The game rebuilds the node matrix from the SRT, ignoring the matrix at 0x90.
+    computeModelMatrixSRT(transform, scale[0], scale[1], scale[2],
+        rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
 
     const field_0xC0 = view.getInt32(0xC0, true);
     const field_0xC4 = view.getInt32(0xC4, true);
@@ -207,7 +190,8 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const field_0xE8 = view.getInt32(0xE8, true);
     const field_0xEC = view.getInt32(0xEC, true);
 
-    return { name, parent, child, next, meshCount: mesh_count, meshID, transform, scale, rotation, position, billboad_type };
+    // From RenderEnabledModelNodes @ 0x02047808.
+    return { name, parent, child, next, meshCount: mesh_count, meshStart: meshID >>> 1, transform, billboardType };
 }
 
 function parseMesh(buffer: ArrayBufferSlice): MPHMesh {
@@ -254,7 +238,7 @@ function parseTexture(buffer: ArrayBufferSlice, TexBuffer: ArrayBufferSlice, ind
     const texture_obj_ref = view.getInt16(0x26, true);
 
     const format = convertMPHTexToNitroTex(mph_format);
-    const color0 = false;
+    const color0 = opaque === 0;
 
     const textureDataStart = textureDataOffs;
     const textureDataEnd = textureDataStart + textureDataSize;
@@ -287,20 +271,20 @@ function parseTexture(buffer: ArrayBufferSlice, TexBuffer: ArrayBufferSlice, ind
     return { name, format, width, height, color0, texData, palIdxData };
 }
 
-export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
+export function parseMPH_Model(buffer: ArrayBufferSlice, sharedTexture: MPHTexture | null = null): MPHbin {
     const view = buffer.createDataView();
 
-    const mtx_shmat = view.getInt32(0x00, true);
-    const posScale = fx32(view.getInt32(0x04, true));
+    const scaleFactor = view.getInt32(0x00, true);
+    const scaleBase = fx32(view.getInt32(0x04, true));
     const unk_0x08 = view.getInt32(0x08, true);
     const unk_0x0C = view.getInt32(0x0C, true);
     const materialOffset = view.getUint32(0x10, true);
     const shapeOffset = view.getUint32(0x14, true);
     const nodeOffset = view.getUint32(0x18, true);
-    const unk_0x1C = view.getInt16(0x1C, true);
+    const matrixCount = view.getUint16(0x1C, true);
     const unk_0x1E = view.getInt8(0x1E);
     const unk_0x1F = view.getInt8(0x1F);
-    const unk_0x20 = view.getUint32(0x20, true);
+    const matrixNodeIndexOffset = view.getUint32(0x20, true);
     const meshOffset = view.getUint32(0x24, true);
     const textureCount = view.getUint16(0x28, true);
     const unk_0x2A = view.getUint16(0x2A, true);
@@ -308,7 +292,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const palletCount = view.getUint16(0x30, true);
     const unk_0x32 = view.getUint16(0x32, true);
     const palletOffset = view.getUint32(0x34, true);
-    const unk_0x38 = view.getUint16(0x38, true);
+    const matrixBlendCountOffset = view.getUint32(0x38, true);
     const unk_0x3C = view.getUint16(0x3C, true);
     const node_init_pos = fx32(view.getInt32(0x40, true));
     const node_pos = fx32(view.getInt32(0x44, true));
@@ -320,7 +304,18 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const unk_0x58 = view.getUint16(0x58, true);
     const unk_0x5C = view.getUint16(0x5C, true);
     const meshCount = view.getUint16(0x60, true);
-    const matrixCount = view.getUint16(0x62, true);
+    const unk_0x62 = view.getUint16(0x62, true);
+
+    const matrixNodeIndices: number[] = [];
+    const matrixBlendCounts: number[] = [];
+    const hasMatrixNodeIndices = matrixNodeIndexOffset !== 0 && matrixNodeIndexOffset + matrixCount * 4 <= buffer.byteLength;
+    const hasMatrixBlendCounts = matrixBlendCountOffset !== 0 && matrixBlendCountOffset + matrixCount * 4 <= buffer.byteLength;
+    if (hasMatrixNodeIndices) {
+        for (let i = 0; i < matrixCount; i++) {
+            matrixNodeIndices.push(view.getUint32(matrixNodeIndexOffset + i * 4, true));
+            matrixBlendCounts.push(hasMatrixBlendCounts ? view.getUint32(matrixBlendCountOffset + i * 4, true) : 0);
+        }
+    }
 
     // Mesh
     const meshs: MPHMesh[] = [];
@@ -337,7 +332,9 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         const tex = buffer.slice(texDataStart, texDataEnd);
         const width = view.getInt16(texDataStart+0x2, true);
         const height = view.getInt16(texDataStart + 0x4, true);
-        const color0 = false;
+        // Palette index zero is transparent when the texture metadata's
+        // opaque flag is clear.
+        const color0 = view.getInt32(texDataStart + 0x1C, true) === 0;
         texs.push({ tex, width, height, color0 });
     }
 
@@ -352,10 +349,12 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
 
     // Material
     const materials: MDL0Material[] = [];
+    // Entities without a texture table use the room's texture table.
+    const materialTexs = texs.length !== 0 ? texs : (sharedTexture?.texs ?? []);
     for (let i = 0; i < materialCount; i++) {
         const matOffs = i * 0x84 + materialOffset;
 
-        materials.push( parseMaterial(buffer.slice(matOffs), texs) );
+        materials.push( parseMaterial(buffer.slice(matOffs), materialTexs) );
     }
 
     // Dlist
@@ -379,81 +378,10 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     // Model
     const texMtxMode = TexMtxMode.MAYA;
     const sbcBuffer = buffer.slice(0, 0x10); // dummy sbc for reuse MDL0 codes
-    const models: MDL0Model[] = [];
 
-    const nodes: MDL0Node[] = [];
-    const nodeMeshRanges: MPHNodeMeshRange[] = [];
-    function computeNodeTransforms(scale: vec3, rotation:vec3, position:vec3): mat4{
-        let sinAx = Math.sin(rotation[0]);
-        let sinAy = Math.sin(rotation[1]);
-        let sinAz = Math.sin(rotation[2]);
-        let cosAx = Math.cos(rotation[0]);
-        let cosAy = Math.cos(rotation[1]);
-        let cosAz = Math.cos(rotation[2]);
+    const model: MPHModel = { name: '', materials, shapes, sbcBuffer, posScale: scaleBase, texMtxMode };
 
-        let v18 = cosAx * cosAz;
-        let v19 = cosAx * sinAz;
-        let v20 = cosAx * cosAy;
-
-        let v22 = sinAx * sinAy;
-
-        let v17 = v19 * sinAy;
-
-        const transform = mat4.create();
-
-        transform[0] = scale[0] * cosAy * cosAz;
-        transform[1] = scale[0] * cosAy * sinAz;
-        transform[2] = scale[0] * -sinAy;
-
-        transform[4] = scale[1] * ((v22 * cosAz) - v19);
-        transform[5] = scale[1] * ((v22 * sinAz) + v18);
-        transform[6] = scale[1] * sinAx * cosAy;
-
-        transform[8] = scale[2] * (v18 * sinAy + sinAx * sinAz);
-        transform[9] = scale[2] * (v17 + (v19 * sinAy) - (sinAx * cosAz));
-        transform[10] = scale[2] * v20;
-
-        transform[12] = position[0];
-        transform[13] = position[1];
-        transform[14] = position[2];
-
-        transform[3] = 0;
-        transform[7] = 0;
-        transform[11] = 0;
-        transform[15] = 1;
-
-        return transform;
-    }
-    function computeNodeMatrices(index: number){
-        if(mphNode.length === 0 || index === -1){
-            return;
-        }
-        for (let i = index; i !== -1;) {
-            let node = mphNode[i];
-            let transform = mat4.create();
-            transform = computeNodeTransforms(node.scale, node.rotation, node.position);
-            if(node.parent === -1){
-                node.transform = transform;
-            } else {
-                mat4.multiply(node.transform, transform, mphNode[node.parent].transform);
-            }
-            const name = node.name;
-            const jointMatrix = node.transform;
-            nodes.push({ name, jointMatrix });
-            // RenderEnabledModelNodes @ 0x02047808 uses meshID to index the
-            // interleaved material/shape ushort table.
-            nodeMeshRanges.push({ meshStart: node.meshID >>> 1, meshCount: node.meshCount });
-            if(node.child !== -1){
-                computeNodeMatrices(node.child);
-            }
-            i = node.next;
-        }
-    }
-    computeNodeMatrices(0);
-
-    models.push({ name: '', nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
-
-    return { models, tex0, mphTex, meshs, nodeMeshRanges, mtx_shmat };
+    return { model, tex0, mphTex, meshs, nodes: mphNode, matrixCount, matrixNodeIndices, matrixBlendCounts, scaleFactor };
 }
 
 export function parseTEX0Texture(buffer: ArrayBufferSlice, tex: MPHTexture): TEX0 {

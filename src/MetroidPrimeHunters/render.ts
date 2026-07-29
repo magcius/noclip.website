@@ -7,14 +7,14 @@ import { readTexture, getFormatName, Texture, textureFormatIsTranslucent } from 
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render.js';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { computeViewMatrix } from "../Camera.js";
 import AnimationController from "../AnimationController.js";
-import { bindMPHT, MPHAnimation, MPHTexCoordAnimator } from "./mph_anim.js";
+import { bindMPHT, MPHAnimation, MPHNodeAnimator, MPHTexCoordAnimator } from "./mph_anim.js";
 import { nArray, assertExists } from "../util.js";
-import { TEX0Texture, PAT0TexAnimator, TEX0, MDL0Material, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D.js";
+import { TEX0Texture, PAT0TexAnimator, TEX0, MDL0Material, MDL0Shape } from "../nns_g3d/NNS_G3D.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { MPHbin } from "./mph_binModel.js";
+import { MPHbin, MPHNode } from "./mph_binModel.js";
 import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { White, colorNewCopy } from "../Color.js";
@@ -58,7 +58,7 @@ class MaterialInstance {
     public specularColor = colorNewCopy(White);
     public emissionColor = colorNewCopy(White);
 
-    constructor(cache: GfxRenderCache, tex0: TEX0, public material: MDL0Material, private texCoordAnimator: MPHTexCoordAnimator | null) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, public material: MDL0Material, private texCoordAnimator: MPHTexCoordAnimator | null, entityModel: boolean) {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
@@ -66,8 +66,10 @@ class MaterialInstance {
         const device = cache.device;
         const texData = tex0.textures.find((t) => t.name === this.material.textureName);
         this.texture = texData !== undefined ? texData: null;
-        this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
+        this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName, entityModel);
         this.baseCtx = { color: White, alpha: expand5to8(this.material.alpha) };
+        if (entityModel)
+            this.lightMask = 0;
 
         if (this.gfxTextures.length > 0) {
             this.gfxSampler = cache.createSampler({
@@ -106,8 +108,17 @@ class MaterialInstance {
         });
     }
 
-    private translateTexture(device: GfxDevice, tex0: TEX0 | null, textureName: string | null, paletteName: string | null) {
-        if (tex0 === null || textureName === null)
+    private translateTexture(device: GfxDevice, tex0: TEX0 | null, textureName: string | null, paletteName: string | null, entityModel: boolean) {
+        if (textureName === null) {
+            if (!entityModel)
+                return;
+            const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+            device.uploadTextureData(gfxTexture, 0, [new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF])]);
+            this.gfxTextures.push(gfxTexture);
+            this.textureNames.push('(untextured)');
+            return;
+        }
+        if (tex0 === null)
             return;
 
         const texture = assertExists(tex0.textures.find((t) => t.name === textureName));
@@ -165,46 +176,52 @@ class MaterialInstance {
 
 class Node {
     public modelMatrix = mat4.create();
-    public billboardMode = BillboardMode.NONE;
+    public drawMatrix = mat4.create();
+    public parent: Node | null = null;
+    public billboardMode: BillboardMode;
+    private localMatrix = mat4.create();
 
-    constructor(public node: MDL0Node) {
+    constructor(public node: MPHNode, public index: number) {
+        this.billboardMode = node.billboardType;
     }
 
-    public calcMatrix(baseModelMatrix: mat4): void {
-        mat4.mul(this.modelMatrix, baseModelMatrix, this.node.jointMatrix);
+    public calcMatrix(baseModelMatrix: mat4, viewMatrix: mat4, nodeAnimator: MPHNodeAnimator | null): void {
+        if (nodeAnimator !== null)
+            nodeAnimator.calcNodeMatrix(this.localMatrix, this.index);
+        else
+            mat4.copy(this.localMatrix, this.node.transform);
+        mat4.mul(this.modelMatrix, this.parent !== null ? this.parent.modelMatrix : baseModelMatrix, this.localMatrix);
+
+        mat4.mul(this.drawMatrix, viewMatrix, this.modelMatrix);
+        if (this.billboardMode === BillboardMode.BB)
+            calcBillboardMatrix(this.drawMatrix, this.drawMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
+        else if (this.billboardMode === BillboardMode.BBY)
+            calcBillboardMatrix(this.drawMatrix, this.drawMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
     }
 }
 
-const scratchMat4 = mat4.create();
+const scratchViewMatrix = mat4.create();
+const MAX_MATRICES = 32;
 class ShapeInstance {
     private vertexData: VertexData;
+    private matrixNodes: Node[] = [];
 
-    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
+    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, matrixNodes: Map<number, Node>, numMatrices: number) {
         const baseCtx = this.materialInstance.baseCtx;
-        const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx, posScale);
-        this.vertexData = new VertexData(cache, nitroVertexData);
-    }
-
-    private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        computeViewMatrix(dst, viewerInput.camera);
-
-        mat4.mul(dst, dst, this.node.modelMatrix);
-
-        if (this.node.billboardMode === BillboardMode.BB)
-            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
-        else if (this.node.billboardMode === BillboardMode.BBY)
-            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
+        for (let i = 0; i < numMatrices; i++)
+            this.matrixNodes.push(matrixNodes.get(i) ?? node);
+        this.vertexData = new VertexData(cache, NITRO_GX.readCmds(shape.dlBuffer, baseCtx, 1));
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.vertexData.inputLayout, this.vertexData.vertexBufferDescriptors, this.vertexData.indexBufferDescriptor);
 
-        let offs = renderInst.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
+        let offs = renderInst.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*MAX_MATRICES);
         const drawParamsMapped = renderInst.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
 
-        this.computeModelView(scratchMat4, viewerInput);
-        offs += fillMatrix4x3(drawParamsMapped, offs, scratchMat4);
+        for (let i = 0; i < this.matrixNodes.length; i++)
+            offs += fillMatrix4x3(drawParamsMapped, offs, this.matrixNodes[i].drawMatrix);
 
         this.materialInstance.setOnRenderInst(renderInst, viewerInput);
 
@@ -227,6 +244,16 @@ enum BillboardMode {
 export type MPHSceneMode =
     { kind: 'singlePlayer', geometrySet: number } |
     { kind: 'multiplayer', layout: 0 | 1, captureTheFlag?: boolean };
+
+export interface MPHRendererOptions {
+    sceneMode?: MPHSceneMode;
+    entityModel?: boolean;
+    calcModelMatrix?: (dst: mat4, timeInMilliseconds: number, modelScale: number) => void;
+    mapAnimationTime?: (timeInMilliseconds: number) => number;
+}
+
+// Uniform presentation scale for converting MPH world units to noclip space.
+export const MPH_VIEWER_SCALE = 4;
 
 function nodeIsVisibleInMode(name: string, mode: MPHSceneMode): boolean {
     let hasModeTag = false;
@@ -263,66 +290,85 @@ export class MPHRenderer {
     private materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
     private nodes: Node[] = [];
+    public modelScale: number;
+    private nodeDrawOrder: Node[] = [];
+    private nodeAnimator: MPHNodeAnimator | null;
+    private sceneMode: MPHSceneMode;
+    private calcModelMatrix: MPHRendererOptions['calcModelMatrix'];
+    private mapAnimationTime: MPHRendererOptions['mapAnimationTime'];
     public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null = null, private sceneMode: MPHSceneMode = { kind: 'singlePlayer', geometrySet: 1 }) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null, options: MPHRendererOptions) {
+        this.sceneMode = options.sceneMode ?? { kind: 'singlePlayer', geometrySet: 1 };
+        this.calcModelMatrix = options.calcModelMatrix;
+        this.mapAnimationTime = options.mapAnimationTime;
+        const entityModel = options.entityModel ?? false;
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
         this.gfxProgram = cache.createProgram(program);
-        let posScale;
-        if (mphModel.mtx_shmat <= 0) {
-            posScale = 4;
-        } else {
-            posScale = mphModel.mtx_shmat * 4;
-        }
-        
-        mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
+        const model = mphModel.model;
+        const nodeAnimation = mphAnimation?.node ?? null;
+        this.nodeAnimator = nodeAnimation !== null ? new MPHNodeAnimator(this.animationController, nodeAnimation) : null;
+        this.modelScale = model.posScale * (1 << mphModel.scaleFactor) * MPH_VIEWER_SCALE;
+        mat4.fromScaling(this.modelMatrix, [this.modelScale, this.modelScale, this.modelScale]);
 
-        const model = mphModel.models[0];
         const texCoordAnimation = mphAnimation?.texCoord ?? null;
 
         for (let i = 0; i < model.materials.length; i++) {
             const material = model.materials[i];
             const texCoordAnimator = texCoordAnimation !== null ?
                 bindMPHT(this.animationController, texCoordAnimation, material.name) : null;
-            this.materialInstances.push(new MaterialInstance(cache, this.tex0, material, texCoordAnimator));
+            this.materialInstances.push(new MaterialInstance(cache, this.tex0, material, texCoordAnimator, entityModel));
         }
 
-        for (let i = 0; i < model.nodes.length; i++)
-            this.nodes.push(new Node(model.nodes[i]));
+        for (let i = 0; i < mphModel.nodes.length; i++)
+            this.nodes.push(new Node(mphModel.nodes[i], i));
+        const addNodeDrawOrder = (index: number, parent: Node | null): void => {
+            for (let i = index; i !== -1; i = mphModel.nodes[i].next) {
+                const node = this.nodes[i];
+                node.parent = parent;
+                this.nodeDrawOrder.push(node);
+                addNodeDrawOrder(mphModel.nodes[i].child, node);
+            }
+        };
+        if (this.nodes.length !== 0)
+            addNodeDrawOrder(0, null);
+
+        const numMatrices = Math.min(Math.max(mphModel.matrixCount, 1), MAX_MATRICES);
+        const drawnNodes = new Set(this.nodeDrawOrder);
+        const matrixNodes = new Map<number, Node>();
+        for (let i = 0; i < mphModel.matrixNodeIndices.length; i++) {
+            const node = this.nodes[mphModel.matrixNodeIndices[i]];
+            if (mphModel.matrixBlendCounts[i] < 2 && drawnNodes.has(node))
+                matrixNodes.set(i, node);
+        }
 
         for (let i = 0; i < this.materialInstances.length; i++)
             if (this.materialInstances[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
 
-        function getNodeIndex(shape: MDL0Shape): number {
-            const view = shape.dlBuffer.createDataView();
-            const nodeIndex = view.getInt8(0x04);
-            return nodeIndex;
-        }
-
-        for (let i = 0; i < this.nodes.length; i++) {
-            if (!nodeIsVisibleInMode(this.nodes[i].node.name, this.sceneMode))
+        for (const node of this.nodeDrawOrder) {
+            if (!nodeIsVisibleInMode(node.node.name, this.sceneMode))
                 continue;
 
-            const range = mphModel.nodeMeshRanges[i];
-            for (let j = 0; j < range.meshCount; j++) {
-                const mesh = mphModel.meshs[range.meshStart + j];
+            for (let j = 0; j < node.node.meshCount; j++) {
+                const mesh = mphModel.meshs[node.node.meshStart + j];
                 const shape = model.shapes[mesh.shapeID];
-                let transformNodeIndex = getNodeIndex(shape);
-                if (transformNodeIndex >= this.nodes.length)
-                    transformNodeIndex = 0;
-                this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[mesh.matID], this.nodes[transformNodeIndex], shape, posScale));
+                this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[mesh.matID], node, shape, matrixNodes, numMatrices));
             }
         }
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
+        this.animationController.setTimeInMilliseconds(this.mapAnimationTime !== undefined ?
+            this.mapAnimationTime(viewerInput.time) : viewerInput.time);
+        if (this.calcModelMatrix !== undefined)
+            this.calcModelMatrix(this.modelMatrix, viewerInput.time, this.modelScale);
 
-        for (let i = 0; i < this.nodes.length; i++)
-            this.nodes[i].calcMatrix(this.modelMatrix);
+        computeViewMatrix(scratchViewMatrix, viewerInput.camera);
+        for (const node of this.nodeDrawOrder)
+            node.calcMatrix(this.modelMatrix, scratchViewMatrix, this.nodeAnimator);
 
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
@@ -331,7 +377,6 @@ export class MPHRenderer {
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16+32);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
-
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput);
 
