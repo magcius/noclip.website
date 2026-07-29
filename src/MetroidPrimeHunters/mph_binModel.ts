@@ -1,10 +1,21 @@
 ﻿
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D.js";
-import { mat4, mat2d, vec3, vec2 } from "gl-matrix";
+import { mat4, mat2d, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex.js";
 import { readString } from "../util.js";
 import { colorNewFromRGBA } from "../Color.js";
+
+export function calcMPHTexMtx(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    mat2d.identity(dst);
+    mat2d.translate(dst, dst, [translationS * scaleS, translationT * scaleT]);
+    if (rotation !== 0) {
+        mat2d.translate(dst, dst, [0.5, 0.5]);
+        mat2d.rotate(dst, dst, rotation);
+        mat2d.translate(dst, dst, [-0.5, -0.5]);
+    }
+    mat2d.scale(dst, dst, [texScaleS * scaleS, texScaleT * scaleT]);
+}
 
 export interface MPHbin {
     models: MDL0Model[];
@@ -101,24 +112,7 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
 
     const texScaleS = scaleS / width;
     const texScaleT = scaleT / height;
-
-    const translationS = scaleWidth * scaleS;
-    const translationT = scaleHeight * scaleT;
-
-    let translate = vec2.create();
-    vec2.set(translate, translationS, translationT);
-    mat2d.translate(texMatrix, texMatrix, translate);
-
-    if (Math.abs(rot_Z) > 0) {
-        vec2.set(translate, 0.5, 0.5);
-        mat2d.translate(texMatrix, texMatrix, translate);
-        mat2d.rotate(texMatrix, texMatrix, rot_Z);
-        vec2.set(translate, -0.5, -0.5);
-        mat2d.translate(texMatrix, texMatrix, translate);
-    }
-    let scale = vec2.create();
-    vec2.set(scale, texScaleS, texScaleT);
-    mat2d.scale(texMatrix, texMatrix, scale);
+    calcMPHTexMtx(texMatrix, 1 / width, 1 / height, scaleS, scaleT, rot_Z, scaleWidth, scaleHeight);
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }

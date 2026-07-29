@@ -5,6 +5,7 @@ import * as Viewer from '../viewer.js';
 import * as CX from '../Common/Compression/CX.js';
 import * as ARC from './mph_arc.js';
 import { parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
+import { parseMPHAnimation } from './mph_anim.js';
 
 import { DataFetcher } from '../DataFetcher.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
@@ -176,7 +177,10 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
 
         const textureFile = modelCache.getFileData(`levels/textures/${this.texName}.bin`);
         const stageTex = textureFile !== null ? parseTEX0Texture(textureFile, stageBin.mphTex) : parseTEX0Texture(assertExists(bin_Model), stageBin.mphTex);
-        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex));
+        const animationName = this.id.replace(/_([Mm])odel$/, (_, c) => c === 'M' ? '_Anim' : '_anim') + '.bin';
+        const animationFile = modelCache.getFileData(animationName);
+        const animation = animationFile !== null ? parseMPHAnimation(animationFile) : null;
+        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex), animation);
 
         return renderer;
     }

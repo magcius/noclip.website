@@ -10,8 +10,9 @@ import { TextureMapping } from "../TextureHolder.js";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { computeViewMatrix } from "../Camera.js";
 import AnimationController from "../AnimationController.js";
+import { bindMPHT, MPHAnimation, MPHTexCoordAnimator } from "./mph_anim.js";
 import { nArray, assertExists } from "../util.js";
-import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D.js";
+import { TEX0Texture, PAT0TexAnimator, TEX0, MDL0Material, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { MPHbin } from "./mph_binModel.js";
 import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
@@ -48,7 +49,6 @@ class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(1, () => new TextureMapping());
     public viewerTextures: Viewer.Texture[] = [];
     public baseCtx: NITRO_GX.Context;
-    public srt0Animator: SRT0TexMtxAnimator | null = null;
     public pat0Animator: PAT0TexAnimator | null = null;
     private sortKey: number;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -58,7 +58,7 @@ class MaterialInstance {
     public specularColor = colorNewCopy(White);
     public emissionColor = colorNewCopy(White);
 
-    constructor(cache: GfxRenderCache, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, public material: MDL0Material, private texCoordAnimator: MPHTexCoordAnimator | null) {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
@@ -130,8 +130,8 @@ class MaterialInstance {
     }
 
     public setOnRenderInst(template: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.srt0Animator !== null) {
-            this.srt0Animator.calcTexMtx(scratchTexMatrix, this.model.texMtxMode, this.material.texScaleS, this.material.texScaleT);
+        if (this.texCoordAnimator !== null) {
+            this.texCoordAnimator.calcTexMtx(scratchTexMatrix, this.material.texScaleS, this.material.texScaleT);
         } else {
             mat2d.copy(scratchTexMatrix, this.material.texMatrix);
         }
@@ -235,7 +235,7 @@ export class MPHRenderer {
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0, mphAnimation: MPHAnimation | null = null) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -250,9 +250,14 @@ export class MPHRenderer {
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
 
         const model = mphModel.models[0];
+        const texCoordAnimation = mphAnimation?.texCoord ?? null;
 
-        for (let i = 0; i < model.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(cache, this.tex0, model, model.materials[i]));
+        for (let i = 0; i < model.materials.length; i++) {
+            const material = model.materials[i];
+            const texCoordAnimator = texCoordAnimation !== null ?
+                bindMPHT(this.animationController, texCoordAnimation, material.name) : null;
+            this.materialInstances.push(new MaterialInstance(cache, this.tex0, material, texCoordAnimator));
+        }
 
         for (let i = 0; i < model.nodes.length; i++)
             this.nodes.push(new Node(model.nodes[i]));
