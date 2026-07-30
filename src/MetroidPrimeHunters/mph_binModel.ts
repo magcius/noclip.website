@@ -1,17 +1,34 @@
 ﻿
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D.js";
-import { mat4, mat2d, vec3, vec2 } from "gl-matrix";
+import { mat4, mat2d, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex.js";
 import { readString } from "../util.js";
 import { colorNewFromRGBA } from "../Color.js";
+
+export function calcMPHTexMtx(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    mat2d.identity(dst);
+    mat2d.translate(dst, dst, [translationS * scaleS, translationT * scaleT]);
+    if (rotation !== 0) {
+        mat2d.translate(dst, dst, [0.5, 0.5]);
+        mat2d.rotate(dst, dst, rotation);
+        mat2d.translate(dst, dst, [-0.5, -0.5]);
+    }
+    mat2d.scale(dst, dst, [texScaleS * scaleS, texScaleT * scaleT]);
+}
 
 export interface MPHbin {
     models: MDL0Model[];
     tex0: TEX0 | null;
     mphTex: MPHTexture;
     meshs: MPHMesh[];
+    nodeMeshRanges: MPHNodeMeshRange[];
     mtx_shmat: number;
+}
+
+export interface MPHNodeMeshRange {
+    meshStart: number;
+    meshCount: number;
 }
 
 interface MPHMesh {
@@ -24,6 +41,7 @@ interface MPHNode {
     parent: number;
     child: number;
     next: number;
+    meshCount: number;
     meshID: number;
     transform: mat4;
     scale: vec3;
@@ -101,24 +119,7 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
 
     const texScaleS = scaleS / width;
     const texScaleT = scaleT / height;
-
-    const translationS = scaleWidth * scaleS;
-    const translationT = scaleHeight * scaleT;
-
-    let translate = vec2.create();
-    vec2.set(translate, translationS, translationT);
-    mat2d.translate(texMatrix, texMatrix, translate);
-
-    if (Math.abs(rot_Z) > 0) {
-        vec2.set(translate, 0.5, 0.5);
-        mat2d.translate(texMatrix, texMatrix, translate);
-        mat2d.rotate(texMatrix, texMatrix, rot_Z);
-        vec2.set(translate, -0.5, -0.5);
-        mat2d.translate(texMatrix, texMatrix, translate);
-    }
-    let scale = vec2.create();
-    vec2.set(scale, texScaleS, texScaleT);
-    mat2d.scale(texMatrix, texMatrix, scale);
+    calcMPHTexMtx(texMatrix, 1 / width, 1 / height, scaleS, scaleT, rot_Z, scaleWidth, scaleHeight);
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
@@ -206,7 +207,7 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const field_0xE8 = view.getInt32(0xE8, true);
     const field_0xEC = view.getInt32(0xEC, true);
 
-    return { name, parent, child, next, meshID, transform, scale, rotation, position, billboad_type };
+    return { name, parent, child, next, meshCount: mesh_count, meshID, transform, scale, rotation, position, billboad_type };
 }
 
 function parseMesh(buffer: ArrayBufferSlice): MPHMesh {
@@ -381,6 +382,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const models: MDL0Model[] = [];
 
     const nodes: MDL0Node[] = [];
+    const nodeMeshRanges: MPHNodeMeshRange[] = [];
     function computeNodeTransforms(scale: vec3, rotation:vec3, position:vec3): mat4{
         let sinAx = Math.sin(rotation[0]);
         let sinAy = Math.sin(rotation[1]);
@@ -438,6 +440,9 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
             const name = node.name;
             const jointMatrix = node.transform;
             nodes.push({ name, jointMatrix });
+            // RenderEnabledModelNodes @ 0x02047808 uses meshID to index the
+            // interleaved material/shape ushort table.
+            nodeMeshRanges.push({ meshStart: node.meshID >>> 1, meshCount: node.meshCount });
             if(node.child !== -1){
                 computeNodeMatrices(node.child);
             }
@@ -448,7 +453,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
 
     models.push({ name: '', nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
 
-    return { models, tex0, mphTex, meshs, mtx_shmat };
+    return { models, tex0, mphTex, meshs, nodeMeshRanges, mtx_shmat };
 }
 
 export function parseTEX0Texture(buffer: ArrayBufferSlice, tex: MPHTexture): TEX0 {
