@@ -213,7 +213,7 @@ function parseNode(buffer: ArrayBufferSlice, name: string): MDL0Node {
     return { name, jointMatrix };
 }
 
-function expand5to8(n: number): number {
+export function expand5to8(n: number): number {
     return (n << (8 - 5)) | (n >>> (10 - 8));
 }
 

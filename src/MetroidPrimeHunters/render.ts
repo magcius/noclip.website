@@ -12,7 +12,7 @@ import { computeViewMatrix } from "../Camera.js";
 import AnimationController from "../AnimationController.js";
 import { bindMPHT, MPHAnimation, MPHNodeAnimator, MPHTexCoordAnimator } from "./mph_anim.js";
 import { nArray, assertExists } from "../util.js";
-import { TEX0Texture, PAT0TexAnimator, TEX0 } from "../nns_g3d/NNS_G3D.js";
+import { TEX0Texture, PAT0TexAnimator, TEX0, expand5to8 } from "../nns_g3d/NNS_G3D.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { MPHbin, MPHMaterial, MPHNode, MPHShape } from "./mph_binModel.js";
 import { CalcBillboardFlags, Vec3Zero, calcBillboardMatrix } from "../MathHelpers.js";
@@ -59,10 +59,6 @@ class MaterialInstance {
     public emissionColor = colorNewCopy(White);
 
     constructor(cache: GfxRenderCache, tex0: TEX0, public material: MPHMaterial, private texCoordAnimator: MPHTexCoordAnimator | null, entityModel: boolean) {
-        function expand5to8(n: number): number {
-            return (n << (8 - 5)) | (n >>> (10 - 8));
-        }
-
         const device = cache.device;
         const texData = tex0.textures.find((t) => t.name === this.material.textureName);
         this.texture = texData !== undefined ? texData: null;
