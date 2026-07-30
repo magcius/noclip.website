@@ -6,14 +6,16 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { fx32, TEX0 } from '../nns_g3d/NNS_G3D.js';
 import { MPHAnimation, parseMPHAnimation } from './mph_anim.js';
 import { fxAngle, MPHbin, parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
-import { MPHLighting, MPHRenderer, MPHRendererOptions, MPHSceneMode, MPH_VIEWER_SCALE } from './render.js';
+import { MPHLighting, MPHRenderer, MPHRendererOptions, MPHSceneMode } from './render.js';
 
 const ENTITY_HEADER_SIZE = 0x24;
 const ENTITY_ENTRY_SIZE = 0x18;
 const ENTITY_TYPE_PLATFORM = 0;
+const ENTITY_TYPE_OBJECT = 1;
 const ENTITY_TYPE_DOOR = 3;
 const ENTITY_TYPE_ITEM_SPAWN = 4;
 const PLATFORM_DATA_SIZE = 0x24C;
+const OBJECT_DATA_SIZE = 0x98;
 const DOOR_DATA_SIZE = 0x68;
 const ITEM_SPAWN_DATA_SIZE = 0x48;
 
@@ -44,6 +46,14 @@ interface MPHPlatformEntity extends MPHEntityEntry {
     path: MPHPlatformPath;
 }
 
+interface MPHObjectEntity extends MPHEntityEntry {
+    position: ReadonlyVec3;
+    up: ReadonlyVec3;
+    facing: ReadonlyVec3;
+    modelId: number;
+    initialState: number;
+}
+
 interface MPHDoorEntity extends MPHEntityEntry {
     position: ReadonlyVec3;
     up: ReadonlyVec3;
@@ -59,8 +69,9 @@ interface MPHItemSpawnEntity extends MPHEntityEntry {
     initialState: number;
 }
 
-interface MPHEntities {
+export interface MPHEntities {
     platforms: MPHPlatformEntity[];
+    objects: MPHObjectEntity[];
     doors: MPHDoorEntity[];
     itemSpawns: MPHItemSpawnEntity[];
 }
@@ -125,6 +136,19 @@ function parsePlatform(entry: MPHEntityEntry, view: DataView): MPHPlatformEntity
     return { ...platform, path: buildPlatformPath(platform) };
 }
 
+function parseObject(entry: MPHEntityEntry, view: DataView): MPHObjectEntity {
+    assert(entry.dataLength === OBJECT_DATA_SIZE);
+    const offs = entry.dataOffset;
+    return {
+        ...entry,
+        position: readVec3Fx(view, offs + 0x04),
+        up: readVec3Fx(view, offs + 0x10),
+        facing: readVec3Fx(view, offs + 0x1C),
+        modelId: view.getInt32(offs + 0x30, true),
+        initialState: view.getUint8(offs + 0x28) & 0x03,
+    };
+}
+
 function parseDoor(entry: MPHEntityEntry, view: DataView): MPHDoorEntity {
     assert(entry.dataLength === DOOR_DATA_SIZE);
     const offs = entry.dataOffset;
@@ -156,6 +180,7 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
     assert(layerId >= 0 && layerId < 16);
 
     const platforms: MPHPlatformEntity[] = [];
+    const objects: MPHObjectEntity[] = [];
     const doors: MPHDoorEntity[] = [];
     const itemSpawns: MPHItemSpawnEntity[] = [];
     let entryCount = 0;
@@ -181,6 +206,8 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
         };
         if (entry.type === ENTITY_TYPE_PLATFORM)
             platforms.push(parsePlatform(entry, view));
+        else if (entry.type === ENTITY_TYPE_OBJECT)
+            objects.push(parseObject(entry, view));
         else if (entry.type === ENTITY_TYPE_DOOR)
             doors.push(parseDoor(entry, view));
         else if (entry.type === ENTITY_TYPE_ITEM_SPAWN)
@@ -188,7 +215,13 @@ export function parseMPHEntities(buffer: ArrayBufferSlice, layerId: number): MPH
     }
 
     assert(entryCount === view.getUint16(0x04 + layerId * 2, true));
-    return { platforms, doors, itemSpawns };
+    return { platforms, objects, doors, itemSpawns };
+}
+
+export interface MPHObjectMetadata {
+    modelName: string;
+    animationName: string | null;
+    animationIds: readonly number[];
 }
 
 export interface MPHPlatformMetadata {
@@ -208,37 +241,34 @@ export interface MPHItemMetadata {
 }
 
 export interface MPHEntityMetadata {
+    objects: readonly MPHObjectMetadata[];
     platforms: readonly MPHPlatformMetadata[];
     doors: readonly MPHDoorMetadata[];
     doorLockPaletteIds: readonly number[];
     items: readonly MPHItemMetadata[];
 }
 
-// The morph ball door draws its textures from a shared model.
-// LoadDoorTypeResources @ 0x02106508 picks this in code, so it isn't part of
-// any extractable table.
+// From LoadObjectSubtypeResources @ 0x0216BB30 and LoadDoorTypeResources @ 0x02106508.
 function getSharedTextureFilename(modelName: string): string | undefined {
-    if (modelName === 'alimbicmorphballdoor_mdl')
+    const equipment = /^(generic|alimbic|lava|ice|ruins)_(console|monitor|power|scanner|switch)_mdl$/.exec(modelName);
+    if (equipment !== null)
+        return `${equipment[1]}EquipTextureShare_img_Model.bin`;
+    if (modelName === 'ghostswitch_mdl' || modelName === 'alimbicmorphballdoor_mdl')
         return 'AlimbicTextureShare_img_Model.bin';
     return undefined;
 }
 
-function getDoorModelSpec(metadata: MPHEntityMetadata, door: MPHDoorEntity): MPHEntityModelSpec {
-    const door_ = assertExists(metadata.doors[door.doorType], `door type ${door.doorType}`);
-    let paletteOverrides: { target: number; source: number }[] | undefined;
-    if (door.doorType === 0 || door.doorType === 3) {
-        const paletteId = assertExists(metadata.doorLockPaletteIds[door.subtype], `door lock subtype ${door.subtype}`);
-        paletteOverrides = [{ target: 1, source: paletteId }];
-        if (door.doorType === 3)
-            paletteOverrides.push({ target: 2, source: paletteId });
-    }
+function getObjectModelSpec(metadata: MPHEntityMetadata, object: MPHObjectEntity): MPHEntityModelSpec | null {
+    if (object.modelId === -1)
+        return null;
+    const object_ = assertExists(metadata.objects[object.modelId], `object model ${object.modelId}`);
+    const animationId = object_.animationIds[object.initialState];
+    const hasAnimation = object_.animationName !== null && animationId !== undefined && animationId >= 0;
     return {
-        modelFilename: `${door_.modelName}_Model.bin`,
-        animationFilename: `${door_.animationName}_Anim.bin`,
-        sharedTextureFilename: getSharedTextureFilename(door_.modelName),
-        paletteFilename: paletteOverrides !== undefined ? 'AlimbicPalettes_pal_Model.bin' : undefined,
-        paletteOverrides,
-        animationId: 0,
+        modelFilename: `${object_.modelName}_Model.bin`,
+        animationFilename: hasAnimation ? `${object_.animationName}_Anim.bin` : undefined,
+        sharedTextureFilename: getSharedTextureFilename(object_.modelName),
+        animationId: hasAnimation ? animationId : undefined,
     };
 }
 
@@ -259,6 +289,25 @@ function getItemModelSpec(metadata: MPHEntityMetadata, item: MPHItemSpawnEntity)
         modelFilename: `${item_.modelName}_Model.bin`,
         animationFilename: item_.animated ? `${item_.modelName}_Anim.bin` : undefined,
         animationId: item_.animated ? 0 : undefined,
+    };
+}
+
+function getDoorModelSpec(metadata: MPHEntityMetadata, door: MPHDoorEntity): MPHEntityModelSpec {
+    const door_ = assertExists(metadata.doors[door.doorType], `door type ${door.doorType}`);
+    let paletteOverrides: { target: number; source: number }[] | undefined;
+    if (door.doorType === 0 || door.doorType === 3) {
+        const paletteId = assertExists(metadata.doorLockPaletteIds[door.subtype], `door lock subtype ${door.subtype}`);
+        paletteOverrides = [{ target: 1, source: paletteId }];
+        if (door.doorType === 3)
+            paletteOverrides.push({ target: 2, source: paletteId });
+    }
+    return {
+        modelFilename: `${door_.modelName}_Model.bin`,
+        animationFilename: `${door_.animationName}_Anim.bin`,
+        sharedTextureFilename: getSharedTextureFilename(door_.modelName),
+        paletteFilename: paletteOverrides !== undefined ? 'AlimbicPalettes_pal_Model.bin' : undefined,
+        paletteOverrides,
+        animationId: 0,
     };
 }
 
@@ -313,9 +362,8 @@ const scratchRotation = quat.create();
 const scratchScale = vec3.create();
 
 function calcOrientedModelMatrix(dst: mat4, position: ReadonlyVec3, facing: ReadonlyVec3, up: ReadonlyVec3, modelScale: number): void {
-    const scaledPosition = vec3.scale(vec3.create(), position, MPH_VIEWER_SCALE);
-    const target = vec3.sub(vec3.create(), scaledPosition, facing);
-    mat4.targetTo(dst, scaledPosition, target, up);
+    const target = vec3.sub(vec3.create(), position, facing);
+    mat4.targetTo(dst, position, target, up);
     mat4.scale(dst, dst, [modelScale, modelScale, modelScale]);
 }
 
@@ -434,14 +482,12 @@ function setupPlatformModelMatrix(dst: mat4, platform: MPHPlatformEntity, modelS
     }
 
     const position = vec3.add(vec3.create(), platform.positions[0], platform.positionOffset);
-    vec3.scale(position, position, MPH_VIEWER_SCALE);
     mat4.fromRotationTranslationScale(dst, platform.rotations[0], position, [modelScale, modelScale, modelScale]);
 }
 
 function calcPlatformModelMatrix(dst: mat4, platform: MPHPlatformEntity, timeInMilliseconds: number, modelScale: number): void {
     samplePlatformPath(scratchPosition, scratchRotation, platform, timeInMilliseconds);
     vec3.add(scratchPosition, scratchPosition, platform.positionOffset);
-    vec3.scale(scratchPosition, scratchPosition, MPH_VIEWER_SCALE);
     vec3.set(scratchScale, modelScale, modelScale, modelScale);
     mat4.fromRotationTranslationScale(dst, scratchRotation, scratchPosition, scratchScale);
 }
@@ -457,9 +503,9 @@ function calcItemSpawnModelMatrix(dst: mat4, item: MPHItemSpawnEntity, phaseAngl
     const angle = fxAngle(phaseAngle + ticks * 0x300);
     const bob = Math.sin(angle) * (0x200 / 0x1000);
     mat4.fromYRotation(dst, angle);
-    dst[12] = item.position[0] * MPH_VIEWER_SCALE;
-    dst[13] = (baseY + bob) * MPH_VIEWER_SCALE;
-    dst[14] = item.position[2] * MPH_VIEWER_SCALE;
+    dst[12] = item.position[0];
+    dst[13] = baseY + bob;
+    dst[14] = item.position[2];
     vec3.set(scratchScale, modelScale, modelScale, modelScale);
     mat4.scale(dst, dst, scratchScale);
 }
@@ -478,6 +524,11 @@ export class MPHEntityFile {
     public requestResources(): void {
         for (const platform of this.entities.platforms) {
             const spec = getPlatformModelSpec(this.metadata, platform);
+            if (spec !== null)
+                requestEntityModel(this.cache, spec);
+        }
+        for (const object of this.entities.objects) {
+            const spec = getObjectModelSpec(this.metadata, object);
             if (spec !== null)
                 requestEntityModel(this.cache, spec);
         }
@@ -501,6 +552,17 @@ export class MPHEntityFile {
                 this.movers.push((time) => calcPlatformModelMatrix(renderer.modelMatrix, platform, time, renderer.modelScale));
             else
                 setupPlatformModelMatrix(renderer.modelMatrix, platform, renderer.modelScale);
+            renderers.push(renderer);
+        }
+        for (const object of this.entities.objects) {
+            const spec = getObjectModelSpec(this.metadata, object);
+            if (spec === null)
+                continue;
+            const renderer = createEntityModelRenderer(device, this.cache, renderCache, spec, {
+                sceneMode: this.sceneMode,
+                lighting,
+            });
+            calcOrientedModelMatrix(renderer.modelMatrix, object.position, object.facing, object.up, renderer.modelScale);
             renderers.push(renderer);
         }
         for (let index = 0; index < this.entities.doors.length; index++) {

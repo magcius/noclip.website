@@ -9,6 +9,7 @@ const RAM = 0x02004000, START = 0x020B8794, END = 0x020BAFD4, STRIDE = 0x70;
 // load addresses overlap, so each table names the overlay it belongs to.
 const ENTITY_OVERLAY = 2, WORLD_OVERLAY = 15;
 const PLATFORM_TABLE = 0x021712D0, PLATFORM_COUNT = 45, PLATFORM_STRIDE = 0x28;
+const OBJECT_TABLE = 0x0217062C, OBJECT_COUNT = 54, OBJECT_STRIDE = 0x14;
 const DOOR_MODEL_TABLE = 0x0211FEEC, DOOR_ANIM_TABLE = 0x0211FF0C, DOOR_COUNT = 4;
 const DOOR_LOCK_PALETTES = 0x0211FE90, DOOR_LOCK_COUNT = 10;
 const ITEM_TABLE = 0x02120460, ITEM_COUNT = 22;
@@ -132,6 +133,18 @@ function entityMetadata(images: Map<number, Image>, hasFile: (name: string) => b
         platforms.push({ modelName: name(WORLD_OVERLAY, pointer(WORLD_OVERLAY, entry)), animationName, animationId });
     }
 
+    const objects = [];
+    for (let i = 0; i < OBJECT_COUNT; i++) {
+        const entry = OBJECT_TABLE + i * OBJECT_STRIDE;
+        const { image, offset } = read(WORLD_OVERLAY, entry + 0x0C);
+        objects.push({
+            modelName: name(WORLD_OVERLAY, pointer(WORLD_OVERLAY, entry)),
+            animationName: name(WORLD_OVERLAY, pointer(WORLD_OVERLAY, entry + 0x04)),
+            // One signed animation ID per initial state; -1 means unanimated.
+            animationIds: [0, 1, 2, 3].map((k) => image.data.readInt8(offset + k)),
+        });
+    }
+
     const doors = [];
     for (let i = 0; i < DOOR_COUNT; i++)
         doors.push({
@@ -149,7 +162,7 @@ function entityMetadata(images: Map<number, Image>, hasFile: (name: string) => b
         items.push({ modelName, animated: hasFile(`models/${modelName}_anim.bin`) });
     }
 
-    return { platforms, doors, doorLockPaletteIds, items };
+    return { platforms, objects, doors, doorLockPaletteIds, items };
 }
 
 function extract(rom: Buffer): [object[], object, Record<string, string>, Record<string, string>, Map<string, Buffer>] {
