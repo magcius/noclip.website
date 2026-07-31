@@ -107,7 +107,7 @@ function getDataForHeader(track: TrackFile, header: SHDR): Uint8Array {
     if (assetData.length >= header.totalDataSize) break;
   }
 
-  return new Uint8Array(assetData);
+  return new Uint8Array(assetData.slice(0, header.totalDataSize));
 }
 
 export function getResourceList(track: TrackFile): RLst {
