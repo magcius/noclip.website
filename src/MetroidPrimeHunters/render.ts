@@ -261,9 +261,6 @@ export interface MPHRendererOptions {
     mapAnimationTime?: (timeInMilliseconds: number) => number;
 }
 
-// Uniform presentation scale for converting MPH world units to noclip space.
-export const MPH_VIEWER_SCALE = 4;
-
 function nodeIsVisibleInMode(name: string, mode: MPHSceneMode): boolean {
     let hasModeTag = false;
     let matchesMode = false;
@@ -318,7 +315,7 @@ export class MPHRenderer {
         this.gfxProgram = cache.createProgram(program);
         const nodeAnimation = mphAnimation?.node ?? null;
         this.nodeAnimator = nodeAnimation !== null ? new MPHNodeAnimator(this.animationController, nodeAnimation) : null;
-        this.modelScale = mphModel.posScale * (1 << mphModel.scaleFactor) * MPH_VIEWER_SCALE;
+        this.modelScale = mphModel.posScale * (1 << mphModel.scaleFactor);
         mat4.fromScaling(this.modelMatrix, [this.modelScale, this.modelScale, this.modelScale]);
 
         const texCoordAnimation = mphAnimation?.texCoord ?? null;

@@ -100,10 +100,11 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(8/60);
+        c.setSceneMoveSpeedMult(0.5/60);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(0.1);
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
         renderInstManager.setCurrentList(this.renderInstListMain);
