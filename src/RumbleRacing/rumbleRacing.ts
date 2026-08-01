@@ -7,6 +7,7 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
+import { TrackLightData } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 
@@ -43,6 +44,16 @@ export interface O3DData {
   resourceIndex: number;
   isAnimated: boolean;
   obfs: ObfData[];
+  boundingSphere: BoundingSphere | null;
+}
+
+export interface BoundingSphere {
+  center: vec3;
+  radius: number;
+}
+
+export const enum ActorType {
+  PowerUp = 8,
 }
 
 type MatrixRow = [x: number, y: number, z: number, w: number];
@@ -58,6 +69,7 @@ export type ActorMatrix = [
 export interface ActorData {
   name: string;
   resourceIndex: number;
+  actorType: number;
   x: number;
   y: number;
   z: number;
@@ -77,6 +89,7 @@ export interface RumbleRacingTrackFile {
   o3ds: O3DData[];
   actors: ActorData[];
   textures: TextureData[];
+  lights: TrackLightData | null; // only half of the tracks have light data, so make it nullable
 }
 
 function buildObfNode(node: ObfNode): ObfJsonNode {
@@ -162,6 +175,7 @@ export function processTrackFile(
     o3ds: [],
     actors: [],
     textures: [],
+    lights: null,
   };
 
   const track = parseTrackFile(rawData, "track");
@@ -174,12 +188,19 @@ export function processTrackFile(
       res.typeTag !== "txf2" &&
       res.typeTag !== "obf " &&
       res.typeTag !== "o3d " &&
-      res.typeTag !== "o3da"
+      res.typeTag !== "o3da" &&
+      res.typeTag !== "gmd "
     ) {
       continue;
     }
 
-    if (isGlobalFile && !res.resourceName.includes("GLOBAL")) continue;
+    // We only want to parse some specific things from the shared global file
+    if (
+      isGlobalFile &&
+      !res.resourceName.includes("GLOBAL.TXF") && // parse out shared textures
+      !res.resourceName.includes("PU_") // parse out powerup models
+    )
+      continue;
 
     let resource: ParsedAsset;
     try {
@@ -191,10 +212,12 @@ export function processTrackFile(
 
     switch (resource.kind) {
       case "Actor": {
-        if (resource.o3dResourceIndex > 0) {
+        const isPowerUp = resource.actorType === ActorType.PowerUp;
+        if (resource.o3dResourceIndex > 0 || isPowerUp) {
           out.actors.push({
             name: res.resourceName,
             resourceIndex: res.resourceIndex,
+            actorType: resource.actorType,
             x: resource.x,
             y: resource.y,
             z: resource.z,
@@ -216,11 +239,16 @@ export function processTrackFile(
           name: `obf_${idx}`,
           rootNode: buildObfNode(obf.rootNode),
         }));
+        const bounds = resource.gmds[0]?.bounds ?? null;
         out.o3ds.push({
           name: res.resourceName,
           resourceIndex: res.resourceIndex,
           isAnimated: resource.isAnimated,
           obfs,
+          boundingSphere:
+            bounds !== null
+              ? { center: bounds.sphereCenter, radius: bounds.sphereRadius }
+              : null,
         });
         break;
       }
@@ -235,6 +263,10 @@ export function processTrackFile(
             height: base.height,
           });
         }
+        break;
+      }
+      case "Gmd": {
+        out.lights = resource.lights;
         break;
       }
       default: {

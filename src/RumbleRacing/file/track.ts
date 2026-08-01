@@ -7,8 +7,9 @@ import { parseGenericAsset, GenericAsset } from "../asset/asset";
 import { parseObf, Obf } from "../asset/o3d/obf";
 import { parseO3D, O3D } from "../asset/o3d/o3d";
 import { parseTXF, TXF } from "../asset/txf/TXF";
+import { Gmd, parseGmd } from "../asset/gmd";
 
-export type ParsedAsset = Actor | Obf | O3D | TXF | GenericAsset;
+export type ParsedAsset = Actor | Obf | O3D | TXF | Gmd | GenericAsset;
 
 export interface TrackFile {
   fileName: string;
@@ -142,6 +143,8 @@ export function getResource(
       return parseO3D(false, data, header, resource.resourceName);
     case "o3da":
       return parseO3D(true, data, header, resource.resourceName);
+    case "gmd ":
+      return parseGmd(data, header, resource.resourceName);
     case "txf ":
     case "txf2": {
       const name = `${resource.resourceIndex}_${resource.resourceName}`;

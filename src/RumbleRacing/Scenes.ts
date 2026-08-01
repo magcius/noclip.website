@@ -1,12 +1,13 @@
 import {
   ActorData,
   ActorTransforms,
+  ActorType,
   ExcludeInfo,
   ObfData,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
   makeBackbufferDescSimple,
@@ -15,7 +16,7 @@ import {
 import {
   fillMatrix4x3,
   fillMatrix4x4,
-  fillVec4,
+  fillVec3v,
 } from "../gfx/helpers/UniformBufferHelpers";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import {
@@ -42,6 +43,7 @@ import {
 } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { TransparentBlack } from "../Color";
 import { BlendMode } from "./asset/o3d/geometry";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
@@ -49,16 +51,44 @@ import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
 import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
+import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
+import { buildGlowDefs } from "./Lights";
 
 const pathBase = `RumbleRacing`;
 const GLOBAL_SCALE = 300.0; // this feels the best
 const SOLID_PASS_ALPHA_REF = 0.99;
+
+const POWERUP_SPIN_RATE = Math.PI / 2.0;
+const POWERUP_SHELL_RATE_Y = 1.2566371;
+const POWERUP_SHELL_RATE_X = 1.8849558;
+const POWERUP_SHELL_RATE_Z = 14.639822;
+const POWERUP_GLOW_RADIUS_SCALE = 0.9;
+
+// The powerups in the final game have a red color in the data
+// but there is some kind of environment map/reflective surface shader applied by the VU
+// I have not figured this out, so I'm making it a bit darker red to get close to that appearance without implementing that yet.
+const WHITE_TINT: vec3 = vec3.fromValues(1.0, 1.0, 1.0);
+const POWERUP_INNER_TINT: vec3 = vec3.fromValues(0.55, 0.62, 0.66);
+
+const POWERUP_GLOW_CLEAR = TransparentBlack;
+const POWERUP_GLOW_RING = glowColorFromRGBA32(0xa8a8ff60);
+const POWERUP_GLOW_STAR = glowColorFromRGBA32(0xb8b8ff80);
 
 interface TrackGeometryGroup {
   geometry: MergedGeometry;
   visible: boolean;
   label: string;
 }
+
+interface PowerUp {
+  baseMatrix: mat4;
+  glowCenter: vec3;
+  glowRadius: number;
+  glowDefs: GlowDef[];
+}
+
+const scratchMatrix = mat4.create();
+const scratchShellMatrix = mat4.create();
 
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
@@ -70,12 +100,20 @@ class RumbleRacingScene implements SceneGfx {
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
+  private showPowerUps: boolean = true;
+  private showTrackLights: boolean = true;
   private wireframe: boolean = false;
   private showVertexColors: boolean = true;
   private showTextures: boolean = true;
 
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
+  private glowRenderer: GlowRenderer;
+  private trackLightGlows: GlowDef[] = [];
+  private powerUps: PowerUp[] = [];
+  private powerUpGlowOffset = vec3.create();
+  private powerUpInnerIndex: number | undefined;
+  private powerUpOuterIndex: number | undefined;
 
   constructor(
     private sceneContext: SceneContext,
@@ -104,6 +142,14 @@ class RumbleRacingScene implements SceneGfx {
         new O3DGeometry(cache, o3d, this.exclude),
       );
     }
+
+    this.glowRenderer = new GlowRenderer(cache);
+    this.buildPowerUps();
+
+    if (this.trackFile.lights !== null)
+      this.trackLightGlows = this.trackFile.lights.glows.flatMap((x) =>
+        buildGlowDefs(x, GLOBAL_SCALE),
+      );
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -237,6 +283,7 @@ class RumbleRacingScene implements SceneGfx {
     batch: DrawBatch,
     modelMatrix: mat4,
     alphaTestRef: number,
+    tint: vec3 = WHITE_TINT,
   ): GfxRenderInst {
     const renderInst = this.renderHelper.renderInstManager.newRenderInst();
     renderInst.setGfxProgram(
@@ -255,25 +302,35 @@ class RumbleRacingScene implements SceneGfx {
       16,
     );
     const offs = fillMatrix4x3(meshParams, 0, modelMatrix);
-    fillVec4(meshParams, offs, alphaTestRef, 0, 0, 0);
+    fillVec3v(meshParams, offs, tint, alphaTestRef);
 
     return renderInst;
   }
 
-  private submitBatches(geometry: MergedGeometry, modelMatrix: mat4): void {
+  private submitBatches(
+    geometry: MergedGeometry,
+    modelMatrix: mat4,
+    tint: vec3 = WHITE_TINT,
+  ): void {
     for (const batch of geometry.batches) {
       if (batch.blendMode === BlendMode.None) {
         this.renderInstList.submitRenderInst(
-          this.newBatchInst(geometry, batch, modelMatrix, 0.0),
+          this.newBatchInst(geometry, batch, modelMatrix, 0.0, tint),
         );
         continue;
       }
 
       this.renderInstList.submitRenderInst(
-        this.newBatchInst(geometry, batch, modelMatrix, SOLID_PASS_ALPHA_REF),
+        this.newBatchInst(
+          geometry,
+          batch,
+          modelMatrix,
+          SOLID_PASS_ALPHA_REF,
+          tint,
+        ),
       );
 
-      const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0);
+      const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0, tint);
       soft.setMegaStateFlags({
         depthWrite: false,
         depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
@@ -292,7 +349,7 @@ class RumbleRacingScene implements SceneGfx {
     }
   }
 
-  private renderMap(): void {
+  private renderMap(viewerInput: ViewerRenderInput): void {
     const template = this.renderHelper.renderInstManager.pushTemplate();
     template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
@@ -310,6 +367,8 @@ class RumbleRacingScene implements SceneGfx {
 
     if (this.showActors) {
       for (const actor of this.trackFile.actors) {
+        if (actor.actorType === ActorType.PowerUp) continue;
+
         const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
 
@@ -320,7 +379,178 @@ class RumbleRacingScene implements SceneGfx {
       }
     }
 
+    if (this.showPowerUps) this.renderPowerUpModels(viewerInput);
+
     this.renderHelper.renderInstManager.popTemplate();
+
+    if (this.showPowerUps) this.renderPowerUpGlows(viewerInput);
+
+    if (this.showTrackLights) this.renderTrackLights(viewerInput);
+  }
+
+  private buildPowerUps(): void {
+    const findModel = (name: string) =>
+      this.trackFile.o3ds.find((o3d) => o3d.name.includes(name));
+
+    const model = findModel("PU_INNER");
+    const shell = findModel("PU_OUTER");
+
+    this.powerUpInnerIndex = model?.resourceIndex;
+    this.powerUpOuterIndex = shell?.resourceIndex;
+
+    const innerSphere = model?.boundingSphere ?? null;
+    const shellSphere = shell?.boundingSphere ?? null;
+
+    if (innerSphere !== null)
+      vec3.copy(this.powerUpGlowOffset, innerSphere.center);
+
+    const innerRadius = innerSphere?.radius ?? 0.0;
+    const radius =
+      (shellSphere !== null
+        ? POWERUP_GLOW_RADIUS_SCALE * Math.max(innerRadius, shellSphere.radius)
+        : innerRadius) * GLOBAL_SCALE;
+
+    for (const actor of this.trackFile.actors) {
+      if (actor.actorType !== ActorType.PowerUp) continue;
+      if (actor.transform === undefined) continue;
+
+      const baseMatrix = this.actorMatrices.get(actor.resourceIndex)!;
+      const glowCenter = vec3.create();
+
+      const glowDefs: GlowDef[] = [
+        {
+          center: glowCenter,
+          colorA: POWERUP_GLOW_CLEAR,
+          colorB: POWERUP_GLOW_RING,
+          radiusA: 0.0,
+          radiusB: radius,
+          angle: 0.0,
+          shape: GlowShape.Ring24,
+        },
+        {
+          center: glowCenter,
+          colorA: POWERUP_GLOW_CLEAR,
+          colorB: POWERUP_GLOW_RING,
+          radiusA: 1.1 * radius,
+          radiusB: radius,
+          angle: 0.0,
+          shape: GlowShape.Ring24,
+        },
+        {
+          center: glowCenter,
+          colorA: POWERUP_GLOW_CLEAR,
+          colorB: POWERUP_GLOW_STAR,
+          radiusA: 3.0 * radius,
+          radiusB: 0.0,
+          angle: Math.PI / 2.0,
+          shape: GlowShape.Star1,
+        },
+      ];
+
+      this.powerUps.push({
+        baseMatrix,
+        glowCenter,
+        glowRadius: radius,
+        glowDefs,
+      });
+    }
+  }
+
+  private powerUpMatrix(
+    powerUp: PowerUp,
+    viewerInput: ViewerRenderInput,
+  ): mat4 {
+    const yaw = POWERUP_SPIN_RATE * (viewerInput.time / 1000.0);
+    mat4.rotateY(scratchMatrix, powerUp.baseMatrix, yaw);
+    return scratchMatrix;
+  }
+
+  private powerUpShellMatrix(
+    powerUp: PowerUp,
+    viewerInput: ViewerRenderInput,
+  ): mat4 {
+    const seconds = viewerInput.time / 1000.0;
+    mat4.rotateY(
+      scratchShellMatrix,
+      powerUp.baseMatrix,
+      POWERUP_SHELL_RATE_Y * seconds,
+    );
+    mat4.rotateX(
+      scratchShellMatrix,
+      scratchShellMatrix,
+      POWERUP_SHELL_RATE_X * seconds,
+    );
+    mat4.rotateZ(
+      scratchShellMatrix,
+      scratchShellMatrix,
+      POWERUP_SHELL_RATE_Z * seconds,
+    );
+    return scratchShellMatrix;
+  }
+
+  private renderPowerUpModels(viewerInput: ViewerRenderInput): void {
+    const inner =
+      this.powerUpInnerIndex !== undefined
+        ? this.o3dGeometries.get(this.powerUpInnerIndex)?.frames[0]
+        : undefined;
+    const shell =
+      this.powerUpOuterIndex !== undefined
+        ? this.o3dGeometries.get(this.powerUpOuterIndex)?.frames[0]
+        : undefined;
+
+    for (const powerUp of this.powerUps) {
+      if (inner !== undefined)
+        this.submitBatches(
+          inner,
+          this.powerUpMatrix(powerUp, viewerInput),
+          POWERUP_INNER_TINT,
+        );
+      if (shell !== undefined)
+        this.submitBatches(
+          shell,
+          this.powerUpShellMatrix(powerUp, viewerInput),
+        );
+    }
+  }
+
+  private renderPowerUpGlows(viewerInput: ViewerRenderInput): void {
+    const renderInstManager = this.renderHelper.renderInstManager;
+    this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
+
+    for (const powerUp of this.powerUps) {
+      if (powerUp.glowRadius <= 0.0) continue;
+
+      vec3.transformMat4(
+        powerUp.glowCenter,
+        this.powerUpGlowOffset,
+        this.powerUpMatrix(powerUp, viewerInput),
+      );
+
+      for (const def of powerUp.glowDefs)
+        this.glowRenderer.submitGlow(
+          renderInstManager,
+          this.blendedRenderInstList,
+          def,
+        );
+    }
+
+    renderInstManager.popTemplate();
+  }
+
+  private renderTrackLights(viewerInput: ViewerRenderInput): void {
+    if (!this.trackLightGlows.length) return;
+
+    const renderInstManager = this.renderHelper.renderInstManager;
+    this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
+
+    for (const glow of this.trackLightGlows)
+      this.glowRenderer.submitGlow(
+        renderInstManager,
+        this.blendedRenderInstList,
+        glow,
+      );
+
+    renderInstManager.popTemplate();
   }
 
   private updateAnimations(viewerInput: ViewerRenderInput): void {
@@ -349,7 +579,7 @@ class RumbleRacingScene implements SceneGfx {
 
     this.fillSceneParams(template, viewerInput);
 
-    this.renderMap();
+    this.renderMap(viewerInput);
 
     const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
@@ -425,6 +655,16 @@ class RumbleRacingScene implements SceneGfx {
 
     trackGeometryPanel.contents.appendChild(showActorsCheckbox.elem);
 
+    const showPowerUpsCheckbox = new UI.Checkbox(
+      "Power-Ups",
+      this.showPowerUps,
+    );
+    showPowerUpsCheckbox.onchanged = () => {
+      this.showPowerUps = showPowerUpsCheckbox.checked;
+    };
+
+    trackGeometryPanel.contents.appendChild(showPowerUpsCheckbox.elem);
+
     for (const group of this.trackGroups) {
       const checkbox = new UI.Checkbox(group.label, group.visible);
       checkbox.onchanged = () => {
@@ -445,14 +685,21 @@ class RumbleRacingScene implements SceneGfx {
       this.showVertexColors = showVertexColorsCheckbox.checked;
     };
 
-    renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
-
     const showTexturesCheckbox = new UI.Checkbox("Textures", this.showTextures);
     showTexturesCheckbox.onchanged = () => {
       this.showTextures = showTexturesCheckbox.checked;
     };
 
+    const showLightsCheckbox = new UI.Checkbox("Lights", this.showTrackLights);
+    showLightsCheckbox.onchanged = () => {
+      this.showTrackLights = showLightsCheckbox.checked;
+    };
+
+    if (this.trackLightGlows.length) {
+      renderSettingsPanel.contents.appendChild(showLightsCheckbox.elem);
+    }
     renderSettingsPanel.contents.appendChild(showTexturesCheckbox.elem);
+    renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
 
     if (this.renderHelper.device.queryLimits().wireframeSupported) {
       const wireframe = new UI.Checkbox("Wireframe", false);
@@ -468,6 +715,7 @@ class RumbleRacingScene implements SceneGfx {
 
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
+    this.glowRenderer.destroy(device);
 
     for (const group of this.trackGroups) group.geometry.destroy(device);
 
@@ -575,6 +823,9 @@ class RumbleRacingSceneDesc implements SceneDesc {
         (t) => !existingTexIds.has(t.textureId),
       ),
     );
+
+    // Add powerup models (the only models we parsed out of the global track file)
+    trackData.o3ds.push(...shared.globalTrackFile.o3ds);
 
     return new RumbleRacingScene(
       sceneContext,
