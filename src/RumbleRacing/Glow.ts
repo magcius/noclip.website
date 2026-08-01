@@ -155,9 +155,79 @@ function buildStar(points: number): GlowStripBuilder {
 interface GlowShapeBuffers {
   vertexBuffer: GfxBuffer;
   indexBuffer: GfxBuffer;
-  vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+  vertexBufferDescriptor: GfxVertexBufferDescriptor;
   indexBufferDescriptor: GfxIndexBufferDescriptor;
   indexCount: number;
+}
+
+const INSTANCE_BYTE_STRIDE = GlowProgram.elementsPerInstance * 4;
+
+interface GlowBatchGroup {
+  shape: GlowShape;
+  first: number;
+  count: number;
+}
+
+export class GlowBatch {
+  public readonly groups: GlowBatchGroup[] = [];
+  public readonly buffer: GfxBuffer;
+  private readonly defs: GlowDef[];
+  private readonly data: Float32Array;
+  private readonly bytes: Uint8Array;
+
+  constructor(device: GfxDevice, defs: GlowDef[], dynamic: boolean) {
+    const byShape = new Map<GlowShape, GlowDef[]>();
+    for (const def of defs) {
+      const shapeDefs = byShape.get(def.shape);
+      if (shapeDefs !== undefined) shapeDefs.push(def);
+      else byShape.set(def.shape, [def]);
+    }
+
+    let first = 0;
+    for (const [shape, shapeDefs] of byShape) {
+      this.groups.push({ shape, first, count: shapeDefs.length });
+      first += shapeDefs.length;
+    }
+
+    this.defs = [...byShape.values()].flat();
+    this.data = new Float32Array(
+      this.defs.length * GlowProgram.elementsPerInstance,
+    );
+    this.bytes = new Uint8Array(this.data.buffer);
+
+    this.pack();
+    this.buffer = createBufferFromData(
+      device,
+      GfxBufferUsage.Vertex,
+      dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static,
+      this.data.buffer,
+    );
+  }
+
+  private pack(): void {
+    let offs = 0;
+    for (const def of this.defs) {
+      offs += fillVec3v(this.data, offs, def.center, def.radiusA);
+      offs += fillVec4(
+        this.data,
+        offs,
+        def.radiusB,
+        Math.cos(def.angle),
+        Math.sin(def.angle),
+      );
+      offs += fillColor(this.data, offs, def.colorA);
+      offs += fillColor(this.data, offs, def.colorB);
+    }
+  }
+
+  public upload(device: GfxDevice): void {
+    this.pack();
+    device.uploadBufferData(this.buffer, 0, this.bytes);
+  }
+
+  public destroy(device: GfxDevice): void {
+    device.destroyBuffer(this.buffer);
+  }
 }
 
 export class GlowRenderer {
@@ -187,11 +257,39 @@ export class GlowRenderer {
           bufferByteOffset: 2 * 4,
           bufferIndex: 0,
         },
+        {
+          location: GlowProgram.a_CenterRadiusA,
+          format: GfxFormat.F32_RGBA,
+          bufferByteOffset: 0 * 4,
+          bufferIndex: 1,
+        },
+        {
+          location: GlowProgram.a_Misc,
+          format: GfxFormat.F32_RGBA,
+          bufferByteOffset: 4 * 4,
+          bufferIndex: 1,
+        },
+        {
+          location: GlowProgram.a_ColorA,
+          format: GfxFormat.F32_RGBA,
+          bufferByteOffset: 8 * 4,
+          bufferIndex: 1,
+        },
+        {
+          location: GlowProgram.a_ColorB,
+          format: GfxFormat.F32_RGBA,
+          bufferByteOffset: 12 * 4,
+          bufferIndex: 1,
+        },
       ],
       vertexBufferDescriptors: [
         {
           byteStride: VERTEX_STRIDE * 4,
           frequency: GfxVertexBufferFrequency.PerVertex,
+        },
+        {
+          byteStride: INSTANCE_BYTE_STRIDE,
+          frequency: GfxVertexBufferFrequency.PerInstance,
         },
       ],
       indexBufferFormat: GfxFormat.U32_R,
@@ -231,7 +329,7 @@ export class GlowRenderer {
     buffers = {
       vertexBuffer,
       indexBuffer,
-      vertexBufferDescriptors: [{ buffer: vertexBuffer, byteOffset: 0 }],
+      vertexBufferDescriptor: { buffer: vertexBuffer, byteOffset: 0 },
       indexBufferDescriptor: { buffer: indexBuffer, byteOffset: 0 },
       indexCount: indices.length,
     };
@@ -244,7 +342,7 @@ export class GlowRenderer {
     viewerInput: ViewerRenderInput,
   ): void {
     const template = renderInstManager.pushTemplate();
-    template.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 2 }]);
+    template.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 1 }]);
     template.setGfxProgram(this.program);
     template.setMegaStateFlags(this.megaStateFlags);
 
@@ -256,39 +354,31 @@ export class GlowRenderer {
     fillMatrix4x3(data, offs, viewerInput.camera.viewMatrix);
   }
 
-  public submitGlow(
+  public submitBatch(
     renderInstManager: GfxRenderInstManager,
     list: GfxRenderInstList,
-    def: GlowDef,
+    batch: GlowBatch,
   ): void {
-    const shape = this.getShape(def.shape);
+    for (const group of batch.groups) {
+      const shape = this.getShape(group.shape);
 
-    const renderInst = renderInstManager.newRenderInst();
-    renderInst.setVertexInput(
-      this.inputLayout,
-      shape.vertexBufferDescriptors,
-      shape.indexBufferDescriptor,
-    );
-    renderInst.setDrawCount(shape.indexCount);
+      const renderInst = renderInstManager.newRenderInst();
+      renderInst.setVertexInput(
+        this.inputLayout,
+        [
+          shape.vertexBufferDescriptor,
+          {
+            buffer: batch.buffer,
+            byteOffset: group.first * INSTANCE_BYTE_STRIDE,
+          },
+        ],
+        shape.indexBufferDescriptor,
+      );
+      renderInst.setDrawCount(shape.indexCount);
+      renderInst.setInstanceCount(group.count);
 
-    const data = renderInst.allocateUniformBufferF32(
-      GlowProgram.ub_GlowParams,
-      4 * 4,
-    );
-    let offs = 0;
-    offs += fillVec3v(data, offs, def.center);
-    offs += fillVec4(
-      data,
-      offs,
-      def.radiusA,
-      def.radiusB,
-      Math.cos(def.angle),
-      Math.sin(def.angle),
-    );
-    offs += fillColor(data, offs, def.colorA);
-    fillColor(data, offs, def.colorB);
-
-    list.submitRenderInst(renderInst);
+      list.submitRenderInst(renderInst);
+    }
   }
 
   public destroy(device: GfxDevice): void {

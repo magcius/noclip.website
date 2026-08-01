@@ -51,7 +51,13 @@ import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
 import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
-import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
+import {
+  GlowBatch,
+  GlowDef,
+  GlowRenderer,
+  GlowShape,
+  glowColorFromRGBA32,
+} from "./Glow";
 import { buildGlowDefs } from "./Lights";
 
 const pathBase = `RumbleRacing`;
@@ -83,7 +89,6 @@ interface TrackGeometryGroup {
 interface PowerUp {
   baseMatrix: mat4;
   glowCenter: vec3;
-  glowRadius: number;
   glowDefs: GlowDef[];
 }
 
@@ -110,6 +115,8 @@ class RumbleRacingScene implements SceneGfx {
   private actorMatrices = new Map<number, mat4>();
   private glowRenderer: GlowRenderer;
   private trackLightGlows: GlowDef[] = [];
+  private trackLightBatch: GlowBatch | null = null;
+  private powerUpGlowBatch: GlowBatch | null = null;
   private powerUps: PowerUp[] = [];
   private powerUpGlowOffset = vec3.create();
   private powerUpInnerIndex: number | undefined;
@@ -146,9 +153,24 @@ class RumbleRacingScene implements SceneGfx {
     this.glowRenderer = new GlowRenderer(cache);
     this.buildPowerUps();
 
+    const powerUpGlowDefs = this.powerUps.flatMap((x) => x.glowDefs);
+    if (powerUpGlowDefs.length > 0)
+      this.powerUpGlowBatch = new GlowBatch(
+        cache.device,
+        powerUpGlowDefs,
+        true,
+      );
+
     if (this.trackFile.lights !== null)
       this.trackLightGlows = this.trackFile.lights.glows.flatMap((x) =>
         buildGlowDefs(x, GLOBAL_SCALE),
+      );
+
+    if (this.trackLightGlows.length > 0)
+      this.trackLightBatch = new GlowBatch(
+        cache.device,
+        this.trackLightGlows,
+        false,
       );
 
     this.linearSampler = cache.createSampler({
@@ -447,12 +469,7 @@ class RumbleRacingScene implements SceneGfx {
         },
       ];
 
-      this.powerUps.push({
-        baseMatrix,
-        glowCenter,
-        glowRadius: radius,
-        glowDefs,
-      });
+      this.powerUps.push({ baseMatrix, glowCenter, glowDefs });
     }
   }
 
@@ -514,42 +531,39 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private renderPowerUpGlows(viewerInput: ViewerRenderInput): void {
-    const renderInstManager = this.renderHelper.renderInstManager;
-    this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
+    const batch = this.powerUpGlowBatch;
+    if (batch === null) return;
 
-    for (const powerUp of this.powerUps) {
-      if (powerUp.glowRadius <= 0.0) continue;
-
+    for (const powerUp of this.powerUps)
       vec3.transformMat4(
         powerUp.glowCenter,
         this.powerUpGlowOffset,
         this.powerUpMatrix(powerUp, viewerInput),
       );
 
-      for (const def of powerUp.glowDefs)
-        this.glowRenderer.submitGlow(
-          renderInstManager,
-          this.blendedRenderInstList,
-          def,
-        );
-    }
+    batch.upload(this.renderHelper.device);
 
+    const renderInstManager = this.renderHelper.renderInstManager;
+    this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
+    this.glowRenderer.submitBatch(
+      renderInstManager,
+      this.blendedRenderInstList,
+      batch,
+    );
     renderInstManager.popTemplate();
   }
 
   private renderTrackLights(viewerInput: ViewerRenderInput): void {
-    if (!this.trackLightGlows.length) return;
+    const batch = this.trackLightBatch;
+    if (batch === null) return;
 
     const renderInstManager = this.renderHelper.renderInstManager;
     this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
-
-    for (const glow of this.trackLightGlows)
-      this.glowRenderer.submitGlow(
-        renderInstManager,
-        this.blendedRenderInstList,
-        glow,
-      );
-
+    this.glowRenderer.submitBatch(
+      renderInstManager,
+      this.blendedRenderInstList,
+      batch,
+    );
     renderInstManager.popTemplate();
   }
 
@@ -716,6 +730,8 @@ class RumbleRacingScene implements SceneGfx {
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
     this.glowRenderer.destroy(device);
+    this.trackLightBatch?.destroy(device);
+    this.powerUpGlowBatch?.destroy(device);
 
     for (const group of this.trackGroups) group.geometry.destroy(device);
 
