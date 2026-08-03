@@ -31,7 +31,7 @@ layout(std140) uniform ub_SkyParams {
     vec4 u_ExtraData; // x = isTextured, yzw = padding
 };
 
-layout(location = 0) uniform sampler2D u_Texture;
+layout(binding = 0) uniform sampler2D u_Texture;
 `;
 
     public override vert = `

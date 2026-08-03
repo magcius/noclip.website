@@ -5,11 +5,12 @@ import * as Viewer from '../viewer.js';
 import * as CX from '../Common/Compression/CX.js';
 import * as ARC from './mph_arc.js';
 import { parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
+import { parseMPHAnimation } from './mph_anim.js';
 
 import { DataFetcher } from '../DataFetcher.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { MPHRenderer } from './render.js';
+import { MPHRenderer, MPHSceneMode } from './render.js';
 import { assert, assertExists } from '../util.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { FakeTextureHolder } from '../TextureHolder.js';
@@ -153,7 +154,7 @@ interface OBJI {
 }
 
 class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public arcName: string | null, public texName: string | null) {
+    constructor(public id: string, public name: string, public arcName: string | null, public texName: string | null, public sceneMode: MPHSceneMode = { kind: 'singlePlayer', area: 1 }, public modelId: string = id) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -164,11 +165,11 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
             if (this.texName !== null)
                 modelCache.fetchMPFile(`levels/textures/${this.texName}.bin`);
         } else {
-            modelCache.fetchMPFile(`${this.id}.bin`);
+            modelCache.fetchMPFile(`${this.modelId}.bin`);
         }
         await modelCache.waitForLoad();
 
-        const bin_Model = modelCache.getFileData(`${this.id}.bin`);
+        const bin_Model = modelCache.getFileData(`${this.modelId}.bin`);
         const stageBin = parseMPH_Model(assertExists(bin_Model));
 
         assert(stageBin.models.length === 1);
@@ -176,43 +177,50 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
 
         const textureFile = modelCache.getFileData(`levels/textures/${this.texName}.bin`);
         const stageTex = textureFile !== null ? parseTEX0Texture(textureFile, stageBin.mphTex) : parseTEX0Texture(assertExists(bin_Model), stageBin.mphTex);
-        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex));
+        const animationName = this.modelId.replace(/_([Mm])odel$/, (_, c) => c === 'M' ? '_Anim' : '_anim') + '.bin';
+        const animationFile = modelCache.getFileData(animationName);
+        const animation = animationFile !== null ? parseMPHAnimation(animationFile) : null;
+        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex), animation, this.sceneMode);
 
         return renderer;
     }
 }
 
+const mp: MPHSceneMode = { kind: 'multiplayer', layout: 0 };
+const mp_ctf: MPHSceneMode = { kind: 'multiplayer', layout: 0, captureTheFlag: true };
+
 const id = 'mph';
 const name = 'Metroid Prime: Hunters';
 const sceneDescs = [
     "Multiplayer",
-    new MetroidPrimeHuntersSceneDesc("mp3_Model", "Combat Hall", "mp3", "mp3_Tex"),
-    new MetroidPrimeHuntersSceneDesc("mp1_Model", "Data Shrine", "mp1", "mp1_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp7_model", "Processor Core", "mp7", "mp7_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit1_RM1_model", "High Ground", "unit1_RM1", "unit1_rm1_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp9_model", "Ice Hive", "mp9", "mp9_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit1_rm2_model", "Alinos Perch", "unit1_RM2", "unit1_rm2_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp12_model", "Sic Transit", "mp12", "mp12_Tex"),
-    new MetroidPrimeHuntersSceneDesc("ad1_model", "Transfer Lock", "ad1", "ad1_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp11_model", "Sanctorus", "mp11", "mp11_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp5_Model", "Compression Chamber", "mp5", "mp5_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp10_model", "Incubation Vault", "mp10", "mp10_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit4_rm5_model", "Subterranean", "unit4_rm5", "unit4_rm5_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp14_model", "Outer Reach", "mp14", "mp14_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp2_model", "Harvester", "mp2", "mp2_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp8_model", "Weapons Complex", "mp8", "mp8_Tex"),
-    new MetroidPrimeHuntersSceneDesc("ad2_model", "Council Chamber", "ad2", "ad2_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp4_model", "Elder Passage", "mp4", "mp4_Tex"),
-    new MetroidPrimeHuntersSceneDesc("mp13_model", "Fuel Stack", "mp13", "mp13_tex"),
-    new MetroidPrimeHuntersSceneDesc("ctf1_model", "Fault Line", "ctf1", "ctf1_tex"),
-    new MetroidPrimeHuntersSceneDesc("e3Level_Model", "Stasis Bunker", "e3Level", "e3level_tex"),
-    new MetroidPrimeHuntersSceneDesc("mp6_model", "Head Shot", "mp6", "mp6_tex"),
+    new MetroidPrimeHuntersSceneDesc("mp3_Model", "Combat Hall", "mp3", "mp3_Tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp1_Model", "Data Shrine", "mp1", "mp1_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp7_model", "Processor Core", "mp7", "mp7_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("unit1_RM1_model_mp", "High Ground", "unit1_RM1", "unit1_rm1_tex", mp, "unit1_RM1_model"),
+    new MetroidPrimeHuntersSceneDesc("mp9_model", "Ice Hive", "mp9", "mp9_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("unit1_rm2_model_mp", "Alinos Perch", "unit1_RM2", "unit1_rm2_tex", mp, "unit1_rm2_model"),
+    new MetroidPrimeHuntersSceneDesc("mp12_model", "Sic Transit", "mp12", "mp12_Tex", mp),
+    new MetroidPrimeHuntersSceneDesc("ad1_model", "Transfer Lock", "ad1", "ad1_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp11_model", "Sanctorus", "mp11", "mp11_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp5_Model", "Compression Chamber", "mp5", "mp5_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp10_model", "Incubation Vault", "mp10", "mp10_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("unit4_rm5_model_mp", "Subterranean", "unit4_rm5", "unit4_rm5_tex", mp, "unit4_rm5_model"),
+    new MetroidPrimeHuntersSceneDesc("mp14_model", "Outer Reach", "mp14", "mp14_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp2_model", "Harvester", "mp2", "mp2_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp8_model", "Weapons Complex", "mp8", "mp8_Tex", mp),
+    new MetroidPrimeHuntersSceneDesc("ad2_model", "Council Chamber", "ad2", "ad2_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp4_model", "Elder Passage", "mp4", "mp4_Tex", mp),
+    new MetroidPrimeHuntersSceneDesc("mp13_model", "Fuel Stack", "mp13", "mp13_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("ctf1_model", "Fault Line", "ctf1", "ctf1_tex", mp_ctf),
+    new MetroidPrimeHuntersSceneDesc("e3Level_Model_mp", "Stasis Bunker", "e3Level", "e3level_tex", mp, "e3Level_Model"),
+    new MetroidPrimeHuntersSceneDesc("mp6_model", "Head Shot", "mp6", "mp6_tex", mp),
+    new MetroidPrimeHuntersSceneDesc("unit2_Land_model_mp", "Landing Bay", "unit2_Land", "unit2_land_tex", mp, "unit2_Land_model"),
+    new MetroidPrimeHuntersSceneDesc("unit1_land_model_mp", "Alinos Landfall", "unit1_Land", "unit1_land_tex", mp, "unit1_land_model"),
+    new MetroidPrimeHuntersSceneDesc("unit3_land_model_mp", "Vesper Starport", "unit3_Land", "unit3_land_tex", mp, "unit3_land_model"),
+    new MetroidPrimeHuntersSceneDesc("unit4_land_model_mp", "Arcterra Base", "unit4_Land", "unit4_land_tex", mp, "unit4_land_model"),
+    new MetroidPrimeHuntersSceneDesc("gorea_b2_Model_mp", "Oubliette", "Gorea_b2", "gorea_b2_tex", mp, "gorea_b2_Model"),
+    "Celestial Archives",
     new MetroidPrimeHuntersSceneDesc("unit2_Land_model", "Celestial Gateway", "unit2_Land", "unit2_land_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit1_land_model", "Alinos Gateway", "unit1_Land", "unit1_land_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit3_land_model", "VDO Gateway", "unit3_Land", "unit3_land_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit4_land_model", "Arcterra Gateway", "unit4_Land", "unit4_land_tex"),
-    new MetroidPrimeHuntersSceneDesc("gorea_b2_Model", "Oubliette", "Gorea_b2", "gorea_b2_tex"),
-    "Celestial Archives,",
     new MetroidPrimeHuntersSceneDesc("unit2_c0_model", "Helm Room", "unit2_C0", "unit2_c0_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_c1_model", "Meditation Room", "unit2_C1", "unit2_c1_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_c2_model", "Fan Room Alpha", "unit2_C2", "unit2_c2_tex"),
@@ -226,6 +234,7 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit2_cx_model", "1_CX", "unit2_CX", null),
     new MetroidPrimeHuntersSceneDesc("unit2_cz_model", "1_CZ", "unit2_CZ", null),
     "Alinos",
+    new MetroidPrimeHuntersSceneDesc("unit1_land_model", "Alinos Gateway", "unit1_Land", "unit1_land_tex"),
     new MetroidPrimeHuntersSceneDesc("unit1_c0_model", "Echo Hall", "unit1_C0", "unit1_c0_tex"),
     new MetroidPrimeHuntersSceneDesc("unit1_RM1_model", "High Ground", "unit1_RM1", "unit1_rm1_tex"),
     new MetroidPrimeHuntersSceneDesc("unit1_rm6_model", "Elder Passage", "unit1_RM6", "unit1_rm6_tex"),
@@ -243,6 +252,7 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit1_morph_cz_model", "1_morphCZ", "unit1_morph_CZ", null),
     new MetroidPrimeHuntersSceneDesc("unit1_rm1_cx_model", "1_RM_CX", "unit1_RM1_CX", null),
     "Vesper Defense Outpost",
+    new MetroidPrimeHuntersSceneDesc("unit3_land_model", "VDO Gateway", "unit3_Land", "unit3_land_tex"),
     new MetroidPrimeHuntersSceneDesc("unit3_c0_model", "Bioweaponry Lab", "unit3_C0", "unit3_c0_tex"),
     new MetroidPrimeHuntersSceneDesc("unit3_rm1_model", "Weapons Complex", "unit3_RM1", "unit3_rm1_Tex"),
     new MetroidPrimeHuntersSceneDesc("unit3_c2_model", "Cortex CPU", "unit3_C2", "unit3_c2_tex"),
@@ -253,6 +263,7 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit3_cz_model", "3_CZ", "unit3_CZ", null),
     new MetroidPrimeHuntersSceneDesc("unit3_morph_cz_model", "3_morphCZ", "unit3_morph_CZ", null),
     "Arcterra",
+    new MetroidPrimeHuntersSceneDesc("unit4_land_model", "Arcterra Gateway", "unit4_Land", "unit4_land_tex"),
     new MetroidPrimeHuntersSceneDesc("unit4_rm1_model", "Ice Hive", "unit4_rm1", "unit4_rm1_Tex"),
     new MetroidPrimeHuntersSceneDesc("unit4_c0_model", "Frost Labyrinth", "unit4_C0", "unit4_c0_tex"),
     new MetroidPrimeHuntersSceneDesc("unit4_rm5_model", "Subterranean", "unit4_rm5", "unit4_rm5_tex"),
@@ -262,10 +273,10 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit4_cz_model", "4_CZ", "unit4_CZ", null),
     "Stronghold Void",
     new MetroidPrimeHuntersSceneDesc("TeleportRoom_model", "Stronghold Gateway", "TeleportRoom", "teleportroom_tex"),
-    new MetroidPrimeHuntersSceneDesc("Cylinder_C1_model", "Biodefense Chamber A Connect", "Cylinder_C1_CZ", null), 
+    new MetroidPrimeHuntersSceneDesc("Cylinder_C1_model", "Biodefense Chamber A Connect", "Cylinder_C1_CZ", null),
     new MetroidPrimeHuntersSceneDesc("cylinderroom_model", "Biodefense Chamber A", "cylinderroom", "cylinderroom_tex"),
-    new MetroidPrimeHuntersSceneDesc("bigeye_c1_model", "Biodefense Chamber B Connect", "BigEye_C1_CZ", null), 
-    new MetroidPrimeHuntersSceneDesc("bigeyeroom_model", "Biodefense Chamber B", "bigeyeroom", "bigeyeroom_tex"), 
+    new MetroidPrimeHuntersSceneDesc("bigeye_c1_model", "Biodefense Chamber B Connect", "BigEye_C1_CZ", null),
+    new MetroidPrimeHuntersSceneDesc("bigeyeroom_model", "Biodefense Chamber B", "bigeyeroom", "bigeyeroom_tex"),
     "Oubliette",
     new MetroidPrimeHuntersSceneDesc("Gorea_Land_Model", "Oubliette Gateway", "Gorea_Land", "Gorea_Land_tex"),
     new MetroidPrimeHuntersSceneDesc("Gorea_b1_Model", "Gorea Room", "Gorea_b1", "Gorea_b1_tex"),
@@ -279,7 +290,7 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit4_b1_model", "biodefense chamber 04", "unit4_b1", null),
     new MetroidPrimeHuntersSceneDesc("unit4_b2_model", "biodefense chamber 07", "unit4_b2", null),
     "FirstHunt",
-    new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/blueRoom_Model", "Regulator Stage", null, null), 
+    new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/blueRoom_Model", "Regulator Stage", null, null),
     new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/e3Level_Model", "Morphball Stage", null, null),
     new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/mp1_Model", "Trooper Module", null, null),
     new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/mp2_Model", "Assault Cradle / Survivour Stage", null, null),

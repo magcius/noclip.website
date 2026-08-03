@@ -478,12 +478,14 @@ class Device_Mesh {
     public material_index: number;
     public detail_level: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, mesh_asset: Mesh_Asset, private sub_mesh_asset: Sub_Mesh_Asset) {
+    constructor(cache: GfxRenderCache, mesh_asset: Mesh_Asset, private sub_mesh_asset: Sub_Mesh_Asset) {
         this.detail_level = sub_mesh_asset.detail_level;
         this.material_index = sub_mesh_asset.material_index;
         this.vertex_count = sub_mesh_asset.vertex_count;
         this.index_count = sub_mesh_asset.index_count;
         this.instance_count = calculate_instance_count(mesh_asset.material_array[this.material_index]);
+
+        const device = cache.device;
 
         this.vertex_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, sub_mesh_asset.vertex_data);
 
@@ -522,6 +524,8 @@ class Device_Mesh {
 
             vertexAttributeDescriptors.push({ location: 1, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 1, bufferIndex: 0, format: GfxFormat.U8_RG_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_TEXCOORD1)) {
@@ -534,6 +538,8 @@ class Device_Mesh {
 
             vertexAttributeDescriptors.push({ location: 2, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 2, bufferIndex: 0, format: GfxFormat.U8_RG_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_NORMAL)) {
@@ -546,6 +552,8 @@ class Device_Mesh {
 
             vertexAttributeDescriptors.push({ location: 3, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 3, bufferIndex: 0, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_TANGENT)) {
@@ -558,6 +566,8 @@ class Device_Mesh {
 
             vertexAttributeDescriptors.push({ location: 4, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 4, bufferIndex: 0, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_COLOR0)) {
@@ -570,12 +580,16 @@ class Device_Mesh {
 
             vertexAttributeDescriptors.push({ location: 5, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 5, bufferIndex: 0, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_COLOR1)) {
             format = GfxFormat.U8_RGBA_NORM;
             vertexAttributeDescriptors.push({ location: 6, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 6, bufferIndex: 0, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_INDICES)) {
@@ -583,6 +597,8 @@ class Device_Mesh {
             format = GfxFormat.U8_RGBA;
             vertexAttributeDescriptors.push({ location: 7, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 7, bufferIndex: 0, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 0 });
         }
 
         if (!!(vaf & VertexAttributeFlags.HAS_WEIGHTS)) {
@@ -593,6 +609,8 @@ class Device_Mesh {
 
             vertexAttributeDescriptors.push({ location: 8, bufferIndex: 0, format, bufferByteOffset: offs });
             offs += getFormatByteSize(format);
+        } else {
+            vertexAttributeDescriptors.push({ location: 8, bufferIndex: 0, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset: 0 });
         }
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
@@ -639,7 +657,7 @@ export class Mesh_Asset {
 
     public device_mesh_array: Device_Mesh[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, version: number, stream: Stream, name: string) {
+    constructor(cache: GfxRenderCache, version: number, stream: Stream, name: string) {
         this.checksum = stream.readUint32();
         this.flags = stream.readUint32();
         this.max_lod_count = stream.readUint32();
@@ -652,7 +670,7 @@ export class Mesh_Asset {
         const z_sub_mesh_array = unpack_Array(stream, unpack_Sub_Mesh_Asset);
 
         this.material_array = material_array;
-        this.device_mesh_array = sub_mesh_array.map((asset) => new Device_Mesh(device, cache, this, asset));
+        this.device_mesh_array = sub_mesh_array.map((asset) => new Device_Mesh(cache, this, asset));
 
         this.collision_mesh = {};
         this.skeleton = null;
@@ -664,9 +682,9 @@ export class Mesh_Asset {
     }
 }
 
-function load_mesh_asset(device: GfxDevice, cache: GfxRenderCache, version: number, buffer: ArrayBufferSlice, name: string): Mesh_Asset {
+function load_mesh_asset(cache: GfxRenderCache, version: number, buffer: ArrayBufferSlice, name: string): Mesh_Asset {
     const stream = new Stream(buffer);
-    return new Mesh_Asset(device, cache, version, stream, name);
+    return new Mesh_Asset(cache, version, stream, name);
 }
 
 function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCache, asset_type_: T, buffer: ArrayBufferSlice, name: string): AssetT<T> {
@@ -696,7 +714,7 @@ function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCac
     } else if (asset_type === Asset_Type.Lightmap) {
         return load_lightmap_asset(device, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.Mesh) {
-        return load_mesh_asset(device, cache, version, buffer, name) as ResT;
+        return load_mesh_asset(cache, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.World) {
         return load_entities(version, buffer) as ResT;
     } else {

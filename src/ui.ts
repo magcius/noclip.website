@@ -1057,7 +1057,7 @@ class SceneSelect extends Panel {
         this.syncVisibility();
     }
 
-    private syncVisibility(): void {
+    private syncVisibility(scope: 'all' | 'levels' = 'all'): void {
         // Start searching!
         const n = this.currentSearchTokens;
 
@@ -1108,7 +1108,8 @@ class SceneSelect extends Panel {
                     }
                 }
 
-                this.sceneGroupList.setItemVisible(i, visible);
+                if (scope === 'all')
+                    this.sceneGroupList.setItemVisible(i, visible);
             }
         }
 
@@ -1122,15 +1123,20 @@ class SceneSelect extends Panel {
             this.sceneDescList.setItemVisible(i, visible);
         }
 
-        this.sceneGroupList.computeHeaderVisibility();
+        if (scope === 'all')
+            this.sceneGroupList.computeHeaderVisibility();
         this.sceneDescList.computeHeaderVisibility();
     }
 
     public setCurrentDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
+        const sceneGroupChanged = this.selectedSceneGroup !== sceneGroup;
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
-        this.syncSceneDescs();
+        if (sceneGroupChanged) {
+            this.syncSceneDescs();
+            this.syncVisibility();
+        }
 
         this.sceneGroupList.setHighlighted(this.sceneGroups.indexOf(this.currentSceneGroup));
         this.sceneDescList.setHighlighted(this.sceneDescs.indexOf(this.currentSceneDesc));
@@ -1145,6 +1151,7 @@ class SceneSelect extends Panel {
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
         }));
         this.syncSceneDescs();
+        this.syncVisibility();
     }
 
     public setSceneDatabase(sceneDatabase: SceneDatabase): void {
@@ -1242,7 +1249,7 @@ class SceneSelect extends Panel {
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
         }));
         this.syncFlairs();
-        this.syncVisibility();
+        this.syncVisibility('levels');
     }
 }
 

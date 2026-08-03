@@ -1,7 +1,7 @@
 
 import { nArray, range } from '../platform/GfxPlatformUtil.js';
 import { gfxSamplerBindingNew } from '../platform/GfxPlatformObjUtil.js';
-import { GfxColor, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSampler, GfxSamplerBinding, GfxTexFilterMode, GfxWrapMode } from '../platform/GfxPlatform.js';
+import { GfxColor, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSampler, GfxSamplerBinding, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxWrapMode } from '../platform/GfxPlatform.js';
 import { GfxShaderLibrary } from './GfxShaderLibrary.js';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler.js';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
@@ -53,8 +53,9 @@ export interface TextDrawer {
 export class DebugThumbnailDrawer {
     private blitProgram: GfxProgram;
     private blitProgramSRGB: GfxProgram;
+    private blitProgramDepth: GfxProgram;
     private anim: number[] = [];
-    private textureMapping: GfxSamplerBinding[] = nArray(1, gfxSamplerBindingNew);
+    private textureMapping: GfxSamplerBinding[] = nArray(2, gfxSamplerBindingNew);
 
     // Used for text.
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
@@ -81,12 +82,31 @@ void main() {
 `);
         this.blitProgramSRGB = cache.createProgramSimple(blitProgramSRGB);
 
+        const blitProgramDepth = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, `
+layout(binding = 1) uniform sampler2D u_TextureFramebufferDepth;
+in vec2 v_TexCoord;
+
+void main() {
+    vec2 t_Size = vec2(textureSize(TEXTURE(u_TextureFramebufferDepth), 0));
+    float t_Depth = texelFetch(TEXTURE(u_TextureFramebufferDepth), ivec2(v_TexCoord.xy * t_Size), 0).r;
+    // Colorized depth.
+    vec3 t_Color = vec3(t_Depth / 0.01f, t_Depth / 0.05f, t_Depth / 0.5f);
+    gl_FragColor = vec4(t_Color, 1.0f);
+}
+`);
+        this.blitProgramDepth = cache.createProgramSimple(blitProgramDepth);
+
         this.textureMapping[0].gfxSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Nearest,
-            minLOD: 0,
-            maxLOD: 100,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+        });
+        this.textureMapping[1].gfxSampler = cache.createSampler({
+            magFilter: GfxTexFilterMode.Point,
+            minFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
         });
@@ -139,7 +159,12 @@ void main() {
         const fullscreenRect = { x1: 0, y1: 0, x2: desc.width, y2: desc.height };
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
+        renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 2,
+            samplerEntries: [
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
+            ],
+        }]);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setDrawCount(3);
 
@@ -193,24 +218,23 @@ void main() {
             return renderInstList;
         };
 
-        const calcBlitProgram = (desc: GfxrRenderTargetDescription) => {
-            const formatFlags = getFormatFlags(desc.pixelFormat);
-            if (!!(formatFlags & FormatFlags.sRGB))
-                return this.blitProgramSRGB;
-            else
-                return this.blitProgram;
-        };
-
         const drawThumbnail = (scope: GfxrPassScope, passRenderer: GfxRenderPass, i: number, textAnimList: GfxRenderInstList | undefined, anim: ReturnType<typeof prepareAnim>) => {
-            const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
-            this.textureMapping[0].gfxTexture = gfxTexture;
-
             const { location, vx, vy, vw, vh } = anim;
             passRenderer.setViewport(vx, vy, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
 
+            const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
             const desc = builder.getRenderTargetDescription(debugThumbnails[i].renderTargetID);
-            renderInst.setGfxProgram(calcBlitProgram(desc));
+            const formatFlags = getFormatFlags(desc.pixelFormat);
+            if (!!(formatFlags & FormatFlags.Depth)) {
+                this.textureMapping[0].gfxTexture = null;
+                this.textureMapping[1].gfxTexture = gfxTexture;
+                renderInst.setGfxProgram(this.blitProgramDepth);
+            } else {
+                this.textureMapping[0].gfxTexture = gfxTexture;
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setGfxProgram(!!(formatFlags & FormatFlags.sRGB) ? this.blitProgramSRGB : this.blitProgram);
+            }
 
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(this.helper.renderCache, passRenderer);

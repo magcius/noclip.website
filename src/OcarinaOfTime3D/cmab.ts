@@ -5,7 +5,7 @@ import { readString, assert } from "../util.js";
 import { mat4 } from "gl-matrix";
 import { Color, colorFromRGBA } from "../Color.js";
 import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb.js";
-import { decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from "./pica_texture.js";
+import { decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from "../Common/CTR/pica_texture.js";
 import { getPointHermite } from "../Spline.js";
 import { CmabData } from "./render.js";
 import { lerp } from "../MathHelpers.js";

@@ -292,13 +292,13 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_EmissiveColor;
 };
 
-layout(location = 0) uniform sampler2D u_TextureBase;
-layout(location = 1) uniform sampler2D u_TextureDark;
-layout(location = 2) uniform sampler2D u_TextureDetail;
-layout(location = 3) uniform sampler2D u_TextureGloss;
-layout(location = 4) uniform sampler2D u_TextureGlow;
-layout(location = 5) uniform sampler2D u_TextureBump;
-layout(location = 6) uniform sampler2D u_TextureDecal;
+layout(binding = 0) uniform sampler2D u_TextureBase;
+layout(binding = 1) uniform sampler2D u_TextureDark;
+layout(binding = 2) uniform sampler2D u_TextureDetail;
+layout(binding = 3) uniform sampler2D u_TextureGloss;
+layout(binding = 4) uniform sampler2D u_TextureGlow;
+layout(binding = 5) uniform sampler2D u_TextureBump;
+layout(binding = 6) uniform sampler2D u_TextureDecal;
 
 #if USE_INSTANCING()
 layout(std140) uniform ub_InstanceParams {

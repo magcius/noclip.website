@@ -527,8 +527,8 @@ layout(std140) uniform ub_ObjectParams {
     Mat3x4 u_WorldFromLocal;
 };
 
-layout(location = 0) uniform sampler2DArray u_TextureTerrain;
-layout(location = 1) uniform sampler2D u_TextureTerrainMap;
+layout(binding = 0) uniform sampler2DArray u_TextureTerrain;
+layout(binding = 1) uniform sampler2D u_TextureTerrainMap;
 `;
     public override vert = `
 layout(location = 0) in float a_Height;

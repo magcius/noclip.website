@@ -1,0 +1,134 @@
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxFormat, GfxSampler, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { DreamDropPMO, DreamDropPMP } from "./bin";
+import { DreamDropRoomConfig } from "./config/room";
+import { DreamDropShader } from "./shader";
+import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxPVD, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
+import { DREAMDROP_SKYBOX_CENTER } from "./config/data";
+import { vec3 } from "gl-matrix";
+
+export class DreamDropRoomRenderer extends LuxRoomRenderer {
+    constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], pvd: LuxPVD, config: DreamDropRoomConfig | undefined) {
+        super(cache, pmp, textures, objects, txas, pvd);
+        if (config && config.defaultSets) {
+            for (const set of config.defaultSets) {
+                this.onSetChanged(set, true);
+            }
+        } else {
+            this.onSetChanged(0, true);
+        }
+    }
+
+    protected override setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]): void {
+        const model = info.pmo as DreamDropPMO;
+        const materials: LuxMaterialInstance[] = Array(model.materials.length);
+        const modelTXAs: LuxTXA[] = [];
+        for (let j = 0; j < model.materials.length; j++) {
+            if (!model.materials[j]) {
+                continue;
+            }
+            const t = textures.filter(texture => texture.name.startsWith(model.materials[j].textureName));
+            if (t.length > 0) {
+                materials[j] = new LuxMaterialInstance(model.materials[j], t, gfxSampler);
+                for (const txa of txas) {
+                    if (txa.textureName === model.materials[j].textureName) {
+                        modelTXAs.push(txa);
+                        break;
+                    }
+                }
+            }
+        }
+        this.parts[i] = new ModelRenderer(cache, model.name, model, materials, modelTXAs);
+        const pos = DREAMDROP_SKYBOX_CENTER.includes(model.name) ? vec3.fromValues(0, 0, 0) : info.position;
+        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, pos), setId: -1 }];
+    }
+
+    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
+        const index = this.objects.findIndex(r => r.name === instance.name);
+        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId };
+        if (index > -1) {
+            this.objects[index].instances.push(modelInstance);
+        } else {
+            const pmo = model as DreamDropPMO;
+            const materials: LuxMaterialInstance[] = Array(pmo.materials.length);
+            const modelTXAs: LuxTXA[] = [];
+            for (let i = 0; i < pmo.materials.length; i++) {
+                if (!pmo.materials[i]) {
+                    continue;
+                }
+                const t = textures.filter(texture => texture.name.startsWith(pmo.materials[i].textureName));
+                if (t.length > 0) {
+                    materials[i] = new LuxMaterialInstance(pmo.materials[i], t, gfxSampler);
+                    for (const txa of txas) {
+                        if (txa.textureName === pmo.materials[i].textureName) {
+                            modelTXAs.push(txa);
+                            break;
+                        }
+                    }
+                }
+            }
+            const renderer = new ModelRenderer(cache, instance.name, model, materials, modelTXAs, animation);
+            if (instance.name.toLowerCase().startsWith("p_")) {
+                // hide player spawn locations by default to sync with ui panel
+                renderer.visible = false;
+            }
+            renderer.instances = [modelInstance];
+            this.objects.push(renderer);
+        }
+    }
+}
+
+class ModelRenderer extends LuxModelRenderer {
+    protected override getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
+        return new ShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
+    }
+}
+
+class ShapeRenderer extends LuxShapeRenderer {
+    constructor(cache: GfxRenderCache, shape: LuxShape, scale: number, material: LuxMaterialInstance, txa?: LuxTextureAnimation, isSkybox: boolean = false, isBackground: boolean = false, boneCount: number = 0) {
+        super(cache, shape, scale, material, txa, isSkybox, isBackground, boneCount);
+    }
+
+    protected override setMegaStateFlags(shape: LuxShape): void {
+        this.megaStateFlags.polygonOffset = (shape.attribute & LuxShapeAttribute.DROP_SHADOW) === 0;
+    }
+
+    protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
+        const inVertexAttributeDescriptors = [
+            { location: DreamDropShader.a_Position, bufferIndex: DreamDropShader.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
+            { location: DreamDropShader.a_Color, bufferIndex: DreamDropShader.a_Color, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
+            { location: DreamDropShader.a_UV, bufferIndex: DreamDropShader.a_UV, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
+        ];
+        const inVertexBufferDescriptors = [
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex }
+        ];
+        this.vertexBufferDescriptors = [
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, shape.vertices.map(v => v * scale).buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, shape.colors.map(c => c / 255).buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, shape.uvs.buffer), byteOffset: 0 }
+        ];
+
+        if (shape.weights.length > 0 && shape.joints.length > 0) {
+            // a weight count of 4 is assumed (any less will just be zeroes and cancel out)
+            inVertexAttributeDescriptors.push({ location: DreamDropShader.a_Weight, bufferIndex: DreamDropShader.a_Weight, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 });
+            inVertexAttributeDescriptors.push({ location: DreamDropShader.a_Joint, bufferIndex: DreamDropShader.a_Joint, format: GfxFormat.U8_RGBA, bufferByteOffset: 0 });
+            inVertexBufferDescriptors.push({ byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex });
+            inVertexBufferDescriptors.push({ byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex });
+            this.vertexBufferDescriptors.push({ buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, shape.weights.buffer), byteOffset: 0 });
+            this.vertexBufferDescriptors.push({ buffer: createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(shape.joints.map(j => shape.boneIndices[j])).buffer), byteOffset: 0 });
+        }
+
+        this.gfxInputLayout = cache.createInputLayout({
+            vertexAttributeDescriptors: inVertexAttributeDescriptors,
+            vertexBufferDescriptors: inVertexBufferDescriptors,
+            indexBufferFormat: GfxFormat.U32_R
+        });
+    }
+
+    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
+        this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, 4, doRigidSkinning, this.doBlendTXA));
+    }
+}
