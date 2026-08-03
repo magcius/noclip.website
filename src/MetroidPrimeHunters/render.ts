@@ -15,7 +15,7 @@ import { nArray, assertExists } from "../util.js";
 import { TEX0Texture, PAT0TexAnimator, TEX0, expand5to8 } from "../nns_g3d/NNS_G3D.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { MPHbin, MPHMaterial, MPHNode, MPHShape } from "./mph_binModel.js";
-import { CalcBillboardFlags, Vec3Zero, calcBillboardMatrix } from "../MathHelpers.js";
+import { CalcBillboardFlags, Vec3Zero, calcBillboardMatrix, computeModelMatrixSRT } from "../MathHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { White, colorNewCopy } from "../Color.js";
 
@@ -182,16 +182,21 @@ class Node {
     public parent: Node | null = null;
     public billboardMode: BillboardMode;
     private localMatrix = mat4.create();
+    private bindMatrix = mat4.create();
 
     constructor(public node: MPHNode, public index: number) {
         this.billboardMode = node.billboardType;
+        computeModelMatrixSRT(this.bindMatrix,
+            node.scale[0], node.scale[1], node.scale[2],
+            node.rotation[0], node.rotation[1], node.rotation[2],
+            node.translation[0], node.translation[1], node.translation[2]);
     }
 
     public calcMatrix(baseModelMatrix: mat4, viewMatrix: mat4, nodeAnimator: MPHNodeAnimator | null): void {
         if (nodeAnimator !== null)
             nodeAnimator.calcNodeMatrix(this.localMatrix, this.index);
         else
-            mat4.copy(this.localMatrix, this.node.transform);
+            mat4.copy(this.localMatrix, this.bindMatrix);
         mat4.mul(this.modelMatrix, this.parent !== null ? this.parent.modelMatrix : baseModelMatrix, this.localMatrix);
 
         mat4.mul(this.drawMatrix, viewMatrix, this.modelMatrix);

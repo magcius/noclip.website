@@ -1,11 +1,11 @@
 ﻿
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material } from "../nns_g3d/NNS_G3D.js";
-import { mat4, mat2d, vec3 } from "gl-matrix";
+import { mat2d, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex.js";
 import { readString } from "../util.js";
 import { Color, colorNewFromRGBA } from "../Color.js";
-import { computeModelMatrixSRT, MathConstants } from "../MathHelpers.js";
+import { MathConstants } from "../MathHelpers.js";
 
 export function fxAngle(n: number): number {
     return n / 0x10000 * MathConstants.TAU;
@@ -60,7 +60,9 @@ export interface MPHNode {
     next: number;
     meshCount: number;
     meshStart: number;
-    transform: mat4;
+    scale: vec3;
+    rotation: vec3;
+    translation: vec3;
     billboardType: number;
 }
 
@@ -162,10 +164,9 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
 
     const scale = vec3.create();
     const rotation = vec3.create();
-    const position = vec3.create();
+    const translation = vec3.create();
     let vec1 = vec3.create();
     let vec2 = vec3.create();
-    const transform = mat4.create();
     const name = readString(buffer, 0x00, 0x40, true);
     const parent = view.getInt16(0x40, true);
     const child = view.getInt16(0x42, true);
@@ -175,11 +176,9 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const mesh_count = view.getInt16(0x4C, true);
     const meshID = view.getInt16(0x4E, true);
     vec3.set(scale, fx32(view.getInt32(0x50, true)), fx32(view.getInt32(0x54, true)), fx32(view.getInt32(0x58, true)));
-    //TODO: Aplly rotation
-    //vec3.set(rotation, view.getInt16(0x5C, true) / 65536 * 2.0 * Math.PI, view.getInt16(0x5E, true) / 65536 * 2.0 * Math.PI, view.getInt16(0x60, true) / 65536 * 2.0 * Math.PI);
+    vec3.set(rotation, fxAngle(view.getInt16(0x5C, true)), fxAngle(view.getInt16(0x5E, true)), fxAngle(view.getInt16(0x60, true)));
     const field_0x62 = view.getInt16(0x62, true);
-    //TODO: Aplly position
-    //vec3.set(position, fx32(view.getInt32(0x64, true)), fx32(view.getInt32(0x68, true)), fx32(view.getInt32(0x6C, true)));
+    vec3.set(translation, fx32(view.getInt32(0x64, true)), fx32(view.getInt32(0x68, true)), fx32(view.getInt32(0x6C, true)));
     const cull_radius = view.getInt32(0x70, true);
 
     vec3.set(vec1, fx32(view.getInt32(0x74, true)), fx32(view.getInt32(0x78, true)), fx32(view.getInt32(0x7C, true)));
@@ -189,10 +188,7 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const field_8D = view.getInt8(0x8D);
     const field_8E = view.getInt16(0x8E, true);
 
-    // The game rebuilds the node matrix from the SRT, ignoring the matrix at 0x90.
-    computeModelMatrixSRT(transform, scale[0], scale[1], scale[2],
-        rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
-
+    // 0x90 is the node's matrix, which the game rebuilds from the SRT above, so skip it.
     const field_0xC0 = view.getInt32(0xC0, true);
     const field_0xC4 = view.getInt32(0xC4, true);
     const field_0xC8 = view.getInt32(0xC8, true);
@@ -207,7 +203,7 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const field_0xEC = view.getInt32(0xEC, true);
 
     // From RenderEnabledModelNodes @ 0x02047808.
-    return { name, parent, child, next, meshCount: mesh_count, meshStart: meshID >>> 1, transform, billboardType };
+    return { name, parent, child, next, meshCount: mesh_count, meshStart: meshID >>> 1, scale, rotation, translation, billboardType };
 }
 
 function parseMesh(buffer: ArrayBufferSlice): MPHMesh {
