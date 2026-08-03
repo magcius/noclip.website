@@ -116,6 +116,8 @@ import * as Scenes_RatchetAndClank from './RatchetAndClank/scenes.js';
 import * as Scenes_RagnarokOnline from './RagnarokOnline/scenes.js';
 import * as Scenes_PaperMarioTheOrigamiKing from './PaperMarioTheOrigamiKing/scenes.js';
 import * as Scenes_NarutoGNT4 from './NarutoGNT4/scenes.js'
+import * as Scenes_KingdomHeartsDDD from './KingdomHeartsDDD/scenes.js';
+import * as Scenes_KingdomHeartsBBS from './KingdomHeartsDDD/scenes_bbs.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -171,6 +173,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_ZeldaTwilightPrincess.sceneGroup,
     Scenes_ZeldaWindWaker.sceneGroup,
     "Nintendo 3DS",
+    Scenes_KingdomHeartsDDD.sceneGroup,
     Scenes_LuigisMansion3D.sceneGroup,
     Scenes_Zelda_MajorasMask3D.sceneGroup,
     Scenes_Zelda_OcarinaOfTime3D.sceneGroup,
@@ -275,6 +278,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
     Scenes_TopGearRally.sceneGroup,
+    Scenes_KingdomHeartsBBS.sceneGroup,
 ];
 
 enum SaveStatesAction {

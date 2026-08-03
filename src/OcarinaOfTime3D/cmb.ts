@@ -2,7 +2,7 @@
 import { assert, readString } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, ReadonlyVec4, vec4 } from 'gl-matrix';
-import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture.js';
+import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from '../Common/CTR/pica_texture.js';
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
 import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
