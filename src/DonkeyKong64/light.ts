@@ -136,8 +136,8 @@ export function buildObjectLightingEnvironment(
     return {
         chunks: chunks.map((chunk) => {
             const bounds = new AABB();
-            const end = Math.min(view.byteLength, chunk.vertOffset + chunk.vertSize);
-            for (let offs = chunk.vertOffset; offs + 6 <= end; offs += 0x10) {
+            const end = chunk.vertOffset + chunk.vertSize;
+            for (let offs = chunk.vertOffset; offs < end; offs += 0x10) {
                 vec3.set(scratchVec3a,
                     view.getInt16(offs + 0, false),
                     view.getInt16(offs + 2, false),
