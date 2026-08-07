@@ -113,7 +113,6 @@ class ROMTables {
     public extractMapTable(): ArrayBufferSlice[] {
         const MapData: ArrayBufferSlice[] = [];
         for (let i = 0; i < MapCount; i++) {
-            // TODO(jstpierre): Extract the proper size, and decompress on client.
             MapData[i] = this.extractCompressedEntry(idx => this.view.getUint32(MapTableOffset + idx * 4), i);
         }
         return MapData;
@@ -172,12 +171,19 @@ function globalAddressToOffset(globalASM: Buffer, address: number): number {
     return offs;
 }
 
+const SpriteTableOffset = 0x15A090;
+const SpriteCount = 176;
+
 function parseSpriteData(globalASM: Buffer): SpriteInfo[] {
-    return Array.from({ length: 176 }, (_, i) => {
-        const address = globalASM.readUInt32BE(0x15A090 + i * 4);
+    const sprites: SpriteInfo[] = [];
+    for (let i = 0; i < SpriteCount; i++) {
+        const address = globalASM.readUInt32BE(SpriteTableOffset + i * 4);
         const offs = globalAddressToOffset(globalASM, address);
         const imageCount = globalASM.readUInt16BE(offs + 0x12);
-        return {
+        const images: number[] = [];
+        for (let j = 0; j < imageCount; j++)
+            images.push(globalASM.readUInt16BE(offs + 0x14 + j * 2));
+        sprites.push({
             address,
             id: globalASM.readUInt32BE(offs),
             imagesPerFrameHorizontal: globalASM.readUInt8(offs + 4),
@@ -188,9 +194,10 @@ function parseSpriteData(globalASM: Buffer): SpriteInfo[] {
             table: globalASM.readUInt8(offs + 0x0D),
             width: globalASM.readUInt16BE(offs + 0x0E),
             height: globalASM.readUInt16BE(offs + 0x10),
-            images: Array.from({ length: imageCount }, (_, j) => globalASM.readUInt16BE(offs + 0x14 + j * 2)),
-        };
-    });
+            images,
+        });
+    }
+    return sprites;
 }
 
 function parseCustomScriptFunctionData(globalASM: Buffer): number[] {

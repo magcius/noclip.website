@@ -9,7 +9,7 @@ import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManage
 import { AABB } from '../Geometry.js';
 import { MathConstants } from '../MathHelpers.js';
 import { nArray } from '../util.js';
-import { AnimatedTexture, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2 } from './f3dex2.js';
+import { AnimatedTexture, RSP_Geometry, RSPSharedOutput, RSPState, runDL_F3DEX2, vertexStride } from './f3dex2.js';
 import { buildObjectLighting } from './light.js';
 import type { ObjectLightingEnvironment } from './light.js';
 import { initDL } from './material.js';
@@ -163,9 +163,32 @@ interface PropAnimationTrack {
     lastTick: number;
 }
 
+const transformComponentCount = 9;
+const scaleComponent = 0;
+const rotationComponent = 3;
+const translationComponent = 6;
+
+function interpolateTransform(node: PropAnimationNode, frame: number, t: number, component: number): number {
+    const current = node.transforms[frame * transformComponentCount + component];
+    const next = node.transforms[(frame + 1) * transformComponentCount + component];
+    return current + (next - current) * t;
+}
+
+function interpolateTransformAngle(node: PropAnimationNode, frame: number, t: number, component: number): number {
+    const current = node.transforms[frame * transformComponentCount + component];
+    let delta = node.transforms[(frame + 1) * transformComponentCount + component] - current;
+    // take the short way
+    if (delta < -180)
+        delta += 360;
+    else if (delta > 180)
+        delta -= 360;
+    return (current + delta * t) * MathConstants.DEG_TO_RAD;
+}
+
 export class PropAnimationState {
     private animationComponent = mat4.create();
     private animationPosition = vec3.create();
+    private scratchVec3 = vec3.create();
 
     constructor(
         public firstVertex: number,
@@ -179,71 +202,83 @@ export class PropAnimationState {
     ) {
     }
 
+    // scripted tracks play once per cycle and hold at each endpoint
+    private sampleTriggeredTrack(track: PropAnimationTrack, tick: number): void {
+        const playback = track.triggeredPlaybackPositions!;
+        const cycleLength = track.endpointHoldTicks * 2 + playback.length;
+        let cycleTick = tick % cycleLength;
+        if (cycleTick < 0)
+            cycleTick += cycleLength;
+
+        const playbackTick = cycleTick - track.endpointHoldTicks;
+        if (playbackTick < 0)
+            track.framePosition = playback[0];
+        else if (playbackTick < playback.length)
+            track.framePosition = playback[playbackTick];
+        else
+            track.framePosition = playback[playback.length - 1];
+        track.lastTick = tick;
+    }
+
+    // free running tracks are stepped tick by tick
+    private advanceFreeRunningTrack(track: PropAnimationTrack, tick: number): void {
+        const loopLength = track.timings.length - 1;
+        if (track.lastTick < 0 || tick < track.lastTick) {
+            track.framePosition = 0;
+            track.lastTick = tick;
+        }
+        for (let animationTick = track.lastTick; animationTick < tick; animationTick++) {
+            const frame = Math.floor(track.framePosition);
+            const t = track.framePosition - frame;
+            // from func_global_asm_806500E0
+            const timing = track.timings[frame] + (track.timings[frame + 1] - track.timings[frame]) * t;
+            track.framePosition = (track.framePosition + track.speed * timing / 300) % loopLength;
+            if (track.framePosition < 0)
+                track.framePosition += loopLength;
+        }
+        track.lastTick = tick;
+    }
+
+    private updateNodeMatrix(node: PropAnimationNode, frame: number, t: number): void {
+        vec3.set(this.scratchVec3,
+            interpolateTransform(node, frame, t, scaleComponent + 0),
+            interpolateTransform(node, frame, t, scaleComponent + 1),
+            interpolateTransform(node, frame, t, scaleComponent + 2),
+        );
+        mat4.fromScaling(node.outputMatrix, this.scratchVec3);
+
+        mat4.fromZRotation(this.animationComponent, interpolateTransformAngle(node, frame, t, rotationComponent + 2));
+        mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+        mat4.fromYRotation(this.animationComponent, interpolateTransformAngle(node, frame, t, rotationComponent + 1));
+        mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+        mat4.fromXRotation(this.animationComponent, interpolateTransformAngle(node, frame, t, rotationComponent + 0));
+        mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+
+        vec3.set(this.scratchVec3,
+            interpolateTransform(node, frame, t, translationComponent + 0),
+            interpolateTransform(node, frame, t, translationComponent + 1),
+            interpolateTransform(node, frame, t, translationComponent + 2),
+        );
+        mat4.fromTranslation(this.animationComponent, this.scratchVec3);
+        mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
+
+        // from 8064FB64
+        mat4.multiply(node.outputMatrix, node.outputMatrix, node.baseMatrix);
+        mat4.multiply(node.outputMatrix, node.postMatrix, node.outputMatrix);
+    }
+
     private sample(tick: number): void {
         for (const track of this.tracks) {
-            const frameCount = track.timings.length;
-            if (track.triggeredPlaybackPositions !== null) {
-                const playback = track.triggeredPlaybackPositions;
-                const cycleLength = track.endpointHoldTicks * 2 + playback.length;
-                let cycleTick = tick % cycleLength;
-                if (cycleTick < 0)
-                    cycleTick += cycleLength;
-                if (cycleTick < track.endpointHoldTicks) {
-                    track.framePosition = playback[0];
-                } else if (cycleTick < track.endpointHoldTicks + playback.length) {
-                    track.framePosition = playback[cycleTick - track.endpointHoldTicks];
-                } else {
-                    track.framePosition = playback[playback.length - 1];
-                }
-                track.lastTick = tick;
-            } else {
-                if (track.lastTick < 0 || tick < track.lastTick) {
-                    track.framePosition = 0;
-                    track.lastTick = tick;
-                }
-                for (let animationTick = track.lastTick; animationTick < tick; animationTick++) {
-                    const frame = Math.floor(track.framePosition);
-                    const t = track.framePosition - frame;
-                    // from func_global_asm_806500E0
-                    const timing = track.timings[frame]
-                        + (track.timings[frame + 1] - track.timings[frame]) * t;
-                    track.framePosition += track.speed * timing / 300;
-                    track.framePosition %= frameCount - 1;
-                    if (track.framePosition < 0)
-                        track.framePosition += frameCount - 1;
-                }
-                track.lastTick = tick;
-            }
-            for (const node of track.nodes) {
-                const frame = Math.min(Math.floor(track.framePosition), frameCount - 2);
-                const t = track.framePosition - frame;
-                const interpolate = (component: number): number => {
-                    const current = node.transforms[frame * 9 + component];
-                    return current + (node.transforms[(frame + 1) * 9 + component] - current) * t;
-                };
-                const interpolateAngle = (component: number): number => {
-                    const current = node.transforms[frame * 9 + component];
-                    let delta = node.transforms[(frame + 1) * 9 + component] - current;
-                    if (delta < -180)
-                        delta += 360;
-                    else if (delta > 180)
-                        delta -= 360;
-                    return (current + delta * t) * MathConstants.DEG_TO_RAD;
-                };
+            if (track.triggeredPlaybackPositions !== null)
+                this.sampleTriggeredTrack(track, tick);
+            else
+                this.advanceFreeRunningTrack(track, tick);
 
-                mat4.fromScaling(node.outputMatrix, [interpolate(0), interpolate(1), interpolate(2)]);
-                mat4.fromZRotation(this.animationComponent, interpolateAngle(5));
-                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
-                mat4.fromYRotation(this.animationComponent, interpolateAngle(4));
-                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
-                mat4.fromXRotation(this.animationComponent, interpolateAngle(3));
-                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
-                mat4.fromTranslation(this.animationComponent, [interpolate(6), interpolate(7), interpolate(8)]);
-                mat4.multiply(node.outputMatrix, this.animationComponent, node.outputMatrix);
-                // from 8064FB64
-                mat4.multiply(node.outputMatrix, node.outputMatrix, node.baseMatrix);
-                mat4.multiply(node.outputMatrix, node.postMatrix, node.outputMatrix);
-            }
+            // the last keyframe is only ever an interpolation target
+            const frame = Math.min(Math.floor(track.framePosition), track.timings.length - 2);
+            const t = track.framePosition - frame;
+            for (const node of track.nodes)
+                this.updateNodeMatrix(node, frame, t);
         }
     }
 
@@ -263,7 +298,7 @@ export class PropAnimationState {
                     vec3.transformMat4(this.animationPosition, this.animationPosition, matrix);
             }
             const vertexIndex = this.firstVertex + this.vertexOffsets[i];
-            const target = (vertexIndex - vertexBufferFirstVertex) * 10;
+            const target = (vertexIndex - vertexBufferFirstVertex) * vertexStride;
             vertexBufferData[target + 0] = this.animationPosition[0];
             vertexBufferData[target + 1] = this.animationPosition[1];
             vertexBufferData[target + 2] = this.animationPosition[2];
@@ -454,11 +489,11 @@ function decodePropAnimation(
             const matrixOffset = view.getUint32(record, false);
             const matrixIndex = matrixOffset >>> 6;
             const parentMatrixOffset = view.getUint32(record + 4, false);
-            const transforms = new Float32Array(frameCount * 9);
+            const transforms = new Float32Array(frameCount * transformComponentCount);
             for (let frame = 0; frame < frameCount; frame++) {
                 const transform = record + 8 + frame * 0x24;
-                for (let component = 0; component < 9; component++)
-                    transforms[frame * 9 + component] = view.getFloat32(transform + component * 4, false);
+                for (let component = 0; component < transformComponentCount; component++)
+                    transforms[frame * transformComponentCount + component] = view.getFloat32(transform + component * 4, false);
             }
             const node: PropAnimationNode = {
                 matrixIndex,
@@ -468,11 +503,11 @@ function decodePropAnimation(
                 outputMatrix: mat4.create(),
             };
             for (let frame = 0; frame < frameCount; frame++) {
-                const i = frame * 9;
+                const i = frame * transformComponentCount + translationComponent;
                 for (let axis = 0; axis < 3; axis++) {
-                    translation[axis] = node.postMatrix[axis] * transforms[i + 6]
-                        + node.postMatrix[axis + 4] * transforms[i + 7]
-                        + node.postMatrix[axis + 8] * transforms[i + 8];
+                    translation[axis] = node.postMatrix[axis] * transforms[i + 0]
+                        + node.postMatrix[axis + 4] * transforms[i + 1]
+                        + node.postMatrix[axis + 8] * transforms[i + 2];
                 }
                 translationBounds.unionPoint(translation);
             }
@@ -1000,16 +1035,8 @@ export function addModel2Props(device: GfxDevice, cache: GfxRenderCache, sceneRe
         const geoData = sceneRenderer.addGeoData(device, cache, geo);
         for (const prop of instances) {
             const renderer = sceneRenderer.addGeometryRenderer(device, cache, geoData, DK64Layer.Props);
-            const origin = vec3.fromValues(
-                prop.position[0] * worldScale,
-                prop.position[1] * worldScale,
-                prop.position[2] * worldScale,
-            );
-            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [
-                origin[0],
-                origin[1],
-                origin[2],
-            ]);
+            const origin = vec3.scale(vec3.create(), prop.position, worldScale);
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, origin);
             mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[0] * MathConstants.DEG_TO_RAD);
             mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[1] * MathConstants.DEG_TO_RAD);
             mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, prop.rotation[2] * MathConstants.DEG_TO_RAD);

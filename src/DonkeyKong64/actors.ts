@@ -1,4 +1,5 @@
 import { mat4, vec3 } from 'gl-matrix';
+import type { ReadonlyVec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import type { Vertex } from '../BanjoKazooie/f3dex.js';
@@ -17,7 +18,7 @@ interface ActorAnimation {
 }
 
 interface ActorSkeleton {
-    offsets: vec3[];
+    offsets: ReadonlyVec3[];
     parents: number[];
 }
 

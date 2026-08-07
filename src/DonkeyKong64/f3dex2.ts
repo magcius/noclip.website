@@ -18,6 +18,9 @@ const G_MTX_PUSH = 0x04;
 // frames above 32-bit address space so they don't collide.
 export const animatedTextureCacheKeyBase = 0x100000000;
 
+// Standard RSP stride-- xyz, bone index, uv, rgba
+export const vertexStride = 10;
+
 export interface DrawTextureAnimation {
     textureIndices: number[];
     frameDuration: number;

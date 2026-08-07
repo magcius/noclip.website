@@ -9,7 +9,7 @@ import type { Color } from '../Color.js';
 import { AABB } from '../Geometry.js';
 import { MathConstants } from '../MathHelpers.js';
 import { assert } from '../util.js';
-import { AnimatedTexture, RSP_Geometry, RSPState } from './f3dex2.js';
+import { AnimatedTexture, RSP_Geometry, RSPState, vertexStride } from './f3dex2.js';
 
 export enum GeneratedSurfaceMaterial {
     Water = 0,
@@ -219,7 +219,7 @@ export class GeneratedSurface {
             const vertexIndex = firstVertex + i;
             const vertex = vertices[vertexIndex];
             const y = this.getHeight(vertex.x / 3, vertex.z / 3, tick);
-            const localVertex = (vertexIndex - vertexBufferFirstVertex) * 10;
+            const localVertex = (vertexIndex - vertexBufferFirstVertex) * vertexStride;
             vertexBufferData[localVertex + 1] = Math.trunc(y * 3);
             vertexBufferData[localVertex + 9] = this.getAlpha(y);
         }

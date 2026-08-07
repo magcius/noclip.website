@@ -26,6 +26,7 @@ import {
 import { MathConstants } from '../MathHelpers.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, hexzero } from '../util.js';
+import { vertexStride } from './f3dex2.js';
 import { bindingLayouts } from './render.js';
 
 export interface BackdropData {
@@ -40,7 +41,6 @@ export interface BackdropRenderer {
 
 const backdropWidth = 320;
 const backdropHeight = 240;
-const backdropVertexStride = 10; // pos.xyz, bone index, texcoord.st, color.rgba
 // The gradient bands extend past the viewport so they never disapper.
 const gradientOffscreenNDC = 6;
 // How far the gradient slides vertically between looking straight up and straight down.
@@ -114,14 +114,14 @@ abstract class BackdropQuadRenderer implements BackdropRenderer {
     private vertexCount: number;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private gfxProgram: GfxProgram, vertices: Float32Array) {
-        this.vertexCount = vertices.length / backdropVertexStride;
+        this.vertexCount = vertices.length / vertexStride;
         this.vertexBuffer = createBufferFromData(
             device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer,
         );
         this.inputLayout = cache.createInputLayout({
             indexBufferFormat: null,
             vertexBufferDescriptors: [
-                { byteStride: backdropVertexStride * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: vertexStride * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
             vertexAttributeDescriptors: [
                 { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04 },

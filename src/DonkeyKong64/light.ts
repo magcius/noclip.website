@@ -7,6 +7,7 @@ import { AABB } from '../Geometry.js';
 import { getMatrixTranslation, lerp, MathConstants, saturate } from '../MathHelpers.js';
 import { actorModelScale, getActorAnimationSpeed, getActorRenderDefinition } from './actors.js';
 import type { ActorAnimationPose, ActorRenderDefinition } from './actors.js';
+import { vertexStride } from './f3dex2.js';
 import type { DrawTextureBinding } from './f3dex2.js';
 import type { Setup } from './parse.js';
 
@@ -29,7 +30,7 @@ const spotLightOffsetX = 0.3;
 
 interface LightAnimationKeyframe {
     intensity: number;
-    color: readonly [number, number, number];
+    color: ReadonlyVec3;
     radius: number;
     duration: number;
 }
@@ -50,7 +51,7 @@ interface DynamicPointLight {
 interface DynamicSpotLight {
     kind: 'spot';
     origin: vec3;
-    color: readonly [number, number, number];
+    color: ReadonlyVec3;
     innerAngle: number;
     outerAngle: number;
     rotationY: number;
@@ -100,7 +101,7 @@ export interface ActiveLight {
     origin: vec3;
     innerRadius: number;
     outerRadius: number;
-    color: [number, number, number];
+    color: ReadonlyVec3;
     direction?: vec3;
     innerConeCos?: number;
     outerConeCos?: number;
@@ -254,11 +255,7 @@ export function buildDynamicLights(
                 actor.position[1] * lightWorldScale,
                 actor.position[2] * lightWorldScale,
             ),
-            color: [
-                actor.lightColor[0] / 0xFF,
-                actor.lightColor[1] / 0xFF,
-                actor.lightColor[2] / 0xFF,
-            ],
+            color: vec3.scale(vec3.create(), actor.lightColor, 1 / 0xFF),
             innerAngle: actor.lightCone[0] !== 0 ? actor.lightCone[0] : 25,
             outerAngle: actor.lightCone[1] !== 0 ? actor.lightCone[1] : 65,
             rotationY: actor.rotationY / 0x1000 * MathConstants.TAU,
@@ -363,11 +360,7 @@ function sampleSpotLight(light: DynamicSpotLight, cameraFade: number, tick: numb
         // from func_global_asm_8065C990
         innerRadius: spotLightInnerRadius,
         outerRadius: spotLightCullRadius,
-        color: [
-            light.color[0] * cameraFade,
-            light.color[1] * cameraFade,
-            light.color[2] * cameraFade,
-        ],
+        color: vec3.scale(vec3.create(), light.color, cameraFade),
         direction,
         innerConeCos: Math.cos(light.innerAngle * MathConstants.DEG_TO_RAD),
         outerConeCos: Math.cos(light.outerAngle * MathConstants.DEG_TO_RAD),
@@ -383,15 +376,12 @@ function samplePointLight(light: DynamicPointLight, cameraFade: number, tick: nu
     const next = keyframes[(keyframeIndex + 1) % keyframes.length];
     const radius = lerp(current.radius, next.radius, t);
     const intensity = lerp(current.intensity, next.intensity, t) * cameraFade;
+    const color = vec3.lerp(vec3.create(), current.color, next.color, t);
     return {
         origin: light.origin,
         innerRadius: radius,
         outerRadius: radius * pointLightOuterRadiusScale,
-        color: [
-            lerp(current.color[0], next.color[0], t) / 0xFF * intensity,
-            lerp(current.color[1], next.color[1], t) / 0xFF * intensity,
-            lerp(current.color[2], next.color[2], t) / 0xFF * intensity,
-        ],
+        color: vec3.scale(color, color, intensity / 0xFF),
     };
 }
 
@@ -421,10 +411,7 @@ function accumulateLighting(dst: vec3, ambientColor: vec3, lights: readonly Dyna
     }
 }
 
-export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, activeLightCache: ActiveLightCache, enabled: boolean): vec3 {
-    if (!enabled)
-        return vec3.set(dst, 1, 1, 1);
-
+export function sampleObjectLighting(dst: vec3, lighting: ObjectLighting, activeLightCache: ActiveLightCache): vec3 {
     accumulateLighting(dst, lighting.ambientColor, lighting.lights, activeLightCache, lighting.origin);
     dst[0] = saturate(dst[0]);
     dst[1] = saturate(dst[1]);
@@ -436,7 +423,7 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
     if (!enabled) {
         for (const vertexIndex of lighting.vertexIndices) {
             const vertex = vertices[vertexIndex];
-            const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
+            const dst = (vertexIndex - vertexBufferFirstVertex) * vertexStride + 6;
             vertexBufferData[dst + 0] = vertex.c0;
             vertexBufferData[dst + 1] = vertex.c1;
             vertexBufferData[dst + 2] = vertex.c2;
@@ -450,7 +437,7 @@ export function updateDynamicLighting(lighting: DynamicLighting, vertices: reado
         const vertex = vertices[vertexIndex];
         vec3.set(scratchVec3a, vertex.x, vertex.y, vertex.z);
         accumulateLighting(scratchVec3b, lighting.ambientColor, lighting.lights, activeLightCache, scratchVec3a);
-        const dst = (vertexIndex - vertexBufferFirstVertex) * 10 + 6;
+        const dst = (vertexIndex - vertexBufferFirstVertex) * vertexStride + 6;
         const baseRed = lighting.modulateVertexColors ? vertex.c0 : 1;
         const baseGreen = lighting.modulateVertexColors ? vertex.c1 : 1;
         const baseBlue = lighting.modulateVertexColors ? vertex.c2 : 1;

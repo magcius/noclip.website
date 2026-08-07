@@ -15,19 +15,21 @@ import { GfxBlendFactor, GfxBlendMode, GfxBindingLayoutDescriptor, GfxBuffer, Gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { AABB } from '../Geometry.js';
-import { getMatrixTranslation, MathConstants, scaleMatrix, setMatrixTranslation, vec3SetAll, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { getMatrixTranslation, MathConstants, saturate, scaleMatrix, setMatrixTranslation, vec3SetAll, Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
 import { translateBlendMode, translateCullMode } from '../PokemonSnap/f3dex2.js';
 import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { assert, hexzero, nArray } from '../util.js';
 import type { ActorAnimationState } from './actors.js';
-import { animatedTextureCacheKeyBase, DrawCall, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState } from './f3dex2.js';
+import { animatedTextureCacheKeyBase, DrawCall, RSP_Geometry, RSPOutput, RSPSharedOutput, RSPState, vertexStride } from './f3dex2.js';
 import { ActiveLightCache, sampleObjectLighting, updateDynamicLighting } from './light.js';
 import type { DynamicLighting, ObjectLighting } from './light.js';
 import type { GeneratedSurface } from './material.js';
 import type { PropAnimationState } from './props.js';
 
 const scratchVec3a = vec3.create();
+
+const indicesPerSprite = 6;
 
 // DK64 has no texture names. Label them by table and index instead.
 function textureViewerName(texture: Texture): string {
@@ -105,6 +107,7 @@ export function fogPositionToViewDistance(position: number, clipNear: number, cl
 class DrawCallInstance {
     private textureEntry: Texture[] = [];
     private animatedTextureMappings: TextureMapping[][] = [];
+    private textureScrollWrap: number[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
@@ -147,6 +150,12 @@ class DrawCallInstance {
                 });
             }
         }
+        for (let i = 0; i < this.textureMappings.length; i++) {
+            const scrollSpeed = drawCall.textureBindings[i]?.scrollSpeed ?? 0;
+            if (scrollSpeed !== 0)
+                this.textureScrollWrap[i] = (Math.floor(255 / scrollSpeed) + 1) * scrollSpeed;
+        }
+
         const crossfadeGroup0 = drawCall.textureBindings[0]?.animation?.crossfadeGroup;
         const crossfadeGroup1 = drawCall.textureBindings[1]?.animation?.crossfadeGroup;
         if (crossfadeGroup0 !== null && crossfadeGroup0 !== undefined && crossfadeGroup0 === crossfadeGroup1)
@@ -231,22 +240,18 @@ class DrawCallInstance {
             calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, texture.width, texture.height, texture.tile.shifts, texture.tile.shiftt);
             const scrollSpeed = this.drawCall.textureBindings[textureEntryIndex]?.scrollSpeed ?? 0;
             if (scrollSpeed !== 0) {
+                // Tile offsets are in quarter texels, and count down from 255, looping every scrollWrap steps.
+                const scrollWrap = this.textureScrollWrap[textureEntryIndex];
                 const tick = Math.floor(time / (1000 / 30));
-                if (tick > 0) {
-                    const scrollWrap = (Math.floor(255 / scrollSpeed) + 1) * scrollSpeed;
-                    const tileOffset = 255 - ((tick - 1) * scrollSpeed) % scrollWrap;
-                    m[13] -= tileOffset / 4 / texture.height;
-                }
+                const tileOffset = 255 - (((tick - 1) * scrollSpeed + scrollWrap) % scrollWrap);
+                m[13] -= tileOffset / (4 * texture.height);
             }
         } else {
             mat4.identity(m);
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null, sprites: readonly SpriteBillboard[] | null = null): void {
-        if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
-
+    private updateAnimatedTextures(viewerInput: Viewer.ViewerRenderInput): void {
         const animationFrame = viewerInput.time / (1000 / 30);
         for (let i = 0; i < this.animatedTextureMappings.length; i++) {
             const mappings = this.animatedTextureMappings[i];
@@ -258,21 +263,30 @@ class DrawCallInstance {
             const frame = (Math.floor(animationFrame / frameDuration) + frameOffset) % mappings.length;
             this.textureMappings[i] = mappings[frame];
         }
-        if (sprites !== null) {
-            for (let i = 0; i < sprites.length; i++) {
-                if (sprites[i].fade > 0)
-                    this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier * sprites[i].fade, primColorMultiplier, 6, this.firstIndex + i * 6);
-            }
-        } else {
-            this.prepareSingleRenderInst(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier, primColorMultiplier, this.drawCall.indexCount, this.firstIndex);
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier = 1, primColorMultiplier: vec3 | null = null): void {
+        this.updateAnimatedTextures(viewerInput);
+        this.submitDraw(renderInstManager, viewerInput, modelMatrix, primAlphaMultiplier, primColorMultiplier, this.drawCall.indexCount, this.firstIndex);
+    }
+
+    public prepareToRenderSprites(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sprites: readonly SpriteBillboard[], primAlphaMultiplier: number, primColorMultiplier: vec3 | null): void {
+        this.updateAnimatedTextures(viewerInput);
+        for (let i = 0; i < sprites.length; i++) {
+            const sprite = sprites[i];
+            if (sprite.fade > 0)
+                this.submitDraw(renderInstManager, viewerInput, sprite.modelMatrix, primAlphaMultiplier * sprite.fade, primColorMultiplier, indicesPerSprite, this.firstIndex + i * indicesPerSprite);
         }
     }
 
-    private prepareSingleRenderInst(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier: number, primColorMultiplier: vec3 | null, indexCount: number, firstIndex: number): void {
+    private submitDraw(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, primAlphaMultiplier: number, primColorMultiplier: vec3 | null, indexCount: number, firstIndex: number): void {
+        if (this.gfxProgram === null)
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
+
         const renderInst = renderInstManager.newRenderInst();
         if (this.isTranslucent)
             renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-        renderInst.setGfxProgram(this.gfxProgram!);
+        renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setDrawCount(indexCount, firstIndex);
@@ -327,7 +341,7 @@ class DrawCallInstance {
 }
 
 function makeVertexBufferData(v: Vertex[], actorAnimation: ActorAnimationState | undefined): Float32Array {
-    const buf = new Float32Array(10 * v.length);
+    const buf = new Float32Array(vertexStride * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
         buf[j++] = v[i].x;
@@ -400,7 +414,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: vertexStride * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = cache.createInputLayout({
@@ -420,8 +434,8 @@ export class RenderData {
 }
 
 export class SpriteBillboard {
-    private static readonly signs = [-1, 1, 1, 1, 1, -1, -1, -1];
     public fade = 1;
+    public modelMatrix = mat4.create();
     private spawnTick: number | undefined;
     private lifetime: number | undefined;
     private loopTicks: number | undefined;
@@ -430,7 +444,6 @@ export class SpriteBillboard {
     public fadeStartDistance: number | undefined;
 
     constructor(
-        public firstVertex: number,
         public origin: vec3,
         private halfWidth: number,
         private halfHeight: number,
@@ -451,7 +464,7 @@ export class SpriteBillboard {
         this.fadeStartDistance = options.fadeStartDistance;
     }
 
-    public update(vertexBufferData: Float32Array, vertexBufferFirstVertex: number, cameraMatrix: mat4, tick: number): void {
+    public update(cameraMatrix: mat4, tick: number): void {
         const age = this.spawnTick === undefined
             ? 0
             : ((tick - this.spawnTick + this.loopTicks!) % this.loopTicks!);
@@ -463,31 +476,15 @@ export class SpriteBillboard {
         if (this.fadeStartDistance !== undefined) {
             this.fade = !active ? 0 : distance < this.fadeStartDistance
                 ? 1
-                : Math.max(0, Math.min(1, (this.maxDistance! - distance) / (this.maxDistance! - this.fadeStartDistance)));
+                : saturate((this.maxDistance! - distance) / (this.maxDistance! - this.fadeStartDistance));
         }
-        const centerX = this.origin[0];
-        const centerY = this.origin[1] + age * (this.velocityY ?? 0);
-        const centerZ = this.origin[2];
-        for (let i = 0; i < 4; i++) {
-            const vertex = (this.firstVertex + i - vertexBufferFirstVertex) * 10;
-            if (!active) {
-                vertexBufferData[vertex + 0] = this.origin[0];
-                vertexBufferData[vertex + 1] = this.origin[1];
-                vertexBufferData[vertex + 2] = this.origin[2];
-                continue;
-            }
-            const rightOffset = this.halfWidth * SpriteBillboard.signs[i * 2];
-            const upOffset = this.halfHeight * SpriteBillboard.signs[i * 2 + 1];
-            vertexBufferData[vertex + 0] = centerX
-                + cameraMatrix[0] * rightOffset
-                + cameraMatrix[4] * upOffset;
-            vertexBufferData[vertex + 1] = centerY
-                + cameraMatrix[1] * rightOffset
-                + cameraMatrix[5] * upOffset;
-            vertexBufferData[vertex + 2] = centerZ
-                + cameraMatrix[2] * rightOffset
-                + cameraMatrix[6] * upOffset;
-        }
+        if (this.fade === 0)
+            return;
+
+        scaleMatrix(this.modelMatrix, cameraMatrix, this.halfWidth, this.halfHeight, 1);
+        vec3.copy(scratchVec3a, this.origin);
+        scratchVec3a[1] += age * (this.velocityY ?? 0);
+        setMatrixTranslation(this.modelMatrix, scratchVec3a);
     }
 }
 
@@ -550,8 +547,6 @@ function getDynamicVertexRange(geo: MeshInput): { start: number, end: number } |
     if (geo.propAnimation !== undefined)
         for (const vertexOffset of geo.propAnimation.vertexOffsets)
             include(geo.propAnimation.firstVertex + vertexOffset, 1);
-    for (const sprite of geo.spriteBillboards ?? [])
-        include(sprite.firstVertex, 4);
     for (const vertexIndex of geo.dynamicLighting?.vertexIndices ?? [])
         include(vertexIndex, 1);
     return rangeStart <= rangeEnd ? { start: rangeStart, end: rangeEnd } : null;
@@ -565,7 +560,7 @@ export class GeometryData {
     private dirtyVertexRange: { start: number, end: number } | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: MeshInput) {
-        this.renderData = new RenderData(device, cache, geo, geo.generatedSurfaceAnimation !== undefined || geo.spriteBillboards !== undefined || geo.dynamicLighting !== undefined || geo.propAnimation !== undefined);
+        this.renderData = new RenderData(device, cache, geo, geo.generatedSurfaceAnimation !== undefined || geo.dynamicLighting !== undefined || geo.propAnimation !== undefined);
         this.lightingDirty = geo.dynamicLighting !== undefined;
         this.cullBoundingBox = computeMeshBoundingBox(geo);
 
@@ -601,10 +596,10 @@ export class GeometryData {
         this.geo.propAnimation?.update(this.renderData.vertexBufferData, this.renderData.vertexStart, tick);
 
         for (const sprite of this.geo.spriteBillboards ?? [])
-            sprite.update(this.renderData.vertexBufferData, this.renderData.vertexStart, viewerInput.camera.worldMatrix, tick);
+            sprite.update(viewerInput.camera.worldMatrix, tick);
         if (this.dirtyVertexRange !== null) {
-            const byteOffset = this.dirtyVertexRange.start * 10 * 4;
-            const byteLength = (this.dirtyVertexRange.end - this.dirtyVertexRange.start) * 10 * 4;
+            const byteOffset = this.dirtyVertexRange.start * vertexStride * 4;
+            const byteLength = (this.dirtyVertexRange.end - this.dirtyVertexRange.start) * vertexStride * 4;
             device.uploadBufferData(
                 this.renderData.vertexBuffer,
                 byteOffset,
@@ -850,12 +845,16 @@ export class GeometryRenderer {
             offs += fillVec4(mappedF32, offs, this.lookAtMatrix[1], this.lookAtMatrix[5], this.lookAtMatrix[9]);
         }
 
-        const objectLightColor = this.objectLighting !== null
-            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache, this.geometryData.dynamicLightingEnabled)
+        const objectLightColor = this.objectLighting !== null && this.geometryData.dynamicLightingEnabled
+            ? sampleObjectLighting(this.objectLightColor, this.objectLighting, activeLightCache)
             : null;
-        const sprites = this.geometryData.geo.spriteBillboards ?? null;
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, primAlphaMultiplier, objectLightColor, sprites);
+        const sprites = this.geometryData.geo.spriteBillboards;
+        for (let i = 0; i < this.drawCallInstances.length; i++) {
+            if (sprites !== undefined)
+                this.drawCallInstances[i].prepareToRenderSprites(renderInstManager, viewerInput, sprites, primAlphaMultiplier, objectLightColor);
+            else
+                this.drawCallInstances[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, primAlphaMultiplier, objectLightColor);
+        }
 
         renderInstManager.popTemplate();
     }

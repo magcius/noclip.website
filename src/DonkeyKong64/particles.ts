@@ -27,10 +27,13 @@ function createSpriteVertexBuffer(sprite: SpriteData, spriteCount = 1): ArrayBuf
     const view = new DataView(buffer);
     const maxS = sprite.width << 5;
     const maxT = sprite.height << 5;
+    const positions = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
     const textureCoordinates = [[0, 0], [maxS, 0], [maxS, maxT], [0, maxT]];
     for (let spriteIndex = 0; spriteIndex < spriteCount; spriteIndex++) {
         for (let vertex = 0; vertex < verticesPerSprite; vertex++) {
             const offs = (spriteIndex * verticesPerSprite + vertex) * spriteVertexStride;
+            view.setInt16(offs + 0, positions[vertex][0]);
+            view.setInt16(offs + 2, positions[vertex][1]);
             view.setInt16(offs + textureCoordinateOffset, textureCoordinates[vertex][0]);
             view.setInt16(offs + textureCoordinateOffset + 2, textureCoordinates[vertex][1]);
             for (let channel = 0; channel < 4; channel++)
@@ -108,7 +111,6 @@ function addSpriteParticleEvents(
             const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput, animatedTextures);
             initDL(state, false);
             initSpriteMaterial(state, definition, spriteTextureSegment, color);
-            const firstVertex = sharedOutput.vertices.length;
             for (let quad = 0; quad < batch.length; quad++) {
                 const vertexAddress = (spriteVertexSegment << 24) + quad * verticesPerSprite * spriteVertexStride;
                 state.gSPVertex(vertexAddress, verticesPerSprite, 0);
@@ -120,8 +122,7 @@ function addSpriteParticleEvents(
             const geo: MeshInput = {
                 sharedOutput,
                 rspOutput: output,
-                spriteBillboards: batch.map((event, index) => new SpriteBillboard(
-                    firstVertex + index * verticesPerSprite,
+                spriteBillboards: batch.map((event) => new SpriteBillboard(
                     event.origin,
                     halfWidth,
                     halfHeight,
