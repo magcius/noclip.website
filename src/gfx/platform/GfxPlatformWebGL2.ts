@@ -2322,19 +2322,33 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const gl = this.gl, prog = program.gl_program!;
             const deviceProgram = program.descriptor;
 
-            const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
-            for (let i = 0; i < uniformBlocks.length; i++) {
-                const [m, blockName, contents] = uniformBlocks[i];
+            const uboNameRegex = /uniform (\w+) {[^]*?}/g;
+            const uboNamesVert = findall(deviceProgram.preprocessedVert, uboNameRegex).map(([m, uboName]) => uboName);
+            const uboNamesFrag = deviceProgram.preprocessedFrag !== null ? findall(deviceProgram.preprocessedFrag, uboNameRegex).map(([m, uboName]) => uboName) : [];
+            for (let i = 0; i < Math.max(uboNamesVert.length, uboNamesFrag.length); i++) {
+                const blockName = uboNamesVert[i] || uboNamesFrag[i];
+                if (uboNamesVert[i] !== undefined && uboNamesFrag[i] !== undefined)
+                    assert(uboNamesVert[i] === uboNamesFrag[i]);
                 const blockIdx = gl.getUniformBlockIndex(prog, blockName);
                 if (blockIdx !== -1 && blockIdx !== 0xFFFFFFFF)
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
-            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+);\s* \/\/ BINDING=(\d+)$/gm);
-            for (let i = 0; i < samplers.length; i++) {
-                const [m, name, location] = samplers[i];
+            const samplerBindingRegex = /^uniform .*sampler\S+ (\w+);\s* \/\/ BINDING=(\d+)$/gm;
+            const samplerBindings = new Map<number, string>();
+            const insertBinding = (name: string, locationStr: string) => {
+                const location = parseInt(locationStr);
+                if (samplerBindings.has(location))
+                    assert(samplerBindings.get(location) === name);
+                else
+                    samplerBindings.set(location, name);
+            };
+            findall(deviceProgram.preprocessedVert, samplerBindingRegex).forEach(([m, name, locationStr]) => insertBinding(name, locationStr));
+            if (deviceProgram.preprocessedFrag !== null)
+                findall(deviceProgram.preprocessedFrag, samplerBindingRegex).forEach(([m, name, locationStr]) => insertBinding(name, locationStr));
+            for (const [location, name] of samplerBindings.entries()) {
                 const samplerUniformLocation = gl.getUniformLocation(prog, name);
-                gl.uniform1i(samplerUniformLocation, parseInt(location));
+                gl.uniform1i(samplerUniformLocation, location);
             }
 
             program.compileState = GfxProgramCompileStateP_GL.ReadyToUse;

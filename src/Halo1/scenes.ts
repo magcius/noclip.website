@@ -923,7 +923,7 @@ class MaterialRender_TransparencyWater {
         });
         device.setResourceName(this.rippleTexture, `Ripple Texture`);
 
-        this.textureMapping[0] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.base_bitmap));
+        this.textureMapping[0] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.base_bitmap), undefined, { wrap: false });
         this.textureMapping[7] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.reflection_bitmap));
 
         this.textureMapping[1] = new TextureMapping();

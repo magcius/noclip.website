@@ -133,5 +133,8 @@ export class TheWitnessGlobals {
 
     public destroy(device: GfxDevice): void {
         this.asset_manager.destroy(device);
+        this.occlusion_manager.destroy(device);
+        this.device_material_cache.destroy(device);
+        this.renderCache.destroy();
     }
 }

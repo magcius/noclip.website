@@ -218,6 +218,8 @@ export class Viewer {
             const viewport = baseLayer.getViewport(xrView);
             if (viewport === undefined)
                 continue;
+            if (viewport.width <= 0 || viewport.height <= 0)
+                continue;
 
             // Render the viewport to our temp RT.
             this.viewerRenderInput.backbufferWidth = viewport.width;

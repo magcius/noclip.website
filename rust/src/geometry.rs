@@ -213,10 +213,13 @@ impl ConvexHull {
     }
 
     pub fn contains_aabb(&self, aabb: &AABB) -> bool {
-        match self.intersect_aabb(aabb) {
-            IntersectionState::Outside => false,
-            _ => true,
+        for plane in &self.planes {
+            let nearest = aabb.get_closest_point_along_direction(&plane.normal);
+            if plane.distance(&nearest) < 0.0 {
+                return false;
+            }
         }
+        true
     }
 
     pub fn contains_sphere(&self, center: &Vec3, radius: f32) -> bool {
@@ -256,28 +259,28 @@ impl ConvexHull {
         self.planes.push(plane.normalized());
     }
 
-    pub fn js_intersect_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {
+    pub fn js_intersect_aabb(&self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {
         let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
         self.intersect_aabb(&aabb)
     }
 
-    pub fn js_contains_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
+    pub fn js_contains_aabb(&self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
         let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
         self.contains_aabb(&aabb)
     }
 
-    pub fn js_contains_point(&mut self, pt_slice: &[f32]) -> bool {
+    pub fn js_contains_point(&self, pt_slice: &[f32]) -> bool {
         assert_eq!(pt_slice.iter().count(), 3);
         let pt = make_vec3(pt_slice);
         self.contains_point(&pt)
     }
 
-    pub fn js_intersect_sphere(&mut self, x: f32, y: f32, z: f32, radius: f32) -> IntersectionState {
+    pub fn js_intersect_sphere(&self, x: f32, y: f32, z: f32, radius: f32) -> IntersectionState {
         let center = Vec3::new(x, y, z);
         self.intersect_sphere(&center, radius)
     }
 
-    pub fn js_contains_sphere(&mut self, x: f32, y: f32, z: f32, radius: f32) -> bool {
+    pub fn js_contains_sphere(&self, x: f32, y: f32, z: f32, radius: f32) -> bool {
         let center = Vec3::new(x, y, z);
         self.contains_sphere(&center, radius)
     }

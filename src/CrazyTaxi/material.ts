@@ -22,6 +22,11 @@ export class TextureCache {
     public addTexture(tex: Texture) {
         this.textureMap.set(tex.name, tex);
     }
+
+    public destroy(device: GfxDevice): void {
+        for (const tex of this.textureMap.values())
+            tex.destroy(device);
+    }
 }
 
 export class Texture {
@@ -57,6 +62,10 @@ export class Texture {
         dst.height = this.gxTexture.height;
         dst.flipY = false;
         return true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
     }
 }
 

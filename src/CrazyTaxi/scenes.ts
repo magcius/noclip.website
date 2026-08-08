@@ -99,6 +99,9 @@ export class Scene implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        this.materials.destroy(device);
+        this.skyboxMaterials.destroy(device);
+        this.textureCache.destroy(device);
     }
 }
 

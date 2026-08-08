@@ -226,6 +226,7 @@ class MarioKartWiiRenderer {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(mainDepthTargetID);
 
         if (this.enablePostProcessing && (this.eggDOF !== null || this.eggBloom !== null)) {
             const mainResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);

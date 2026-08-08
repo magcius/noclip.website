@@ -110,7 +110,7 @@ layout(std140) uniform ub_CubeParams {
 };
 
 // Declare our texture for the cube.
-layout(location = 0) uniform sampler2D u_Texture;
+layout(binding = 0) uniform sampler2D u_Texture;
 `;
 
 }
@@ -129,7 +129,7 @@ layout(std140) uniform ub_PostProcessingParams {
     vec4 u_Misc[1];
 };
 
-layout(location = 0) uniform sampler2D u_TextureColor;
+layout(binding = 0) uniform sampler2D u_TextureColor;
 
 #define u_AberrationStrength (u_Misc[0].x)
 `;
