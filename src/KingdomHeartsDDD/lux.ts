@@ -595,29 +595,26 @@ export class LuxModelRenderer implements Destroyable, Layer {
         }
     }
 
-    private inView(bbox: Float32Array, m: ReadonlyMat4) {
+    private inView(bbox: Float32Array, m: ReadonlyMat4): boolean {
         // cheaper frustum culling than with aabb, and data has bbox in points anyway
-        let aol = true, aor = true;
-        let aob = true, aot = true;
-        let aon = true, aof = true;
-        for (let i = 0; i < 32; i += 4) {
-            const x = bbox[i], y = bbox[i + 1], z = bbox[i + 2];
-            const xw = x * m[0] + y * m[4] + z * m[8] + m[12];
-            const yw = x * m[1] + y * m[5] + z * m[9] + m[13];
-            const zw = x * m[2] + y * m[6] + z * m[10] + m[14];
-            const ww = x * m[3] + y * m[7] + z * m[11] + m[15];
-            if (xw >= -ww && xw <= ww && yw >= -ww && yw <= ww && zw >= 0 && zw <= ww) {
-                return true;
+        const planes = [
+            [m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]], // left
+            [m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]], // right
+            [m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]], // bottom
+            [m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]], // top
+            [m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]], // near
+            [m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]], // far
+        ];
+        for (let i = 0; i < 6; i++) {
+            let pointsOutOfView = 0;
+            for (let j = 0; j < 32; j += 4) {
+                if (planes[i][0] * bbox[j] + planes[i][1] * bbox[j + 1] + planes[i][2] * bbox[j + 2] + planes[i][3] < 0) {
+                    pointsOutOfView++;
+                }
             }
-            if (xw > -ww) aol = false;
-            if (xw < ww) aor = false;
-            if (yw > -ww) aob = false;
-            if (yw < ww) aot = false;
-            if (zw > 0) aon = false;
-            if (zw < ww) aof = false;
-        }
-        if (aol || aor || aob || aot || aon || aof) {
-            return false;
+            if (pointsOutOfView === 8) {
+                return false;
+            }
         }
         return true;
     }
