@@ -21,16 +21,20 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    float u_Time;
-    float u_ApplyTextures;
-    float u_ShowFog;
+    vec4 u_Misc0[1];
 };
+
+#define u_Time (u_Misc0[0].x)
+#define u_ApplyTextures (u_Misc0[0].y)
+#define u_ShowFog (u_Misc0[0].z)
 
 layout(std140) uniform ub_EnvParams {
     vec4 u_FogColor;
-    float u_FogNear;
-    float u_FogFar;
+    vec4 u_Misc1[1];
 };
+
+#define u_FogNear (u_Misc1[0].x)
+#define u_FogFar (u_Misc1[0].y)
 
 layout(std140) uniform ub_ModelParams {
     Mat3x4 u_View;
@@ -38,10 +42,12 @@ layout(std140) uniform ub_ModelParams {
 };
 
 layout(std140) uniform ub_ShapeParams {
-    vec2 u_Scroll;
-    float u_HasTexture;
-    ${this.blendTXA ? `float u_TXAFactor;` : ""}
+    vec4 u_Misc2[1];
 };
+
+#define u_Scroll (u_Misc2[0].xy)
+#define u_HasTexture (u_Misc2[0].z)
+#define u_TXAFactor (u_Misc2[0].w)
 
 uniform sampler2D u_Texture;
 ${this.blendTXA ? `uniform sampler2D u_Texture2;` : ""}

@@ -280,7 +280,6 @@ export class LuxShapeRenderer implements Destroyable {
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     private sortKey: number;
     private drawCount: number;
-    private ubSize: number;
     private txaFactor: number = 0;
     private txaKeyframes: TXAKeyframe[] = [];
     private txaFrameCount: number = 0;
@@ -334,10 +333,8 @@ export class LuxShapeRenderer implements Destroyable {
         }
         if (this.doBlendTXA) {
             this.bindingLayouts = BINDING_LAYOUTS_TXA;
-            this.ubSize = 4;
         } else {
             this.bindingLayouts = BINDING_LAYOUTS;
-            this.ubSize = 3;
         }
         this.hasTXA = txa !== undefined;
 
@@ -354,7 +351,7 @@ export class LuxShapeRenderer implements Destroyable {
         renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setBindingLayouts(this.bindingLayouts);
         renderInst.setVertexInput(this.gfxInputLayout!, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, this.ubSize);
+        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, 4);
         const d = renderInst.mapUniformBufferF32(DreamDropShader.ub_ShapeParams);
         // u_Scroll (2)
         d[offset++] = this.material ? this.material.scrollX : 0.0;
@@ -715,7 +712,7 @@ export class LuxRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 19);
+        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 20);
         const uniformBuffer = template.mapUniformBufferF32(DreamDropShader.ub_SceneParams);
         // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.projectionMatrix);
@@ -726,7 +723,7 @@ export class LuxRoomRenderer implements Destroyable {
         // u_ShowFog (1)
         uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
 
-        offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 6);
+        offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 8);
         const uniformBuffer2 = template.mapUniformBufferF32(DreamDropShader.ub_EnvParams);
         // u_FogColor (4)
         offset += fillVec4(uniformBuffer2, offset, this.pvd.fogColor[0], this.pvd.fogColor[1], this.pvd.fogColor[2], this.pvd.fogColor[3]);
