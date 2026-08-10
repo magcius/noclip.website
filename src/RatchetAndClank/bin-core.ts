@@ -1,10 +1,12 @@
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GsPrimitiveType } from "../Common/PS2/GS";
-import { DataViewExt } from "./DataViewExt";
-import { assert } from "../util";
-import { getBits, GN, ImaginaryGsCommand, ImaginaryGsCommandBuffer, truncateTrailing0xFF } from "./utils";
+import { DataViewExt, EMPTY_VIEW } from "./DataViewExt";
+import { align, assert } from "../util";
+import { getBits, GN, ImaginaryGsCommand, ImaginaryGsCommandBuffer, readA1BGR5 } from "./utils";
 import { readVifCommandList, VifUnpackReader } from "./vif";
 import { VifUnpackFormat } from "../Common/PS2/VIF";
+import { DirectionLightSelector, readDirectionLightSelector } from "./bin-gameplay";
+import { RAC1_SKY_ANGULAR_VELOCITY, RAC1_SKY_ROTATION } from "./sky-data";
 
 export interface GsRamTableEntry {
     psm: number,
@@ -29,8 +31,8 @@ export function readGsRamTableEntry(view: DataViewExt) {
 
 export interface TieClass {
     header: TieClassHeader,
-    normalsData: { x: number, y: number, z: number }[],
-    rgbaRemaps: RgbaRemap[][] | null; // [lod][remap], not present in rac1
+    normalsData: { x: number, y: number, z: number, w: number }[],
+    rgbaRemaps: (RgbaRemaps | null)[] | null; // [lod], not present in rac1
     nearDist: number,
     midDist: number,
     farDist: number,
@@ -38,12 +40,15 @@ export interface TieClass {
     scale: number,
     packets: TiePacket[][], // [lod][packet]
     adGifs: TieGifAds[],
+
+    // the index of this class within the class list
+    _classIndex: number,
 };
 export interface TiePacket {
     header: TiePacketHeader,
     body: TiePacketBody,
 };
-export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClass {
+export function readTieClass(gn: GN, view: DataViewExt, oClass: number, classIndex: number): TieClass {
     /*
     https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/tie.h#L37
     */
@@ -56,46 +61,43 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
 
     const adGifs = view.subdivide(header.adGifsOffset, header.textureCount, SIZEOF_TIE_AD_GIFS).map(readTieAdGifs);
 
-    const normalsData = view.subdivide(header.normalsOffset, header.normalsCount, 8).map(view => view.getInt16_Xyzw(0));
+    const normalsData = readTieNormalData(gn, view.subview(header.normalsOffset), header.normalsCount);
+
+    const rgbaRemaps: (RgbaRemaps | null)[] = [null, null, null]; // by lod
 
     // there are always 3 lods
-    for (let i = 0; i < 3; i++) {
-        const packetOffset = header.packetOffsets[i];
-        const packetCount = header.packetCounts[i];
+    for (let lod = 0; lod < 3; lod++) {
+        const packetOffset = header.packetOffsets[lod];
+        const packetCount = header.packetCounts[lod];
         const packetHeaders = view.subdivide(packetOffset, packetCount, SIZEOF_TIE_PACKET_HEADER).map(readTiePacketHeader);
 
+        // packets
         const packetsInThisLod: TiePacket[] = [];
+        let baseRgbaRemapSlot = 0;
         for (let j = 0; j < packetCount; j++) {
             const packetDataOffset = packetOffset + packetHeaders[j].data;
-            const packetBody = readTiePacketBody(gn, view.subview(packetDataOffset), packetHeaders[j], adGifs, oClass, i, j);
+            const packetBody = readTiePacketBody(gn, view.subview(packetDataOffset), packetHeaders[j], adGifs, oClass, lod, j, baseRgbaRemapSlot);
             packetsInThisLod.push({
                 header: packetHeaders[j],
                 body: packetBody,
             });
+            baseRgbaRemapSlot += align(packetBody.totalVertexCount, 4); // why align here I have no idea
         }
-
         packets.push(packetsInThisLod);
-    }
 
-    const rgbaRemaps: RgbaRemap[][] = [[], [], []]; // [lod][remapIndex]
-    if (gn >= 2) {
-        for (let i = 0; i < 3; i++) {
-            const offset = header.rgbaRemapOffsets![i];
-            if (offset === header.adGifsOffset || header.lodHeaders![i].vertCount === 0) continue;
-            rgbaRemaps[i] = readTieRgbaRemaps(view.subview(header.normalsOffset + offset));
+        // rgba remaps
+        if (gn >= 2) {
+            const offset = header.rgbaRemapOffsets![lod];
+            assert(offset !== 0);
+            if (offset === header.adGifsOffset || header.lodHeaders![lod]!.vertCount === 0) continue;
 
-            // const remapsInThisLod = rgbaRemaps[i];
-            // const packetsInThisLod = packets[i];
-            // for (let j = 0; j  < remapsInThisLod.length; j++) {
-            //     const dest = remapsInThisLod[j].dest;
-            //     let vertexPtr = 0;
-            //     for (let k = 0; k < packetsInThisLod.length; k++) {
-            //     }
-            // }
+            const remaps = readTieRgbaRemaps(view.subview(header.normalsOffset + offset), oClass);
+            rgbaRemaps[lod] = remaps;
         }
     }
 
-    return {
+
+    const tie: TieClass = {
         header,
         normalsData,
         rgbaRemaps,
@@ -106,30 +108,94 @@ export function readTieClass(gn: GN, view: DataViewExt, oClass: number): TieClas
         scale: header.scale,
         packets,
         adGifs,
+
+        _classIndex: classIndex,
     };
+    return tie;
+}
+
+function readTieNormalData(gn: GN, view: DataViewExt, count: number) {
+    switch (gn) {
+        case 1: {
+            return view.subdivide(0, count, 8).map(view => {
+                const n = view.getInt16_Xyzw(0);
+                const scale = 1 / 0x7FFF;
+                return { x: n.x * scale, y: n.y * scale, z: n.z * scale, w: n.w * scale };
+            });
+        }
+        case 2:
+        case 3: {
+            return view.subdivide(0, count, 8).map(view => readTieNormalEntry_Rac234(view));
+        }
+        case 4: {
+            return view.subdivide(0x10, count, 8).map(view => readTieNormalEntry_Rac234(view));
+        }
+    }
+}
+
+function readTieNormalEntry_Rac234(view: DataViewExt) {
+    /*
+    struct TieNormalEntry {
+        uint8 x;
+        uint8 y;
+        uint8 z;
+        uint8 w;
+        uint8 unknown4;
+        uint8 scale;
+        uint8 azimuth; // xyzw and elevation/azimuth are redundant, idk why, I'll use the second
+        uint8 elevation;
+    }
+    */
+    const angleScale = 2 * Math.PI / 256;
+    const azimuth = view.getUint8(0x6) * angleScale;
+    const elevation = view.getUint8(0x7) * angleScale;
+
+    return {
+        x: azimuth,
+        y: elevation,
+        z: 0,
+        w: 0,
+    }
 }
 
 export interface RgbaRemap {
     dest: number,
-    src: [number, number, number, number] | 0,
+    src: [number, number, number, number],
+    kind: RgbaRemapKind,
+}
+export enum RgbaRemapKind {
+    Zero = 0,
+    AAAA = 1,
+    AABB = 2,
+    ABBB = 3,
+    AABC = 4,
+    ABCD = 5,
+}
+export interface RgbaRemapPacketDescriptor {
+    aaaaSize: number;
+    aabbSize: number;
+    abbbSize: number;
+    aabcSize: number;
+    abcdSize: number;
+    zeroSize: number;
+    outputSize: number;
+    packetSize: number;
+}
+export interface RgbaRemapPacket {
+    outputBase: number,
+    remaps: RgbaRemap[],
+}
+export interface RgbaRemaps {
+    packets: RgbaRemapPacket[],
 }
 
-// needs more reverse engineering work
-// I can parse the headers but no idea what the inner data is
-export function readTieRgbaRemaps(view: DataViewExt): RgbaRemap[] {
-    const out: RgbaRemap[] = [];
+// each remap defines a mixture of up to 4 input values
+// (the data to be mixed is the lit color cache)
+export function readTieRgbaRemaps(view: DataViewExt, oClass: number): RgbaRemaps {
+    const blockSizes = view.getArrayOfNumbers(0x0, 32, Uint8Array).map(size => size * 0x10);
 
-    const blockSizesQw = view.getArrayOfNumbers(0x0, 32, Uint8Array);
-    const blockSizes = [];
-    for (let i = 0; i < blockSizesQw.length; i++) {
-        if (blockSizesQw[i] === 0) break;
-        blockSizes.push(blockSizesQw[i] * 16);
-    }
-
-    function validate(a: RgbaRemap) {
-        // assert((a.dest & 0x3) === 0);
-        return a;
-    }
+    let base = 0;
+    const packets: RgbaRemapPacket[] = [];
 
     let packetView = view.subview(0x20);
     for (let i = 0; i < blockSizes.length; i++) {
@@ -137,98 +203,166 @@ export function readTieRgbaRemaps(view: DataViewExt): RgbaRemap[] {
         if (packetSizeBytes === 0) break;
 
         const descriptor = {
-            block1Size: packetView.getUint16(0x0),
-            block2Size: packetView.getUint16(0x2),
-            block4Size: packetView.getUint16(0x4),
-            block5Size: packetView.getUint16(0x6),
-            block6Size: packetView.getUint16(0x8),
-            block3Size: packetView.getUint16(0xa),
-            unknown1: packetView.getUint16(0xc),
-            totalSize: packetView.getUint16(0xe),
+            aaaaSize: packetView.getUint16(0x0),
+            aabbSize: packetView.getUint16(0x2),
+            abbbSize: packetView.getUint16(0x4),
+            aabcSize: packetView.getUint16(0x6),
+            abcdSize: packetView.getUint16(0x8),
+            zeroSize: packetView.getUint16(0xa),
+            outputSize: packetView.getUint16(0xc), // <- in units of 0x10
+            packetSize: packetView.getUint16(0xe), // <- in bytes
         };
 
-        let ptr = 0x10;
-        function alignTo(size: number) {
-            if (ptr % size !== 0) ptr += size - (ptr % size);
-        }
+        assert(descriptor.aaaaSize % 4 === 0);
+        assert(descriptor.aabbSize % 4 === 0);
+        assert(descriptor.abbbSize % 4 === 0);
+        assert(descriptor.aabcSize % 8 === 0);
+        assert(descriptor.abcdSize % 8 === 0);
 
-        const block1_aaaa = descriptor.block1Size ? packetView.subview(ptr, descriptor.block1Size) : null;
-        ptr += descriptor.block1Size;
-        const block2_aabb = descriptor.block2Size ? packetView.subview(ptr, descriptor.block2Size) : null;
-        ptr += descriptor.block2Size;
-        const block3_unknown = descriptor.block3Size ? packetView.subview(ptr, descriptor.block3Size) : null;
-        ptr += descriptor.block3Size;
-        const block4_aaab = descriptor.block4Size ? packetView.subview(ptr, descriptor.block4Size) : null;
-        ptr += descriptor.block4Size;
-        const block5_aabc = descriptor.block5Size ? packetView.subview(ptr, descriptor.block5Size) : null;
-        ptr += descriptor.block5Size;
-        const block6_abcd = descriptor.block6Size ? packetView.subview(ptr, descriptor.block6Size) : null;
-        ptr += descriptor.block6Size;
-        alignTo(0x10)
-        assert(ptr === descriptor.totalSize);
+        let ptr = 0x10;
+
+        const aaaaView = descriptor.aaaaSize ? packetView.subview(ptr, descriptor.aaaaSize) : EMPTY_VIEW;
+        ptr += descriptor.aaaaSize;
+        const aabbView = descriptor.aabbSize ? packetView.subview(ptr, descriptor.aabbSize) : EMPTY_VIEW;
+        ptr += descriptor.aabbSize;
+        const abbbView = descriptor.abbbSize ? packetView.subview(ptr, descriptor.abbbSize) : EMPTY_VIEW;
+        ptr += descriptor.abbbSize;
+        const aabcView = descriptor.aabcSize ? packetView.subview(ptr, descriptor.aabcSize) : EMPTY_VIEW;
+        ptr += descriptor.aabcSize;
+        const abcdView = descriptor.abcdSize ? packetView.subview(ptr, descriptor.abcdSize) : EMPTY_VIEW;
+        ptr += descriptor.abcdSize;
+        const zeroView = descriptor.zeroSize ? packetView.subview(ptr, descriptor.zeroSize) : EMPTY_VIEW;
+        ptr += descriptor.zeroSize;
+        ptr = align(ptr, 0x10);
+        assert(ptr === descriptor.packetSize);
         assert(ptr === packetSizeBytes);
 
-        // unsure about any of this
+        // everything here is 11-bit, because they're byte offsets into uint32[512] arrays
 
-        block1_aaaa?.subdivide(0, 0xFFFF, 4).forEach(view => {
-            const a = view.getUint16(0x0);
-            const dest = view.getUint16(0x2);
-            out.push(validate({ dest, src: [a, a, a, a] }));
+        // AAAA
+        const aaaaRemaps: RgbaRemap[] = aaaaView.subdivide(0, 0xFFFF, 4).map((view): RgbaRemap => {
+            const a = decodeRemap_11(view, 0x0);
+            const dest = decodeRemap_11(view, 0x2);
+            return { dest, src: [a, a, a, a], kind: RgbaRemapKind.AAAA };
         });
 
-        block2_aabb?.subdivide(0, 0xFFFF, 4).forEach(view => {
-            const packed = view.getUint32(0x0);
-            const dest = packed & 0x3FFC;
-            const a = (packed >> 21) & 0x7FC;
-            const b = (packed >> 12) & 0x7FC;
-            out.push(validate({ dest, src: [a, a, b, b] }));
+        // AABB
+        const aabbRemaps: RgbaRemap[] = aabbView.subdivide(0, 0xFFFF, 4).map(view => {
+            const { value1: a, value2: b, value3: dest } = decodeRemap_11_11_11_Weird(view, 0x0);
+            return { dest, src: [a, a, b, b], kind: RgbaRemapKind.AABB };
         });
 
-        block4_aaab?.subdivide(0, 0xFFFF, 4).forEach(view => {
-            const packed = view.getUint32(0x0);
-            const dest = packed & 0x3FFC;
-            const a = (packed >> 21) & 0x7FC;
-            const b = (packed >> 12) & 0x7FC;
-            out.push(validate({ dest, src: [a, a, a, b] }));
+        // ABBB
+        const abbbRemaps: RgbaRemap[] = abbbView.subdivide(0, 0xFFFF, 4).map(view => {
+            const { value1: a, value2: b, value3: dest } = decodeRemap_11_11_11_Weird(view, 0x0);
+            return { dest, src: [a, b, b, b], kind: RgbaRemapKind.ABBB };
         });
 
-        block5_aabc?.subdivide(0, 0xFFFF, 8).forEach(view => {
-            const a = view.getUint16(0x0);
-            const b = view.getUint16(0x2);
-            const c = view.getUint16(0x4);
-            const dest = view.getUint16(0x6);
-            out.push(validate({ dest, src: [a, a, b, c] }));
+        // AABC
+        const aabcRemaps: RgbaRemap[] = aabcView.subdivide(0, 0xFFFF, 8).map(view => {
+            const a = decodeRemap_11(view, 0x0);
+            const b = decodeRemap_11(view, 0x2);
+            const c = decodeRemap_11(view, 0x4);
+            const dest = decodeRemap_11(view, 0x6);
+            return { dest, src: [a, a, b, c], kind: RgbaRemapKind.AABC };
         });
 
-        block6_abcd?.subdivide(0, 0xFFFF, 8).forEach(view => {
-            const packed = view.getUint32(0x0);
-            const a = packed & 0x7FC;
-            const b = (packed >> 9) & 0x7FC;
-            const c = (packed >> 18) & 0x7FC;
-            const d = view.getUint16(0x4);
-            const dest = view.getUint16(0x6);
-            out.push(validate({ dest, src: [a, b, c, d] }));
+        // ABCD
+        const abcdRemaps: RgbaRemap[] = abcdView.subdivide(0, 0xFFFF, 8).map(view => {
+            const { value1: a, value2: b, value3: c } = decodeRemap_11_11_11(view, 0x0);
+            const d = decodeRemap_11(view, 0x4);
+            const dest = decodeRemap_11(view, 0x6);
+            return { dest, src: [a, b, c, d], kind: RgbaRemapKind.ABCD };
+        });
+
+        // zero
+        const zeroRemaps: RgbaRemap[] = zeroView.subdivide(0, 0xFFFF, 8).map(view => {
+            const dest = decodeRemap_11(view, 0x0);
+            return { dest, src: [0, 0, 0, 0], kind: RgbaRemapKind.Zero };
+        });
+
+        packets.push({
+            outputBase: base,
+            remaps: [aaaaRemaps, aabbRemaps, abbbRemaps, aabcRemaps, abcdRemaps, zeroRemaps].flat(1),
         });
 
         packetView = packetView.subview(packetSizeBytes);
+
+        base += descriptor.outputSize * 0x10;
     }
 
-    return out;
+    return {
+        packets,
+    };
+}
+
+function decodeRemap_11(view: DataViewExt, offset: number): number {
+    const value = view.getUint16(offset);
+    assert(value % 4 === 0);
+    return value & 0x7FF;
+}
+
+function decodeRemap_11_11_11(view: DataViewExt, offset: number): { value1: number, value2: number, value3: number } {
+    // | unused: 3 bits | value1: 9 bits | value2: 9 bits | value3: 11 bits |
+    // 9 bit values leftshifted 2
+    const packed = view.getUint32(offset);
+    const value1 = (packed >> 18) & 0x7FC;
+    const value2 = (packed >> 9) & 0x7FC;
+    const value3 = packed & 0x7FF;
+    assert(value1 % 4 === 0);
+    assert(value2 % 4 === 0);
+    assert(value3 % 4 === 0);
+    return { value1, value2, value3 };
+}
+
+function decodeRemap_11_11_11_Weird(view: DataViewExt, offset: number): { value1: number, value2: number, value3: number } {
+    // | value1: 9 bits | value2: 9 bits | unused: 3 bits | value3: 11 bits |
+    // 9 bit values leftshifted 2
+    const packed = view.getUint32(offset);
+    const value1 = (packed >> 21) & 0x7FC;
+    const value2 = (packed >> 12) & 0x7FC;
+    const value3 = packed & 0x7FF;
+    assert(value1 % 4 === 0);
+    assert(value2 % 4 === 0);
+    assert(value3 % 4 === 0);
+    return { value1, value2, value3 };
 }
 
 export type TieClassHeader = {
     packetOffsets: number[],
     packetCounts: number[],
-    normalsOffset: number,
-    normalsCount: number,
     textureCount: number,
     nearDist: number,
     midDist: number,
     farDist: number,
     adGifsOffset: number,
+    instanceIndex: number,
+    cacheSizes: number[],
+    rgbaRemapOffsets: number[],
+    ambientRgbasOffset: number,
+    normalsOffset: number,
+    normalsCount: number,
+    ambientSize: number,
+    /**
+     * 0x1 = disable rendering
+     * 0x2 = wind effect
+     * 0x4 = wind effect but bigger
+     * 0x10 = glow?
+     * 0x20 = alpha is specular mask?
+     * 0x40 = no idea (used on enemy spawners on rac3 veldin)
+     */
+    modeBits: number,
+    instanceCount: number,
+    scale: number,
+    oClass: number,
+    tClass: number,
+    mipDist: number,
+    glowRgba: { r: number, g: number, b: number, a: number },
     bsphere: { x: number, y: number, z: number, w: number },
+    lodHeaders: (TieLodHeader | null)[],
+    glowRemapOffsets: number[],
 }
-export function readTieClassHeader(gn: GN, view: DataViewExt) {
+export function readTieClassHeader(gn: GN, view: DataViewExt): TieClassHeader {
     switch (gn) {
         case 1: {
             /*
@@ -237,15 +371,32 @@ export function readTieClassHeader(gn: GN, view: DataViewExt) {
             return {
                 packetOffsets: view.getArrayOfNumbers(0x0, 3, Uint32Array),
                 normalsOffset: view.getUint32(0xc),
-                normalsCount: 64, // always 64 normals in rac1
                 nearDist: view.getFloat32(0x10),
                 midDist: view.getFloat32(0x14),
                 farDist: view.getFloat32(0x18),
                 packetCounts: view.getArrayOfNumbers(0x20, 3, Uint8Array),
                 textureCount: view.getUint8(0x23),
+                modeBits: view.getInt16(0x24),
                 adGifsOffset: view.getUint32(0x2c),
                 bsphere: view.getFloat32_Xyzw(0x30),
                 scale: view.getFloat32(0x40),
+
+                // fields definitely not in rac1
+                normalsCount: 64, // always 64 normals in rac1
+                rgbaRemapOffsets: [0, 0, 0],
+                cacheSizes: [],
+                ambientRgbasOffset: 0,
+
+                // fields that probably exist but idk where
+                lodHeaders: [null, null, null],
+                instanceIndex: 0,
+                ambientSize: 0,
+                instanceCount: 0,
+                oClass: 0,
+                tClass: 0,
+                mipDist: 0,
+                glowRgba: { r: 0, g: 0, b: 0, a: 0 },
+                glowRemapOffsets: []
             };
         }
         case 2:
@@ -275,7 +426,7 @@ export function readTieClassHeader(gn: GN, view: DataViewExt) {
                 oClass: view.getInt16(0x44),
                 tClass: view.getInt16(0x46),
                 mipDist: view.getFloat32(0x48),
-                glowRgba: view.getInt32(0x4c),
+                glowRgba: view.getUint8_Rgba(0x4c),
                 bsphere: view.getFloat32_Xyzw(0x50),
                 lodHeaders: view.subdivide(0x60, 3, SIZEOF_TIE_LOD_HEADER).map(readTieLodHeader),
                 glowRemapOffsets: view.getArrayOfNumbers(0x78, 3, Uint16Array),
@@ -339,8 +490,13 @@ export function readTiePacketHeader(view: DataViewExt): TiePacketHeader {
     };
 }
 
-export interface TieVertexWithNormalAndRgba { vertex: TieVertex, normalIndex: number, rgbaIndex: number };
-export type TieImaginaryGsCommand = ImaginaryGsCommand<TieStrip, { material: number, clamp: number }, TieVertexWithNormalAndRgba>;
+export interface TieVertexWithLightingInfo {
+    vertex: TieVertex,
+    rgbaRemapSlot_Rac234: number | null, // the order in which the vertex was copied from the uploaded data to the GS packet buffer
+    normalIndices_Rac1: [number, number, number] | null,
+    rgbaIndices_Rac1: [number, number, number] | null,
+};
+export type TieImaginaryGsCommand = ImaginaryGsCommand<TieStrip, { material: number, clamp: number }, TieVertexWithLightingInfo>;
 
 const tieCommandSizes = {
     primitiveReset: 1,
@@ -349,7 +505,7 @@ const tieCommandSizes = {
 };
 
 export type TiePacketBody = ReturnType<typeof readTiePacketBody>;
-export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: TiePacketHeader, adGifs: TieGifAds[], oClass: number, lod: number, packetIndex: number) {
+export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: TiePacketHeader, adGifs: TieGifAds[], oClass: number, lod: number, packetIndex: number, baseRgbaRemapSlot: number) {
     /*
     struct TiePacketBody {
         // 0x0
@@ -379,9 +535,6 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
     */
 
     let ptr = 0;
-    function alignTo(size: number) {
-        if (ptr % size !== 0) ptr += size - (ptr % size);
-    }
 
     const AD_GIFS = 4;
     const adGifDestOffsets = view.getArrayOfNumbers(ptr, AD_GIFS, Int32Array);
@@ -396,7 +549,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
     ptr += tieVuHeader.stripCount * SIZEOF_TIE_STRIP;
 
     // regular verts
-    alignTo(0x10);
+    ptr = align(ptr, 0x10);
     const regularVertexCount = tieVuHeader.regularVertexCount;
     const regularVerts = view.subdivide(ptr, regularVertexCount, SIZEOF_TIE_REGULAR_VERTEX).map(readTieRegularVertex);
     ptr += regularVertexCount * SIZEOF_TIE_REGULAR_VERTEX;
@@ -413,23 +566,23 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
     let morphingRgbaIndices: { x: number, y: number, z: number }[] = [];
     if (gn === 1) {
         // indices into the tie's normal array
-        alignTo(0x10);
+        ptr = align(ptr, 0x10);
         regularNormalIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
         ptr += tieVuHeader.regularVertexCount * 0x1;
-        alignTo(0x4);
+        ptr = align(ptr, 0x4);
         morphingNormalIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyz(0));
         ptr += tieVuHeader.morphingVertexCount * 0x4;
 
         // indices into the instance's rgba array
-        alignTo(0x10);
+        ptr = align(ptr, 0x10);
         regularRgbaIndices = view.subdivide(ptr, tieVuHeader.regularVertexCount, 0x1).map(view => view.getUint8(0));
         ptr += tieVuHeader.regularVertexCount * 0x1;
-        alignTo(0x4);
+        ptr = align(ptr, 0x4);
         morphingRgbaIndices = view.subdivide(ptr, tieVuHeader.morphingVertexCount, 0x4).map(view => view.getUint8_Xyzw(0));
         ptr += tieVuHeader.morphingVertexCount * 0x4;
     }
 
-    alignTo(0x10);
+    ptr = align(ptr, 0x10);
     const stripControlBytes: number[] = [];
     let stripCount = tieVuHeader.stripCount + 1;
     while (true) {
@@ -445,7 +598,7 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
         }
     }
 
-    const imaginaryGsBuffer = new ImaginaryGsCommandBuffer<TieStrip, { material: number, clamp: number }, TieVertexWithNormalAndRgba>();
+    const imaginaryGsBuffer = new ImaginaryGsCommandBuffer<TieStrip, { material: number, clamp: number }, TieVertexWithLightingInfo>();
 
     // first command always sets the material to the first material
     const firstMaterialId = adGifSrcOffsets[0] / SIZEOF_TIE_AD_GIFS;
@@ -453,41 +606,74 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
     const firstClamp = firstAdGif.clamp.low + (firstAdGif.clamp.high << 2);
     imaginaryGsBuffer.writeSetMaterial(0, tieCommandSizes.setMaterial, { material: firstMaterialId, clamp: firstClamp });
 
+    let rgbaRemapSlot = baseRgbaRemapSlot;
+
     // Write verts into command buffer
     // Some are written twice.
     for (let i = 0; i < regularVerts.length; i++) {
         const vertex = regularVerts[i];
-        let normalIndex = 0;
-        let rgbaIndex = 0;
-        if (gn === 1) {
-            normalIndex = regularNormalIndices[i];
-            rgbaIndex = regularRgbaIndices[i] - 64;
-        } else {
-            // TODO: rgba remaps for rac2
+
+        const commandValue: TieVertexWithLightingInfo = {
+            vertex,
+            normalIndices_Rac1: null,
+            rgbaIndices_Rac1: null,
+            rgbaRemapSlot_Rac234: null,
+        };
+        switch (gn) {
+            case 1: {
+                commandValue.normalIndices_Rac1 = [regularNormalIndices[i], regularNormalIndices[i], regularNormalIndices[i]];
+                commandValue.rgbaIndices_Rac1 = [regularRgbaIndices[i] - 64, regularRgbaIndices[i] - 64, regularRgbaIndices[i] - 64];
+                break;
+            }
+            case 2:
+            case 3:
+            case 4: {
+                commandValue.rgbaRemapSlot_Rac234 = rgbaRemapSlot;
+                break;
+            }
         }
-        imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
+
+        imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, commandValue, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
-            imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
+            imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, commandValue, true);
         }
+
+        rgbaRemapSlot++;
     }
     for (let i = 0; i < morphingVerts.length; i++) {
         const vertex = morphingVerts[i];
-        let normalIndex = 0;
-        let rgbaIndex = 0;
-        if (gn === 1) {
-            normalIndex = morphingNormalIndices[i].x; // all 3 components are normal indices, not sure why there are 3, maybe to do with lod morphing
-            rgbaIndex = morphingRgbaIndices[i].x - 64;
-        } else {
-            // TODO: rgba remaps for rac2
+
+        const commandValue: TieVertexWithLightingInfo = {
+            vertex,
+            normalIndices_Rac1: null,
+            rgbaIndices_Rac1: null,
+            rgbaRemapSlot_Rac234: null,
+        };
+        switch (gn) {
+            case 1: {
+                commandValue.normalIndices_Rac1 = [morphingNormalIndices[i].x, morphingNormalIndices[i].y, morphingNormalIndices[i].z];
+                commandValue.rgbaIndices_Rac1 = [morphingRgbaIndices[i].x - 64, morphingRgbaIndices[i].y - 64, morphingRgbaIndices[i].z - 64];
+                break;
+            }
+            case 2:
+            case 3:
+            case 4: {
+                commandValue.rgbaRemapSlot_Rac234 = rgbaRemapSlot;
+                break;
+            }
         }
-        imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
+
+        imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset, tieCommandSizes.vertex, commandValue, true);
         if (vertex.gsPacketWriteOffset2 !== 0 && vertex.gsPacketWriteOffset !== vertex.gsPacketWriteOffset2) {
-            imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, { vertex, normalIndex, rgbaIndex }, true);
+            imaginaryGsBuffer.writeVertex(vertex.gsPacketWriteOffset2, tieCommandSizes.vertex, commandValue, true);
         }
+
+        rgbaRemapSlot++;
     }
 
     // Write primitive reset commands
-    for (const strip of tieStrips) {
+    for (let i = 0; i < tieStrips.length; i++) {
+        const strip = tieStrips[i];
         imaginaryGsBuffer.writePrimitiveReset(strip.gifTagOffset, tieCommandSizes.primitiveReset, strip);
     }
 
@@ -738,30 +924,30 @@ export function readTfragHeader(view: DataViewExt) {
 }
 
 export interface TfragLight {
-    unknown0: number,
+    offset: number,
     azimuth: number,
     elevation: number,
-    brightness: number,
-    directionalLights: number[],
+    ambientColor: { a: number, r: number, g: number, b: number },
+    lightSelector: DirectionLightSelector,
 };
 export const SIZEOF_TFRAG_LIGHT = 0x8;
 export function readTfragLight(view: DataViewExt): TfragLight {
     /*
     struct TfragLight {
-        uint16 unknown0; // looks like a write address. Between 300 and 1400, always increases, usually by 6 at a time, always divisible by 2.
+        uint16 offset; // byte offset into the vertex array, not needed
         int8 azimuth;
         int8 elevation;
-        uint16 brightness; // this looks like light intensity but I don't know why I'd need it
-        uint16 directionalLights; // nibble[4], list of indices into the directional light array
+        uint16 ambientColor;
+        uint16 lightSelector;
     }
     */
 
     return {
-        unknown0: view.getUint16(0x0),
+        offset: view.getUint16(0x0),
         azimuth: view.getInt8(0x2),
         elevation: view.getInt8(0x3),
-        brightness: view.getUint16(0x4),
-        directionalLights: view.getNibbleArray(0x6, 2),
+        ambientColor: readA1BGR5(view.subview(0x4)),
+        lightSelector: readDirectionLightSelector(view.subview(0x6)),
     }
 }
 
@@ -772,8 +958,10 @@ export interface TfragLod {
 
 export interface Tfrag {
     header: TfragHeader,
-    rgbas: { r: number, g: number, b: number, a: number }[],
+    // actual lighting input
     lights: TfragLight[],
+    // precomputed lit colors (should match lighting result)
+    rgbas: { r: number, g: number, b: number, a: number }[],
     dataGroup1: {
         lod2: TfragLod,
     },
@@ -798,7 +986,7 @@ export interface Tfrag {
     },
 }
 
-export function readTfrag(view: DataViewExt, header: TfragHeader) {
+export function readTfrag(view: DataViewExt, header: TfragHeader, tfragNumber: number) {
     const rgbas = view.subdivide(header.rgbaOffset, header.rgbaSize * 4, 0x4).map(view => view.getUint8_Rgba(0));
     const lights = view.subdivide(header.lightOfs + 0x10, header.vertCount, SIZEOF_TFRAG_LIGHT).map(readTfragLight); // why plus 0x10?
 
@@ -990,7 +1178,7 @@ export function readTfrag(view: DataViewExt, header: TfragHeader) {
         }
 
         let vertexInfoPart3: TfragVertexInfo[] | null = null;
-        if (vuHeader.positionsLod0Count > 0) {
+        if (unpackReader.hasNext() && unpackReader.peekNextVnvl() === VifUnpackFormat.V4_16) {
             assert(unpackReader.peekNextVnvl() === VifUnpackFormat.V4_16);
             vertexInfoPart3 = unpackReader.next().subdivide(0, 0xFFFF, SIZEOF_TFRAG_VERTEX_INFO).map(readTfragVertexInfo);
         }
@@ -1362,14 +1550,14 @@ export function readShrubClass(view: DataViewExt) {
 }
 
 export interface Sky {
-    header: SkyHeader,
+    header: SkyHeader | null, // sky is optional
     textureEntries: SkyTextureEntry[],
     shells: SkyShell[],
 }
-export function readSky(skyView: DataViewExt): Sky {
+export function readSky(gn: GN, levelNumber: number, skyView: DataViewExt): Sky {
     const header = readSkyHeader(skyView);
     const textureEntries = skyView.subdivide(header.textureDefs, header.textureCount, SIZEOF_SKY_TEXTURE_ENTRY).map(readSkyTextureEntry);
-    const shells = header.shells.slice(0, header.shellCount).map(offset => readSkyShell(skyView, skyView.subview(offset)));
+    const shells = header.shells.slice(0, header.shellCount).map((offset, i) => readSkyShell(gn, levelNumber, skyView, skyView.subview(offset), i));
     return {
         header,
         textureEntries,
@@ -1386,8 +1574,8 @@ export interface SkyShell {
         triangles: SkyFace[],
     }[],
 };
-export function readSkyShell(skyView: DataViewExt, skyShellView: DataViewExt): SkyShell {
-    const shellHeader = readSkyShellHeader(skyShellView);
+export function readSkyShell(gn: GN, levelNumber: number, skyView: DataViewExt, skyShellView: DataViewExt, shellIndex: number): SkyShell {
+    const shellHeader = readSkyShellHeader(gn, levelNumber, skyShellView, shellIndex);
     const skyShells: SkyShell = {
         header: shellHeader,
         clusters: [],
@@ -1399,22 +1587,15 @@ export function readSkyShell(skyView: DataViewExt, skyShellView: DataViewExt): S
         const dataView = skyView.subview(clusterHeader.data);
         const vertexBuffer = dataView.subview(clusterHeader.vertexOffset);
         const vertices = vertexBuffer.subdivide(0, clusterHeader.vertexCount, SIZEOF_SKY_VERTEX).map(readSkyVertex);
+
+        // the texcoords and rgbas are the same memory interpreted differently
+        // triangle.texture controls which one is used on a per-triangle basis
         const texcoordsOrRgbaBuffer = dataView.subview(clusterHeader.texcoordsOrRgbasOffset);
-        let texcoords: SkyTexcoord[] = [];
-        let rgbas: SkyRgba[] = [];
-        if (shellHeader.flags.textured) {
-            texcoords = texcoordsOrRgbaBuffer.subdivide(0, clusterHeader.vertexCount, SIZEOF_SKY_TEXCOORD).map(readSkyTexcoord);
-        } else {
-            rgbas = texcoordsOrRgbaBuffer.subdivide(0, clusterHeader.vertexCount, 4).map(view => view.getUint8_Rgba(0));
-        }
+        const texcoords = texcoordsOrRgbaBuffer.subdivide(0, clusterHeader.vertexCount, SIZEOF_SKY_TEXCOORD).map(readSkyTexcoord);
+        const rgbas = texcoordsOrRgbaBuffer.subdivide(0, clusterHeader.vertexCount, 4).map(view => view.getUint8_Rgba(0));
+
         const indicesBuffer = dataView.subview(clusterHeader.triOffset);
         const triangles = indicesBuffer.subdivide(0, clusterHeader.triCount, SIZEOF_SKY_FACE).map(readSkyFace);
-
-        for (const triangle of triangles) {
-            // make sure it's not mixing texcoords and rgbas
-            const expectedTexture = shellHeader.flags.textured ? triangle.texture : 0xFF;
-            assert(triangle.texture === expectedTexture);
-        }
 
         skyShells.clusters.push({
             vertices,
@@ -1484,24 +1665,70 @@ export interface SkyShellHeader {
     clusterCount: number,
     flags: {
         textured: boolean,
+        bloom: boolean,
     },
+    rotation: { x: number, y: number, z: number } | null;
+    angularVelocity: { x: number, y: number, z: number } | null;
 };
-export const SIZEOF_SKY_SHELL_HEADER = 0x8;
-export function readSkyShellHeader(view: DataViewExt): SkyShellHeader {
+export const SIZEOF_SKY_SHELL_HEADER = (gn: GN) => {
+    switch (gn) {
+        case 1:
+        case 2: return 0x8;
+        case 3:
+        case 4: return 0x10;
+    }
+    assert(false);
+}
+export function readSkyShellHeader(gn: GN, levelNumber: number, view: DataViewExt, shellIndex: number): SkyShellHeader {
     /*
     https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/engine/sky.h#L87C15-L87C34
-
-    Different in rac3+
     */
 
-    const flags = view.getInt32(0x4);
+    switch (gn) {
+        case 1: {
+            const flags = view.getInt32(0x4);
 
-    return {
-        clusterCount: view.getInt32(0x0),
-        flags: {
-            textured: flags & 0x1 ? false : true,
-        },
-    };
+            return {
+                clusterCount: view.getInt32(0x0),
+                flags: {
+                    textured: flags === 0,
+                    bloom: false,
+                },
+                rotation: RAC1_SKY_ROTATION.get(levelNumber)?.find(item => item.shell === shellIndex)?.rotation ?? null,
+                angularVelocity: RAC1_SKY_ANGULAR_VELOCITY.get(levelNumber)?.find(item => item.shell === shellIndex)?.angularVelocity ?? null,
+            };
+        }
+        case 2: {
+            const flags = view.getInt32(0x4);
+
+            return {
+                clusterCount: view.getInt32(0x0),
+                flags: {
+                    textured: flags === 0,
+                    bloom: false,
+                },
+                rotation: null,
+                angularVelocity: null
+            };
+        }
+        case 3:
+        case 4: {
+            const flags = view.getInt16(0x2);
+
+            return {
+                clusterCount: view.getInt16(0x0),
+                flags: {
+                    textured: !(flags & 0x1),
+                    bloom: !!(flags & 0x2),
+                },
+                rotation: view.getInt16_Xyz(0x4),
+                angularVelocity: view.getInt16_Xyz(0xa),
+            };
+        }
+        default: {
+            assert(false);
+        }
+    }
 }
 
 export interface SkyClusterHeader {
@@ -1825,6 +2052,7 @@ export type MobyClass = {
     oClass: number,
     header: MobyClassHeader,
     mesh: MobyMesh | null,
+    bangles: MobyBangles | null,
 };
 export function readMobyClass(gn: GN, view: DataViewExt, oClass: number): MobyClass {
     const header = readMobyClassHeader(view);
@@ -1838,10 +2066,17 @@ export function readMobyClass(gn: GN, view: DataViewExt, oClass: number): MobyCl
         mesh = readMobyMesh(meshGn, view, header.packetTableOffset, header.meshInfo);
     }
 
+    let bangles: MobyBangles | null = null;
+    if (header.bangles) {
+        assert(meshGn !== 1); // no bangles in rac1
+        bangles = readMobyBangles(gn, view, header.bangles * 0x10, header.packetTableOffset);
+    }
+
     return {
         oClass,
         header,
         mesh,
+        bangles
     };
 }
 
@@ -1925,13 +2160,89 @@ export function readMobyMeshInfo(view: DataViewExt): MobyMeshInfo {
     }
 }
 
+export interface MobyBangles {
+    header: MobyBanglesHeader,
+    bangles: MobyBangle[],
+}
+export interface MobyBangle {
+    packetsByLod: [MobyMeshPacket[], MobyMeshPacket[]],
+}
+export function readMobyBangles(gn: GN, mobyView: DataViewExt, banglesOffset: number, packetTableOffset: number): MobyBangles {
+    const header = readMobyBanglesHeader(mobyView.subview(banglesOffset));
+    let bangles: MobyBangle[] = [];
+    for (let i = 0; i < header.bangleDescriptors.length; i++) {
+        const bangleDescriptor = header.bangleDescriptors[i];
+        if (!bangleDescriptor) continue;
+
+        let packetsLod0: MobyMeshPacket[] = [];
+        if (bangleDescriptor.lod0Count > 0) {
+            const bangleOffset = packetTableOffset + bangleDescriptor.lod0Offset * 0x10;
+            const packetHeaders = mobyView.subdivide(bangleOffset, bangleDescriptor.lod0Count, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
+            packetsLod0 = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader, true));
+        }
+
+        let packetsLod1: MobyMeshPacket[] = [];
+        if (bangleDescriptor.lod1Count > 0) {
+            const bangleOffset = packetTableOffset + bangleDescriptor.lod1Offset * 0x10;
+            const packetHeaders = mobyView.subdivide(bangleOffset, bangleDescriptor.lod1Count, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
+            packetsLod1 = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader, true));
+        }
+
+        if (packetsLod0.length || packetsLod1.length) {
+            bangles.push({
+                packetsByLod: [packetsLod0, packetsLod1],
+            });
+        }
+    }
+    return {
+        header,
+        bangles,
+    };
+}
+
+export interface MobyBangleDescriptor {
+    lod0Offset: number;
+    lod0Count: number;
+    lod1Offset: number;
+    lod1Count: number;
+}
+export interface MobyBanglesHeader {
+    unknown0: number,
+    bangleDescriptors: (MobyBangleDescriptor | null)[],
+}
+export function readMobyBanglesHeader(view: DataViewExt) {
+    let ptr = 0;
+    const unknown0 = view.getUint16(0); // ??
+    const enabledBanglesBitmask = view.getUint16(2);
+    ptr += 4;
+    const bangleDescriptors: (MobyBangleDescriptor | null)[] = []
+    for (let i = 0; i < 15; i++) {
+        if (enabledBanglesBitmask & (1 << i)) {
+            bangleDescriptors.push({
+                lod0Offset: view.getUint8(ptr + 0x0),
+                lod0Count: view.getUint8(ptr + 0x1),
+                lod1Offset: view.getUint8(ptr + 0x2),
+                lod1Count: view.getUint8(ptr + 0x3),
+            });
+        } else {
+            bangleDescriptors.push(null);
+        }
+        ptr += 4;
+    }
+
+    return {
+        unknown0,
+        bangleDescriptors,
+    }
+}
+
 export interface MobyMesh {
     packetHeaders: MobyMeshPacketHeader[],
     packetsByLod: [MobyMeshPacket[], MobyMeshPacket[]],
 };
 export function readMobyMesh(gn: GN, mobyView: DataViewExt, packetTableOffset: number, meshInfo: MobyMeshInfo): MobyMesh {
     const packetHeaders = mobyView.subdivide(packetTableOffset, meshInfo.highLodCount + meshInfo.lowLodCount, SIZEOF_MOBY_MESH_PACKET_HEADER).map(readMobyMeshPacketHeader);
-    const packets = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader));
+    const packets = packetHeaders.map(packetHeader => readMobyMeshPacket(gn, mobyView, packetHeader, false));
     const packetsLod0 = packets.slice(0, meshInfo.highLodCount);
     const packetsLod1 = packets.slice(meshInfo.highLodCount);
     // TODO: read metal packets
@@ -1977,9 +2288,10 @@ export interface MobyMeshPacket {
     textures: MobyTexturePrimitive[],
     vertices: MobyVertex[],
     duplicateVertices: number[],
+    isBanglePacket: boolean,
 };
-export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader): MobyMeshPacket {
-    const vifCommands = readVifCommandList(packetView.subview(packetHeader.vifListOffset, packetHeader.vifListSize * 0x10));
+export function readMobyMeshPacket(meshGn: GN, mobyView: DataViewExt, packetHeader: MobyMeshPacketHeader, isBanglePacket: boolean): MobyMeshPacket {
+    const vifCommands = readVifCommandList(mobyView.subview(packetHeader.vifListOffset, packetHeader.vifListSize * 0x10));
     const unpackReader = new VifUnpackReader(vifCommands);
 
     const unpack1 = unpackReader.next();
@@ -1992,22 +2304,26 @@ export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHe
     const indicesHeader = readMobyIndicesHeader(unpack2);
     const indices = unpack2.subview(0x4).getTypedArrayView(Int8Array);
 
-    // they've packed vertex indices into all the padding bytes...
-    const secretIndices: number[] = [indicesHeader.secretIndex];
+    let textures: MobyTexturePrimitive[] = [];
 
-    const textures: MobyTexturePrimitive[] = [];
+    // more unhinged behavior -
+    // secret indices are a secondary index buffer, when the regular index buffer contains a 0,
+    // the next secret index is used instead and the next texture is used
+    // but if the secret index is also 0 that means the end of the mesh was 3 verts earlier.
+    let secretIndices: number[] = [indicesHeader.secretIndex];
 
     assert(!!packetHeader.vifListTextureUnpackOffset === !!unpackReader.hasNext());
     if (packetHeader.vifListTextureUnpackOffset) {
         const unpack3 = unpackReader.next();
         assert(unpack3.byteLength % 0x40 === 0);
-        for (let i = 0; i < unpack3.byteLength / 0x40; i++) {
-            secretIndices.push(unpack3.getInt8(i * 0x10 + 0xc));
-            textures.push(readMobyTexturePrimitive(unpack3.subview(i * 0x40)));
-        }
+        const res = readMobyTexturePrimitives(unpack3);
+        textures = res.textures;
+        secretIndices = secretIndices.concat(res.secretIndices);
     }
 
-    const vertexTable = readMobyVertexTable(meshGn, packetView, packetHeader);
+    // important to have accurate size here so it knows how to read weird trailing cache address data
+    const vertexTableSize = (packetHeader.vertexDataSize - (meshGn === 1 ? packetHeader.unknownE : 0)) * 0x10
+    const vertexTable = readMobyVertexTable(meshGn, mobyView.subview(packetHeader.vertexOffset, vertexTableSize), packetHeader);
 
     return {
         texcoords,
@@ -2017,77 +2333,57 @@ export function readMobyMeshPacket(meshGn: GN, packetView: DataViewExt, packetHe
         textures,
         vertices: vertexTable.vertices,
         duplicateVertices: vertexTable.duplicateVertices,
+        isBanglePacket,
     };
 }
 
-export function readMobyVertexTable(meshGn: GN, packetView: DataViewExt, packetHeader: MobyMeshPacketHeader) {
-    let arrayOffset = packetHeader.vertexOffset;
-    function alignTo(size: number) {
-        if (arrayOffset % size !== 0) arrayOffset += size - (arrayOffset % size);
+export function readMobyVertexTable(meshGn: GN, vertexTableView: DataViewExt, packetHeader: MobyMeshPacketHeader) {
+    /*
+    struct {
+        // 0x0
+        VertexTableHeader header;
+        // 0x10
+        MobyMatrixTransfer matrix_transfers[header.matrixTransferCount];
+        // align 0x8
+        uint16 duplicateVerts[header.duplicateVertexCount];
+        // seek to header.vertexTableOffset (usually same as align 0x10)
+        MobyVertex verts[header.twoWayBlendVertexCount + header.threeWayBlendVertexCount + header.mainVertexCount];
+        // has trailing data for vert cache addresses
     }
+    */
 
-    const vertexTableHeader = readVertexTableHeader(meshGn, packetView.subview(arrayOffset));
-    arrayOffset += SIZEOF_VERTEX_TABLE_HEADER(meshGn);
+    let ptr = 0;
+
+    const vertexTableHeader = readVertexTableHeader(meshGn, vertexTableView);
+    ptr += SIZEOF_VERTEX_TABLE_HEADER(meshGn);
 
     assert(vertexTableHeader.vertexTableOffset / 0x10 <= packetHeader.vertexDataSize);
     assert(vertexTableHeader.transferVertexCount === packetHeader.transferVertexCount);
     assert(packetHeader.unknownD === Math.floor((0xf + packetHeader.transferVertexCount * 6) / 0x10));
     assert(packetHeader.unknownE === Math.floor((3 + packetHeader.transferVertexCount) / 4));
 
-    let vertexOffset = packetHeader.vertexOffset + vertexTableHeader.vertexTableOffset;
+    const matrixTransfers = vertexTableView.subdivide(ptr, vertexTableHeader.matrixTransferCount, SIZEOF_MOBY_MATRIX_TRANSFER).map(view => readMobyMatrixTransfer(view));
+    ptr += vertexTableHeader.matrixTransferCount * SIZEOF_MOBY_MATRIX_TRANSFER;
+
+    ptr = align(ptr, 0x8);
+
+    // verts to copy from the cache
+    const duplicateVertices = vertexTableView.getArrayOfNumbers(ptr, vertexTableHeader.duplicateVertexCount, Uint16Array).map(value => value >> 7);
+
+    ptr = vertexTableHeader.vertexTableOffset;
+
     const vertexCount = vertexTableHeader.twoWayBlendVertexCount + vertexTableHeader.threeWayBlendVertexCount + vertexTableHeader.mainVertexCount;
-    const vertices = packetView.subview(vertexOffset).subdivide(0, vertexCount, SIZEOF_MOBY_VERTEX).map(view => readMobyVertex(view));
-    vertexOffset += vertexCount * SIZEOF_MOBY_VERTEX;
+    const verticesView = vertexTableView.subview(ptr); // important - must inherit accurate length from parent view 
+    const vertices = verticesView.subdivide(0, vertexCount, SIZEOF_MOBY_VERTEX).map(view => readMobyVertex(view));
 
-    const matrixTransfers = packetView.subdivide(arrayOffset, vertexTableHeader.matrixTransferCount, SIZEOF_MOBY_MATRIX_TRANSFER).map(view => readMobyMatrixTransfer(view));
-    arrayOffset += vertexTableHeader.matrixTransferCount * SIZEOF_MOBY_MATRIX_TRANSFER;
-
-    alignTo(8);
-
-    // appends verts to the list by cloning them from the cache
-    const duplicateVertices = packetView.getArrayOfNumbers(arrayOffset, vertexTableHeader.duplicateVertexCount, Uint16Array).map(value => value >> 7);
-
-    /*
-    I am so confused by this...
-    */
-
-    // shift all the cache slot values 7 verts to the left
-    for (let i = 7; i < vertices.length; i++) {
-        vertices[i - 7].cacheAddress = vertices[i].cacheAddress;
-    }
-
-    // calculate how many blocks are left
-    let epilogueCount = 0;
-    if (meshGn === 1) {
-        epilogueCount = (vertexTableHeader.unknownE - vertexTableHeader.vertexTableOffset) / 0x10 - vertexCount;
-    } else {
-        epilogueCount = packetHeader.vertexDataSize - vertexTableHeader.vertexTableOffset / 0x10 - vertexCount;
-    }
-    assert(epilogueCount < 7);
-
-    // starting at the 7th last vertex, populate cache addresses from epilogue
-    vertexOffset += Math.max(7 - vertexCount, 0) * SIZEOF_MOBY_VERTEX;
-    for (let i = Math.max(7 - vertexCount, 0); i < epilogueCount; i++) {
-        const cacheAddress = readMobyVertexCacheAddress(packetView.subview(vertexOffset));
-        vertexOffset += SIZEOF_MOBY_VERTEX; // advance a full vertex even though we only read 2 bytes
-        const dest = vertexCount + i - 7;
-        vertices[dest].cacheAddress = cacheAddress;
-    }
-
-    // once we reach the last 16 byte block, read up to 6 more cache addresses from the last block starting at 0x4
-    const trailingCacheAddresses = packetView.getArrayOfNumbers(vertexOffset - SIZEOF_MOBY_VERTEX + 0x4, 6, Uint16Array);
-    for (let i = Math.max(7 - vertexCount - epilogueCount, 0); i < 6; i++) {
-        const dest = vertexCount + epilogueCount + i - 7;
-        if (dest < vertices.length) {
-            vertices[dest].cacheAddress = trailingCacheAddresses[i];
-        }
-    }
+    // assign cache addresses to verts
+    readMobyCacheAddresses(verticesView, vertices);
 
     return {
         vertexTableHeader,
-        vertices,
         matrixTransfers,
         duplicateVertices,
+        vertices,
     };
 }
 
@@ -2108,30 +2404,55 @@ export function readMobyIndicesHeader(view: DataViewExt): MobyIndicesHeader {
     };
 }
 
+export function readMobyTexturePrimitives(view: DataViewExt) {
+    assert(view.byteLength % 0x40 === 0);
+
+    const textures = view.subdivide(0, 0xFFFF, 0x40).map(view => readMobyTexturePrimitive(view));
+
+    /*
+    Some unhinged behavior here -
+    The secret indices occupy the same memory as the textures, but they fill the padding space.
+    They're spaced weirdly - they're 0x10 apart even though the textures are 0x40.
+    
+    e.g. If there are 3 textures X,Y,Z then there will be 3 indices arranged like this:
+    |XXXXXXXXX---01--|
+    |XXXXXXXXX---02--|
+    |XXXXXXXXX---03--|
+    |XXXXXXXXX-------|
+    |YYYYYYYYY-------|
+    |YYYYYYYYY-------|
+    |YYYYYYYYY-------|
+    |YYYYYYYYY-------|
+    |ZZZZZZZZZ-------|
+    |ZZZZZZZZZ-------|
+    |ZZZZZZZZZ-------|
+    |ZZZZZZZZZ-------|
+    */
+    const secretIndices = view.subdivide(0, textures.length, 0x10).map(view => view.getInt32(0xc));
+
+    return {
+        textures,
+        secretIndices,
+    }
+}
+
 export interface MobyTexturePrimitive {
     tex1: GifAd,
-    superSecretIndex1: number,
     clamp: GifAd,
-    superSecretIndex2: number,
     tex0: GifAd,
-    superSecretIndex3: number,
     miptbp1: GifAd,
-    superSecretIndex4: number,
 };
 export const SIZEOF_MOBY_TEXTURE_PRIMITIVE = 0x40;
 export function readMobyTexturePrimitive(view: DataViewExt): MobyTexturePrimitive {
     /*
     https://github.com/chaoticgd/wrench/blob/master/src/engine/moby_packet.h#L44
+    Vertex indices are packed into the padding bytes but they don't correspond to the same texture so they're read elsewhere.
     */
     return {
         tex1: readGifAdData(view.subview(0x0)),
-        superSecretIndex1: view.getInt32(0xc),
         clamp: readGifAdData(view.subview(0x10)),
-        superSecretIndex2: view.getInt32(0x1c),
         tex0: readGifAdData(view.subview(0x20)),
-        superSecretIndex3: view.getInt32(0x2c),
         miptbp1: readGifAdData(view.subview(0x30)),
-        superSecretIndex4: view.getInt32(0x3c),
     };
 }
 
@@ -2150,29 +2471,32 @@ export function readVertexTableHeader(gn: GN, view: DataViewExt): VertexTableHea
     /*
     https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_vertex.cpp#L25-L45
     */
-    if (gn === 1) {
-        return {
-            matrixTransferCount: view.getInt32(0x0),
-            twoWayBlendVertexCount: view.getInt32(0x4),
-            threeWayBlendVertexCount: view.getInt32(0x8),
-            mainVertexCount: view.getInt32(0xc),
-            duplicateVertexCount: view.getInt32(0x10),
-            transferVertexCount: view.getInt32(0x14),
-            vertexTableOffset: view.getInt32(0x18),
-            unknownE: view.getInt32(0x1c),
-        };
-    } else {
-        // same but with 16 bit fields instead of 32 bit
-        return {
-            matrixTransferCount: view.getInt16(0x0),
-            twoWayBlendVertexCount: view.getInt16(0x2),
-            threeWayBlendVertexCount: view.getInt16(0x4),
-            mainVertexCount: view.getInt16(0x6),
-            duplicateVertexCount: view.getInt16(0x8),
-            transferVertexCount: view.getInt16(0xa),
-            vertexTableOffset: view.getInt16(0xc),
-            unknownE: view.getInt16(0xe),
-        };
+    switch (gn) {
+        case 1:
+            return {
+                matrixTransferCount: view.getInt32(0x0),
+                twoWayBlendVertexCount: view.getInt32(0x4),
+                threeWayBlendVertexCount: view.getInt32(0x8),
+                mainVertexCount: view.getInt32(0xc),
+                duplicateVertexCount: view.getInt32(0x10),
+                transferVertexCount: view.getInt32(0x14),
+                vertexTableOffset: view.getInt32(0x18),
+                unknownE: view.getInt32(0x1c),
+            };
+        case 2:
+        case 3:
+        case 4:
+            // same but with 16 bit fields instead of 32 bit
+            return {
+                matrixTransferCount: view.getInt16(0x0),
+                twoWayBlendVertexCount: view.getInt16(0x2),
+                threeWayBlendVertexCount: view.getInt16(0x4),
+                mainVertexCount: view.getInt16(0x6),
+                duplicateVertexCount: view.getInt16(0x8),
+                transferVertexCount: view.getInt16(0xa),
+                vertexTableOffset: view.getInt16(0xc),
+                unknownE: view.getInt16(0xe),
+            };
     }
 }
 
@@ -2191,7 +2515,7 @@ export function readMobyVertex(view: DataViewExt): MobyVertex {
     Skip skinning data for now because it's very complicated
     */
     return {
-        cacheAddress: readMobyVertexCacheAddress(view), // 9 bit
+        cacheAddress: 0xFF, // populated later
         normalAzumith: view.getInt8(0x8),
         normalElevation: view.getInt8(0x9),
         x: view.getInt16(0xa),
@@ -2200,8 +2524,75 @@ export function readMobyVertex(view: DataViewExt): MobyVertex {
     };
 }
 
-export function readMobyVertexCacheAddress(view: DataViewExt) {
-    return view.getUint16(0x0) & 0x1FF;
+function readMobyCacheAddresses(view: DataViewExt, verts: MobyVertex[]) {
+    /**
+     * Each vert has a cache address.
+     * But they are arranged in most insane way possible.
+     * 
+     * We have to iterate with a stride of 0x10, until we would reach the end of the buffer,
+     * then we advance 0x4 once, then 0x2 thereafter.
+     * 
+     * The amount of trailing space varies but it's at least 0x10 and always a multiple of 0x10.
+     * If there's exactly 3 verts there must be at least 0x20 trailing space.
+     * 
+     * We need to skip the first 7 elements but the iteration order is not affected by skipping.
+     * 
+     * They are arranged like this.
+     * In this example there are 10 verts (XX) and 10 cache addresses (01-10).
+     * |--XXXXXXXXXXXXXX| vert 1
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX| vert 7
+     * |01XXXXXXXXXXXXXX|
+     * |02XXXXXXXXXXXXXX|
+     * |03XXXXXXXXXXXXXX| vert 10
+     * |04--------------| trailing space
+     * |05--------------|
+     * |06--07080910----| end of buffer
+     * 
+     * Another example with 4 verts - the cache addresses don't overlap the vertex data at all:
+     * |--XXXXXXXXXXXXXX| vert 1
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX|
+     * |--XXXXXXXXXXXXXX| vert 4
+     * |----------------| trailing space
+     * |------01020304--| end of buffer
+     */
+
+    let ptr = 0;
+    let vertIdx = 0;
+    let i = 0;
+
+    const lastRow = view.byteLength - 0x10;
+
+    while (true) {
+        // read cache address, skip the first 7
+        if (i >= 7) {
+            verts[vertIdx].cacheAddress = view.getUint16(ptr) & 0x1FF;
+            vertIdx++;
+        }
+
+        if (vertIdx === verts.length) {
+            // done
+            break;
+        }
+
+        if (ptr === lastRow) {
+            // 4 bytes when we hit the last row
+            ptr += 0x4;
+        } else if (ptr >= lastRow) {
+            // 2 bytes within the last row
+            ptr += 0x2;
+        } else {
+            // 0x10 bytes before the last row
+            ptr += 0x10;
+        }
+
+        i++;
+    }
 }
 
 export type MobyMatrixTransfer = {
@@ -2209,12 +2600,69 @@ export type MobyMatrixTransfer = {
     vu0DestAddr: number,
 };
 export const SIZEOF_MOBY_MATRIX_TRANSFER = 0x2;
-export function readMobyMatrixTransfer(view: DataViewExt) {
+export function readMobyMatrixTransfer(view: DataViewExt): MobyMatrixTransfer {
     /*
     https://github.com/chaoticgd/wrench/blob/ba12611f5e5b54733fd807f17b3210fd0248f996/src/engine/moby_vertex.h#L99
     */
     return {
         sprJointIndex: view.getUint8(0x0),
         vu0DestAddr: view.getUint8(0x1),
+    }
+}
+
+export interface Occlusion {
+    // [z][y][x] -> occlusion mask id
+    // where x,y,z are the camera coords divided by 4 and rounded down
+    grid: Map<number, Map<number, Map<number, number>>>,
+    // is_occluded = masks[maskId * 128][occlusionIndex / 8] & (1 << (occlusionIndex % 8))
+    masks: DataViewExt,
+};
+
+export function readOcclusion(view: DataViewExt): Occlusion {
+    const masksOffset = view.getUint32(0x0);
+    let maxMaskId = 0;
+    const grid = new Map<number, Map<number, Map<number, number>>>();
+
+    const zStart = view.getUint16(0x4);
+    const zCount = view.getUint16(0x6);
+    const zOffsets = view.getArrayOfNumbers(0x8, zCount, Uint16Array);
+
+    for (let z = 0; z < zOffsets.length; z++) {
+        const zOffset = zOffsets[z] * 4;
+        if (!zOffset) continue;
+
+        const yStart = view.getUint16(zOffset + 0x0);
+        const yCount = view.getUint16(zOffset + 0x2);
+        const yOffsets = view.getArrayOfNumbers(zOffset + 0x4, yCount, Uint16Array);
+        for (let y = 0; y < yOffsets.length; y++) {
+            const yOffset = yOffsets[y] * 4;
+            if (!yOffset) continue;
+
+            const xStart = view.getUint16(yOffset + 0x0);
+            const xCount = view.getUint16(yOffset + 0x2);
+            const xMaskIds = view.getArrayOfNumbers(yOffset + 0x4, xCount, Uint16Array);
+            for (let x = 0; x < xMaskIds.length; x++) {
+                const xMaskId = xMaskIds[x];
+                if (xMaskId === 0xFFFF) continue;
+                maxMaskId = Math.max(maxMaskId, xMaskId);
+
+                const zPos = zStart + z;
+                const yPos = yStart + y;
+                const xPos = xStart + x;
+
+                let zCell = grid.get(zPos);
+                if (!zCell) zCell = grid.set(zPos, new Map()).get(zPos)!;
+                let yCell = zCell.get(yPos);
+                if (!yCell) yCell = zCell.set(yPos, new Map()).get(yPos)!;
+                yCell.set(xPos, xMaskId);
+            }
+        }
+    }
+
+    const masks = view.subview(masksOffset, (maxMaskId + 1) * 128);
+
+    return {
+        masks,
+        grid,
     }
 }

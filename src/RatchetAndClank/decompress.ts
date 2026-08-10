@@ -59,6 +59,7 @@ while( !eof ) {
 }
 
 The max match size is 286
+The max match lookback distance is 0x4000
 The max literal size is 273
 
 
@@ -188,9 +189,9 @@ export class WadDecompressor {
                     matchSize = this.srcBuf[this.srcPtr++] + 7;
                 }
 
-                const b0 = this.srcBuf[this.srcPtr++];
-                const b1 = this.srcBuf[this.srcPtr++]
-                lookback = this.destPtr - ((flag & 8) * 0x800) - (b1 * 0x40) - (b0 >> 2);
+                const b1 = this.srcBuf[this.srcPtr++];
+                const b2 = this.srcBuf[this.srcPtr++];
+                lookback = this.destPtr - ((flag & 8) * 0x800) - (b2 * 0x40) - (b1 >> 2);
 
                 // not sure what this does
                 if (lookback !== this.destPtr) {

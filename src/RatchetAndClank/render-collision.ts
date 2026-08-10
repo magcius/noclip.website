@@ -19,7 +19,7 @@ const collisionTypeMap = Object.fromEntries([
     [0b0011, vec3.fromValues(0.6, 0.5, 0.3)], // 3 drown (mud)
     [0b0100, vec3.fromValues(0.1, 0.4, 0.1)], // 4 slippy slide
     [0b0101, vec3.fromValues(0.9, 0.6, 0.3)], // 5 hoverbike or grindrail jump
-    [0b0110, vec3.fromValues(0.4, 0.7, 0.4)], // 6 unused
+    [0b0110, vec3.fromValues(0.8, 0.9, 0.7)], // 6 something to do with rac2 spiderbot, and rac2 spaceship invisible walls
     [0b0111, vec3.fromValues(0.7, 0.9, 1.0)], // 7 ice
     [0b1000, vec3.fromValues(0.2, 0.2, 0.3)], // 8 out of bounds, can wall-jump
     [0b1001, vec3.fromValues(0.8, 0.5, 0.5)], // 9 cannot mantle

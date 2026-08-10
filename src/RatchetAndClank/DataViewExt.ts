@@ -409,3 +409,5 @@ export class DataViewExt<T extends ArrayBufferLike = ArrayBufferLike> extends Da
         URL.revokeObjectURL(url);
     }
 }
+
+export const EMPTY_VIEW = new DataViewExt(new ArrayBuffer(0), { littleEndian: true });

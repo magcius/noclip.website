@@ -42,6 +42,8 @@ export enum GfxBlendFactor {
     OneMinusDstAlpha,
     ConstantColor,
     OneMinusConstantColor,
+    ConstantAlpha,
+    OneMinusConstantAlpha,
 }
 
 export enum GfxBlendMode {

@@ -4,7 +4,10 @@ import { Color } from "../Color";
 import { assert, nArray } from "../util";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { ClassEntry } from "./bin-index";
-import { ChunkPlane, MobyInstance } from "./bin-gameplay";
+import { ChunkPlane, MobyInstance, OcclusionMappings, TieInstance } from "./bin-gameplay";
+import { Occlusion } from "./bin-core";
+import { DataViewExt } from "./DataViewExt";
+import { MOBYS_IMMUNE_TO_CHUNKING } from "./moby-impl/moby";
 
 // game number shorthand
 export type GN = 1 | 2 | 3 | 4;
@@ -13,6 +16,7 @@ export type GN = 1 | 2 | 3 | 4;
 const _noclipSpaceFromRatchetSpace = mat4.create();
 mat4.rotateX(_noclipSpaceFromRatchetSpace, mat4.clone(_noclipSpaceFromRatchetSpace), -Math.PI / 2);
 export const noclipSpaceFromRatchetSpace = _noclipSpaceFromRatchetSpace as ReadonlyMat4;
+export const ratchetSpaceFromNoclipSpace = mat4.invert(mat4.create(), _noclipSpaceFromRatchetSpace) as ReadonlyMat4;
 
 export function matrixToNoclipSpace(matrix: ReadonlyMat4): mat4 {
     const out = mat4.clone(matrix);
@@ -21,15 +25,16 @@ export function matrixToNoclipSpace(matrix: ReadonlyMat4): mat4 {
 }
 
 // make map of oClass to instances of that oClass
-export function makeInstanceOClassMap<T extends { oClass: number }>(instances: T[]) {
+export function makeInstanceOClassMap<T extends { oClass: number }>(instances: (T | null)[]) {
     const map = new Map<number, T[]>();
     for (const inst of instances) {
+        if (!inst) continue;
         if (!map.has(inst.oClass)) {
             map.set(inst.oClass, []);
         }
         map.get(inst.oClass)!.push(inst);
     }
-    return map;
+    return Array.from(map.values());
 }
 
 // make map of oClass to texture indices
@@ -69,17 +74,21 @@ export function ownerChunk(pos: vec3, chunkPlanes: ChunkPlane[]): number {
 }
 
 // filter tie or shrub instances matching a chunk id
-export function filterInstancesByChunkPlane<T extends { _matrixInNoclipSpace: mat4 }>(chunkNumber: number | null, instances: T[], chunkPlanes: ChunkPlane[] | undefined): T[] {
+export function filterInstancesByChunkPlane<T extends { _matrixPretransformed: mat4 }>(chunkNumber: number | null, instances: T[], chunkPlanes: ChunkPlane[] | undefined): (T | null)[] {
     if (!chunkPlanes) return instances;
     if (chunkNumber === null) return instances;
-    const out: T[] = [];
+
+    const out: (T | null)[] = [];
     for (let i = 0; i < instances.length; i++) {
         const instance = instances[i];
-        const pos = mat4.getTranslation(vec3.create(), instance._matrixInNoclipSpace);
+        const pos = mat4.getTranslation(vec3.create(), instance._matrixPretransformed);
         if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
             out.push(instance);
+        } else {
+            out.push(null);
         }
     }
+
     return out;
 }
 
@@ -92,7 +101,7 @@ export function filterMobyInstancesByChunkPlane(chunkNumber: number | null, inst
         const instance = instances[i];
         const pos = vec3.fromValues(instance.position.x, instance.position.y, instance.position.z);
         vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
-        if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
+        if (ownerChunk(pos, chunkPlanes) === chunkNumber || MOBYS_IMMUNE_TO_CHUNKING.has(instance.oClass)) {
             out.push(instance);
         }
     }
@@ -126,12 +135,144 @@ export function truncateTrailing0xFF(arr: number[]): number[] {
     return copy;
 }
 
-export function readRGB5A1(rgba: number): Color {
-    const r = (rgba & 0x1F) << 3;
-    const g = ((rgba >> 5) & 0x1F) << 3;
-    const b = ((rgba >> 10) & 0x1F) << 3;
-    const a = (rgba >> 15) === 1 ? 0xFF : 0x00;
-    return { r, g, b, a };
+export function readA1BGR5(view: DataViewExt): { a: number, r: number, g: number, b: number } {
+    const value = view.getUint16(0x0);
+    const a = ((value >> 15) & 0x1) << 7;
+    const b = ((value >> 10) & 0x1F) << 3;
+    const g = ((value >> 5) & 0x1F) << 3;
+    const r = (value & 0x1F) << 3;
+    return { a, r, g, b };
+}
+
+// I call this one "The Headless Chicken"
+export function populateMobyOcclusionBits(instances: MobyInstance[], mappings: OcclusionMappings | null) {
+    if (!mappings) return;
+
+    // you think the list would be empty if there are no occludable mobys?
+    // wrong. you get garbage data.
+    if (!instances.find(inst => inst.skipOcclusionCheck === 0)) return;
+
+    function findMapping(uid: number) {
+        for (let i = 0; i < mappings!.mobyMappings.length; i += 2) {
+            if (mappings!.mobyMappings[i + 1] === uid) {
+                return i;
+            }
+        }
+        return null;
+    }
+
+    let ptr = 0;
+    for (let i = 0; i < instances.length; i++) {
+        const inst = instances[i];
+        if (!inst.skipOcclusionCheck) {
+            const mobyUid = inst.uid;
+            const occlusionUid = mappings.mobyMappings[ptr + 1];
+            if (mobyUid !== occlusionUid) {
+                // it doesn't match, try jumping to wherever that uid appears
+                const guess = findMapping(mobyUid);
+                if (guess !== null) {
+                    // ok, seek to that uid
+                    ptr = guess;
+                } else {
+                    // it's not here? i guess I'll just disable occlusion on this moby...
+                    inst.skipOcclusionCheck = 1;
+                    continue;
+                }
+            }
+
+            // yay
+            inst._occlusionBit = mappings.mobyMappings[ptr];
+            assert(inst._occlusionBit < 1024);
+            ptr += 2;
+        }
+    }
+}
+
+// And I call this one "Two Headless Chickens"
+export function populateTieOcclusionBits(instances: TieInstance[], mappings: OcclusionMappings | null) {
+    if (!mappings) return;
+
+    let mappingPtr = 0;
+    outer: do {
+        let instancePtr = 0;
+        let prevMappingPtr = mappingPtr;
+
+        while (instancePtr < instances.length) {
+            if (mappingPtr >= mappings.tieMappings.length) break outer;
+            const occlusionUid = mappings.tieMappings[mappingPtr + 1];
+            if (occlusionUid === -1) break;
+
+            const inst = instances[instancePtr];
+            const tieUid = inst.occlusionIndex;
+            if (tieUid !== occlusionUid) {
+                // if it doesn't match we skip over the INSTANCE array
+                // (for each instance we skip here there will be one trailing -1 at the end of the array) (usually)
+                instancePtr++;
+                continue;
+            }
+
+            // yay
+            inst._occlusionBit = mappings.tieMappings[mappingPtr];
+            assert(inst._occlusionBit < 1024);
+            mappingPtr += 2;
+            instancePtr++;
+        }
+
+        while (mappingPtr !== mappings.tieMappings.length && mappings.tieMappings[mappingPtr] === -1) {
+            // consume all the -1s until the end of the list or a non -1
+            mappingPtr += 2;
+        }
+
+        if (mappingPtr === prevMappingPtr) {
+            // on rac4 dreadzone station, there are wierd mappings where the uid is set to -1 instead of the bit
+            mappingPtr += 2;
+        }
+
+        // go back to the start of the instance list and loop over the remaining mappings
+    } while (mappingPtr < mappings.tieMappings.length);
+}
+
+export class OcclusionChecker {
+
+    // 128 byte buffer
+    public mask: Uint8Array | null = null;
+    private maskId: number | null = null;
+
+    /**
+     * To check visibility:
+     * ```
+     * if (occlusionChecker.mask) {
+     *   const bit = inst._occlusionBit;
+     *   isVisible = (occlusionChecker.mask[bit >> 3] & (1 << (bit % 8))) === 0;
+     * }
+     * ```
+     */
+    private tfragMappings: Int32Array;
+    private tieMappings: Int32Array;
+    private mobyMappings: Int32Array;
+
+    constructor(private occlusionGrid: Occlusion, private occlusionMappings: OcclusionMappings) {
+        this.tfragMappings = occlusionMappings.tfragMappings;
+        this.tieMappings = occlusionMappings.tieMappings;
+        this.mobyMappings = occlusionMappings.mobyMappings;
+    }
+
+    setCameraPosition(pos: vec3) {
+        const x = Math.floor(pos[0] / 4);
+        const y = Math.floor(-pos[2] / 4);
+        const z = Math.floor(pos[1] / 4);
+
+        const nextMaskId = this.occlusionGrid.grid.get(z)?.get(y)?.get(x) ?? null;
+        if (nextMaskId === this.maskId) return;
+
+        if (nextMaskId === null) {
+            this.maskId = null;
+            this.mask = null;
+        } else {
+            this.maskId = nextMaskId;
+            this.mask = this.occlusionGrid.masks.subview(nextMaskId * 128, 128).getTypedArrayView(Uint8Array);
+        }
+    }
 }
 
 export type MegaBuffer = {
