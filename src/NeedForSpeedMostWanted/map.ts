@@ -345,7 +345,7 @@ function orientation(a: vec2, b: vec2, c: vec2) {
 }
 
 function onSegment(a: vec2, b: vec2, c: vec2) {
-    return b[0] <= Math.max(a[0], c[0]) && b[0] >= Math.max(a[0], c[0]) &&
+    return b[0] <= Math.max(a[0], c[0]) && b[0] >= Math.min(a[0], c[0]) &&
         b[1] <= Math.max(a[1], c[1]) && b[1] >= Math.min(a[1], c[1]);
 }
 
