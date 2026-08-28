@@ -492,6 +492,8 @@ export interface IncomingInstance {
     readonly twoSided: boolean;
     /** GPU index format of {@link mesh}. */
     readonly indexFormat: GfxFormat;
+    /** Winding that faces the camera. Defaults to the clockwise `.ian` convention. */
+    readonly frontFace?: GfxFrontFaceMode;
     /**
      * Per-axis spin in radians per engine tick, about the part's local axes. When set and non-zero,
      * {@link modelMatrix} is rebuilt each frame from {@link baseFrame} and {@link meshScale};
@@ -1112,13 +1114,14 @@ export class IncomingRenderer implements SceneGfx {
             const renderInst = renderInstManager.newRenderInst();
             renderInst.setVertexInput(this.inputLayout, mesh.vertexBufferDescriptors, mesh.indexBufferDescriptor);
             renderInst.setDrawCount(mesh.indexCount);
-            // Culling is disabled everywhere: the correct per-instance mode is still unresolved.
+            // Culling stays off until the per-instance front face is settled for every mesh.
+            const frontFace = inst.frontFace ?? GfxFrontFaceMode.CW;
             if (inst.transparent === true) {
-                const mega: Partial<GfxMegaStateDescriptor> = { cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW, depthWrite: false };
+                const mega: Partial<GfxMegaStateDescriptor> = { cullMode: GfxCullMode.None, frontFace, depthWrite: false };
                 setAttachmentStateSimple(mega, { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
                 renderInst.setMegaStateFlags(mega);
             } else {
-                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
+                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace });
             }
             renderInst.setSamplerBindings(0, [{ gfxTexture: texture ?? null, gfxSampler: this.sampler }]);
 

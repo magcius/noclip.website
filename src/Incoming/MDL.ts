@@ -7,11 +7,6 @@ import { num, stripComment, tokenize } from "./WDL.js";
 export interface IncomingMDLRef {
     /** The referenced object's `label`, resolved against the level's WDL and MDL placements. */
     readonly label: string;
-    /**
-     * Which frame the offset is measured in: `"world"` for world axis-aligned (`relative to`),
-     * `"local"` for the reference's full rotated frame (`local to`, `fixed_to ... at`), or
-     * `"localxz"` for its yaw-only frame (`... toxz`).
-     */
     readonly mode: "world" | "local" | "localxz";
     /** Offset X, in the frame named by {@link mode}. */
     readonly dx: number;

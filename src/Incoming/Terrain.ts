@@ -3,6 +3,7 @@
 // over a 512x512 cell field at 700 world units per cell, the height being the raw int16.
 // `city2tc.bin` holds a 128x128 map of int16 tile words, one per 4x4-cell tile.
 
+import { vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { IAN_VERTEX_FLOATS } from "./IAN.js";
 
@@ -102,21 +103,16 @@ export function sampleGroundHeight(hf: Heightfield, worldX: number, worldZ: numb
     }
 }
 
-function computeNormal(hf: Heightfield, ix: number, iz: number, out: Float32Array): void {
+function computeNormal(hf: Heightfield, ix: number, iz: number, out: vec3): void {
     const heightNegX = heightAt(hf, ix - 1, iz);
     const heightPosX = heightAt(hf, ix + 1, iz);
     const heightNegZ = heightAt(hf, ix, iz - 1);
     const heightPosZ = heightAt(hf, ix, iz + 1);
-    const nx = heightPosX - heightNegX;
-    const ny = INCOMING_UP_Y * 2 * TERRAIN_CELL_SPACING;
-    const nz = heightPosZ - heightNegZ;
-    const length = Math.hypot(nx, ny, nz) || 1;
-    out[0] = nx / length;
-    out[1] = ny / length;
-    out[2] = nz / length;
+    vec3.set(out, heightPosX - heightNegX, INCOMING_UP_Y * 2 * TERRAIN_CELL_SPACING, heightPosZ - heightNegZ);
+    vec3.normalize(out, out);
 }
 
-function orientUV(u: number, v: number, quarterTurns: number, flipU: boolean, flipV: boolean, out: Float32Array): void {
+function orientUV(u: number, v: number, quarterTurns: number, flipU: boolean, flipV: boolean, out: vec2): void {
     let orientedU = u;
     let orientedV = v;
     for (let turn = 0; turn < quarterTurns; turn++) {
@@ -130,8 +126,7 @@ function orientUV(u: number, v: number, quarterTurns: number, flipU: boolean, fl
     if (flipV) {
         orientedV = 1 - orientedV;
     }
-    out[0] = orientedU;
-    out[1] = orientedV;
+    vec2.set(out, orientedU, orientedV);
 }
 
 /**
@@ -145,8 +140,8 @@ function orientUV(u: number, v: number, quarterTurns: number, flipU: boolean, fl
  */
 export function buildTerrainMeshes(hf: Heightfield, cellFlags: ArrayBufferSlice): TerrainMesh[] {
     const tiles = cellFlags.createTypedArray(Int16Array, 0, TERRAIN_TILE_GRID * TERRAIN_TILE_GRID);
-    const normalScratch = new Float32Array(3);
-    const uvScratch = new Float32Array(2);
+    const normalScratch = vec3.create();
+    const uvScratch = vec2.create();
     const verticesByTexture: number[][] = [];
     const indicesByTexture: number[][] = [];
     for (let t = 0; t < TERRAIN_MAX_TEXTURES; t++) {
@@ -188,9 +183,7 @@ export function buildTerrainMeshes(hf: Heightfield, cellFlags: ArrayBufferSlice)
                     const v10 = firstVertex + (localX + 1) * VERTS_PER_TILE_EDGE + localZ;
                     const v01 = firstVertex + localX * VERTS_PER_TILE_EDGE + (localZ + 1);
                     const v11 = firstVertex + (localX + 1) * VERTS_PER_TILE_EDGE + (localZ + 1);
-                    // Reversed from the natural v00, v10, v11 to match the CW front-face convention
-                    // the `.ian` meshes use, so culling drops the underside rather than the top.
-                    indices.push(v00, v11, v10, v00, v01, v11);
+                    indices.push(v00, v10, v11, v00, v11, v01);
                 }
             }
         }

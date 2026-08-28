@@ -3,8 +3,9 @@
 // `.odl` object, terrain and sky definition with a `.wdl` placement list, plus an optional `.mdl`
 // mission file holding the actors.
 
-import { mat4, vec3 } from "gl-matrix";
-import { GfxDevice, GfxFormat, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import { mat4, vec3, type ReadonlyMat4 } from "gl-matrix";
+import { Mat4Identity } from "../MathHelpers.js";
+import { GfxDevice, GfxFormat, GfxFrontFaceMode, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { makeImageBitmapTexture2D } from "../gfx/helpers/TextureHelpers.js";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
@@ -21,7 +22,6 @@ import subversionOverridePaths from "./SubversionOverrides.json";
 
 
 const SPRITE_ATLAS_SIZE = 256;
-const IDENTITY_MATRIX = mat4.create();
 const WATER_FRAME_COUNT = 16;
 const SHADOW_OPACITY = 0.5;
 const SHADOW_SIZE_FACTOR = 0.9;
@@ -29,29 +29,30 @@ const SHADOW_LIFT = 4;
 const pathBase = "Incoming";
 const subversionBase = "IncomingSubversion";
 const SUBVERSION_OVERRIDES = new Set<string>(subversionOverridePaths);
-let overrideSet = new Set<string>();
 
 function normalizePath(p: string): string {
     return p.replace(/\\/g, "/").toLowerCase().trim();
 }
 
-function baseFor(rel: string): string {
-    return overrideSet.has(rel) ? subversionBase : pathBase;
-}
-function resolveDataPath(p: string): string {
-    const rel = normalizePath(p);
-    return `${baseFor(rel)}/${rel}`;
-}
-function resolveTexturePath(p: string): string {
-    const rel = `ppm/${normalizePath(p).replace(/\.ppm$/, ".png")}`;
-    return `${baseFor(rel)}/${rel}`;
-}
-function resolveModelPath(p: string): string {
-    const rel = `pcobject/${normalizePath(p)}`;
-    return `${baseFor(rel)}/${rel}`;
+// Subversion ships a partial tree, so a path falls back to the base game unless it overrides it.
+class PathResolver {
+    constructor(private overrides: ReadonlySet<string>) {}
+
+    public data(p: string): string {
+        return this.resolve(normalizePath(p));
+    }
+    public texture(p: string): string {
+        return this.resolve(`ppm/${normalizePath(p).replace(/\.ppm$/, ".png")}`);
+    }
+    public model(p: string): string {
+        return this.resolve(`pcobject/${normalizePath(p)}`);
+    }
+    private resolve(rel: string): string {
+        return `${this.overrides.has(rel) ? subversionBase : pathBase}/${rel}`;
+    }
 }
 
-async function loadODLRecursive(dataFetcher: DataFetcher, odlPath: string): Promise<IncomingODL> {
+async function loadODLRecursive(dataFetcher: DataFetcher, paths: PathResolver, odlPath: string): Promise<IncomingODL> {
     const types = new Map<string, IncomingObjectType>();
     let land: IncomingODL["land"];
     let sky: IncomingODL["sky"];
@@ -92,7 +93,7 @@ async function loadODLRecursive(dataFetcher: DataFetcher, odlPath: string): Prom
         }
 
         for (const inc of odl.includes) {
-            await visit(resolveDataPath(inc), false);
+            await visit(paths.data(inc), false);
         }
     };
 
@@ -101,8 +102,8 @@ async function loadODLRecursive(dataFetcher: DataFetcher, odlPath: string): Prom
 }
 
 
-async function loadTexture(device: GfxDevice, dataFetcher: DataFetcher, cache: Map<string, GfxTexture | undefined>, ownedTextures: GfxTexture[], texturePath: string): Promise<GfxTexture | undefined> {
-    const url = resolveTexturePath(texturePath);
+async function loadTexture(device: GfxDevice, dataFetcher: DataFetcher, paths: PathResolver, cache: Map<string, GfxTexture | undefined>, ownedTextures: GfxTexture[], texturePath: string): Promise<GfxTexture | undefined> {
+    const url = paths.texture(texturePath);
     if (cache.has(url)) {
         return cache.get(url);
     }
@@ -120,8 +121,8 @@ async function loadTexture(device: GfxDevice, dataFetcher: DataFetcher, cache: M
 }
 
 
-async function loadModel(device: GfxDevice, dataFetcher: DataFetcher, cache: Map<string, IncomingMeshData | undefined>, ownedMeshes: IncomingMeshData[], modelPath: string): Promise<IncomingMeshData | undefined> {
-    const url = resolveModelPath(modelPath);
+async function loadModel(device: GfxDevice, dataFetcher: DataFetcher, paths: PathResolver, cache: Map<string, IncomingMeshData | undefined>, ownedMeshes: IncomingMeshData[], modelPath: string): Promise<IncomingMeshData | undefined> {
+    const url = paths.model(modelPath);
     if (cache.has(url)) {
         return cache.get(url);
     }
@@ -129,7 +130,7 @@ async function loadModel(device: GfxDevice, dataFetcher: DataFetcher, cache: Map
     try {
         const buffer = await dataFetcher.fetchData(url);
         const model = parseIAN(buffer);
-        if (model.triangleCount > 0 && model.vertexCount > 0) {
+        if (model.indices.length > 0 && model.vertices.length > 0) {
             mesh = new IncomingMeshData(device, model.vertices, model.indices);
             ownedMeshes.push(mesh);
         }
@@ -321,7 +322,7 @@ function buildMover(start: [number, number, number], waypoints: IncomingMDLWaypo
     return { points, cumLengths, totalLength: acc, speed: maxVel * SPIN_TICKS_PER_MS, forward, up, phase };
 }
 
-function buildPartFrames(type: IncomingObjectType, placementMatrix: mat4): mat4[] {
+function buildPartFrames(type: IncomingObjectType, placementMatrix: ReadonlyMat4): mat4[] {
     const parts = type.parts;
     const n = parts.length;
 
@@ -369,11 +370,11 @@ class IncomingSceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        overrideSet = this.subversion ? SUBVERSION_OVERRIDES : new Set();
+        const paths = new PathResolver(this.subversion ? SUBVERSION_OVERRIDES : new Set());
 
-        const odl = await loadODLRecursive(dataFetcher, resolveDataPath(this.odlPath));
+        const odl = await loadODLRecursive(dataFetcher, paths, paths.data(this.odlPath));
         const globalParts = buildGlobalPartRegistry(odl.types);
-        const wdlBuffer = await dataFetcher.fetchData(resolveDataPath(this.wdlPath));
+        const wdlBuffer = await dataFetcher.fetchData(paths.data(this.wdlPath));
         const placements = parseWDL(new TextDecoder("latin1").decode(wdlBuffer.createTypedArray(Uint8Array)));
 
         const sky = odl.sky;
@@ -412,24 +413,24 @@ class IncomingSceneDesc implements SceneDesc {
         const procCache = new Map<string, IncomingMeshData>();
 
         if (sky !== undefined && sky.texturePath !== undefined) {
-            renderer.skyCloudTexture = await loadTexture(device, dataFetcher, textureCache, renderer.textures, sky.texturePath);
+            renderer.skyCloudTexture = await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, sky.texturePath);
         }
         if (sky !== undefined && sky.sunImagePath !== undefined) {
-            renderer.sunTexture = await loadTexture(device, dataFetcher, textureCache, renderer.textures, sky.sunImagePath);
+            renderer.sunTexture = await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, sky.sunImagePath);
         }
 
         let heightfield: Heightfield | undefined;
         if (odl.land !== undefined) {
             const land = odl.land;
             try {
-                const hfBuffer = await dataFetcher.fetchData(resolveDataPath(land.heightfieldPath));
-                const cfBuffer = await dataFetcher.fetchData(resolveDataPath(land.cellFlagsPath));
+                const hfBuffer = await dataFetcher.fetchData(paths.data(land.heightfieldPath));
+                const cfBuffer = await dataFetcher.fetchData(paths.data(land.cellFlagsPath));
                 heightfield = parseHeightfield(hfBuffer);
 
                 const landTextures: (GfxTexture | undefined)[] = [];
                 for (let i = 0; i < TERRAIN_MAX_TEXTURES; i++) {
                     const tp = land.texturePaths[i];
-                    landTextures.push(tp !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, tp) : undefined);
+                    landTextures.push(tp !== undefined ? await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, tp) : undefined);
                 }
 
                 const terrainMeshes = buildTerrainMeshes(heightfield, cfBuffer);
@@ -439,8 +440,8 @@ class IncomingSceneDesc implements SceneDesc {
                     renderer.instances.push({
                         mesh, texture: landTextures[tm.textureIndex],
                         modelMatrix: mat4.create(), selfIllum: false, colorKey: false,
-                        // Single-sided so the underside can be culled.
                         twoSided: false, indexFormat: indexFormatFor(tm.indices),
+                        frontFace: GfxFrontFaceMode.CCW,
                     });
                 }
                 // A flat plane over the water-flagged tiles, at the ODL `water` level.
@@ -452,7 +453,7 @@ class IncomingSceneDesc implements SceneDesc {
                         // Reuse the `animatemodel` flipbook to cycle textures on one shared mesh.
                         const waterFrames: IncomingAnimFrame[] = [];
                         for (let n = 1; n <= WATER_FRAME_COUNT; n++) {
-                            const tex = await loadTexture(device, dataFetcher, textureCache, renderer.textures, `water4\\water${n}.ppm`);
+                            const tex = await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, `water4\\water${n}.ppm`);
                             if (tex !== undefined) {
                                 waterFrames.push({ mesh, texture: tex });
                             }
@@ -473,7 +474,7 @@ class IncomingSceneDesc implements SceneDesc {
         }
 
         const labelWorld = new Map<string, ResolvedPlacement>();
-        const instancePlacement = async (type: IncomingObjectType, placementMatrix: mat4, mover?: IncomingMover): Promise<void> => {
+        const instancePlacement = async (type: IncomingObjectType, placementMatrix: ReadonlyMat4, mover?: IncomingMover): Promise<void> => {
             const frames = buildPartFrames(type, placementMatrix);
             // Largest scaled part footprint, which sizes the ground shadow.
             let footprintRadius = 0;
@@ -496,7 +497,7 @@ class IncomingSceneDesc implements SceneDesc {
                 if (part.smoke !== undefined && mover === undefined) {
                     const smoke = part.smoke;
                     const emitterWorld = vec3.transformMat4(vec3.create(), smoke.offset as vec3, frames[i]);
-                    const smokeTex = await loadTexture(device, dataFetcher, textureCache, renderer.textures, "smoke.ppm");
+                    const smokeTex = await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, "smoke.ppm");
                     renderer.smoke.push({
                         position: [emitterWorld[0], emitterWorld[1], emitterWorld[2]],
                         size: smoke.size,
@@ -513,7 +514,7 @@ class IncomingSceneDesc implements SceneDesc {
                 if (part.sprite !== undefined && mover === undefined) {
                     const sprite = part.sprite;
                     const spriteWorld = mat4.getTranslation(vec3.create(), frames[i]);
-                    const tex = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, part.texturePath) : undefined;
+                    const tex = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, part.texturePath) : undefined;
                     renderer.sprites.push({
                         position: [spriteWorld[0], spriteWorld[1], spriteWorld[2]],
                         size: sprite.size,
@@ -538,12 +539,12 @@ class IncomingSceneDesc implements SceneDesc {
                         renderer.meshes.push(procMesh);
                         procCache.set(cacheKey, procMesh);
                     }
-                    const procTexture = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, part.texturePath) : undefined;
+                    const procTexture = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, part.texturePath) : undefined;
                     let texAnim: IncomingAnimFrame[] | undefined;
                     if (part.textures.length > 1) {
                         const textureFrames: IncomingAnimFrame[] = [];
                         for (const texturePath of part.textures) {
-                            const frameTexture = await loadTexture(device, dataFetcher, textureCache, renderer.textures, texturePath);
+                            const frameTexture = await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, texturePath);
                             if (frameTexture !== undefined) {
                                 textureFrames.push({ mesh: procMesh, texture: frameTexture });
                             }
@@ -576,11 +577,11 @@ class IncomingSceneDesc implements SceneDesc {
                         if (frameMaterial === undefined) {
                             continue;
                         }
-                        const frameMesh = await loadModel(device, dataFetcher, modelCache, renderer.meshes, frameMaterial.objfile);
+                        const frameMesh = await loadModel(device, dataFetcher, paths, modelCache, renderer.meshes, frameMaterial.objfile);
                         if (frameMesh === undefined) {
                             continue;
                         }
-                        const frameTexture = frameMaterial.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, frameMaterial.texturePath) : undefined;
+                        const frameTexture = frameMaterial.texturePath !== undefined ? await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, frameMaterial.texturePath) : undefined;
                         animFrames.push({ mesh: frameMesh, texture: frameTexture });
                         footprintRadius = Math.max(footprintRadius, frameMesh.localRadiusXZ * frameMaterial.scale);
                         frameScale = frameMaterial.scale;
@@ -607,12 +608,12 @@ class IncomingSceneDesc implements SceneDesc {
                 if (material === undefined) {
                     continue;
                 }
-                const mesh = await loadModel(device, dataFetcher, modelCache, renderer.meshes, material.objfile);
+                const mesh = await loadModel(device, dataFetcher, paths, modelCache, renderer.meshes, material.objfile);
                 if (mesh === undefined) {
                     continue;
                 }
                 footprintRadius = Math.max(footprintRadius, mesh.localRadiusXZ * material.scale);
-                const texture = material.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, material.texturePath) : undefined;
+                const texture = material.texturePath !== undefined ? await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, material.texturePath) : undefined;
 
                 // A negative scale mirrors the mesh, which is how the data builds a rotated variant
                 // from a shared one.
@@ -647,7 +648,7 @@ class IncomingSceneDesc implements SceneDesc {
                 });
             }
             if (type.shadowTexture !== undefined && footprintRadius > 0 && mover === undefined) {
-                const shadowTex = await loadTexture(device, dataFetcher, textureCache, renderer.textures, type.shadowTexture);
+                const shadowTex = await loadTexture(device, dataFetcher, paths, textureCache, renderer.textures, type.shadowTexture);
                 // An undefined bind samples the fallback white texture, painting a solid black
                 // square instead of a silhouette.
                 if (shadowTex !== undefined) {
@@ -681,7 +682,7 @@ class IncomingSceneDesc implements SceneDesc {
         const mdlPath = this.mdlPathOverride ?? this.wdlPath.replace(/\.wdl$/i, "_action.mdl");
         let mdlPlacements: IncomingMDLPlacement[] = [];
         try {
-            const mdlBuffer = await dataFetcher.fetchData(resolveDataPath(mdlPath));
+            const mdlBuffer = await dataFetcher.fetchData(paths.data(mdlPath));
             mdlPlacements = parseMDL(new TextDecoder("latin1").decode(mdlBuffer.createTypedArray(Uint8Array)));
         } catch {
             // A level without a mission file has no actors.
@@ -712,7 +713,7 @@ class IncomingSceneDesc implements SceneDesc {
             if (p.path !== undefined && type.maxVel !== undefined && type.maxVel > 0) {
                 const mover = buildMover(resolved.world, p.path.waypoints, odl.offset, heightfield, labelWorld, type.maxVel, resolved.forward, resolved.up, 0);
                 if (mover !== undefined) {
-                    await instancePlacement(type, IDENTITY_MATRIX, mover);
+                    await instancePlacement(type, Mat4Identity, mover);
                     continue;
                 }
             }
