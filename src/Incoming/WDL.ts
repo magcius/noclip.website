@@ -1,23 +1,19 @@
 
 // Parser for Incoming (1998, Rage Software) ".wdl" world-definition files.
 
-/**
- * A single placed object instance from a `.wdl` file. The orientation is given by a forward and up
- * vector; the right vector is derived as `up × forward` when building the model matrix.
- */
+/** One placed object instance. The right vector is derived as `up × forward`. */
 export interface IncomingPlacement {
-    /** The object type name to instance (matches an `IncomingObjectType.name`). */
+    /** Object type to instance, matching an `IncomingObjectType.name`. */
     readonly typeName: string;
-    /** The instance's `label "x"`, used by `.mdl` placements that position relative to it;
-     *  undefined if unlabeled. */
+    /** The instance's `label "x"`, which `.mdl` placements position themselves against. */
     readonly label?: string;
-    /** World X coordinate. */
+    /** World X. */
     readonly x: number;
-    /** World Y coordinate. Only meaningful when {@link onGround} is false. */
+    /** World Y. Only meaningful when {@link onGround} is false. */
     readonly y: number;
-    /** World Z coordinate. */
+    /** World Z. */
     readonly z: number;
-    /** If true, Y must be sampled from the terrain heightfield at (x, z). */
+    /** Sample Y from the terrain heightfield at (x, z) instead of using {@link y}. */
     readonly onGround: boolean;
     /** Forward orientation vector. */
     readonly forward: [number, number, number];
@@ -26,9 +22,10 @@ export interface IncomingPlacement {
 }
 
 /**
- * Strips a `;` or `#` line comment (outside of quotes) from a single line.
- * @param line The raw line.
- * @returns The line with any trailing comment removed.
+ * Strips a `;` or `#` line comment, ignoring either character inside quotes.
+ *
+ * @param line Raw line.
+ * @returns The line up to the comment.
  */
 export function stripComment(line: string): string {
     let inQuote = false;
@@ -44,9 +41,10 @@ export function stripComment(line: string): string {
 }
 
 /**
- * Tokenizes a line, keeping double-quoted spans as single tokens.
- * @param line The (comment-stripped) line.
- * @returns The list of tokens.
+ * Splits a line on whitespace, keeping a double-quoted span as one token.
+ *
+ * @param line Comment-stripped line.
+ * @returns The tokens.
  */
 export function tokenize(line: string): string[] {
     const tokens: string[] = [];
@@ -75,10 +73,11 @@ export function tokenize(line: string): string[] {
 }
 
 /**
- * Parses a float, returning a fallback for invalid input.
- * @param t The token (may be undefined).
- * @param fallback The value to return for missing/invalid input.
- * @returns The parsed float, or the fallback.
+ * Parses a float.
+ *
+ * @param t Token, possibly missing.
+ * @param fallback Returned when the token is missing or not finite.
+ * @returns The parsed float, or `fallback`.
  */
 export function num(t: string | undefined, fallback = 0): number {
     const n = t !== undefined ? parseFloat(t) : NaN;
@@ -86,8 +85,9 @@ export function num(t: string | undefined, fallback = 0): number {
 }
 
 /**
- * Parses an Incoming `.wdl` file into a flat list of object placements.
- * @param text The full text of the `.wdl` file.
+ * Parses a `.wdl` file into a flat list of placements.
+ *
+ * @param text Full text of the file.
  * @returns Every `create` placement, in file order.
  */
 export function parseWDL(text: string): IncomingPlacement[] {
@@ -123,7 +123,7 @@ export function parseWDL(text: string): IncomingPlacement[] {
                 label = tokens[1];
             }
         } else if (kw === "position") {
-            // Handle "position X on ground Z" OR "position X Y Z".
+            // Either "position X on ground Z" or "position X Y Z".
             const groundIdx = tokens.findIndex((t) => t.toLowerCase() === "ground");
             if (groundIdx >= 0) {
                 onGround = true;
@@ -137,7 +137,6 @@ export function parseWDL(text: string): IncomingPlacement[] {
                 z = num(tokens[3]);
             }
         } else if (kw === "forward") {
-            // Handle "forward fx fy fz up ux uy uz".
             forward = [num(tokens[1]), num(tokens[2]), num(tokens[3])];
             const upIdx = tokens.findIndex((t) => t.toLowerCase() === "up");
             if (upIdx >= 0) {

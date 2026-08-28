@@ -1,312 +1,282 @@
 
 // Parser for Incoming (1998, Rage Software) ".odl" object-definition files.
 
+// Stands in for the engine's continuous radar sweep, which has no authored rate.
 const BRADAR_YAW_RATE = 0.3;
-/**
- * Render/material flag bits for an Incoming object type, OR'd from the `drawtype` /
- * inline render-flag keywords.
- */
+
+/** Render flags for an object type, OR'd from `drawtype` and the inline render-flag keywords. */
 export const enum IncomingMaterialFlag {
-    /** `self illuminating` — unlit / full-bright material. */
+    /** `self illuminating`, drawn full-bright. */
     SelfIlluminating = 0x01,
-    /** `reflective` — environment-reflective material. */
+    /** `reflective`, environment-reflective. */
     Reflective = 0x02,
-    /** `semi transparent` — alpha-blended material. */
+    /** `semi transparent`, alpha-blended. */
     SemiTransparent = 0x10,
-    /** `semiinv` — inverse/additive blend material. */
+    /** `semiinv`, inverse or additive blend. */
     SemiInverse = 0x20,
 }
-/**
- * Texture attribute flags parsed from a `texture "path" <flags...>` declaration.
- */
+
+/** Texture attributes from a `texture "path" <flags...>` declaration. */
 export const enum IncomingTextureFlag {
-    /** `transparent` — 1-bit color-key transparency (key-colored pixels are skipped). */
+    /** `transparent`, 1-bit color-key: key-colored pixels are skipped. */
     ColorKey = 0x01,
-    /** `alpha` — full alpha-blended. */
+    /** `alpha`, fully alpha-blended. */
     Alpha = 0x02,
-    /** `alphabright` — additive/bright alpha. */
+    /** `alphabright`, additive. */
     AlphaBright = 0x04,
-    /** `alphainv` — inverse alpha. */
+    /** `alphainv`, inverse alpha. */
     AlphaInverse = 0x08,
 }
-/**
- * A light defined on an object type, in the part's local model space. Incoming supports three
- * kinds. All illuminate nearby geometry; lamp/point are omni, spot is a cone. Colours are RGB and
- * may exceed 255 (treated as HDR intensity, summed then clamped).
- */
+
+/** A light on a part, in that part's local model space. */
 export interface IncomingLight {
-    /** Light kind. */
+    /** `lamp` and `point` are omni, `spot` is a cone. */
     readonly kind: "lamp" | "point" | "spot";
-    /** Local-space position `[x, y, z]` relative to the owning part. */
+    /** Local-space position relative to the owning part. */
     readonly position: [number, number, number];
-    /** Light colour `[r, g, b]` (0..255+, HDR). For point/spot this is the first colour slot. */
+    /** RGB. Values may exceed 255, since lights are summed and then clamped. */
     readonly color: [number, number, number];
-    /** Effective radius/range in world units (lamp `radius`, point `range`). */
+    /** Range in world units: lamp `radius`, point `range`. */
     readonly radius: number;
 }
+
 /**
- * A camera-facing billboard sprite on a part, from the `sprite` directive: a wingtip nav-light,
- * engine glow, or smoke emitter. The UV rect addresses a sub-region of the part's texture atlas
- * (`smoke.ppm`, 256×256). An optional `colourfade`/`colour` block animates {@link color} through
- * {@link cycleColors} over time.
+ * A camera-facing billboard from the `sprite` directive, used for nav lights, engine glow and
+ * smoke. The UV rect addresses a sub-region of the part's 256x256 `smoke.ppm` atlas.
  */
 export interface IncomingSprite {
-    /** Atlas sub-rect left edge, in texture pixels (`u=`). */
+    /** Atlas left edge in texture pixels, `u=`. */
     readonly u: number;
-    /** Atlas sub-rect top edge, in texture pixels (`v=`). */
+    /** Atlas top edge in texture pixels, `v=`. */
     readonly v: number;
-    /** Atlas sub-rect width, in texture pixels (`w=`). */
+    /** Atlas width in texture pixels, `w=`. */
     readonly w: number;
-    /** Atlas sub-rect height, in texture pixels (`h=`). */
+    /** Atlas height in texture pixels, `h=`. */
     readonly h: number;
-    /** Billboard world-space size (`size=`, engine default 24). */
+    /** World-space billboard size, `size=`, engine default 24. */
     readonly size: number;
-    /** Base RGB colour `[r, g, b]` 0..255 (`colour 1=R G B`, engine default 128,128,128). */
+    /** Base RGB 0..255, `colour 1=R G B`, engine default 128,128,128. */
     readonly color: [number, number, number];
-    /**
-     * Colour-cycle keyframes `[r, g, b]` 0..255, from a `colourfade` + `colour` block. Empty when
-     * the sprite has a static colour; otherwise the displayed colour cycles through these.
-     */
+    /** RGB keyframes from a `colourfade` block. Empty when the sprite holds a static colour. */
     cycleColors: [number, number, number][];
-    /** Colour-cycle rate from `colourfade speed N` (engine default 8); 0 when there is no cycle. */
+    /** Cycle rate from `colourfade speed N`, engine default 8. Zero for a static colour. */
     cycleSpeed: number;
 }
-/**
- * Procedural mesh geometry for a part, from the `sphere` / `hemisphere` directives: an energy
- * sphere/shield or a dome canopy, tessellated at radius `radius` with `width` longitude and
- * `height` latitude segments. Used instead of an `objfile` mesh.
- */
+
+/** Procedural geometry from `sphere` or `hemisphere`, used in place of an `objfile` mesh. */
 export interface IncomingProcGeom {
-    /** Surface kind: a full sphere or a hemisphere dome. */
+    /** Which surface to tessellate. */
     readonly kind: "sphere" | "hemisphere";
-    /** Surface radius (`rad=`), in model units (scaled by the part scale like any mesh). */
+    /** Radius in model units, `rad=`, scaled by the part scale like any mesh. */
     readonly radius: number;
-    /** Longitude tessellation segments (`width=`). */
+    /** Longitude segments, `width=`. */
     readonly width: number;
-    /** Latitude tessellation segments (`height=`). */
+    /** Latitude segments, `height=`. */
     readonly height: number;
-    /** Texture tiling around the longitude (hemisphere `repeat=` first value; 1 for a sphere). */
+    /** Texture tiling around the longitude: the hemisphere's first `repeat=` value, else 1. */
     readonly repeatU: number;
-    /** Texture tiling along the latitude (hemisphere `repeat=` second value; 1 for a sphere). */
+    /** Texture tiling along the latitude: the hemisphere's second `repeat=` value, else 1. */
     readonly repeatV: number;
 }
 
 /**
- * A smoke-plume emitter on a part, from the `smoke` directive: a continuous stream of soft puffs
- * (e.g. the power-station cooling-tower smoke). The renderer animates a rising, expanding, fading
- * column of `smoke.ppm` billboards from {@link offset} (part-local).
+ * A smoke-plume emitter from the `smoke` directive, such as the power station's cooling tower. The
+ * renderer animates a rising, expanding, fading column of `smoke.ppm` billboards from
+ * {@link offset}.
  */
 export interface IncomingSmoke {
-    /** Emitter offset `[x, y, z]` in part-local space (e.g. the tower top). */
+    /** Emitter offset in part-local space. */
     readonly offset: [number, number, number];
-    /** Initial puff billboard size (`size S`; engine default 70). Each puff grows +5/frame. */
+    /** Starting billboard size, `size S`, engine default 70. Each puff grows 5 per frame. */
     readonly size: number;
-    /** Smoke colour `[r, g, b]` 0..255 (`colour R G B`). */
+    /** RGB 0..255, `colour R G B`. */
     readonly color: [number, number, number];
-    /** Peak puff opacity 0..255 (`alpha A`, engine default 128). Only used for {@link additive} = false. */
+    /** Peak puff opacity 0..255, `alpha A`, engine default 128. Ignored when {@link additive}. */
     readonly alpha: number;
     /**
-     * Frames between successive puff spawns (`rate N`; the engine's re-arm countdown, default 4).
-     * The number of puffs alive at once is `ceil(lifetime / rate)`.
+     * Frames between puff spawns, `rate N`, engine default 4. Puffs alive at once come to
+     * `ceil(lifetime / rate)`.
      */
     readonly rate: number;
     /**
-     * Each puff's lifetime in game frames (`frames M`, default 42). A puff rises 16 world units
-     * and grows 5 size units per frame, so the column is `lifetime * 16` units tall.
+     * Puff lifetime in game frames, `frames M`, engine default 42. A puff rises 16 world units per
+     * frame, making the column `lifetime * 16` units tall.
      */
     readonly lifetime: number;
     /**
-     * True when the directive's `frames` value was negative: the engine sets the additive-blend
-     * flag (`wFlags |= 0x20`) for the puffs (e.g. the chimney and aircraft-exhaust trails), versus
-     * the alpha blend used by the cooling tower (`frames 42`, positive).
+     * True when `frames` was authored negative, which makes the engine blend the puffs additively.
+     * Chimney and exhaust trails are additive; the cooling tower is not.
      */
     readonly additive: boolean;
 }
 
 /**
- * A single node of an object type's part hierarchy: one mesh (or mesh alias) with its own
- * material, plus a local offset/orientation relative to its parent. An object type's root
- * mesh is `parts[0]`; `child`/`sibling` directives append further parts. Fields relevant to
- * static level rendering are retained, including {@link lights}, {@link animFrames}, and
- * {@link sprite}; non-visual directives (dynamics, cannons, sound) are parsed but discarded.
+ * One node of an object type's part hierarchy: a mesh with its own material and a local pose
+ * relative to its parent. `parts[0]` is the root, and `child` and `sibling` directives append the
+ * rest. Non-visual directives such as dynamics, cannons and sound are parsed and discarded.
  */
 export interface IncomingPart {
-    /** The part name (the `type`/`child`/`sibling` quoted token); referenced by `objfile as`. */
+    /** The `type`, `child` or `sibling` token. Doubles as the key `objfile as` resolves against. */
     readonly name: string;
-    /**
-     * The HUD/display label from the `name "x"` sub-command, if present (distinct from
-     * {@link name}, which is the mesh-resolution key). Purely informational; not used for
-     * rendering. Undefined when the part has no explicit `name` directive.
-     */
+    /** HUD label from the `name "x"` sub-command. Informational, with no rendering effect. */
     displayName?: string;
-    /** Relative path (under `pcobject/`) of this part's highest-detail `.ian` file, if any. */
+    /** Path under `pcobject/` to this part's highest-detail `.ian`. */
     objfile?: string;
-    /** If set, this part reuses the mesh of the same-type part with this name (`objfile as`). */
+    /** Reuse the mesh of the same-type part with this name, from `objfile as`. */
     aliasOf?: string;
-    /** Uniform model scale applied to this part's vertices (engine default 100.0). */
+    /** Uniform model scale for this part's vertices, engine default 100.0. */
     scale: number;
-    /** Relative path (under `ppm/`) of this part's material texture, if a `texture` was given. */
+    /** Path under `ppm/` to this part's material texture. */
     texturePath?: string;
     /**
-     * All `texture` paths declared on the part, in order. A single entry for most parts; multiple
-     * entries are animation frames (e.g. the arctic energy shields cycle `water1`…`water16`).
-     * {@link texturePath} mirrors the last entry for single-texture consumers.
+     * Every `texture` path declared on the part, in order. More than one means animation frames,
+     * such as the arctic energy shields cycling `water1` through `water16`. {@link texturePath}
+     * mirrors the last entry for single-texture consumers.
      */
     textures: string[];
-    /** Bitfield of {@link IncomingTextureFlag} for the material texture. */
+    /** Bitfield of {@link IncomingTextureFlag}. */
     textureFlags: number;
-    /** Bitfield of {@link IncomingMaterialFlag} render flags. */
+    /** Bitfield of {@link IncomingMaterialFlag}. */
     materialFlags: number;
-    /** If true (`double sided` face flag), this part's triangles are never backface-culled. */
+    /** Never backface-cull this part's triangles, from the `double sided` face flag. */
     doubleSided: boolean;
     /**
-     * Mesh-mirror flags from `drawtype flipx`/`flipy`/`flipz` (engine face flags 0x02/0x04/0x08):
-     * negate the mesh along that axis. Used to make a mirrored/180°-rotated variant from a shared
-     * mesh (e.g. the `cobra` is a `flipx flipz` — 180° yaw — reuse of another helicopter mesh).
+     * Negate the mesh along an axis, from `drawtype flipx`, `flipy` and `flipz`, which are engine
+     * face flags 0x02, 0x04 and 0x08. This builds a mirrored variant from a shared mesh: the
+     * `cobra` is a `flipx flipz`, so a 180-degree yaw, of another helicopter.
      */
     flipX: boolean;
     flipY: boolean;
     flipZ: boolean;
-    /** Local position offset `[x, y, z]` (in root-model units) relative to the parent part. */
+    /** Position offset in root-model units, relative to the parent part. */
     position: [number, number, number];
-    /** Local forward orientation vector `[x, y, z]` relative to the parent part. */
+    /** Forward orientation vector, relative to the parent part. */
     forward: [number, number, number];
-    /** Local up orientation vector `[x, y, z]` relative to the parent part. */
+    /** Up orientation vector, relative to the parent part. */
     up: [number, number, number];
     /**
-     * Per-axis spin angular velocity `[x, y, z]` in radians per engine tick, from
-     * `operate "spin" ax ay az`, or undefined if the part does not spin. Rotation is about the
-     * part's own local axes (e.g. `[0, 0.08, 0]` spins about local up).
+     * Per-axis spin in radians per engine tick, from `operate "spin" ax ay az`, about the part's
+     * own local axes.
      */
     spin?: [number, number, number];
     /**
-     * True when this part's {@link spin} should rotate only its descendants, NOT the part's own
-     * mesh. Set for `operate "bradar"` (a radar relay): the engine sweeps the whole object, but its
-     * structural base is radially symmetric at the game's low texture resolution so its rotation is
-     * invisible there; at noclip's higher fidelity the base visibly (and wrongly) spins, so we keep
-     * the base mesh static and rotate only the dish child on the axis. `operate "spin"` (rotors,
-     * rings) leaves this false: the part's own mesh spins.
+     * Apply {@link spin} to this part's descendants but not its own mesh. Set for
+     * `operate "bradar"`, a radar relay. The engine sweeps the whole object, but the structural base
+     * is radially symmetric at the game's texture resolution, so its rotation never shows there. At
+     * noclip's fidelity the base visibly and wrongly spins, so only the dish child turns.
+     * `operate "spin"`, for rotors and rings, leaves this false and spins the part's own mesh.
      */
     spinInheritOnly: boolean;
     /**
-     * True for `operate "spinengines"`: the part's mesh pulses its Z-scale each frame (an engine
-     * exhaust-flame flicker). Animated at render time.
+     * Pulse the mesh's Z-scale each frame for an exhaust-flame flicker, from
+     * `operate "spinengines"`. Animated at render time.
      */
     flameFlicker: boolean;
-    /** Lights defined on this part (`lamplight`/`pointlight`/`spotlight`), in part-local space. */
+    /** Lights from `lamplight`, `pointlight` and `spotlight`, in part-local space. */
     lights: IncomingLight[];
     /**
-     * Frame-animation model type names from `animatemodel "a" "b" ... end` (engine
-     * `OdlCmdAnimateModel`): the part cycles its mesh through these types' models (e.g. tank
-     * treads). Empty if the part has no model flipbook.
+     * Type names from `animatemodel "a" "b" ... end`, whose models the part cycles its mesh
+     * through, as tank treads do. Empty when the part has no flipbook.
      */
     animFrames: string[];
     /**
-     * Target local pose from an `animate` keyframe block (helicopter gear, VTOL engine tilt, wing
-     * morph), or undefined. The renderer oscillates the part between its default pose and this target,
-     * giving a living scene. `forward`/`up` are undefined when the keyframe only repositions the part.
+     * Target local pose from an `animate` keyframe block, such as helicopter gear, VTOL engine tilt
+     * or wing morph. The renderer oscillates the part between its default pose and this one.
+     * `forward` and `up` are absent when the keyframe only moves the part.
      */
     animTarget?: { position: [number, number, number]; forward?: [number, number, number]; up?: [number, number, number] };
-    /** The part's billboard sprite (`sprite` directive), or undefined if it has none. */
+    /** Billboard sprite from the `sprite` directive. */
     sprite?: IncomingSprite;
-    /** The part's procedural `sphere`/`hemisphere` geometry, or undefined if it uses an `objfile` mesh. */
+    /** Procedural geometry, present instead of an `objfile` mesh. */
     procGeom?: IncomingProcGeom;
-    /** The part's `smoke` plume emitter (e.g. cooling-tower smoke), or undefined. */
+    /** Smoke plume emitter from the `smoke` directive. */
     smoke?: IncomingSmoke;
-    /** Index into {@link IncomingObjectType.parts} of this part's parent, or -1 for the root. */
+    /** Index into {@link IncomingObjectType.parts} of the parent, or -1 for the root. */
     parentIndex: number;
 }
+
 /**
- * A reusable object type declared by a `type "name" { ... }` block: a hierarchy of one or
- * more {@link IncomingPart}s. Single-mesh objects (trees, buildings, animals) have exactly
- * one part; vehicles have a root plus child/sibling sub-parts (wheels, flaps, rotors).
+ * A reusable object type from a `type "name" { ... }` block. Buildings and animals have a single
+ * part; vehicles have a root plus children and siblings for their rotors and flaps.
  */
 export interface IncomingObjectType {
-    /** The type name, e.g. `"giraffe"`, used by `.wdl` `create` placements. */
+    /** The type name, such as `"giraffe"`, used by `.wdl` `create` placements. */
     readonly name: string;
-    /** The part hierarchy. `parts[0]` is the root; every other part has a valid parentIndex. */
+    /** The hierarchy. `parts[0]` is the root and every other part has a valid `parentIndex`. */
     readonly parts: IncomingPart[];
     /**
-     * Relative path (under `ppm/`) of the type's ground-shadow silhouette texture, from the
-     * `shadow` directive (engine `OdlCmdShadow`, type-wide), or undefined if it casts no shadow. The
-     * shadow's size/placement is derived from the object footprint at render time. Captured;
-     * shadow rendering is not yet implemented.
+     * Path under `ppm/` to the type-wide ground-shadow silhouette, from the `shadow` directive.
+     * Captured only; shadow rendering is not implemented.
      */
     shadowTexture?: string;
     /**
-     * Maximum velocity in world units per engine tick, from the `dynamics` block's `max vel N`
-     * field (engine `OdlCmdDynamics` @0x00406b58, stored raw at DynamicsData+0x8), or undefined if the
-     * type has no `dynamics` block. Used as the constant traversal speed for an actor following an
-     * MDL waypoint path (jets ≈ 80, transport helis ≈ 42, hovercraft ≈ 25, big ships ≈ 20).
+     * Maximum velocity in world units per engine tick, from the `dynamics` block's `max vel N`.
+     * Used as the constant traversal speed for an actor following an MDL waypoint path: jets are
+     * about 80, transport helicopters 42, hovercraft 25, big ships 20.
      */
     maxVel?: number;
 }
-/**
- * The `land` block: the terrain source binaries and the (up to 8) land textures, in
- * declaration order (index 0..7 indexes the terrain tile-material LUT).
- */
+
+/** The `land` block: terrain source binaries plus the land textures. */
 export interface IncomingLand {
-    /** Relative path (under the data root) of the int16 heightfield binary (`tland1.bin`). */
+    /** Path under the data root to the int16 heightfield binary, `tland1.bin`. */
     heightfieldPath: string;
-    /** Relative path of the per-tile cell/texcoord binary (`city2tc.bin`). */
+    /** Path to the per-tile cell and texcoord binary, `city2tc.bin`. */
     cellFlagsPath: string;
-    /** Relative paths (under `ppm/`) of the up-to-8 land textures, index 0..7. */
+    /** Paths under `ppm/` to the land textures. Declaration order indexes the tile-material LUT. */
     texturePaths: string[];
 }
-/**
- * The `sky` block: sky-dome gradient colors, fog, cloud plane height, and scene lighting.
- * Colors are RGB byte triples (0..255). Directions are in world space.
- */
+
+/** The `sky` block: dome gradient, fog, cloud plane and scene lighting. */
 export interface IncomingSky {
-    /** True for a flat sky plane (`flat`); false for an earth/hemisphere backdrop. */
+    /** True for a flat sky plane, `flat`; false for a hemisphere backdrop. */
     flat: boolean;
-    /** Relative path (under `ppm/`) of the sky/cloud texture, if any. */
+    /** Path under `ppm/` to the sky or cloud texture. */
     texturePath?: string;
-    /** Up to 8 sky-dome gradient colors (top → bottom), each `[r, g, b]` in 0..255. */
+    /** Up to 8 dome gradient colors, top to bottom, each RGB 0..255. */
     gradient: number[][];
-    /** Fog color `[r, g, b]` in 0..255. */
+    /** Fog color, RGB 0..255. */
     fogColor: number[];
-    /** World-space Z height of the cloud plane (engine `cloud level`). */
+    /** World-space Z of the cloud plane, from `cloud level`. */
     cloudLevelZ: number;
-    /** Ambient light color `[r, g, b]` in 0..255 (`ambiance`). */
+    /** Ambient light color from `ambiance`, RGB 0..255. */
     ambient: number[];
-    /** Directional (sun) light color `[r, g, b]` in 0..255 (`direct`). */
+    /** Sun color from `direct`, RGB 0..255. */
     directColor: number[];
-    /** Directional (sun) light direction `[x, y, z]` in world space (`from`). */
+    /** World-space sun direction, from `from`. */
     lightDir: number[];
     /**
-     * True when the `from` line ends with `not_unit`: the engine does NOT normalize the light
-     * vector, so its magnitude (~2) scales the directional term (`ProjectMeshWithDynamicLighting`).
+     * True when the `from` line ends in `not_unit`, which stops the engine normalizing the light
+     * vector, so its magnitude of roughly 2 scales the directional term.
      */
     lightUnnormalized: boolean;
-    /** Relative path (under `ppm/`) of the sun sprite image (`sunimage`), or undefined. */
+    /** Path under `ppm/` to the sun sprite, from `sunimage`. */
     sunImagePath?: string;
-    /** Sun sprite color `[r, g, b]` in 0..255 (`color` after `sunimage`); warm sunset tint. */
+    /** Sun sprite tint from the `color` line after `sunimage`, RGB 0..255. */
     sunColor: number[];
-    /** Sun sprite world-space size (`size`), or 0 if unspecified. */
+    /** World-space sun sprite size, or 0 when unspecified. */
     sunSize: number;
 }
+
 /** The decoded contents of a single `.odl` file. */
 export interface IncomingODL {
-    /** Object types declared in this file, keyed by lower-cased type name. */
+    /** Object types declared in this file, keyed by lower-cased name. */
     readonly types: Map<string, IncomingObjectType>;
-    /** The `land` block, if this file declared one. */
+    /** The `land` block, when the file declared one. */
     land?: IncomingLand;
-    /** The `sky` block, if this file declared one. */
+    /** The `sky` block, when the file declared one. */
     sky?: IncomingSky;
     /**
-     * The `offset` directive value (engine `g_flTerrainGridZBase`), added to BOTH the X and Z
-     * of every `.wdl` placement to map level-authoring coordinates into terrain world space.
-     * Defaults to 0 if no `offset` directive is present.
+     * The `offset` directive, added to both the X and Z of every `.wdl` placement to map authoring
+     * coordinates into terrain world space. Defaults to 0.
      */
     offset: number;
     /**
-     * The `water <level>` directive: the world-space Y of the water surface (engine
-     * `g_flWaterLevel`). Undefined if the level has no water. Terrain tiles flagged as water
-     * (`city2tc` bit 0x2000) are covered by a flat water plane at this height.
+     * World-space Y of the water surface from `water <level>`. Terrain tiles flagged as water are
+     * covered by a flat plane at this height. Absent when the level has none.
      */
     waterLevel?: number;
-    /** Relative paths of `include`d `.odl` files, to be loaded and merged by the caller. */
+    /** Paths of `include`d `.odl` files, for the caller to load and merge. */
     readonly includes: string[];
 }
 
@@ -433,12 +403,10 @@ interface TypeParseState {
 }
 
 /**
- * Parses an Incoming `.odl` file body into an {@link IncomingODL}.
+ * Parses an `.odl` file body. `include` directives are collected rather than resolved, since
+ * loading files is asynchronous and the caller owns it.
  *
- * `include` directives are collected (not resolved) — the caller is responsible for
- * fetching and merging included files, since file loading is asynchronous.
- *
- * @param text The full text of the `.odl` file.
+ * @param text Full text of the file.
  * @returns The decoded object-definition data.
  */
 export function parseODL(text: string): IncomingODL {
@@ -460,7 +428,6 @@ export function parseODL(text: string): IncomingODL {
         }
         const kw = tokens[0].toLowerCase();
 
-        // A top-level keyword ends any current block.
         if (TOP_LEVEL_KEYWORDS.has(kw)) {
             curType = undefined;
             curBlock = undefined;
@@ -469,12 +436,10 @@ export function parseODL(text: string): IncomingODL {
                     includes.push(tokens[1]);
                 }
             } else if (kw === "offset") {
-                // Single-line directive: a world-space bias added to .wdl placement X and Z.
                 if (tokens.length >= 2) {
                     offset = floatOrZero(tokens[1]);
                 }
             } else if (kw === "water") {
-                // Single-line directive: the water-surface Y (engine g_flWaterLevel).
                 if (tokens.length >= 2) {
                     waterLevel = floatOrZero(tokens[1]);
                 }
@@ -499,7 +464,6 @@ export function parseODL(text: string): IncomingODL {
             continue;
         }
 
-        // Otherwise the line is content of the active block.
         if (curBlock === "type" && curType !== undefined) {
             parseTypeLine(kw, tokens, curType);
         } else if (curBlock === "land" && land !== undefined) {
@@ -523,7 +487,6 @@ function parseTypeLine(kw: string, tokens: string[], state: TypeParseState): voi
         }
         state.block = undefined;
     } else if (state.block === "dynamics") {
-        // Get only the maximum velocity.
         if (DYNAMICS_ATTR_KEYWORDS.has(kw)) {
             if (kw === "max" && tokens.length >= 3 && tokens[1].toLowerCase() === "vel") {
                 state.type.maxVel = floatOrZero(tokens[2]);
@@ -532,34 +495,32 @@ function parseTypeLine(kw: string, tokens: string[], state: TypeParseState): voi
         }
         state.block = undefined;
     } else if (state.block === "animate") {
-        // `animate` keyframe block: each line `"PART" position … [forward …] [up …]` poses a
-        // named sub-part; `wait` separates keyframes (the engine plays them in sequence; we treat
-        // the final pose as the animation target and oscillate to it); `end` terminates. Match the
-        // part by name and record its target pose.
+        // Each line poses a named sub-part as `"PART" position … [forward …] [up …]`, `wait`
+        // separates keyframes and `end` closes the block. The engine plays the sequence through; we
+        // keep the last pose as a target and oscillate to it.
         if (kw === "end") {
             state.block = undefined;
         } else if (kw !== "wait") {
             const name = tokens[0].toLowerCase();
             const part = state.type.parts.find((p) => p.name.toLowerCase() === name);
             if (part !== undefined) {
-                const pi = tokens.findIndex((t) => t.toLowerCase() === "position");
-                const fi = tokens.findIndex((t) => t.toLowerCase() === "forward");
-                const ui = tokens.findIndex((t) => t.toLowerCase() === "up");
+                const positionIdx = tokens.findIndex((t) => t.toLowerCase() === "position");
+                const forwardIdx = tokens.findIndex((t) => t.toLowerCase() === "forward");
+                const upIdx = tokens.findIndex((t) => t.toLowerCase() === "up");
                 const animTarget: { position: [number, number, number]; forward?: [number, number, number]; up?: [number, number, number] } = {
-                    position: pi >= 0 ? [floatOrZero(tokens[pi + 1]), floatOrZero(tokens[pi + 2]), floatOrZero(tokens[pi + 3])] : [part.position[0], part.position[1], part.position[2]],
+                    position: positionIdx >= 0 ? [floatOrZero(tokens[positionIdx + 1]), floatOrZero(tokens[positionIdx + 2]), floatOrZero(tokens[positionIdx + 3])] : [part.position[0], part.position[1], part.position[2]],
                 };
-                if (fi >= 0) {
-                    animTarget.forward = [floatOrZero(tokens[fi + 1]), floatOrZero(tokens[fi + 2]), floatOrZero(tokens[fi + 3])];
+                if (forwardIdx >= 0) {
+                    animTarget.forward = [floatOrZero(tokens[forwardIdx + 1]), floatOrZero(tokens[forwardIdx + 2]), floatOrZero(tokens[forwardIdx + 3])];
                 }
-                if (ui >= 0) {
-                    animTarget.up = [floatOrZero(tokens[ui + 1]), floatOrZero(tokens[ui + 2]), floatOrZero(tokens[ui + 3])];
+                if (upIdx >= 0) {
+                    animTarget.up = [floatOrZero(tokens[upIdx + 1]), floatOrZero(tokens[upIdx + 2]), floatOrZero(tokens[upIdx + 3])];
                 }
                 part.animTarget = animTarget;
             }
         }
         return;
     } else if (state.block !== undefined) {
-        // Inside an `animatemodel` (frame list) or `skip` block: consume lines until `end`.
         if (kw === "end") {
             state.block = undefined;
         } else if (state.block === "animframes") {
@@ -568,40 +529,36 @@ function parseTypeLine(kw: string, tokens: string[], state: TypeParseState): voi
         return;
     }
     if (kw === "child") {
-        // A child of the current part: descend a level.
         const name = tokens.length >= 2 ? tokens[1] : "";
         state.cur = state.type.parts.push(newPart(name, state.cur)) - 1;
         return;
     }
     if (kw === "sibling") {
-        // A sibling of the current part: same parent, stay at this level.
         const name = tokens.length >= 2 ? tokens[1] : "";
         const parentIndex = state.type.parts[state.cur].parentIndex;
         state.cur = state.type.parts.push(newPart(name, parentIndex)) - 1;
         return;
     }
     if (kw === "<<") {
-        // Explicit one-level pop: subsequent parts attach to the current part's parent. The
-        // engine's recursive type parser (DefineObjectType @0x404930) ends a nested `child`
-        // block on any unrecognised keyword; `<<` is the convention used between sub-trees.
+        // The engine's recursive type parser ends a nested `child` block on any unrecognised
+        // keyword. `<<` is the convention the data uses between sub-trees.
         state.cur = state.type.parts[state.cur].parentIndex;
         return;
     }
     if (kw === "parent") {
-        // Return to the root part (index 0). Type-wide attributes that follow (cannons,
-        // animatemodel, …) belong to the whole object. DefineObjectType special-cases the
-        // `parent` keyword as a nested-block terminator before its sub-command table lookup.
+        // Type-wide attributes follow, so return to the root. The engine special-cases `parent` as
+        // a block terminator before its sub-command table lookup.
         state.cur = 0;
         return;
     }
 
     const part = state.type.parts[state.cur];
     if (kw === "objfile") {
-        const arg = tokens.length >= 2 ? tokens[1].toLowerCase() : "";
-        if (arg === "lod") {
-            // Lower-detail LOD variant: intentionally ignored — only the highest detail is kept.
-        } else if (arg === "as") {
-            // Alias: reuse another part's mesh (resolved by the consumer).
+        const objfileArg = tokens.length >= 2 ? tokens[1].toLowerCase() : "";
+        if (objfileArg === "lod") {
+            // Only the highest detail is kept, so drop the LOD variants.
+        } else if (objfileArg === "as") {
+            // Aliases another part's mesh, resolved by the consumer.
             if (tokens.length >= 3) {
                 part.aliasOf = tokens[2];
             }
@@ -610,9 +567,9 @@ function parseTypeLine(kw: string, tokens: string[], state: TypeParseState): voi
             if (tokens.length >= 2) {
                 part.objfile = tokens[1];
             }
-            const si = tokens.findIndex((t) => t.toLowerCase() === "scale");
-            if (si >= 0 && si + 1 < tokens.length) {
-                part.scale = parseFloat(tokens[si + 1]) || part.scale;
+            const scaleIdx = tokens.findIndex((t) => t.toLowerCase() === "scale");
+            if (scaleIdx >= 0 && scaleIdx + 1 < tokens.length) {
+                part.scale = parseFloat(tokens[scaleIdx + 1]) || part.scale;
             }
         }
     } else if (kw === "scale") {
@@ -628,36 +585,30 @@ function parseTypeLine(kw: string, tokens: string[], state: TypeParseState): voi
     } else if (kw === "drawtype") {
         parseRenderFlags(tokens.slice(1), part);
     } else if (kw === "position") {
-        // "position X Y Z [forward fx fy fz] [up ux uy uz]"
+        // position X Y Z [forward fx fy fz] [up ux uy uz]
         part.position = [floatOrZero(tokens[1]), floatOrZero(tokens[2]), floatOrZero(tokens[3])];
         applyOrientationTokens(tokens, part);
     } else if (kw === "forward") {
         applyOrientationTokens(tokens, part);
     } else if (kw === "operate") {
-        // `operate "spin" ax ay az` installs a per-frame local-axis rotation on the part.
-        // `operate "bradar"` (no args) is the radar behaviour: the engine continuously sweeps the
-        // radar's facing each frame (UpdateDebrisPhysicsObject @0x4456a0 — the install table maps
-        // "bradar"→that fn, which integrates+renormalizes a direction vector → continuous rotation).
-        // Reproduced as a steady yaw about the part's up axis. The engine sweeps the WHOLE object, but
-        // the structural base mesh is radially symmetric at the game's low texture resolution so its
-        // rotation is invisible there; at higher fidelity it visibly (wrongly) spins. So `bradar` is
-        // marked inherit-only: the base mesh stays static and only the dish child on the axis sweeps.
-        const op = tokens.length >= 2 ? tokens[1].toLowerCase() : "";
-        if (op === "spin") {
+        // `bradar` takes no arguments: the engine integrates and renormalizes a direction vector
+        // each frame, giving a continuous sweep. See IncomingPart.spinInheritOnly for why only the
+        // children turn here.
+        const operation = tokens.length >= 2 ? tokens[1].toLowerCase() : "";
+        if (operation === "spin") {
             part.spin = [floatOrZero(tokens[2]), floatOrZero(tokens[3]), floatOrZero(tokens[4])];
         }
-        else if (op === "bradar") {
+        else if (operation === "bradar") {
             part.spin = [0, BRADAR_YAW_RATE, 0];
             part.spinInheritOnly = true;
         }
-        else if (op === "spinengines") {
-            // `operate "spinengines"` (no args): the engine-exhaust flame flicker
-            // (ApplyFrameShakeToObjectMatrix @0x4466b0 — a per-frame staircase Z-scale of the part's
-            // matrix, ~2.0..2.6 over 4 engine frames). Reproduced as a per-part Z-scale oscillation.
+        else if (operation === "spinengines") {
+            // The engine walks the part's Z-scale up a staircase from about 2.0 to 2.6 over 4
+            // frames.
             part.flameFlicker = true;
         }
     } else if (kw === "lamplight") {
-        // lamplight x y z r g b radius (OdlCmdLampLight): an omni light in part-local space.
+        // lamplight x y z r g b radius
         part.lights.push({
             kind: "lamp",
             position: [floatOrZero(tokens[1]), floatOrZero(tokens[2]), floatOrZero(tokens[3])],
@@ -665,134 +616,118 @@ function parseTypeLine(kw: string, tokens: string[], state: TypeParseState): voi
             radius: floatOrZero(tokens[7]),
         });
     } else if (kw === "pointlight" || kw === "spotlight") {
-        // pointlight: range falloff intensity [colours]; spotlight: inner outer angle [colours].
-        // Both mark the part as a light emitter; treat as an omni at the part origin (range = the
-        // first numeric operand). Cone narrowing for spot is approximated as omni for now.
-        const nums = tokens.slice(1).map((t) => parseFloat(t)).filter((n) => Number.isFinite(n));
+        // pointlight is `range falloff intensity [colours]`, spotlight `inner outer angle
+        // [colours]`. Both become an omni at the part origin taking the first operand as range,
+        // which approximates the spot cone.
+        const operands = tokens.slice(1).map((t) => parseFloat(t)).filter((n) => Number.isFinite(n));
         part.lights.push({
             kind: kw === "spotlight" ? "spot" : "point",
             position: [0, 0, 0],
             color: [255, 255, 255],
-            radius: nums.length > 0 ? nums[0] : 1500,
+            radius: operands.length > 0 ? operands[0] : 1500,
         });
     } else if (kw === "name") {
-        // `name "x"` sets the part's HUD/display label (e.g. the targeting-reticle name). It is
-        // distinct from the mesh-resolution key {@link IncomingPart.name}, so it is captured
-        // separately rather than overwriting it. No rendering effect.
+        // Captured separately rather than overwriting IncomingPart.name, which meshes resolve by.
         if (tokens.length >= 2) {
             part.displayName = tokens[1];
         }
     } else if (kw === "animatemodel") {
-        // animatemodel \n "f0" "f1" … \n end (OdlCmdAnimateModel @0x406150): a mesh flipbook
-        // whose frames are other TYPE names; the engine cycles the part's displayed mesh through
-        // them. Begin collecting frame names (one per following line) until `end`. Any names on
-        // this same line are captured too for robustness, though the data lists them per-line.
+        // animatemodel \n "f0" "f1" … \n end. The frame names are other type names. The data lists
+        // one per line, but take any on this line too.
         state.block = "animframes";
         for (let i = 1; i < tokens.length; i++) {
             part.animFrames.push(tokens[i]);
         }
     } else if (kw === "animate") {
-        // animate \n "PART" position … \n wait \n … \n end: a sub-part keyframe pose sequence
-        // (helicopter landing gear, VTOL engine tilt, wing morph). Begin capturing per-part target
-        // poses; the renderer oscillates each part between its default and target pose (living scene).
         state.block = "animate";
     } else if (kw === "sprite") {
-        // sprite u=U v=V w=W h=H size=S colour 1=R G B (ParseOdlSpriteDef @0x406690): a billboard.
-        // The UV rect is in texture pixels; `size` is the world billboard size (default 24); the
-        // base colour follows `colour` as `N=R G B` (the `N=` slot prefix is stripped).
-        const kv = (key: string): number => {
-            const t = tokens.find((tok) => tok.toLowerCase().startsWith(key));
-            return t !== undefined ? floatOrZero(t.slice(key.length)) : NaN;
+        // sprite u=U v=V w=W h=H size=S colour 1=R G B. The UV rect is in texture pixels, and the
+        // first colour operand carries an `N=` slot prefix to strip.
+        const numberFor = (prefix: string): number => {
+            const token = tokens.find((t) => t.toLowerCase().startsWith(prefix));
+            return token !== undefined ? floatOrZero(token.slice(prefix.length)) : NaN;
         };
-        const sizeTok = kv("size=");
+        const authoredSize = numberFor("size=");
         let color: [number, number, number] = [128, 128, 128];
-        const ci = tokens.findIndex((t) => t.toLowerCase() === "colour");
-        if (ci >= 0 && ci + 3 < tokens.length) {
-            const rTok = tokens[ci + 1];
-            const r = floatOrZero(rTok.includes("=") ? rTok.slice(rTok.indexOf("=") + 1) : rTok);
-            color = [r, floatOrZero(tokens[ci + 2]), floatOrZero(tokens[ci + 3])];
+        const colourIdx = tokens.findIndex((t) => t.toLowerCase() === "colour");
+        if (colourIdx >= 0 && colourIdx + 3 < tokens.length) {
+            const redToken = tokens[colourIdx + 1];
+            const red = floatOrZero(redToken.includes("=") ? redToken.slice(redToken.indexOf("=") + 1) : redToken);
+            color = [red, floatOrZero(tokens[colourIdx + 2]), floatOrZero(tokens[colourIdx + 3])];
         }
         part.sprite = {
-            u: kv("u="), v: kv("v="), w: kv("w="), h: kv("h="),
-            size: Number.isFinite(sizeTok) ? sizeTok : 24,
+            u: numberFor("u="), v: numberFor("v="), w: numberFor("w="), h: numberFor("h="),
+            size: Number.isFinite(authoredSize) ? authoredSize : 24,
             color, cycleColors: [], cycleSpeed: 0,
         };
     } else if (kw === "colourfade") {
-        // colourfade speed N + following `colour R G B` lines: animates
-        // the part's sprite colour through the cycle list. Begin collecting the colour keyframes.
-        const si = tokens.findIndex((t) => t.toLowerCase() === "speed");
-        if (part.sprite !== undefined && si >= 0) {
-            part.sprite.cycleSpeed = floatOrZero(tokens[si + 1]);
+        // colourfade speed N, then `colour R G B` lines holding the keyframes.
+        const speedIdx = tokens.findIndex((t) => t.toLowerCase() === "speed");
+        if (part.sprite !== undefined && speedIdx >= 0) {
+            part.sprite.cycleSpeed = floatOrZero(tokens[speedIdx + 1]);
         }
         state.block = "colourcycle";
     } else if (kw === "dynamics") {
-        // dynamics "class" + following attribute lines: the flight/physics model.
-        // Begin the attribute block; the in-block handler captures `max vel` (the traversal speed).
+        // dynamics "class", then attribute lines. Only `max vel` is kept.
         state.block = "dynamics";
     } else if (kw === "shadow") {
-        // shadow "tex" [flags]: a type-wide ground-shadow silhouette texture. The
-        // engine derives the shadow's footprint/placement from the object bounding box at render
-        // time; captured here for completeness (shadow rendering is not yet implemented).
+        // shadow "tex" [flags]
         if (tokens.length >= 2) {
             state.type.shadowTexture = tokens[1];
         }
     } else if (kw === "sphere" || kw === "hemisphere") {
-        // sphere rad=R width=W height=H / hemisphere rad=R width=W height=H repeat=U V
-        // (OdlCmdSphere/OdlCmdHemisphere): a procedural mesh (energy sphere/shield, dome canopy)
-        // built in place of an objfile. `repeat` (hemisphere only) tiles the texture U×V.
-        const kv = (key: string): number => {
-            const t = tokens.find((tok) => tok.toLowerCase().startsWith(key));
-            return t !== undefined ? floatOrZero(t.slice(key.length)) : NaN;
+        // sphere rad=R width=W height=H, or hemisphere rad=R width=W height=H repeat=U V, where
+        // `repeat` is hemisphere-only.
+        const numberFor = (prefix: string): number => {
+            const token = tokens.find((t) => t.toLowerCase().startsWith(prefix));
+            return token !== undefined ? floatOrZero(token.slice(prefix.length)) : NaN;
         };
         let repeatU = 1, repeatV = 1;
-        const ri = tokens.findIndex((t) => t.toLowerCase().startsWith("repeat="));
-        if (ri >= 0) {
-            repeatU = floatOrZero(tokens[ri].slice("repeat=".length)) || 1;
-            repeatV = ri + 1 < tokens.length ? floatOrZero(tokens[ri + 1]) || 1 : 1;
+        const repeatIdx = tokens.findIndex((t) => t.toLowerCase().startsWith("repeat="));
+        if (repeatIdx >= 0) {
+            repeatU = floatOrZero(tokens[repeatIdx].slice("repeat=".length)) || 1;
+            repeatV = repeatIdx + 1 < tokens.length ? floatOrZero(tokens[repeatIdx + 1]) || 1 : 1;
         }
         part.procGeom = {
             kind: kw === "hemisphere" ? "hemisphere" : "sphere",
-            radius: kv("rad="), width: kv("width="), height: kv("height="), repeatU, repeatV,
+            radius: numberFor("rad="), width: numberFor("width="), height: numberFor("height="), repeatU, repeatV,
         };
     } else if (kw === "smoke") {
-        // smoke ox oy oz [rate N] [frames M] [size S] [colour R G B] [alpha A] (OdlCmdSmokeOperate):
-        // a continuous puff emitter (e.g. cooling-tower smoke). The first 3 numbers are the local
-        // emitter offset; the renderer animates a rising/fading column from it.
-        const after = (key: string): number => {
-            const ix = tokens.findIndex((t) => t.toLowerCase() === key);
-            return ix >= 0 && ix + 1 < tokens.length ? floatOrZero(tokens[ix + 1]) : NaN;
+        // smoke ox oy oz [rate N] [frames M] [size S] [colour R G B] [alpha A]. The first three
+        // numbers are the local emitter offset.
+        const numberAfter = (keyword: string): number => {
+            const at = tokens.findIndex((t) => t.toLowerCase() === keyword);
+            return at >= 0 && at + 1 < tokens.length ? floatOrZero(tokens[at + 1]) : NaN;
         };
-        const ci = tokens.findIndex((t) => t.toLowerCase() === "colour");
-        const sizeV = after("size");
-        const alphaV = after("alpha");
-        const rateV = after("rate");
-        const framesV = after("frames");
-        // `frames` is negative for additive-blended trails (chimney/exhaust) and positive for the
-        // alpha-blended cooling-tower plume; the engine takes its absolute value as the lifetime.
-        const framesRaw = Number.isFinite(framesV) ? framesV : 42;
+        const colourIdx = tokens.findIndex((t) => t.toLowerCase() === "colour");
+        const authoredSize = numberAfter("size");
+        const authoredAlpha = numberAfter("alpha");
+        const authoredRate = numberAfter("rate");
+        const authoredFrames = numberAfter("frames");
+        const signedFrames = Number.isFinite(authoredFrames) ? authoredFrames : 42;
         part.smoke = {
             offset: [floatOrZero(tokens[1]), floatOrZero(tokens[2]), floatOrZero(tokens[3])],
-            size: Number.isFinite(sizeV) ? sizeV : 70,
-            color: ci >= 0 && ci + 3 < tokens.length ? [floatOrZero(tokens[ci + 1]), floatOrZero(tokens[ci + 2]), floatOrZero(tokens[ci + 3])] : [60, 60, 60],
-            alpha: Number.isFinite(alphaV) ? alphaV : 128,
-            rate: Number.isFinite(rateV) ? Math.max(1, Math.abs(rateV)) : 4,
-            lifetime: Math.max(1, Math.abs(framesRaw)),
-            additive: framesRaw < 0,
+            size: Number.isFinite(authoredSize) ? authoredSize : 70,
+            color: colourIdx >= 0 && colourIdx + 3 < tokens.length ? [floatOrZero(tokens[colourIdx + 1]), floatOrZero(tokens[colourIdx + 2]), floatOrZero(tokens[colourIdx + 3])] : [60, 60, 60],
+            alpha: Number.isFinite(authoredAlpha) ? authoredAlpha : 128,
+            rate: Number.isFinite(authoredRate) ? Math.max(1, Math.abs(authoredRate)) : 4,
+            lifetime: Math.max(1, Math.abs(signedFrames)),
+            additive: signedFrames < 0,
         };
     } else if (kw === "double" || kw === "self" || kw === "semi" || kw === "reflective" || kw === "semiinv") {
-        // Bare inline render-flag phrase on its own line.
+        // The same render flags can appear bare on their own line instead of after `drawtype`.
         parseRenderFlags(tokens, part);
     }
 }
 
 function applyOrientationTokens(tokens: string[], part: IncomingPart): void {
-    const fi = tokens.findIndex((t) => t.toLowerCase() === "forward");
-    if (fi >= 0) {
-        part.forward = [floatOrZero(tokens[fi + 1]), floatOrZero(tokens[fi + 2]), floatOrZero(tokens[fi + 3])];
+    const forwardIdx = tokens.findIndex((t) => t.toLowerCase() === "forward");
+    if (forwardIdx >= 0) {
+        part.forward = [floatOrZero(tokens[forwardIdx + 1]), floatOrZero(tokens[forwardIdx + 2]), floatOrZero(tokens[forwardIdx + 3])];
     }
-    const ui = tokens.findIndex((t) => t.toLowerCase() === "up");
-    if (ui >= 0) {
-        part.up = [floatOrZero(tokens[ui + 1]), floatOrZero(tokens[ui + 2]), floatOrZero(tokens[ui + 3])];
+    const upIdx = tokens.findIndex((t) => t.toLowerCase() === "up");
+    if (upIdx >= 0) {
+        part.up = [floatOrZero(tokens[upIdx + 1]), floatOrZero(tokens[upIdx + 2]), floatOrZero(tokens[upIdx + 3])];
     }
 }
 
@@ -802,7 +737,7 @@ function parseLandLine(kw: string, tokens: string[], land: IncomingLand): void {
             land.texturePaths.push(tokens[1]);
         }
     } else {
-        // The first two bare quoted strings are the heightfield then cell-flags binaries.
+        // The first two bare quoted strings are the heightfield, then the cell flags.
         if (land.heightfieldPath === "") {
             land.heightfieldPath = tokens[0];
         } else if (land.cellFlagsPath === "") {
@@ -823,7 +758,7 @@ function parseSkyLine(kw: string, tokens: string[], sky: IncomingSky): void {
     } else if (kw === "fog") {
         sky.fogColor = [intOrZero(tokens[1]), intOrZero(tokens[2]), intOrZero(tokens[3])];
     } else if (kw === "cloud") {
-        // "cloud level <z>"
+        // cloud level <z>
         const z = tokens[tokens.length - 1];
         sky.cloudLevelZ = parseFloat(z) || 0;
     } else if (kw === "ambiance" || kw === "ambience") {
@@ -838,7 +773,7 @@ function parseSkyLine(kw: string, tokens: string[], sky: IncomingSky): void {
             sky.sunImagePath = tokens[1];
         }
     } else if (kw === "color") {
-        // The `color R G B` line follows `sunimage`: the sun's (warm) tint color.
+        // This `color` line follows `sunimage` and tints the sun, not the sky.
         sky.sunColor = [intOrZero(tokens[1]), intOrZero(tokens[2]), intOrZero(tokens[3])];
     } else if (kw === "size") {
         sky.sunSize = floatOrZero(tokens[1]);

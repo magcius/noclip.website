@@ -1,8 +1,7 @@
 
-// Scene assembly and registration for Incoming (1998, Rage Software) levels.
-//
-// Each level is described by an `.odl` object/terrain/sky definition and a `.wdl` placement
-// list.
+// Scene assembly and registration for Incoming (1998, Rage Software) levels. A level pairs an
+// `.odl` object, terrain and sky definition with a `.wdl` placement list, plus an optional `.mdl`
+// mission file holding the actors.
 
 import { mat4, vec3 } from "gl-matrix";
 import { GfxDevice, GfxFormat, GfxTexture } from "../gfx/platform/GfxPlatform.js";
@@ -142,16 +141,15 @@ async function loadModel(device: GfxDevice, dataFetcher: DataFetcher, cache: Map
 }
 
 function buildModelMatrix(out: mat4, px: number, py: number, pz: number, forward: vec3, up: vec3, scale: number): void {
-    const f = vec3.normalize(vec3.create(), forward);
-    const u = vec3.normalize(vec3.create(), up);
-    const r = vec3.normalize(vec3.create(), vec3.cross(vec3.create(), u, f));
-    // Re-orthogonalize up from forward and right.
-    const u2 = vec3.cross(vec3.create(), f, r);
+    const forwardAxis = vec3.normalize(vec3.create(), forward);
+    const upAxis = vec3.normalize(vec3.create(), up);
+    const rightAxis = vec3.normalize(vec3.create(), vec3.cross(vec3.create(), upAxis, forwardAxis));
+    const orthogonalUp = vec3.cross(vec3.create(), forwardAxis, rightAxis);
 
-    // Column-major: columns are scaled basis vectors (X=right, Y=up, Z=forward), then translation.
-    out[0] = r[0] * scale; out[1] = r[1] * scale; out[2] = r[2] * scale; out[3] = 0;
-    out[4] = u2[0] * scale; out[5] = u2[1] * scale; out[6] = u2[2] * scale; out[7] = 0;
-    out[8] = f[0] * scale; out[9] = f[1] * scale; out[10] = f[2] * scale; out[11] = 0;
+    // Column-major, so the columns are the scaled axes, then the translation.
+    out[0] = rightAxis[0] * scale; out[1] = rightAxis[1] * scale; out[2] = rightAxis[2] * scale; out[3] = 0;
+    out[4] = orthogonalUp[0] * scale; out[5] = orthogonalUp[1] * scale; out[6] = orthogonalUp[2] * scale; out[7] = 0;
+    out[8] = forwardAxis[0] * scale; out[9] = forwardAxis[1] * scale; out[10] = forwardAxis[2] * scale; out[11] = 0;
     out[12] = px; out[13] = py; out[14] = pz; out[15] = 1;
 }
 
@@ -170,14 +168,14 @@ function pickSkyColor(sky: IncomingODL["sky"], fogColor: [number, number, number
 }
 
 function deriveSkyGradient(sky: NonNullable<IncomingODL["sky"]>): number[][] {
-    // Horizon glow: a brightened blend of the sun tint and the directional-light colour.
+    // Brighten a blend of the sun tint and the directional colour for the horizon.
     const glow = (i: number) => Math.min(255, ((sky.sunColor[i] + sky.directColor[i]) * 0.5) * 1.25);
     const horizon = [glow(0), glow(1), glow(2)];
-    // Zenith: a darker version of the same hue (keeps the sky one warm/cool family — no stray blue).
+    // Darken the same hue for the zenith, keeping the sky in one colour family.
     const zenith = [horizon[0] * 0.45, horizon[1] * 0.30, horizon[2] * 0.22];
     const bands: number[][] = [];
     for (let i = 0; i < 8; i++) {
-        // Bands 0..3 span zenith→horizon (the visible upper hemisphere); 4..7 hold at the horizon.
+        // Bands 0..3 span zenith to horizon; 4..7 hold at the horizon.
         const t = Math.min(i / 3, 1);
         bands.push([
             zenith[0] + (horizon[0] - zenith[0]) * t,
@@ -212,7 +210,7 @@ function buildGlobalPartRegistry(types: Map<string, IncomingObjectType>): Map<st
 function resolvePartMaterial(type: IncomingObjectType, part: IncomingPart, globalParts: Map<string, IncomingPart>): ResolvedPartMaterial | undefined {
     let src = part;
     const visited = new Set<IncomingPart>();
-    // Follow the alias chain until reaching a part with a real mesh (or a cycle/dead end).
+    // Follow the alias chain to a part with a real mesh, guarding against cycles.
     while (src.objfile === undefined && src.aliasOf !== undefined && !visited.has(src)) {
         visited.add(src);
         const target = src.aliasOf.toLowerCase();
@@ -250,17 +248,16 @@ function resolveMDLWorld(p: IncomingMDLPlacement, offset: number, heightfield: H
         }
         let world: [number, number, number];
         if (p.ref.mode === "world") {
-            // World-axis offset from the reference position (`relative to`).
+            // `relative to`: a world-axis offset from the reference position.
             world = [base.world[0] + p.ref.dx, base.world[1] + p.ref.dy, base.world[2] + p.ref.dz];
         } else {
-            // Offset in the reference's own rotated frame (`local to` / `fixed_to ... at`). The
-            // right vector is up×forward, matching buildModelMatrix, so transforming the offset by
-            // the reference's model matrix yields base + R·offset. (`localxz` is approximated as the
-            // full local frame; reference objects are level, making the yaw-only distinction moot.)
-            const bm = mat4.create();
-            buildModelMatrix(bm, base.world[0], base.world[1], base.world[2], base.forward as vec3, base.up as vec3, 1);
-            const w = vec3.transformMat4(vec3.create(), [p.ref.dx, p.ref.dy, p.ref.dz], bm);
-            world = [w[0], w[1], w[2]];
+            // `local to` and `fixed_to ... at`: an offset in the reference's own rotated frame, so
+            // its model matrix transforms the offset directly. `localxz` uses the full local frame
+            // too, since reference objects are level and the yaw-only distinction never shows.
+            const referenceMatrix = mat4.create();
+            buildModelMatrix(referenceMatrix, base.world[0], base.world[1], base.world[2], base.forward as vec3, base.up as vec3, 1);
+            const offsetWorld = vec3.transformMat4(vec3.create(), [p.ref.dx, p.ref.dy, p.ref.dz], referenceMatrix);
+            world = [offsetWorld[0], offsetWorld[1], offsetWorld[2]];
         }
         if (p.ref.onGround && heightfield !== undefined) {
             world[1] = sampleGroundHeight(heightfield, world[0], world[2]);
@@ -285,10 +282,10 @@ function resolveWaypointWorld(wp: IncomingMDLWaypoint, offset: number, heightfie
         if (wp.ref.mode === "world") {
             world = [base.world[0] + wp.ref.dx, base.world[1] + wp.ref.dy, base.world[2] + wp.ref.dz];
         } else {
-            const bm = mat4.create();
-            buildModelMatrix(bm, base.world[0], base.world[1], base.world[2], base.forward as vec3, base.up as vec3, 1);
-            const w = vec3.transformMat4(vec3.create(), [wp.ref.dx, wp.ref.dy, wp.ref.dz], bm);
-            world = [w[0], w[1], w[2]];
+            const referenceMatrix = mat4.create();
+            buildModelMatrix(referenceMatrix, base.world[0], base.world[1], base.world[2], base.forward as vec3, base.up as vec3, 1);
+            const offsetWorld = vec3.transformMat4(vec3.create(), [wp.ref.dx, wp.ref.dy, wp.ref.dz], referenceMatrix);
+            world = [offsetWorld[0], offsetWorld[1], offsetWorld[2]];
         }
         if (wp.ref.onGround && heightfield !== undefined) {
             world[1] = sampleGroundHeight(heightfield, world[0], world[2]);
@@ -305,7 +302,7 @@ function buildMover(start: [number, number, number], waypoints: IncomingMDLWaypo
         if (w === undefined) {
             continue;
         }
-        // Skip a point coincident with the previous one (zero-length leg adds nothing).
+        // Drop a point on top of the previous one, since a zero-length leg adds nothing.
         const prev = points[points.length - 1];
         if (Math.abs(w[0] - prev[0]) > 1 || Math.abs(w[1] - prev[1]) > 1 || Math.abs(w[2] - prev[2]) > 1) {
             points.push(w);
@@ -314,7 +311,6 @@ function buildMover(start: [number, number, number], waypoints: IncomingMDLWaypo
     if (points.length < 2) {
         return undefined;
     }
-    // Cumulative arc length at the start of each leg; the loop closes from the last point to the first.
     const cumLengths: number[] = new Array(points.length);
     let acc = 0;
     for (let i = 0; i < points.length; i++) {
@@ -329,7 +325,7 @@ function buildPartFrames(type: IncomingObjectType, placementMatrix: mat4): mat4[
     const parts = type.parts;
     const n = parts.length;
 
-    // Local translate·rotate of each part relative to its parent (unit scale, world-unit offset).
+    // Unit scale here: part offsets are already in world units.
     const local: mat4[] = new Array(n);
     for (let i = 0; i < n; i++) {
         const p = parts[i];
@@ -338,7 +334,7 @@ function buildPartFrames(type: IncomingObjectType, placementMatrix: mat4): mat4[
         local[i] = m;
     }
 
-    // Accumulate down the hierarchy (parentIndex < i is guaranteed by the parser).
+    // One pass suffices because the parser guarantees a parent's index precedes its child's.
     const lworld: mat4[] = new Array(n);
     for (let i = 0; i < n; i++) {
         const p = parts[i];
@@ -358,8 +354,8 @@ function effectiveSpin(type: IncomingObjectType, index: number): [number, number
         if (part.spin === undefined) {
             continue;
         }
-        // This is to avoid going too far up the hierarchy so parent objects do not spin (fixes
-        // buildings spinning with the mounted satellite dish).
+        // Stop the walk from spinning a parent object, which made buildings turn along with their
+        // mounted satellite dish.
         if (i === index && part.spinInheritOnly) {
             continue;
         }
@@ -380,22 +376,18 @@ class IncomingSceneDesc implements SceneDesc {
         const wdlBuffer = await dataFetcher.fetchData(resolveDataPath(this.wdlPath));
         const placements = parseWDL(new TextDecoder("latin1").decode(wdlBuffer.createTypedArray(Uint8Array)));
 
-        // Derive lighting/fog from the sky block (with defaults).
         const sky = odl.sky;
         const fogColor: [number, number, number] = sky !== undefined ? normColor(sky.fogColor) : [0.5, 0.6, 0.7];
-        // Directional light: the engine keeps the `from` vector UN-normalized when `not_unit` is
-        // given (its magnitude ~2 scales the directional term), and the warm sunset look comes from
-        // the sun `color`, not the gray `direct` value.
+        // `not_unit` leaves the vector un-normalized, letting its magnitude scale the directional
+        // term. The warm sunset look comes from the sun `color`, not the gray `direct` value.
         const lightDir: [number, number, number] = sky === undefined ? [0.4, 0.8, 0.4]
             : sky.lightUnnormalized ? [sky.lightDir[0], sky.lightDir[1], sky.lightDir[2]]
             : (vec3.normalize(vec3.create(), sky.lightDir as vec3) as unknown as [number, number, number]);
-        // Sky-dome gradient: for a `flat` sky, derive it from the level's lighting (sun/direct) so
-        // the player sees the sun-tinted sky (e.g. Africa's sunset orange) rather than the deep-blue
-        // backdrop bands the engine keeps behind its warm-lit cloud plane. Non-flat (space) keeps its
-        // own bands (moon has none → black space).
+        // A `flat` sky derives its gradient from the level's own lighting, so the player sees the
+        // sun-tinted sky rather than the deep-blue backdrop bands the engine hides behind its
+        // warm-lit cloud plane. Space levels keep their authored bands, and the moon has none.
         const skyGradient: number[][] = sky !== undefined ? (sky.flat ? deriveSkyGradient(sky) : sky.gradient) : [];
-        // Clear/background to the gradient's horizon (band 3 of the 8) so nothing peeks through as a
-        // foreign colour; fall back to the prior heuristic when there is no gradient.
+        // Clear to the gradient's horizon band so nothing peeks through in a foreign colour.
         const skyColor: [number, number, number] = skyGradient.length > 3
             ? normColor(skyGradient[3]) : pickSkyColor(sky, fogColor);
         const sceneParams: IncomingSceneParams = {
@@ -406,7 +398,7 @@ class IncomingSceneDesc implements SceneDesc {
             skyColor,
             skyGradient,
             sunColor: sky !== undefined ? normColor(sky.sunColor) : [1, 0.85, 0.7],
-            // Sun is toward the light `from` direction; convert Incoming->noclip (negate Y and Z).
+            // Toward the light's `from` direction, converted to noclip space by negating Y and Z.
             sunDir: sky !== undefined
                 ? (vec3.normalize(vec3.create(), [sky.lightDir[0], -sky.lightDir[1], -sky.lightDir[2]]) as unknown as [number, number, number])
                 : [0, 0.3, 1],
@@ -419,7 +411,6 @@ class IncomingSceneDesc implements SceneDesc {
         const modelCache = new Map<string, IncomingMeshData | undefined>();
         const procCache = new Map<string, IncomingMeshData>();
 
-        // Sky cloud texture for the dome and the sun-sprite texture.
         if (sky !== undefined && sky.texturePath !== undefined) {
             renderer.skyCloudTexture = await loadTexture(device, dataFetcher, textureCache, renderer.textures, sky.texturePath);
         }
@@ -427,7 +418,6 @@ class IncomingSceneDesc implements SceneDesc {
             renderer.sunTexture = await loadTexture(device, dataFetcher, textureCache, renderer.textures, sky.sunImagePath);
         }
 
-        // Terrain.
         let heightfield: Heightfield | undefined;
         if (odl.land !== undefined) {
             const land = odl.land;
@@ -449,20 +439,17 @@ class IncomingSceneDesc implements SceneDesc {
                     renderer.instances.push({
                         mesh, texture: landTextures[tm.textureIndex],
                         modelMatrix: mat4.create(), selfIllum: false, colorKey: false,
-                        // Make the terrain single-sided so the bottom can be culled.
+                        // Single-sided so the underside can be culled.
                         twoSided: false, indexFormat: indexFormatFor(tm.indices),
                     });
                 }
-                // Water plane over the water-flagged tiles, at the ODL `water` level (oceanic/egypt).
+                // A flat plane over the water-flagged tiles, at the ODL `water` level.
                 if (odl.waterLevel !== undefined) {
                     const waterMesh = buildWaterMesh(cfBuffer, odl.waterLevel);
                     if (waterMesh !== undefined) {
                         const mesh = new IncomingMeshData(device, waterMesh.vertices, waterMesh.indices);
                         renderer.meshes.push(mesh);
-                        // Animated water surface: cycle the sequential water-texture frames on the
-                        // shared water mesh, reusing the `animatemodel` flipbook (same mesh,
-                        // changing texture). Load every frame that resolves; skip any that are
-                        // missing.
+                        // Reuse the `animatemodel` flipbook to cycle textures on one shared mesh.
                         const waterFrames: IncomingAnimFrame[] = [];
                         for (let n = 1; n <= WATER_FRAME_COUNT; n++) {
                             const tex = await loadTexture(device, dataFetcher, textureCache, renderer.textures, `water4\\water${n}.ppm`);
@@ -481,27 +468,21 @@ class IncomingSceneDesc implements SceneDesc {
                     }
                 }
             } catch {
-                // Missing terrain binaries: render objects only.
+                // Without the terrain binaries the level still renders its objects.
             }
         }
 
-        // Model placement.
         const labelWorld = new Map<string, ResolvedPlacement>();
         const instancePlacement = async (type: IncomingObjectType, placementMatrix: mat4, mover?: IncomingMover): Promise<void> => {
             const frames = buildPartFrames(type, placementMatrix);
-            // Largest scaled part-mesh footprint radius, accumulated to size the ground shadow.
-            let footprintR = 0;
+            // Largest scaled part footprint, which sizes the ground shadow.
+            let footprintRadius = 0;
             for (let i = 0; i < type.parts.length; i++) {
                 const part = type.parts[i];
-                // The part's effective spin, inheriting a rotating ancestor's (e.g. a radar dish
-                // rotating with its `bradar` base) so rigid sub-assemblies sweep together.
                 const partSpin = effectiveSpin(type, i);
-                // Collect this part's lamp/point lights in world space (lights can be on parts that
-                // have no mesh). The light position is a world-unit offset in the part's frame, like
-                // the part position; radius is in world units. Color is normalized (may exceed 1 = HDR).
-                // Skipped for moving actors: these are baked at fixed world points (the actor's frames
-                // here are actor-local), so a mover's lights/sprites/smoke/shadow would orphan at the
-                // origin. Effects that travel with a moving craft are a future refinement.
+                // Lights, sprites, smoke and shadows all bake to fixed world points, and a moving
+                // actor's frames are actor-local, so baking them would strand the effects at the
+                // origin. Travelling effects can come later.
                 if (mover === undefined) {
                     for (const light of part.lights) {
                         const wp = vec3.transformMat4(vec3.create(), light.position as vec3, frames[i]);
@@ -512,72 +493,67 @@ class IncomingSceneDesc implements SceneDesc {
                         });
                     }
                 }
-                // Smoke plume emitter = objectPos + rotate(offset).
                 if (part.smoke !== undefined && mover === undefined) {
-                    const sm = part.smoke;
-                    const ep = vec3.transformMat4(vec3.create(), sm.offset as vec3, frames[i]);
+                    const smoke = part.smoke;
+                    const emitterWorld = vec3.transformMat4(vec3.create(), smoke.offset as vec3, frames[i]);
                     const smokeTex = await loadTexture(device, dataFetcher, textureCache, renderer.textures, "smoke.ppm");
                     renderer.smoke.push({
-                        position: [ep[0], ep[1], ep[2]],
-                        size: sm.size,
-                        color: sm.color,
-                        alpha: sm.alpha,
-                        rate: sm.rate,
-                        lifetime: sm.lifetime,
-                        additive: sm.additive,
+                        position: [emitterWorld[0], emitterWorld[1], emitterWorld[2]],
+                        size: smoke.size,
+                        color: smoke.color,
+                        alpha: smoke.alpha,
+                        rate: smoke.rate,
+                        lifetime: smoke.lifetime,
+                        additive: smoke.additive,
                         texture: smokeTex,
                     });
                 }
-                // Billboard sprite: emitted at the part's world origin, additively, with the part's
-                // texture atlas sub-rect. Sprite-only parts have no mesh, so this runs before the mesh resolution that would `continue` past
-                // them. The UV rect is normalized from texture pixels by the atlas size.
+                // This has to precede mesh resolution, which would `continue` past the sprite-only
+                // parts that carry no mesh of their own.
                 if (part.sprite !== undefined && mover === undefined) {
-                    const sp = part.sprite;
-                    const wp = mat4.getTranslation(vec3.create(), frames[i]);
+                    const sprite = part.sprite;
+                    const spriteWorld = mat4.getTranslation(vec3.create(), frames[i]);
                     const tex = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, part.texturePath) : undefined;
                     renderer.sprites.push({
-                        position: [wp[0], wp[1], wp[2]],
-                        size: sp.size,
-                        uvRect: [sp.u / SPRITE_ATLAS_SIZE, sp.v / SPRITE_ATLAS_SIZE, sp.w / SPRITE_ATLAS_SIZE, sp.h / SPRITE_ATLAS_SIZE],
+                        position: [spriteWorld[0], spriteWorld[1], spriteWorld[2]],
+                        size: sprite.size,
+                        uvRect: [sprite.u / SPRITE_ATLAS_SIZE, sprite.v / SPRITE_ATLAS_SIZE, sprite.w / SPRITE_ATLAS_SIZE, sprite.h / SPRITE_ATLAS_SIZE],
                         texture: tex,
-                        color: sp.color,
-                        cycleColors: sp.cycleColors,
-                        cycleSpeed: sp.cycleSpeed,
+                        color: sprite.color,
+                        cycleColors: sprite.cycleColors,
+                        cycleSpeed: sprite.cycleSpeed,
                     });
                 }
-                // Procedural `sphere`/`hemisphere` geometry (energy shields/spheres): generate and
-                // cache the tessellated mesh, then emit one instance. The radius is in world units,
-                // so the mesh sits at the part frame with unit scale (not the default part scale).
-                // Semi-transparent shields render alpha-blended after the opaque scene.
+                // The radius is already in world units, so the mesh sits at the part frame with unit
+                // scale rather than the part's own.
                 if (part.procGeom !== undefined) {
-                    const g = part.procGeom;
-                    const key = `${g.kind}:${g.radius}:${g.width}:${g.height}:${g.repeatU}:${g.repeatV}`;
-                    let pmesh = procCache.get(key);
-                    if (pmesh === undefined) {
-                        const gen = g.kind === "hemisphere"
-                            ? buildHemisphereMesh(g.radius, g.width, g.height, g.repeatU, g.repeatV)
-                            : buildSphereMesh(g.radius, g.width, g.height);
-                        pmesh = new IncomingMeshData(device, gen.vertices, gen.indices);
-                        renderer.meshes.push(pmesh);
-                        procCache.set(key, pmesh);
+                    const geom = part.procGeom;
+                    const cacheKey = `${geom.kind}:${geom.radius}:${geom.width}:${geom.height}:${geom.repeatU}:${geom.repeatV}`;
+                    let procMesh = procCache.get(cacheKey);
+                    if (procMesh === undefined) {
+                        const generated = geom.kind === "hemisphere"
+                            ? buildHemisphereMesh(geom.radius, geom.width, geom.height, geom.repeatU, geom.repeatV)
+                            : buildSphereMesh(geom.radius, geom.width, geom.height);
+                        procMesh = new IncomingMeshData(device, generated.vertices, generated.indices);
+                        renderer.meshes.push(procMesh);
+                        procCache.set(cacheKey, procMesh);
                     }
-                    const ptex = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, part.texturePath) : undefined;
-                    // Multi-`texture` parts.
+                    const procTexture = part.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, part.texturePath) : undefined;
                     let texAnim: IncomingAnimFrame[] | undefined;
                     if (part.textures.length > 1) {
-                        const tf: IncomingAnimFrame[] = [];
-                        for (const tp of part.textures) {
-                            const t = await loadTexture(device, dataFetcher, textureCache, renderer.textures, tp);
-                            if (t !== undefined) {
-                                tf.push({ mesh: pmesh, texture: t });
+                        const textureFrames: IncomingAnimFrame[] = [];
+                        for (const texturePath of part.textures) {
+                            const frameTexture = await loadTexture(device, dataFetcher, textureCache, renderer.textures, texturePath);
+                            if (frameTexture !== undefined) {
+                                textureFrames.push({ mesh: procMesh, texture: frameTexture });
                             }
                         }
-                        if (tf.length > 1) {
-                            texAnim = tf;
+                        if (textureFrames.length > 1) {
+                            texAnim = textureFrames;
                         }
                     }
                     renderer.instances.push({
-                        mesh: pmesh, texture: texAnim !== undefined ? texAnim[0].texture : ptex, modelMatrix: mat4.clone(frames[i]),
+                        mesh: procMesh, texture: texAnim !== undefined ? texAnim[0].texture : procTexture, modelMatrix: mat4.clone(frames[i]),
                         mover,
                         selfIllum: (part.materialFlags & IncomingMaterialFlag.SelfIlluminating) !== 0,
                         colorKey: (part.textureFlags & IncomingTextureFlag.ColorKey) !== 0,
@@ -588,39 +564,38 @@ class IncomingSceneDesc implements SceneDesc {
                     });
                     continue;
                 }
-                // `animatemodel`
                 if (part.animFrames.length > 0) {
                     const animFrames: IncomingAnimFrame[] = [];
                     let frameScale = 1, frameSelfIllum = false, frameColorKey = false, frameTwoSided = false;
                     for (const frameName of part.animFrames) {
-                        const ft = odl.types.get(frameName.toLowerCase());
-                        if (ft === undefined || ft.parts.length === 0) {
+                        const frameType = odl.types.get(frameName.toLowerCase());
+                        if (frameType === undefined || frameType.parts.length === 0) {
                             continue;
                         }
-                        const fm = resolvePartMaterial(ft, ft.parts[0], globalParts);
-                        if (fm === undefined) {
+                        const frameMaterial = resolvePartMaterial(frameType, frameType.parts[0], globalParts);
+                        if (frameMaterial === undefined) {
                             continue;
                         }
-                        const fmesh = await loadModel(device, dataFetcher, modelCache, renderer.meshes, fm.objfile);
-                        if (fmesh === undefined) {
+                        const frameMesh = await loadModel(device, dataFetcher, modelCache, renderer.meshes, frameMaterial.objfile);
+                        if (frameMesh === undefined) {
                             continue;
                         }
-                        const ftex = fm.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, fm.texturePath) : undefined;
-                        animFrames.push({ mesh: fmesh, texture: ftex });
-                        footprintR = Math.max(footprintR, fmesh.localRadiusXZ * fm.scale);
-                        frameScale = fm.scale;
-                        frameSelfIllum = (fm.materialFlags & IncomingMaterialFlag.SelfIlluminating) !== 0;
-                        frameColorKey = (fm.textureFlags & IncomingTextureFlag.ColorKey) !== 0;
-                        frameTwoSided = fm.doubleSided;
+                        const frameTexture = frameMaterial.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, frameMaterial.texturePath) : undefined;
+                        animFrames.push({ mesh: frameMesh, texture: frameTexture });
+                        footprintRadius = Math.max(footprintRadius, frameMesh.localRadiusXZ * frameMaterial.scale);
+                        frameScale = frameMaterial.scale;
+                        frameSelfIllum = (frameMaterial.materialFlags & IncomingMaterialFlag.SelfIlluminating) !== 0;
+                        frameColorKey = (frameMaterial.textureFlags & IncomingTextureFlag.ColorKey) !== 0;
+                        frameTwoSided = frameMaterial.doubleSided;
                     }
                     if (animFrames.length > 0) {
-                        const fs = frameScale;
-                        const modelMatrix = mat4.multiply(mat4.create(), frames[i], mat4.fromScaling(mat4.create(), [fs, fs, fs]));
+                        const scale = frameScale;
+                        const modelMatrix = mat4.multiply(mat4.create(), frames[i], mat4.fromScaling(mat4.create(), [scale, scale, scale]));
                         renderer.instances.push({
                             mesh: animFrames[0].mesh, texture: animFrames[0].texture, modelMatrix,
                             selfIllum: frameSelfIllum, colorKey: frameColorKey, twoSided: frameTwoSided,
                             indexFormat: GfxFormat.U32_R, animFrames,
-                            spin: partSpin, baseFrame: frames[i], meshScale: fs, mover,
+                            spin: partSpin, baseFrame: frames[i], meshScale: scale, mover,
                         });
                     }
                     if (part.objfile === undefined && part.aliasOf === undefined) {
@@ -636,14 +611,16 @@ class IncomingSceneDesc implements SceneDesc {
                 if (mesh === undefined) {
                     continue;
                 }
-                footprintR = Math.max(footprintR, mesh.localRadiusXZ * material.scale);
+                footprintRadius = Math.max(footprintRadius, mesh.localRadiusXZ * material.scale);
                 const texture = material.texturePath !== undefined ? await loadTexture(device, dataFetcher, textureCache, renderer.textures, material.texturePath) : undefined;
 
-                const s = material.scale;
-                // `drawtype flipx/flipy/flipz` mirror the mesh along an axis (negative scale): a
-                // mirrored/180°-yaw variant of a shared mesh.
-                const modelMatrix = mat4.multiply(mat4.create(), frames[i],
-                    mat4.fromScaling(mat4.create(), [part.flipX ? -s : s, part.flipY ? -s : s, part.flipZ ? -s : s]));
+                // A negative scale mirrors the mesh, which is how the data builds a rotated variant
+                // from a shared one.
+                const scale = material.scale;
+                const mirroredScale: [number, number, number] = [
+                    part.flipX ? -scale : scale, part.flipY ? -scale : scale, part.flipZ ? -scale : scale,
+                ];
+                const modelMatrix = mat4.multiply(mat4.create(), frames[i], mat4.fromScaling(mat4.create(), mirroredScale));
 
                 let animTargetFrame: mat4 | undefined;
                 if (part.animTarget !== undefined) {
@@ -664,33 +641,28 @@ class IncomingSceneDesc implements SceneDesc {
                     spin: partSpin,
                     flameFlicker: part.flameFlicker,
                     baseFrame: frames[i],
-                    meshScale: s,
+                    meshScale: scale,
                     animTargetFrame,
                     mover,
                 });
             }
-            // Ground shadow: one flat alpha quad on the terrain beneath the object, sized to its
-            // footprint and oriented to its heading.
-            if (type.shadowTexture !== undefined && footprintR > 0 && mover === undefined) {
+            if (type.shadowTexture !== undefined && footprintRadius > 0 && mover === undefined) {
                 const shadowTex = await loadTexture(device, dataFetcher, textureCache, renderer.textures, type.shadowTexture);
-                // Skip when the texture is missing: an undefined bind would sample the fallback white
-                // texture and paint a solid black square instead of a silhouette.
+                // An undefined bind samples the fallback white texture, painting a solid black
+                // square instead of a silhouette.
                 if (shadowTex !== undefined) {
                     const objX = placementMatrix[12], objZ = placementMatrix[14];
                     const groundY = heightfield !== undefined ? sampleGroundHeight(heightfield, objX, objZ) : placementMatrix[13];
-                    // Placement forward (matrix Z column) projected onto the horizontal plane: keeps
-                    // the silhouette pointing the right way while the quad lies flat (up = world up).
-                    const fwd: [number, number, number] = [placementMatrix[8], 0, placementMatrix[10]];
-                    if (fwd[0] === 0 && fwd[2] === 0) {
-                        fwd[2] = 1;
+                    const flattenedForward: [number, number, number] = [placementMatrix[8], 0, placementMatrix[10]];
+                    if (flattenedForward[0] === 0 && flattenedForward[2] === 0) {
+                        flattenedForward[2] = 1;
                     }
                     const shadowMatrix = mat4.create();
-                    buildModelMatrix(shadowMatrix, objX, groundY - SHADOW_LIFT, objZ, fwd as vec3, [0, 1, 0], footprintR * SHADOW_SIZE_FACTOR);
+                    buildModelMatrix(shadowMatrix, objX, groundY - SHADOW_LIFT, objZ, flattenedForward as vec3, [0, 1, 0], footprintRadius * SHADOW_SIZE_FACTOR);
                     renderer.shadows.push({ modelMatrix: shadowMatrix, texture: shadowTex, opacity: SHADOW_OPACITY });
                 }
             }
         };
-        // Static `.wdl` placements.
         for (const placement of placements) {
             const worldX = placement.x + odl.offset;
             const worldZ = placement.z + odl.offset;
@@ -706,17 +678,16 @@ class IncomingSceneDesc implements SceneDesc {
             buildModelMatrix(placementMatrix, worldX, py, worldZ, placement.forward as vec3, placement.up as vec3, 1);
             await instancePlacement(type, placementMatrix);
         }
-        // Mission actors.
         const mdlPath = this.mdlPathOverride ?? this.wdlPath.replace(/\.wdl$/i, "_action.mdl");
         let mdlPlacements: IncomingMDLPlacement[] = [];
         try {
             const mdlBuffer = await dataFetcher.fetchData(resolveDataPath(mdlPath));
             mdlPlacements = parseMDL(new TextDecoder("latin1").decode(mdlBuffer.createTypedArray(Uint8Array)));
         } catch {
-            // Ignore no mission file found.
+            // A level without a mission file has no actors.
         }
-        // Pass 1: register every absolute MDL label's world transform, so reference-relative
-        // placements can resolve regardless of file order.
+        // Register every absolute label first, so reference-relative placements resolve whatever
+        // order the file lists them in.
         for (const p of mdlPlacements) {
             if (p.abs === undefined || p.label === undefined) {
                 continue;
@@ -725,9 +696,7 @@ class IncomingSceneDesc implements SceneDesc {
             const wy = p.abs.onGround && heightfield !== undefined ? sampleGroundHeight(heightfield, wx, wz) : p.abs.y;
             labelWorld.set(p.label.toLowerCase(), { world: [wx, wy, wz], forward: p.forward ?? [0, 0, 1], up: p.up });
         }
-        // Pass 2: create every actor with a resolvable position. Dynamic spawns (`position at
-        // generation point`) and references to an unknown label resolve to undefined and are
-        // skipped.
+        // Dynamic spawns and references to an unknown label resolve to undefined, so skip them.
         for (const p of mdlPlacements) {
             const resolved = resolveMDLWorld(p, odl.offset, heightfield, labelWorld);
             if (resolved === undefined) {
@@ -740,8 +709,6 @@ class IncomingSceneDesc implements SceneDesc {
             if (type === undefined || type.parts.length === 0) {
                 continue;
             }
-            // A waypoint-path actor with a known speed becomes a moving actor: it travels its
-            // looped route.
             if (p.path !== undefined && type.maxVel !== undefined && type.maxVel > 0) {
                 const mover = buildMover(resolved.world, p.path.waypoints, odl.offset, heightfield, labelWorld, type.maxVel, resolved.forward, resolved.up, 0);
                 if (mover !== undefined) {

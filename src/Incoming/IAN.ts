@@ -1,115 +1,100 @@
-// Parser for Incoming (1998, Rage Software) ".ian" model files.
-//
-// File structure (all little-endian):
-//   RawModelGeometry header (100 bytes):
-//     +0x00 u32           reserved
-//     +0x04 u32           reserved
-//     +0x08 u32           reserved
-//     +0x0C float         flBoundRadius (ignored)
-//     +0x10 u32           faceFlags (bits 1/2/3 = mirror X/Y/Z)
-//     +0x14 ModelLodEntry aLods[4]  (20 bytes each)
-//
-//   ModelLodEntry (20 bytes):
-//     +0x00 u32  faceCount    (triangle count, low 16 bits)
-//     +0x04 u16  vertexCount
-//     +0x06 u16  textureId     (stamped at load from the ODL color-key)
-//     +0x08 u32  pVertices     (file-relative offset to MeshVertex[])
-//     +0x0C u32  pFaceData     (file-relative offset to MeshFaceRecord[])
-//     +0x10 u32  reserved
-//
-//   MeshVertex (32 bytes): 8 float32 = posX,posY,posZ, normX,normY,normZ, u, v
-//
-//   MeshFaceRecord (28 bytes): u16 tag, u16 flags (bit 0x4 = two-sided),
-//     then 3 face-vertex slots of 8 bytes each = { u16 vertexIndex; u8[6] aux }.
+// Parser for Incoming (1998, Rage Software) ".ian" model files. Little-endian throughout: a
+// header, four LOD entries, then the vertex and face data each LOD entry points at.
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-/**The size in bytes of the {@link IANModel} header (`RawModelGeometry`). */
-const IAN_HEADER_SIZE = 0x14;
-/** The stride in bytes of a single `MeshVertex` record inside an `.ian` file. */
-const IAN_VERTEX_STRIDE = 0x20;
-/** The stride in bytes of a single `MeshFaceRecord` (one triangle) inside an `.ian` file. */
-const IAN_FACE_STRIDE = 0x1c;
-/** Face flag bit indicating a triangle is two-sided. */
+const FIRST_LOD_OFFSET = 0x14;
+const LOD_FACE_COUNT_OFFSET = FIRST_LOD_OFFSET + 0x00;
+const LOD_VERTEX_COUNT_OFFSET = FIRST_LOD_OFFSET + 0x04;
+const LOD_VERTEX_DATA_OFFSET = FIRST_LOD_OFFSET + 0x08;
+const LOD_FACE_DATA_OFFSET = FIRST_LOD_OFFSET + 0x0c;
+const FACE_COUNT_MASK = 0xffff;
+
+const VERTEX_RECORD_STRIDE = 0x20;
+const FLOAT32_SIZE = 0x04;
+
+const FACE_RECORD_STRIDE = 0x1c;
+const FACE_FLAGS_OFFSET = 0x02;
+const FACE_VERTEX_SLOT_OFFSET = 0x04;
+const FACE_VERTEX_SLOT_STRIDE = 0x08;
+const VERTICES_PER_FACE = 3;
+
+const ASCII_PRINTABLE_MIN = 0x20;
+const ASCII_PRINTABLE_MAX = 0x7e;
+
+/** Face flag bit marking a triangle as two-sided. */
 export const IAN_FACE_FLAG_TWO_SIDED = 0x4;
-/**
- * A fully decoded Incoming `.ian` model: a single mesh node of position/normal/uv vertices plus a
- * triangle list, ready to be uploaded to the GPU. Note that positions are in object space and have
- * not yet been multiplied by the object's scale.
- */
+/** Float32 components per interleaved vertex: posX, posY, posZ, normX, normY, normZ, u, v. */
+export const IAN_VERTEX_FLOATS = 8;
+
+/** A decoded `.ian` model. Positions are object space and not yet scaled by the object's scale. */
 export interface IANModel {
-    /** Human-readable node name embedded in the file (e.g. `"Line01"`), for debugging. */
+    /** Node name embedded in the file, such as `"Line01"`. */
     readonly name: string;
-    /** Interleaved vertex data, 8 float32 per vertex: posX, posY, posZ, normX, normY, normZ, u, v. */
+    /** Interleaved vertex data, {@link IAN_VERTEX_FLOATS} float32 per vertex. */
     readonly vertices: Float32Array;
-    /** Number of vertices in {@link vertices}. */
+    /** Vertices in {@link vertices}. */
     readonly vertexCount: number;
-    /** Triangle index list (3 indices per triangle) referencing {@link vertices}. */
+    /** Triangle list, 3 indices each, into {@link vertices}. */
     readonly indices: Uint32Array;
-    /** Per-triangle flags (one entry per triangle); bit {@link IAN_FACE_FLAG_TWO_SIDED} = two-sided. */
+    /** One entry per triangle; bit {@link IAN_FACE_FLAG_TWO_SIDED} marks it two-sided. */
     readonly faceFlags: Uint16Array;
-    /** Number of triangles. */
+    /** Triangles in {@link indices}. */
     readonly triangleCount: number;
 }
+
 /**
- * The number of float32 components per interleaved vertex emitted by {@link parseIAN}
- * (posX, posY, posZ, normX, normY, normZ, u, v).
- */
-export const IAN_VERTEX_FLOATS = 8;
-/**
- * Parses an Incoming `.ian` model file into an {@link IANModel}. Only the highest-detail geometry
- * (`aLods[0]`) is read.
- * @param buffer The raw bytes of the `.ian` file.
+ * Parses an `.ian` file. Only the first LOD, the highest-detail geometry, is read.
+ *
+ * @param buffer Raw bytes of the file.
  * @returns The decoded model.
  */
 export function parseIAN(buffer: ArrayBufferSlice): IANModel {
     const view = buffer.createDataView();
-    // RawModelGeometry header: aLods[0] begins at 0x14.
-    const lodFaceCount = view.getUint32(IAN_HEADER_SIZE + 0x00, true) & 0xffff;
-    const vertexCount = view.getUint16(IAN_HEADER_SIZE + 0x04, true);
-    const pVertices = view.getUint32(IAN_HEADER_SIZE + 0x08, true);
-    const pFaceData = view.getUint32(IAN_HEADER_SIZE + 0x0c, true);
-    // The node name is the NUL-terminated string sitting just before the face data.
-    const name = readNodeName(view, pFaceData);
-    // Vertices: 8 float32 each, copied verbatim (object-space pos, normal, uv).
+    const triangleCount = view.getUint32(LOD_FACE_COUNT_OFFSET, true) & FACE_COUNT_MASK;
+    const vertexCount = view.getUint16(LOD_VERTEX_COUNT_OFFSET, true);
+    const vertexDataOffset = view.getUint32(LOD_VERTEX_DATA_OFFSET, true);
+    const faceDataOffset = view.getUint32(LOD_FACE_DATA_OFFSET, true);
+    const name = readNodeName(view, faceDataOffset);
+
     const vertices = new Float32Array(vertexCount * IAN_VERTEX_FLOATS);
     for (let i = 0; i < vertexCount; i++) {
-        const src = pVertices + i * IAN_VERTEX_STRIDE;
-        const dst = i * IAN_VERTEX_FLOATS;
+        const record = vertexDataOffset + i * VERTEX_RECORD_STRIDE;
+        const writeAt = i * IAN_VERTEX_FLOATS;
         for (let c = 0; c < IAN_VERTEX_FLOATS; c++) {
-            vertices[dst + c] = view.getFloat32(src + c * 0x04, true);
+            vertices[writeAt + c] = view.getFloat32(record + c * FLOAT32_SIZE, true);
         }
     }
-    // Faces: each record is one triangle; the three vertex indices live at +0x04/+0x0C/+0x14.
-    const indices = new Uint32Array(lodFaceCount * 3);
-    const faceFlags = new Uint16Array(lodFaceCount);
-    for (let i = 0; i < lodFaceCount; i++) {
-        const src = pFaceData + i * IAN_FACE_STRIDE;
-        faceFlags[i] = view.getUint16(src + 0x02, true);
-        indices[i * 3 + 0] = view.getUint16(src + 0x04, true);
-        indices[i * 3 + 1] = view.getUint16(src + 0x0c, true);
-        indices[i * 3 + 2] = view.getUint16(src + 0x14, true);
+
+    const indices = new Uint32Array(triangleCount * VERTICES_PER_FACE);
+    const faceFlags = new Uint16Array(triangleCount);
+    for (let i = 0; i < triangleCount; i++) {
+        const record = faceDataOffset + i * FACE_RECORD_STRIDE;
+        faceFlags[i] = view.getUint16(record + FACE_FLAGS_OFFSET, true);
+        for (let v = 0; v < VERTICES_PER_FACE; v++) {
+            const slot = record + FACE_VERTEX_SLOT_OFFSET + v * FACE_VERTEX_SLOT_STRIDE;
+            indices[i * VERTICES_PER_FACE + v] = view.getUint16(slot, true);
+        }
     }
-    return { name, vertices, vertexCount, indices, faceFlags, triangleCount: lodFaceCount };
+    return { name, vertices, vertexCount, indices, faceFlags, triangleCount };
 }
 
+// The name is the NUL-terminated ASCII string sitting immediately before the face data.
 function readNodeName(view: DataView, faceDataOffset: number): string {
-    // Iterate from end to find the start of the string.
     let end = faceDataOffset;
     while (end > 0 && view.getUint8(end - 1) === 0) {
         end--;
     }
     let start = end;
     while (start > 0) {
-        const b = view.getUint8(start - 1);
-        // Only ASCII is accepted.
-        if (b < 0x20 || b > 0x7e) {
+        const ch = view.getUint8(start - 1);
+        if (ch < ASCII_PRINTABLE_MIN || ch > ASCII_PRINTABLE_MAX) {
             break;
         }
         start--;
     }
-    let s = "";
+    let name = "";
     for (let i = start; i < end; i++) {
-        s += String.fromCharCode(view.getUint8(i));
+        name += String.fromCharCode(view.getUint8(i));
     }
-    return s;
+    return name;
 }

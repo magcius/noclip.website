@@ -1,37 +1,16 @@
 
-// Procedural mesh generation for Incoming `sphere` / `hemisphere` type geometry.
-//
-// Some object types define their mesh procedurally instead of via an `.ian` `objfile`: an energy
-// sphere/shield (`sphere rad=R width=W height=H`) or a dome shield/canopy (`hemisphere rad=R
-// width=W height=H repeat=U V`). The engine stores the parameters (OdlCmdSphere @0x405130,
-// OdlCmdHemisphere @0x4051d0) and tessellates a surface of revolution at instancing time; this
-// reproduces that mesh. `width` is the number of longitude segments, `height` the number of
-// latitude segments (apex→rim for a hemisphere, pole→pole for a sphere). Output matches the
-// engine model vertex layout consumed by {@link IncomingMeshData}: 8 float32 per vertex
-// (position3, normal3, uv2), with a 32-bit triangle index list.
+// Some object types tessellate their mesh instead of loading an `.ian`: `sphere rad=R width=W
+// height=H` and `hemisphere rad=R width=W height=H repeat=U V`. Despite the names, `width` and
+// `height` are longitude and latitude segment counts, not dimensions.
 
-/** A generated mesh: interleaved vertices (pos3, norm3, uv2) and a triangle index list. */
+/** A tessellated mesh in the same vertex layout as the `.ian` models. */
 export interface ProcMesh {
-    /** Interleaved vertex data, 8 float32 per vertex (position3, normal3, uv2). */
+    /** Interleaved, 8 float32 per vertex: position3, normal3, uv2. */
     readonly vertices: Float32Array;
-    /** Triangle indices (3 per triangle). */
+    /** Triangle list, 3 indices each. */
     readonly indices: Uint32Array;
 }
 
-/**
- * Builds a surface of revolution about the +Y axis, sweeping latitude angle θ from 0 (apex, +Y)
- * to `thetaMax` and longitude φ over a full turn. Vertices carry outward normals and UVs scaled by
- * the texture-repeat factors. Shared by {@link buildSphereMesh} (θ∈[0,π]) and
- * {@link buildHemisphereMesh} (θ∈[0,π/2]).
- *
- * @param radius Surface radius.
- * @param width Longitude segments (≥3).
- * @param height Latitude segments (≥1).
- * @param thetaMax Maximum latitude angle (π for a full sphere, π/2 for a hemisphere dome).
- * @param repeatU Texture tiling around the longitude.
- * @param repeatV Texture tiling along the latitude.
- * @returns The generated mesh.
- */
 function buildSurfaceOfRevolution(radius: number, width: number, height: number, thetaMax: number, repeatU: number, repeatV: number): ProcMesh {
     const cols = width + 1;
     const rows = height + 1;
@@ -62,27 +41,27 @@ function buildSurfaceOfRevolution(radius: number, width: number, height: number,
 }
 
 /**
- * Builds a full UV-sphere mesh (an energy sphere / planet), centered at the origin.
+ * Full UV sphere centered on the origin.
  *
- * @param radius Sphere radius (`rad=`).
- * @param width Longitude segments (`width=`).
- * @param height Latitude segments (`height=`).
- * @returns The generated sphere mesh.
+ * @param radius `rad=`.
+ * @param width Longitude segments, `width=`.
+ * @param height Latitude segments, `height=`.
+ * @returns The tessellated sphere.
  */
 export function buildSphereMesh(radius: number, width: number, height: number): ProcMesh {
     return buildSurfaceOfRevolution(radius, Math.max(3, width | 0), Math.max(2, height | 0), Math.PI, 1, 1);
 }
 
 /**
- * Builds a hemisphere dome mesh (an energy shield / canopy), centered at the origin with its apex
- * at +Y (the same up convention as the `.ian` model meshes, so it renders upright when placed).
+ * Dome centered on the origin. Its apex points at +Y, matching the `.ian` up convention, so it
+ * stands upright when placed.
  *
- * @param radius Dome radius (`rad=`).
- * @param width Longitude segments (`width=`).
- * @param height Latitude segments (`height=`).
- * @param repeatU Texture tiling around the longitude (`repeat=` first value).
- * @param repeatV Texture tiling apex→rim (`repeat=` second value).
- * @returns The generated hemisphere mesh.
+ * @param radius `rad=`.
+ * @param width Longitude segments, `width=`.
+ * @param height Latitude segments, `height=`.
+ * @param repeatU Texture tiling around the longitude, first value of `repeat=`.
+ * @param repeatV Texture tiling apex to rim, second value of `repeat=`.
+ * @returns The tessellated dome.
  */
 export function buildHemisphereMesh(radius: number, width: number, height: number, repeatU: number, repeatV: number): ProcMesh {
     return buildSurfaceOfRevolution(radius, Math.max(3, width | 0), Math.max(1, height | 0), Math.PI / 2, repeatU || 1, repeatV || 1);
