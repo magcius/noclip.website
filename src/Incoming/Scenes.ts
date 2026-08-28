@@ -18,7 +18,6 @@ import { buildSphereMesh, buildHemisphereMesh } from "./ProcGeom.js";
 import { parseIAN } from "./IAN.js";
 import { parseHeightfield, buildTerrainMeshes, buildWaterMesh, sampleGroundHeight, Heightfield, TERRAIN_MAX_TEXTURES } from "./Terrain.js";
 import { IncomingMeshData, IncomingRenderer, IncomingAnimFrame, IncomingSceneParams, IncomingMover, SPIN_TICKS_PER_MS, indexFormatFor } from "./Render.js";
-import subversionOverridePaths from "./SubversionOverrides.json";
 
 
 const SPRITE_ATLAS_SIZE = 256;
@@ -28,7 +27,7 @@ const SHADOW_SIZE_FACTOR = 0.9;
 const SHADOW_LIFT = 4;
 const pathBase = "Incoming";
 const subversionBase = "IncomingSubversion";
-const SUBVERSION_OVERRIDES = new Set<string>(subversionOverridePaths);
+const subversionOverridesPath = `${subversionBase}/overrides.json`;
 
 // `drawtype flip*` mirrors the mesh with a negative scale. An odd number of flips flips the
 // winding too, so such a part presents the opposite face to the camera.
@@ -39,6 +38,12 @@ function frontFaceForFlips(flipX: boolean, flipY: boolean, flipZ: boolean): GfxF
 
 function normalizePath(p: string): string {
     return p.replace(/\\/g, "/").toLowerCase().trim();
+}
+
+async function loadSubversionOverrides(dataFetcher: DataFetcher): Promise<Set<string>> {
+    const buffer = await dataFetcher.fetchData(subversionOverridesPath);
+    const text = new TextDecoder().decode(buffer.createTypedArray(Uint8Array));
+    return new Set<string>(JSON.parse(text));
 }
 
 // Subversion ships a partial tree, so a path falls back to the base game unless it overrides it.
@@ -377,7 +382,8 @@ class IncomingSceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const paths = new PathResolver(this.subversion ? SUBVERSION_OVERRIDES : new Set());
+        const overrides = this.subversion ? await loadSubversionOverrides(dataFetcher) : new Set<string>();
+        const paths = new PathResolver(overrides);
 
         const odl = await loadODLRecursive(dataFetcher, paths, paths.data(this.odlPath));
         const globalParts = buildGlobalPartRegistry(odl.types);
