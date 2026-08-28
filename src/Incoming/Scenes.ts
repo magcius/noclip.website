@@ -30,6 +30,13 @@ const pathBase = "Incoming";
 const subversionBase = "IncomingSubversion";
 const SUBVERSION_OVERRIDES = new Set<string>(subversionOverridePaths);
 
+// `drawtype flip*` mirrors the mesh with a negative scale. An odd number of flips flips the
+// winding too, so such a part presents the opposite face to the camera.
+function frontFaceForFlips(flipX: boolean, flipY: boolean, flipZ: boolean): GfxFrontFaceMode {
+    const flips = (flipX ? 1 : 0) + (flipY ? 1 : 0) + (flipZ ? 1 : 0);
+    return flips % 2 === 1 ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
+}
+
 function normalizePath(p: string): string {
     return p.replace(/\\/g, "/").toLowerCase().trim();
 }
@@ -131,7 +138,7 @@ async function loadModel(device: GfxDevice, dataFetcher: DataFetcher, paths: Pat
         const buffer = await dataFetcher.fetchData(url);
         const model = parseIAN(buffer);
         if (model.indices.length > 0 && model.vertices.length > 0) {
-            mesh = new IncomingMeshData(device, model.vertices, model.indices);
+            mesh = new IncomingMeshData(device, model.vertices, model.indices, model.singleSidedIndexCount);
             ownedMeshes.push(mesh);
         }
     } catch {
@@ -639,6 +646,7 @@ class IncomingSceneDesc implements SceneDesc {
                     colorKey: (material.textureFlags & IncomingTextureFlag.ColorKey) !== 0,
                     twoSided: material.doubleSided,
                     indexFormat: GfxFormat.U32_R,
+                    frontFace: frontFaceForFlips(part.flipX, part.flipY, part.flipZ),
                     spin: partSpin,
                     flameFlicker: part.flameFlicker,
                     baseFrame: frames[i],
@@ -736,7 +744,12 @@ export const sceneGroup: SceneGroup = {
         new IncomingSceneDesc("canaveral", "U.S.A.", "asc/canaveral/canaveral.odl", "asc/canaveral/canaveral.wdl"),
         new IncomingSceneDesc("moon", "The Moon", "asc/moon/moon.odl", "asc/moon/moon.wdl"),
         new IncomingSceneDesc("egypt", "Alien World", "asc/egypt/egypt.odl", "asc/egypt/egypt.wdl"),
-        "Subversion",
+    ],
+};
+
+export const subversionSceneGroup: SceneGroup = {
+    id: "IncomingSubversion", name: "Incoming: Subversion",
+    sceneDescs: [
         new IncomingSceneDesc("intro", "Intro", "asc/intro/intro.odl", "asc/intro/intro.wdl", true, "asc/intro/intro.mdl"),
         new IncomingSceneDesc("border", "Border Defence", "asc/border/border.odl", "asc/border/border.wdl", true),
         new IncomingSceneDesc("spheres", "Spheres of Influence", "asc/spheres/spheres.odl", "asc/spheres/spheres.wdl", true),

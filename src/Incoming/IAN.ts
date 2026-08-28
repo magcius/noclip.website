@@ -14,6 +14,8 @@ const VERTEX_RECORD_STRIDE = 0x20;
 const FLOAT32_SIZE = 0x04;
 
 const FACE_RECORD_STRIDE = 0x1c;
+const FACE_FLAGS_OFFSET = 0x02;
+const FACE_FLAG_TWO_SIDED = 0x04;
 const FACE_VERTEX_SLOT_OFFSET = 0x04;
 const FACE_VERTEX_SLOT_STRIDE = 0x08;
 const VERTICES_PER_FACE = 3;
@@ -30,8 +32,14 @@ export interface IANModel {
     readonly name: string;
     /** Interleaved vertex data, {@link IAN_VERTEX_FLOATS} float32 per vertex. */
     readonly vertices: Float32Array;
-    /** Triangle list, 3 indices each, into {@link vertices}. */
+    /** Triangle list, 3 indices each, into {@link vertices}. Single-sided faces come first. */
     readonly indices: Uint32Array;
+    /**
+     * Length of the leading single-sided run of {@link indices}. The remainder are faces the model
+     * marks two-sided, which the renderer must draw without back-face culling: they are the thin
+     * lattice and panel geometry that would otherwise show holes.
+     */
+    readonly singleSidedIndexCount: number;
 }
 
 /**
@@ -57,15 +65,29 @@ export function parseIAN(buffer: ArrayBufferSlice): IANModel {
         }
     }
 
+    // Group the single-sided faces ahead of the two-sided ones so the renderer can draw each run
+    // with its own cull mode.
     const indices = new Uint32Array(triangleCount * VERTICES_PER_FACE);
-    for (let i = 0; i < triangleCount; i++) {
-        const record = faceDataOffset + i * FACE_RECORD_STRIDE;
-        for (let v = 0; v < VERTICES_PER_FACE; v++) {
-            const slot = record + FACE_VERTEX_SLOT_OFFSET + v * FACE_VERTEX_SLOT_STRIDE;
-            indices[i * VERTICES_PER_FACE + v] = view.getUint16(slot, true);
+    let writeAt = 0;
+    let singleSidedIndexCount = 0;
+    for (let pass = 0; pass < 2; pass++) {
+        const collectingTwoSided = pass === 1;
+        for (let i = 0; i < triangleCount; i++) {
+            const record = faceDataOffset + i * FACE_RECORD_STRIDE;
+            const flags = view.getUint16(record + FACE_FLAGS_OFFSET, true);
+            if (((flags & FACE_FLAG_TWO_SIDED) !== 0) !== collectingTwoSided) {
+                continue;
+            }
+            for (let v = 0; v < VERTICES_PER_FACE; v++) {
+                const slot = record + FACE_VERTEX_SLOT_OFFSET + v * FACE_VERTEX_SLOT_STRIDE;
+                indices[writeAt++] = view.getUint16(slot, true);
+            }
+        }
+        if (pass === 0) {
+            singleSidedIndexCount = writeAt;
         }
     }
-    return { name, vertices, indices };
+    return { name, vertices, indices, singleSidedIndexCount };
 }
 
 // The name is the NUL-terminated ASCII string sitting immediately before the face data.

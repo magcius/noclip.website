@@ -421,6 +421,8 @@ export class IncomingMeshData {
     public readonly indexBufferDescriptor: GfxIndexBufferDescriptor;
     /** Number of triangle indices to draw. */
     public readonly indexCount: number;
+    /** Length of the leading run of indices whose faces are single-sided, so safe to cull. */
+    public readonly singleSidedIndexCount: number;
     /**
      * Bounding radius in the XZ plane, in model units. Scaled by the part scale, this gives the
      * ground footprint that sizes the object's `shadow` sprite.
@@ -433,13 +435,15 @@ export class IncomingMeshData {
      * @param device The GPU device.
      * @param vertices Interleaved, 8 float32 per vertex: position3, normal3, uv2.
      * @param indices Triangle indices.
+     * @param singleSidedIndexCount Leading indices that may be back-face culled. Defaults to all.
      */
-    constructor(device: GfxDevice, vertices: Float32Array, indices: Uint16Array | Uint32Array) {
+    constructor(device: GfxDevice, vertices: Float32Array, indices: Uint16Array | Uint32Array, singleSidedIndexCount = indices.length) {
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indices.buffer);
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.indexCount = indices.length;
+        this.singleSidedIndexCount = singleSidedIndexCount;
 
         // X and Z are floats 0 and 2 of each 8-float vertex.
         let maxR2 = 0;
@@ -1111,26 +1115,39 @@ export class IncomingRenderer implements SceneGfx {
                 mesh = frame.mesh;
                 texture = frame.texture;
             }
-            const renderInst = renderInstManager.newRenderInst();
-            renderInst.setVertexInput(this.inputLayout, mesh.vertexBufferDescriptors, mesh.indexBufferDescriptor);
-            renderInst.setDrawCount(mesh.indexCount);
-            // Culling stays off until the per-instance front face is settled for every mesh.
             const frontFace = inst.frontFace ?? GfxFrontFaceMode.CW;
-            if (inst.transparent === true) {
-                const mega: Partial<GfxMegaStateDescriptor> = { cullMode: GfxCullMode.None, frontFace, depthWrite: false };
-                setAttachmentStateSimple(mega, { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
-                renderInst.setMegaStateFlags(mega);
+            const modelMatrix = this.computeModelMatrix(inst, viewerInput);
+            const drawRange = (start: number, count: number, cullMode: GfxCullMode) => {
+                if (count <= 0) {
+                    return;
+                }
+                const renderInst = renderInstManager.newRenderInst();
+                renderInst.setVertexInput(this.inputLayout, mesh.vertexBufferDescriptors, mesh.indexBufferDescriptor);
+                renderInst.setDrawCount(count, start);
+                if (inst.transparent === true) {
+                    const mega: Partial<GfxMegaStateDescriptor> = { cullMode, frontFace, depthWrite: false };
+                    setAttachmentStateSimple(mega, { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
+                    renderInst.setMegaStateFlags(mega);
+                } else {
+                    renderInst.setMegaStateFlags({ cullMode, frontFace });
+                }
+                renderInst.setSamplerBindings(0, [{ gfxTexture: texture ?? null, gfxSampler: this.sampler }]);
+
+                let offs = renderInst.allocateUniformBuffer(IncomingProgram.ub_ModelParams, MODEL_PARAMS_SIZE);
+                const d = renderInst.mapUniformBufferF32(IncomingProgram.ub_ModelParams);
+                offs += fillMatrix4x3(d, offs, modelMatrix);
+                offs += fillVec4(d, offs, inst.selfIllum ? 1 : 0, inst.colorKey ? 1 : 0, inst.transparent === true ? SHIELD_OPACITY : 1.0, 0);
+
+                renderInstManager.submitRenderInst(renderInst);
+            };
+
+            if (inst.twoSided) {
+                drawRange(0, mesh.indexCount, GfxCullMode.None);
             } else {
-                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace });
+                const singleSided = Math.min(mesh.singleSidedIndexCount, mesh.indexCount);
+                drawRange(0, singleSided, GfxCullMode.Back);
+                drawRange(singleSided, mesh.indexCount - singleSided, GfxCullMode.None);
             }
-            renderInst.setSamplerBindings(0, [{ gfxTexture: texture ?? null, gfxSampler: this.sampler }]);
-
-            let offs = renderInst.allocateUniformBuffer(IncomingProgram.ub_ModelParams, MODEL_PARAMS_SIZE);
-            const d = renderInst.mapUniformBufferF32(IncomingProgram.ub_ModelParams);
-            offs += fillMatrix4x3(d, offs, this.computeModelMatrix(inst, viewerInput));
-            offs += fillVec4(d, offs, inst.selfIllum ? 1 : 0, inst.colorKey ? 1 : 0, inst.transparent === true ? SHIELD_OPACITY : 1.0, 0);
-
-            renderInstManager.submitRenderInst(renderInst);
         };
         // Opaques first, so the semi-transparent pass blends over finished geometry.
         for (const inst of this.instances) {
