@@ -55,6 +55,7 @@ import * as Scenes_SpongeBobBFBB from './HeavyIron/Scenes_BFBB.js';
 import * as Scenes_SpongeBobTSSM from './HeavyIron/Scenes_TSSM.js';
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee.js';
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes.js';
+import * as Scenes_PerfectDark from './PerfectDark/scenes.js';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters.js';
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum.js';
 import * as Scenes_PokemonHGSS from './nns_g3d/Scenes_PokemonHGSS.js';
@@ -192,6 +193,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Glover.sceneGroup,
     Scenes_MarioKart64.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
+    Scenes_PerfectDark.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
