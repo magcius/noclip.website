@@ -716,9 +716,22 @@ const SPAWNFLAG_ONLY_AGENT = 0x00000020;
 const SPAWNFLAG_ONLY_SPECIAL_AGENT = 0x00000040;
 const SPAWNFLAG_ONLY_PERFECT_AGENT = 0x00000080;
 const SPAWNFLAG_HIDDEN = 0x00001000;
+const SPAWNFLAG_FORCESUNGLASSES = 0x00000001;
+const SPAWNFLAG_MAYBESUNGLASSES = 0x00000002;
 const CHARACTER_HEAD_PART = 0x0004;
 const DEFAULT_MALE_GUARD_HEAD = 0x0018;
 const DEFAULT_FEMALE_GUARD_HEAD = 0x0021;
+const BODY_FEM_GUARD = 0x0068;
+const HEAD_PART_SUNGLASSES = 0x0000;
+const HEAD_PART_EYES_CLOSED = 0x0003;
+const HEAD_PART_HUD_PIECE = 0x0004;
+const MALE_GUARD_HEADS = [
+    0x18, 0x13, 0x16, 0x11, 0x06, 0x14, 0x12, 0x1b, 0x1c, 0x1a, 0x3b, 0x37, 0x42, 0x43,
+    0x48, 0x54, 0x0b, 0x2a, 0x1e, 0x1f, 0x22, 0x23, 0x25, 0x26, 0x27, 0x2d, 0x2e, 0x49,
+    0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x55, 0x3f, 0x40, 0x41, 0x44,
+];
+const FEMALE_GUARD_HEADS = [0x21, 0x20, 0x24, 0x2c];
+const FEM_GUARD_HEADS = [0x45, 0x46, 0x47];
 const CHARACTER_RIGHT_HAND_PART = 0x0003;
 const CHARACTER_LEFT_HAND_PART = 0x0005;
 const CHARACTER_HAT_PART = 0x0006;
@@ -737,6 +750,27 @@ const ROBOT_SKELETON_ID = 0x0034;
 const ROBOT_SKELETON_PART_COUNT = 3;
 const ROBOT_STANDING_ANIMATION = 0x0237;
 const CHARACTER_GALLERY_BODY_NUMS = [0x00, 0x01, 0x02, 0x03, ...Array.from({ length: 0x41 }, (_, i) => 0x56 + i).filter((bodyNum) => bodyNum !== 0x70)];
+
+function hashDeterministicChoice(value: string): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return hash >>> 0;
+}
+
+function makeDeterministicHeadPool(stageId: string, gender: string, availableHeads: readonly number[], count: number): number[] {
+    const heads = [...availableHeads];
+    let state = hashDeterministicChoice(`${stageId}:${gender}`);
+    for (let i = heads.length - 1; i > 0; i--) {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        const j = state % (i + 1);
+        [heads[i], heads[j]] = [heads[j], heads[i]];
+    }
+    return Array.from({ length: count }, (_, index) => heads[index % heads.length]);
+}
+
 const CHARACTER_GALLERY_HEADS = new Map<number, number>([
     [0x56, 0x04], [0x57, 0x05], [0x5a, 0x07], [0x5b, 0x08], [0x5d, 0x09], [0x5e, 0x0a],
     [0x61, 0x0c], [0x62, 0x04], [0x65, 0x0d], [0x66, 0x0e], [0x67, 0x0f], [0x68, 0x10],
@@ -1489,7 +1523,12 @@ function isModelDistanceNodeVisible(near: number, far: number, distance: number)
     return (distance > near || near === 0) && distance <= far;
 }
 
-function parseModel(data: Uint8Array, animationPoses: ReadonlyMap<number, AnimationPose> | null = null, animationScale: number = 1): ModelGeometry {
+function parseModel(
+    data: Uint8Array,
+    animationPoses: ReadonlyMap<number, AnimationPose> | null = null,
+    animationScale: number = 1,
+    hiddenToggleParts: ReadonlySet<number> | null = null,
+): ModelGeometry {
     if (data.byteLength < 0x1c)
         throw new Error("Perfect Dark model is smaller than its header");
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -1602,7 +1641,10 @@ function parseModel(data: Uint8Array, animationPoses: ReadonlyMap<number, Animat
                     ? pointerOffset(view.getUint32(rodataOffset + 0x08, false))
                     : 0;
             } else if (type === 0x12 && rodataOffset + 4 <= data.byteLength) {
-                childOffset = pointerOffset(view.getUint32(rodataOffset, false));
+                const part = partByNode.get(nodeOffset);
+                childOffset = part !== undefined && hiddenToggleParts?.has(part)
+                    ? 0
+                    : pointerOffset(view.getUint32(rodataOffset, false));
             }
 
             const part = partByNode.get(nodeOffset);
@@ -2131,6 +2173,10 @@ interface ConvertedStageObjects {
         commandIndex: number;
         characterId: number;
         bodyNum: number;
+        packedHeadNum: number;
+        headNum: number;
+        spawnFlags: number;
+        sunglasses: boolean;
         hasEmbeddedHead: boolean;
         skeletonId: number;
         matrixCount: number;
@@ -2200,6 +2246,11 @@ interface CharacterValidation {
     maximumGalleryPadContactOffset: number;
     maximumRootPlacementError: number;
     uprightHumanCount: number;
+    randomHeadCount: number;
+    distinctRandomHeadCount: number;
+    sunglassesCount: number;
+    forcedSunglassesCount: number;
+    optionalSunglassesCount: number;
     modes: Record<ConvertedStageObjects["characterPlacements"][number]["placementMode"], number>;
     skeletonCounts: Record<string, number>;
 }
@@ -2212,6 +2263,11 @@ function validateCharacterPlacements(stageId: string, placements: ConvertedStage
     let maximumGalleryPadContactOffset = 0;
     let maximumRootPlacementError = 0;
     let uprightHumanCount = 0;
+    let randomHeadCount = 0;
+    let sunglassesCount = 0;
+    let forcedSunglassesCount = 0;
+    let optionalSunglassesCount = 0;
+    const randomHeads = new Set<number>();
     const modes: CharacterValidation["modes"] = {
         "collision-floor": 0,
         "nearby-room-collision-floor": 0,
@@ -2223,6 +2279,21 @@ function validateCharacterPlacements(stageId: string, placements: ConvertedStage
     const skeletonCounts = new Map<number, number>();
 
     for (const placement of placements) {
+        if (placement.packedHeadNum < 0 && !placement.hasEmbeddedHead) {
+            randomHeadCount++;
+            randomHeads.add(placement.headNum);
+        }
+        if ((placement.spawnFlags & SPAWNFLAG_FORCESUNGLASSES) !== 0) {
+            forcedSunglassesCount++;
+            if (!placement.sunglasses)
+                throw new Error(`${stageId} character command ${placement.commandIndex} did not render forced sunglasses`);
+        } else if ((placement.spawnFlags & SPAWNFLAG_MAYBESUNGLASSES) !== 0) {
+            optionalSunglassesCount++;
+        } else if (placement.sunglasses) {
+            throw new Error(`${stageId} character command ${placement.commandIndex} rendered unrequested sunglasses`);
+        }
+        if (placement.sunglasses)
+            sunglassesCount++;
         const values = [...placement.worldBounds, ...placement.rootAdjustedWorldBounds, ...placement.rootPosition,
             ...placement.padUp, ...placement.floorQueryPosition, placement.placementOriginY, placement.placementContactY];
         if (placement.padPosition !== null)
@@ -2285,6 +2356,11 @@ function validateCharacterPlacements(stageId: string, placements: ConvertedStage
         maximumGalleryPadContactOffset,
         maximumRootPlacementError,
         uprightHumanCount,
+        randomHeadCount,
+        distinctRandomHeadCount: randomHeads.size,
+        sunglassesCount,
+        forcedSunglassesCount,
+        optionalSunglassesCount,
         modes,
         skeletonCounts: Object.fromEntries([...skeletonCounts]
             .sort(([a], [b]) => a - b)
@@ -2451,6 +2527,16 @@ function convertStageObjects(
     const characterPlacements: ConvertedStageObjects["characterPlacements"] = [];
     const objectPlacements: ConvertedStageObjects["objectPlacements"] = [];
     const unresolvedRooms: ConvertedStageObjects["unresolvedRooms"] = [];
+    const activeHeadCount = stage.multiplayer ? 4
+        : stage.id === "infiltration" || stage.id === "escape" ? 5
+        : stage.id === "rescue" ? 4
+        : 8;
+    const activeMaleHeads = makeDeterministicHeadPool(stage.id, "male", MALE_GUARD_HEADS, activeHeadCount);
+    const activeFemaleHeads = makeDeterministicHeadPool(stage.id, "female", FEMALE_GUARD_HEADS, activeHeadCount);
+    const activeFemGuardHeads = makeDeterministicHeadPool(stage.id, "female-guard", FEM_GUARD_HEADS, FEM_GUARD_HEADS.length);
+    let activeMaleHeadIndex = 0;
+    let activeFemaleHeadIndex = 0;
+    let activeFemGuardHeadIndex = 0;
     const bump = (counts: Map<string, number>, reason: string): void => {
         counts.set(reason, (counts.get(reason) ?? 0) + 1);
     };
@@ -2482,7 +2568,20 @@ function convertStageObjects(
         }
         return body;
     };
-    const appendCharacterHead = (bodyState: HeadBodyState, body: ModelGeometry, transform: mat4, headNum: number): number | null => {
+    const chooseRandomHead = (bodyNum: number, bodyState: HeadBodyState): number => {
+        if (bodyState.isMale)
+            return activeMaleHeads[activeMaleHeadIndex++ % activeMaleHeads.length];
+        if (bodyNum === BODY_FEM_GUARD)
+            return activeFemGuardHeads[activeFemGuardHeadIndex++ % activeFemGuardHeads.length];
+        return activeFemaleHeads[activeFemaleHeadIndex++ % activeFemaleHeads.length];
+    };
+    const appendCharacterHead = (
+        bodyState: HeadBodyState,
+        body: ModelGeometry,
+        transform: mat4,
+        headNum: number,
+        sunglasses: boolean,
+    ): number | null => {
         const headTransform = body.skeletonId === HUMAN_SKELETON_ID
             ? body.partTransforms.get(CHARACTER_HEAD_PART)
             : undefined;
@@ -2491,10 +2590,19 @@ function convertStageObjects(
         const headSocket = vec3.transformMat4(vec3.create(), [0, 0, 0], mat4.multiply(mat4.create(), transform, headTransform));
         const headState = headBodyStates[headNum];
         if (!bodyState.hasEmbeddedHead && headState !== undefined && headState.fileId !== 0) {
-            let head = modelCache.get(headState.fileId);
+            const cacheKey = (sunglasses ? 0x30000 : 0x20000) | headState.fileId;
+            let head = modelCache.get(cacheKey);
             if (head === undefined) {
-                head = parseModel(readRomFile(rom, dataView, version.fileTableOffset, headState.fileId));
-                modelCache.set(headState.fileId, head);
+                const hiddenToggleParts = new Set([HEAD_PART_EYES_CLOSED, HEAD_PART_HUD_PIECE]);
+                if (!sunglasses)
+                    hiddenToggleParts.add(HEAD_PART_SUNGLASSES);
+                head = parseModel(
+                    readRomFile(rom, dataView, version.fileTableOffset, headState.fileId),
+                    null,
+                    1,
+                    hiddenToggleParts,
+                );
+                modelCache.set(cacheKey, head);
             }
             if (head.vertices.length > 0)
                 appendModel(head, mat4.multiply(mat4.create(), transform, headTransform));
@@ -2616,16 +2724,22 @@ function convertStageObjects(
             for (const textureSubcommand of body.textureSubcommands)
                 builder.textureSubcommands.add(textureSubcommand);
 
-            const headNum = packedHeadNum >= 0 ? packedHeadNum
-                : bodyState.isMale ? DEFAULT_MALE_GUARD_HEAD : DEFAULT_FEMALE_GUARD_HEAD;
-            const headSocketY = appendCharacterHead(bodyState, body, transform, headNum);
             const characterId = setupView.getInt16(offs + 0x08, false);
+            const headNum = packedHeadNum >= 0 ? packedHeadNum : chooseRandomHead(bodyNum, bodyState);
+            const sunglasses = (spawnFlags & SPAWNFLAG_FORCESUNGLASSES) !== 0
+                || ((spawnFlags & SPAWNFLAG_MAYBESUNGLASSES) !== 0
+                    && (hashDeterministicChoice(`${stage.id}:${commandIndex}:${characterId}:sunglasses`) & 1) === 0);
+            const headSocketY = appendCharacterHead(bodyState, body, transform, headNum, sunglasses);
             const rootAdjustedTransform = mat4.clone(transform);
             mat4.translate(rootAdjustedTransform, rootAdjustedTransform, [-body.rootPosition[0], -body.rootPosition[1], -body.rootPosition[2]]);
             characterPlacements.push({
                 commandIndex,
                 characterId,
                 bodyNum,
+                packedHeadNum,
+                headNum,
+                spawnFlags,
+                sunglasses,
                 hasEmbeddedHead: bodyState.hasEmbeddedHead,
                 skeletonId: body.skeletonId,
                 matrixCount: body.matrixCount,
@@ -2864,13 +2978,17 @@ function convertStageObjects(
             appendModel(body, transform);
             const headNum = CHARACTER_GALLERY_HEADS.get(bodyNum)
                 ?? (bodyState.isMale ? DEFAULT_MALE_GUARD_HEAD : DEFAULT_FEMALE_GUARD_HEAD);
-            const headSocketY = appendCharacterHead(bodyState, body, transform, headNum);
+            const headSocketY = appendCharacterHead(bodyState, body, transform, headNum, false);
             const rootAdjustedTransform = mat4.clone(transform);
             mat4.translate(rootAdjustedTransform, rootAdjustedTransform, [-body.rootPosition[0], -body.rootPosition[1], -body.rootPosition[2]]);
             characterPlacements.push({
                 commandIndex: commands.length + galleryIndex,
                 characterId: galleryIndex,
                 bodyNum,
+                packedHeadNum: headNum,
+                headNum,
+                spawnFlags: 0,
+                sunglasses: false,
                 hasEmbeddedHead: bodyState.hasEmbeddedHead,
                 skeletonId: body.skeletonId,
                 matrixCount: body.matrixCount,
@@ -3260,6 +3378,10 @@ function runSelfTest(fixturePath?: string): void {
             commandIndex: 1,
             characterId: 1,
             bodyNum: 1,
+            packedHeadNum: -1,
+            headNum: DEFAULT_MALE_GUARD_HEAD,
+            spawnFlags: SPAWNFLAG_FORCESUNGLASSES,
+            sunglasses: true,
             hasEmbeddedHead: false,
             skeletonId: HUMAN_SKELETON_ID,
             matrixCount: 1,
@@ -3282,6 +3404,10 @@ function runSelfTest(fixturePath?: string): void {
             commandIndex: 2,
             characterId: 2,
             bodyNum: 2,
+            packedHeadNum: DEFAULT_MALE_GUARD_HEAD,
+            headNum: DEFAULT_MALE_GUARD_HEAD,
+            spawnFlags: 0,
+            sunglasses: false,
             hasEmbeddedHead: false,
             skeletonId: ROBOT_SKELETON_ID,
             matrixCount: 1,

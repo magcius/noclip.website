@@ -14,13 +14,21 @@ class PerfectDarkSceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const filename = this.bgFileId.toString(16).padStart(2, "0");
-        const [data, props, textures, manifestData] = await Promise.all([
+        const fetchSceneData = () => Promise.all([
             context.dataFetcher.fetchData(dataPath(`${filename}.pdb1`)),
             context.dataFetcher.fetchData(dataPath(`${this.id}.pdp1`), { allow404: true }),
             context.dataFetcher.fetchData(dataPath("textures.pdt1")),
             context.dataFetcher.fetchData(dataPath("manifest.json")),
         ]);
-        const manifest = parsePerfectDarkManifest(manifestData);
+        let [data, props, textures, manifestData] = await fetchSceneData();
+        let manifest;
+        try {
+            manifest = parsePerfectDarkManifest(manifestData);
+        } catch {
+            await context.dataFetcher.clearCache(`${pathBase}/`);
+            [data, props, textures, manifestData] = await fetchSceneData();
+            manifest = parsePerfectDarkManifest(manifestData);
+        }
         const manifestStage = manifest.stages.find((stage) => stage.id === this.id);
         if (manifestStage === undefined || manifestStage.backgroundFileId !== this.bgFileId)
             throw new Error(`Perfect Dark data manifest does not match scene ${this.id}`);

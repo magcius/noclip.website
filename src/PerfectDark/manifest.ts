@@ -2,7 +2,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { PDB1_VERSION } from "./data.js";
 import { PDT1_VERSION } from "./texture.js";
 
-export const PERFECT_DARK_DATASET_VERSION = 26;
+export const PERFECT_DARK_DATASET_VERSION = 27;
 export const PERFECT_DARK_MANIFEST_VERSION = 1;
 
 export interface PerfectDarkManifestStage {
