@@ -1,10 +1,10 @@
 
-import { ReadonlyVec4, vec4 } from "gl-matrix";
+import { mat4, ReadonlyVec4, vec4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { AABB } from "../../Geometry.js";
 import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
 import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "../../SourceEngine/VMT.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair, VKFParamMap } from "../../SourceEngine/VMT.js";
 import { assert, decodeString, ensureInList, readString } from "../../util.js";
 
 enum LumpType {
@@ -63,18 +63,70 @@ export interface Surface {
 }
 
 export interface BSPEntity {
+    kvs: VKFParamMap;
+    transform: mat4;
+
     classname: string;
-    [k: string]: string;
+
+    model: string | null;
+    bmodel: number | null;
+
+    origin: vec3;
+    rendermode: number;
+    renderamt: number;
+    spawnflags: number;
+}
+
+function parseEntity(kvs: VKFParamMap): BSPEntity {
+    // worldspawn has an implicit 0 bmodel ID.
+    if (kvs.classname === "worldspawn") {
+        kvs.model = "*0";
+    }
+
+    const model: string|null = kvs.model || null;
+    var bmodel: number|null = null;
+    if (model && model.startsWith("*")) {
+        bmodel = parseInt(model.slice(1), 10);
+    }
+
+    const origin: vec3 = parseVec3Str(kvs.origin || "");
+    const transform: mat4 = mat4.fromTranslation(mat4.create(), origin);
+
+    return {
+        kvs: kvs,
+        transform: transform,
+
+        classname: kvs.classname || "",
+        origin: origin,
+        model: model,
+        bmodel: bmodel,
+        rendermode: parseInt(kvs.rendermode || "0", 10),
+        renderamt: parseInt(kvs.renderamt || "0", 10),
+        spawnflags: parseInt(kvs.spawnflags || "0", 10),
+    };
 }
 
 function parseEntitiesLump(str: string): BSPEntity[] {
     const p = new ValveKeyValueParser(str);
     const entities: BSPEntity[] = [];
     while (p.hastok()) {
-        entities.push(pairs2obj(p.unit() as VKFPair[]) as BSPEntity);
+        entities.push(parseEntity(pairs2obj(p.unit() as VKFPair[])));
         p.skipwhite();
     }
     return entities;
+}
+
+function parseVec3Str(str: string): vec3 {
+    if (str === "") {
+        return vec3.fromValues(0, 0, 0);
+    }
+
+    const [x, y, z] = str.split(' ');
+    return vec3.fromValues(
+        parseFloat(x),
+        parseFloat(y),
+        parseFloat(z),
+    );
 }
 
 export class BSPFile {
@@ -356,7 +408,7 @@ export class BSPFile {
         const worldspawn = this.entities.find(isWorldspawn);
         assert(worldspawn !== undefined);
 
-        const wad = worldspawn.wad;
+        const wad = worldspawn.kvs.wad;
         return wad.split(';').filter((v) => v !== '').map((v) => {
             if (v.startsWith('\\')) {
                 const x = v.split('\\');
