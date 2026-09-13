@@ -1,5 +1,5 @@
 
-import { ReadonlyVec4, vec4 } from "gl-matrix";
+import { ReadonlyVec4, vec4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { AABB } from "../../Geometry.js";
 import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
@@ -77,11 +77,53 @@ function parseEntitiesLump(str: string): BSPEntity[] {
     return entities;
 }
 
+function parseVec3Str(str: string): vec3 {
+    if (str === "") {
+        return vec3.fromValues(0, 0, 0);
+    }
+
+    const [x, y, z] = str.split(' ');
+
+    return vec3.fromValues(
+        parseFloat(x),
+        parseFloat(y),
+        parseFloat(z),
+    );
+}
+
+function fillModelEntities(models: Model[], entities: BSPEntity[]): Map<number, BSPEntity[]> {
+    const ret = new Map<number, BSPEntity[]>();
+
+    entities.forEach(ent => {
+        if (ent.model === undefined) {
+            return;
+        }
+
+        const modelStr = ent.model;
+        if (modelStr.length <= 1) {
+            return;
+        }
+
+        if (modelStr[0] !== '*') {
+            // TODO: Handle sprites, BSPs, mdls.
+            return;
+        }
+
+        const modelIdx = parseInt(modelStr.slice(1), 10);
+        const entList = ret.get(modelIdx) || [];
+        entList.push(ent);
+        ret.set(modelIdx, entList);
+    });
+
+    return ret;
+}
+
 export class BSPFile {
     public version: number;
 
     private entitiesStr: string; // For debugging.
     public models: Model[] = [];
+    public modelEntities: Map<number, BSPEntity[]> = new Map();
     public entities: BSPEntity[] = [];
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
@@ -214,6 +256,11 @@ export class BSPFile {
             this.models.push({ bbox, headnode, surfaces: [] });
         }
 
+        // Multiple entities can point to the same model, if we encounter a
+        // face belonging to a model it can be reused any number of times with
+        // a different origin set by its entity.
+        this.modelEntities = fillModelEntities(this.models, this.entities);
+
         const vertexData = new Float32Array(numVertexData * 7);
         let dstOffsVertex = 0;
 
@@ -261,6 +308,11 @@ export class BSPFile {
             let maxTexCoordS = -Infinity, maxTexCoordT = -Infinity;
 
             const dstOffsVertexBase = dstOffsVertex;
+            const modelIndex = faceToModelIdx[face.index];
+
+            const model = this.models[faceToModelIdx[face.index]];
+            const entities = this.modelEntities.get(modelIndex) || [];
+
             for (let j = 0; j < numedges; j++) {
                 const vertIndex = vertindices[firstedge + j];
                 const px = vertexes[vertIndex * 3 + 0];
@@ -270,14 +322,16 @@ export class BSPFile {
                 const texCoordS = Math.fround(px*m.s[0] + py*m.s[1] + pz*m.s[2] + m.s[3]);
                 const texCoordT = Math.fround(px*m.t[0] + py*m.t[1] + pz*m.t[2] + m.t[3]);
 
-                vertexData[dstOffsVertex++] = px;
-                vertexData[dstOffsVertex++] = py;
-                vertexData[dstOffsVertex++] = pz;
+                const origin = vec3.create();
+                if (modelIndex > 0 && entities.length > 0) {
+                    vec3.copy(origin, parseVec3Str(entities[0].origin || ""));
+                }
 
+                vertexData[dstOffsVertex++] = px + origin[0];
+                vertexData[dstOffsVertex++] = py + origin[1];
+                vertexData[dstOffsVertex++] = pz + origin[2];
                 vertexData[dstOffsVertex++] = texCoordS;
                 vertexData[dstOffsVertex++] = texCoordT;
-
-                // Dummy lightmap data for now, will compute after the loop.
                 vertexData[dstOffsVertex++] = 0;
                 vertexData[dstOffsVertex++] = 0;
 
@@ -330,8 +384,6 @@ export class BSPFile {
             convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
 
             const surfaceIndex = this.surfaces.length - 1;
-
-            const model = this.models[faceToModelIdx[face.index]];
             ensureInList(model.surfaces, surfaceIndex);
 
             surface.lightmapData.push(lightmapData);
