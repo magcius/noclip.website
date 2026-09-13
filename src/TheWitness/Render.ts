@@ -21,7 +21,7 @@ import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { Asset_Type, Material_Flags, Material_Type, Mesh_Asset, Render_Material, Texture_Asset } from "./Assets.js";
-import { Entity_World, Lightmap_Table } from "./Entity.js";
+import { Entity_World, Entity_Light, Lightmap_Table, MAX_LIGHTS_PER_ENTITY } from "./Entity.js";
 import { noclipSpaceFromTheWitnessSpace, TheWitnessGlobals } from "./Globals.js";
 import { Post_Process } from "./PostProcess.js";
 
@@ -118,6 +118,11 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_TerrainScaleBias;
     vec4 u_TintFactor;
     vec4 u_AverageColor[3];
+
+    // The point lights reaching this entity; see Light_Manager. xyz: where the light stands,
+    // w: 1 / its radius squared. rgb: colour times intensity, a: 0 in an unused slot.
+    vec4 u_LightPosition[${MAX_LIGHTS_PER_ENTITY}];
+    vec4 u_LightColor[${MAX_LIGHTS_PER_ENTITY}];
 };
 
 #define u_BlendFactor    (u_Misc[0].x)
@@ -610,6 +615,31 @@ void mainPS() {
     // Add directional light.
     CalcLight(t_HasIncomingLight, t_DiffuseLight, u_KeyLightDir.xyz, u_KeyLightColor.rgb * t_SunVisibility, t_NormalWorld.xyz, t_WorldDirectionToEye.xyz);
 
+    // Add the world's own lamps. The bake carries the daylight and the bounce, but not these --
+    // the interiors it lights are dark without them. Inverse square, windowed so a light stops
+    // at the radius it states rather than trailing off across the island; the +1 keeps the pole
+    // at the centre of the bulb from blowing out the surface it stands on. Nothing shadows
+    // these, so a light does reach through a thin wall; their radii are small enough that it
+    // costs less than leaving the rooms black.
+    bool use_point_lights = ${this.is_type(m, Material_Type.Standard) || this.is_type(m, Material_Type.Blended) || this.is_type(m, Material_Type.Blended3) || this.is_type(m, Material_Type.Foliage)};
+    if (use_point_lights) {
+        for (int i = 0; i < ${MAX_LIGHTS_PER_ENTITY}; i++) {
+            if (u_LightColor[i].a == 0.0)
+                continue;
+
+            vec3 t_ToLight = u_LightPosition[i].xyz - v_PositionWorld.xyz;
+            float t_DistanceSq = dot(t_ToLight, t_ToLight);
+
+            float t_Window = saturate(1.0 - t_DistanceSq * u_LightPosition[i].w);
+            if (t_Window <= 0.0)
+                continue;
+            t_Window *= t_Window;
+
+            float t_Attenuation = t_Window / (t_DistanceSq + 1.0);
+            CalcLight(t_HasIncomingLight, t_DiffuseLight, normalize(t_ToLight), u_LightColor[i].rgb * t_Attenuation, t_NormalWorld.xyz, t_WorldDirectionToEye.xyz);
+        }
+    }
+
     if (use_lightmap) {
         bool use_vegetation = ${this.is_type(m, Material_Type.Vegetation)};
         if (use_vegetation) {
@@ -785,6 +815,7 @@ interface Mesh_Render_Params {
     model_matrix: ReadonlyMat4;
     color: Color | null;
     mesh_lod: number;
+    light_set: Entity_Light[] | null;
 }
 
 function material_will_dynamically_override_color(type: Material_Type, flags: Material_Flags): boolean {
@@ -849,6 +880,10 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchMatrix = mat4.create();
 const KEY_LIGHT_STRENGTH = 12.0;
+// The game's light intensities are in its own units, and the key light above is not the game's
+// either, so the two have to be reconciled somewhere; this is where. Chosen so that the lamps in
+// the caves and the huts read at about the strength the game's own screenshots show them.
+const POINT_LIGHT_STRENGTH = 6.0;
 class Device_Material {
     public visible: boolean = true;
 
@@ -959,7 +994,7 @@ class Device_Material {
     }
 
     public fillMaterialParams(globals: TheWitnessGlobals, renderInst: GfxRenderInst, params: Mesh_Render_Params): void {
-        let offs = renderInst.allocateUniformBuffer(TheWitnessShaderTemplate.ub_ObjectParams, 4*4+4*9);
+        let offs = renderInst.allocateUniformBuffer(TheWitnessShaderTemplate.ub_ObjectParams, 4*4+4*9+4*(MAX_LIGHTS_PER_ENTITY*2));
         const d = renderInst.mapUniformBufferF32(TheWitnessShaderTemplate.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, params.model_matrix);
 
@@ -1016,6 +1051,28 @@ class Device_Material {
                 offs += fillColor(d, offs, this.texture_map[i]!.average_color);
             else
                 offs += fillVec4(d, offs, 0);
+        }
+
+        // The lamps reaching this entity. An unused slot is left with an alpha of zero, which is
+        // what the shader tests; the rest of it never gets read.
+        const light_set = params.light_set;
+        const light_count = light_set !== null ? Math.min(light_set.length, MAX_LIGHTS_PER_ENTITY) : 0;
+        for (let i = 0; i < MAX_LIGHTS_PER_ENTITY; i++) {
+            if (i >= light_count) {
+                offs += fillVec4(d, offs, 0.0, 0.0, 0.0, 0.0);
+                continue;
+            }
+            const light = light_set![i];
+            offs += fillVec3v(d, offs, light.position, 1.0 / (light.radius * light.radius));
+        }
+        for (let i = 0; i < MAX_LIGHTS_PER_ENTITY; i++) {
+            if (i >= light_count) {
+                offs += fillVec4(d, offs, 0.0, 0.0, 0.0, 0.0);
+                continue;
+            }
+            const light = light_set![i];
+            const strength = light.intensity * POINT_LIGHT_STRENGTH;
+            offs += fillVec4(d, offs, light.light_color[0] * strength, light.light_color[1] * strength, light.light_color[2] * strength, 1.0);
         }
     }
 
@@ -1085,6 +1142,7 @@ class Skydome {
     public color: Color = colorNewFromRGBA(0.213740, 0.404580, 0.519084);
     public model_matrix = mat4.create();
     public mesh_lod = 0;
+    public light_set = null;
 
     private mesh_instance: Mesh_Instance;
 

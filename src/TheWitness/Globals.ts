@@ -1,5 +1,5 @@
 
-import { Entity_Manager, Entity_Render_List } from "./Entity.js";
+import { Entity_Manager, Entity_Render_List, Light_Manager } from "./Entity.js";
 import { Shadow_Map } from "./Shadow_Map.js";
 import { Asset_Manager, Asset_Type } from "./Assets.js";
 import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -114,6 +114,7 @@ class Render_Settings {
 export class TheWitnessGlobals {
     public entity_manager = new Entity_Manager();
     public entity_render_list = new Entity_Render_List();
+    public light_manager = new Light_Manager();
     public viewpoint = new Viewpoint();
     public renderCache: GfxRenderCache;
     public debug_draw: DebugDraw;

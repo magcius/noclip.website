@@ -40,6 +40,7 @@ export class Entity_Manager {
             this.flat_entity_list[i].transport_create_hook(globals);
 
         globals.occlusion_manager.init(globals);
+        globals.light_manager.init(globals);
         globals.entity_render_list.init(globals);
     }
 }
@@ -161,6 +162,9 @@ export class Entity implements Portable {
     public model_matrix = mat4.create();
     public color: Color | null;
     public mesh_lod: number = 0;
+    // The lights that reach this entity. Neither they nor it ever move, so this is worked out
+    // the first time it draws and then kept; see Light_Manager.
+    public light_set: Entity_Light[] | null = null;
 
     constructor(public portable_id: number, public revision_number: number) {
     }
@@ -309,6 +313,9 @@ export class Entity implements Portable {
             this.mesh_lod = Math.min(steps, max_lod_count - 1);
         }
 
+        if (this.light_set === null)
+            this.light_set = globals.light_manager.gather(this.bounding_center_world, this.bounding_radius_world);
+
         const depth = computeViewSpaceDepthFromWorldSpacePoint(globals.viewpoint.viewFromWorldMatrix, this.bounding_center_world);
         this.mesh_instance.prepareToRender(globals, renderInstManager, this, depth);
     }
@@ -334,6 +341,88 @@ export class Entity_Inanimate extends Entity {
         }
     }
 }
+
+// A Light is a point light: a colour, an intensity, and a radius it carries that far and no
+// further. The bakes hold the island's daylight, but they are only as fine as their texels and
+// they carry none of the game's interior lamps, so the caves and the huts are lit by these.
+//
+// The colour is read into `color`, which on every other entity is the material colour override
+// -- and Entity_Inanimate's hook clears that one. So the light takes its own copy first.
+export class Entity_Light extends Entity_Inanimate {
+    public intensity: number = 0.0;
+    public radius: number = 0.0;
+
+    public light_color = vec3.fromValues(1.0, 1.0, 1.0);
+    public light_strength: number = 0.0;
+
+    public override transport_create_hook(globals: TheWitnessGlobals): void {
+        const unpacked = this.color as unknown as vec3 | null;
+        if (unpacked !== null && unpacked !== undefined && unpacked.length === 3)
+            vec3.copy(this.light_color, unpacked);
+
+        super.transport_create_hook(globals);
+
+        this.light_strength = Math.max(this.light_color[0], this.light_color[1], this.light_color[2]) * this.intensity;
+    }
+
+    public lights_anything(): boolean {
+        return this.radius > 0.0 && this.light_strength > 0.0;
+    }
+
+    // Has to agree with the shader, which is what actually shades by it; see Render.ts.
+    public falloff_at(squared_distance: number): number {
+        let window = 1.0 - squared_distance / (this.radius * this.radius);
+        if (window <= 0.0)
+            return 0.0;
+        window *= window;
+        return window / (squared_distance + 1.0);
+    }
+}
+
+// At most this many lights shade any one entity. The world holds 37 and a handful of rooms have
+// several, but past four the nearest ones have swamped the rest anyway.
+export const MAX_LIGHTS_PER_ENTITY = 4;
+
+// Which lights reach a given entity never changes -- the lights are static and so is everything
+// they light -- so it is worked out once, the first time the entity is drawn, and then kept.
+export class Light_Manager {
+    public lights: Entity_Light[] = [];
+
+    public init(globals: TheWitnessGlobals): void {
+        for (let i = 0; i < globals.entity_manager.flat_entity_list.length; i++) {
+            const entity = globals.entity_manager.flat_entity_list[i];
+            if (entity instanceof Entity_Light && entity.lights_anything())
+                this.lights.push(entity);
+        }
+    }
+
+    // The lights that reach this sphere, strongest first. Measured at the nearest point of the
+    // sphere to each light, which is the brightest the entity can be lit anywhere on it.
+    public gather(center: vec3, radius: number): Entity_Light[] {
+        for (let i = 0; i < this.lights.length; i++) {
+            const light = this.lights[i];
+            const distance = Math.max(vec3.distance(center, light.position) - radius, 0.0);
+            scratch_influence[i] = light.falloff_at(distance * distance) * light.light_strength;
+        }
+
+        const reached: Entity_Light[] = [];
+        for (let n = 0; n < MAX_LIGHTS_PER_ENTITY; n++) {
+            let best = -1;
+            for (let i = 0; i < this.lights.length; i++)
+                if (scratch_influence[i] > 0.0 && (best < 0 || scratch_influence[i] > scratch_influence[best]))
+                    best = i;
+
+            if (best < 0)
+                break;
+
+            reached.push(this.lights[best]);
+            scratch_influence[best] = 0.0;
+        }
+        return reached;
+    }
+}
+
+const scratch_influence: number[] = [];
 
 export class Entity_Lake extends Entity {
     protected override load_assets(globals: TheWitnessGlobals): void {

@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { Stream, Stream_read_Vector3, Stream_read_Array_int, Stream_read_Color, Stream_read_Quaternion, Stream_read_Vector2, Stream_read_Array_float } from "./Stream.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, nullify, setAssertLogStacks } from "../util.js";
-import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable, Entity_Cluster, Entity_Group, Entity_Lake, Entity_World } from "./Entity.js";
+import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Light, Entity_Power_Cable, Entity_Cluster, Entity_Group, Entity_Lake, Entity_World } from "./Entity.js";
 
 function get_truth_value(portable: Portable, item: Metadata_Item): boolean {
     const v: any = portable[item.name];
@@ -1232,7 +1232,7 @@ class Entity_Type_Light extends Portable_Type {
     }
 
     public override construct_new_obj(portable_id: number, revision_number: number): Entity {
-        return new Entity_Inanimate(portable_id, revision_number);
+        return new Entity_Light(portable_id, revision_number);
     }
 }
 
