@@ -1,10 +1,10 @@
 
-import { ReadonlyVec4, vec4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec4, vec4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { AABB } from "../../Geometry.js";
 import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
 import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "../../SourceEngine/VMT.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair, VKFParamMap } from "../../SourceEngine/VMT.js";
 import { assert, decodeString, ensureInList, readString } from "../../util.js";
 
 enum LumpType {
@@ -63,15 +63,54 @@ export interface Surface {
 }
 
 export interface BSPEntity {
+    kvs: VKFParamMap;
+    transform: mat4;
+
     classname: string;
-    [k: string]: string;
+
+    model: string | null;
+    bmodel: number | null;
+
+    origin: vec3;
+    rendermode: number;
+    renderamt: number;
+    spawnflags: number;
+}
+
+function parseEntity(kvs: VKFParamMap): BSPEntity {
+    // worldspawn has an implicit 0 bmodel ID.
+    if (kvs.classname === "worldspawn") {
+        kvs.model = "*0";
+    }
+
+    const model: string|null = kvs.model || null;
+    var bmodel: number|null = null;
+    if (model && model.startsWith("*")) {
+        bmodel = parseInt(model.slice(1), 10);
+    }
+
+    const origin: vec3 = parseVec3Str(kvs.origin || "");
+    const transform: mat4 = mat4.fromTranslation(mat4.create(), origin);
+
+    return {
+        kvs: kvs,
+        transform: transform,
+
+        classname: kvs.classname || "",
+        origin: origin,
+        model: model,
+        bmodel: bmodel,
+        rendermode: parseInt(kvs.rendermode || "0", 10),
+        renderamt: parseInt(kvs.renderamt || "0", 10),
+        spawnflags: parseInt(kvs.spawnflags || "0", 10),
+    };
 }
 
 function parseEntitiesLump(str: string): BSPEntity[] {
     const p = new ValveKeyValueParser(str);
     const entities: BSPEntity[] = [];
     while (p.hastok()) {
-        entities.push(pairs2obj(p.unit() as VKFPair[]) as BSPEntity);
+        entities.push(parseEntity(pairs2obj(p.unit() as VKFPair[])));
         p.skipwhite();
     }
     return entities;
@@ -83,7 +122,6 @@ function parseVec3Str(str: string): vec3 {
     }
 
     const [x, y, z] = str.split(' ');
-
     return vec3.fromValues(
         parseFloat(x),
         parseFloat(y),
@@ -91,39 +129,11 @@ function parseVec3Str(str: string): vec3 {
     );
 }
 
-function fillModelEntities(models: Model[], entities: BSPEntity[]): Map<number, BSPEntity[]> {
-    const ret = new Map<number, BSPEntity[]>();
-
-    entities.forEach(ent => {
-        if (ent.model === undefined) {
-            return;
-        }
-
-        const modelStr = ent.model;
-        if (modelStr.length <= 1) {
-            return;
-        }
-
-        if (modelStr[0] !== '*') {
-            // TODO: Handle sprites, BSPs, mdls.
-            return;
-        }
-
-        const modelIdx = parseInt(modelStr.slice(1), 10);
-        const entList = ret.get(modelIdx) || [];
-        entList.push(ent);
-        ret.set(modelIdx, entList);
-    });
-
-    return ret;
-}
-
 export class BSPFile {
     public version: number;
 
     private entitiesStr: string; // For debugging.
     public models: Model[] = [];
-    public modelEntities: Map<number, BSPEntity[]> = new Map();
     public entities: BSPEntity[] = [];
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
@@ -256,11 +266,6 @@ export class BSPFile {
             this.models.push({ bbox, headnode, surfaces: [] });
         }
 
-        // Multiple entities can point to the same model, if we encounter a
-        // face belonging to a model it can be reused any number of times with
-        // a different origin set by its entity.
-        this.modelEntities = fillModelEntities(this.models, this.entities);
-
         const vertexData = new Float32Array(numVertexData * 7);
         let dstOffsVertex = 0;
 
@@ -308,11 +313,6 @@ export class BSPFile {
             let maxTexCoordS = -Infinity, maxTexCoordT = -Infinity;
 
             const dstOffsVertexBase = dstOffsVertex;
-            const modelIndex = faceToModelIdx[face.index];
-
-            const model = this.models[faceToModelIdx[face.index]];
-            const entities = this.modelEntities.get(modelIndex) || [];
-
             for (let j = 0; j < numedges; j++) {
                 const vertIndex = vertindices[firstedge + j];
                 const px = vertexes[vertIndex * 3 + 0];
@@ -322,16 +322,14 @@ export class BSPFile {
                 const texCoordS = Math.fround(px*m.s[0] + py*m.s[1] + pz*m.s[2] + m.s[3]);
                 const texCoordT = Math.fround(px*m.t[0] + py*m.t[1] + pz*m.t[2] + m.t[3]);
 
-                const origin = vec3.create();
-                if (modelIndex > 0 && entities.length > 0) {
-                    vec3.copy(origin, parseVec3Str(entities[0].origin || ""));
-                }
+                vertexData[dstOffsVertex++] = px;
+                vertexData[dstOffsVertex++] = py;
+                vertexData[dstOffsVertex++] = pz;
 
-                vertexData[dstOffsVertex++] = px + origin[0];
-                vertexData[dstOffsVertex++] = py + origin[1];
-                vertexData[dstOffsVertex++] = pz + origin[2];
                 vertexData[dstOffsVertex++] = texCoordS;
                 vertexData[dstOffsVertex++] = texCoordT;
+
+                // Dummy lightmap data for now, will compute after the loop.
                 vertexData[dstOffsVertex++] = 0;
                 vertexData[dstOffsVertex++] = 0;
 
@@ -384,6 +382,8 @@ export class BSPFile {
             convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
 
             const surfaceIndex = this.surfaces.length - 1;
+
+            const model = this.models[faceToModelIdx[face.index]];
             ensureInList(model.surfaces, surfaceIndex);
 
             surface.lightmapData.push(lightmapData);
@@ -408,7 +408,7 @@ export class BSPFile {
         const worldspawn = this.entities.find(isWorldspawn);
         assert(worldspawn !== undefined);
 
-        const wad = worldspawn.wad;
+        const wad = worldspawn.kvs.wad;
         return wad.split(';').filter((v) => v !== '').map((v) => {
             if (v.startsWith('\\')) {
                 const x = v.split('\\');

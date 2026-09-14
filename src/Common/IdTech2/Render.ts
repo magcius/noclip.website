@@ -406,12 +406,22 @@ class BSPModelRenderer {
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
+    public prepareToRender(
+        renderInstManager: GfxRenderInstManager,
+        view: View,
+        transform: ReadonlyMat4,
+    ): void {
         if (!this.visible)
             return;
 
-        for (let i = 0; i < this.surfaceRenderers.length; i++)
-            this.surfaceRenderers[i].prepareToRender(renderInstManager, this.lightmapManager, view, identityMatrix);
+        for (let i = 0; i < this.surfaceRenderers.length; i++) {
+            this.surfaceRenderers[i].prepareToRender(
+                renderInstManager,
+                this.lightmapManager,
+                view,
+                transform,
+            );
+        }
     }
 }
 
@@ -574,34 +584,26 @@ export class BSPRenderer {
 
     private processEntities(entities: BSPEntity[]): void {
         for (const entity of entities) {
-            if (!entity.model || !entity.model.startsWith('*'))
+            if (!entity.bmodel)
                 continue;
 
-            const modelIndex = parseInt(entity.model.slice(1), 10);
-            if (modelIndex <= 0 || modelIndex >= this.modelRenderers.length)
+            if (entity.bmodel < 0 || entity.bmodel >= this.modelRenderers.length)
                 continue;
 
-            const classname = entity.classname || '';
-
-            if (classname.startsWith('trigger_'))
+            if (entity.classname.startsWith('trigger_'))
                 continue;
-
-            const rendermode = parseInt(entity.rendermode || '0', 10);
-            const renderamt = parseInt(entity.renderamt || '0', 10);
 
             // rendermode 1 (Color) / 2 (Texture) / 5 (Additive) with renderamt 0 = fully transparent
-            if (rendermode !== 0 && rendermode !== 4 && renderamt === 0)
+            if (entity.rendermode !== 0 && entity.rendermode !== 4 && entity.renderamt === 0)
                 continue;
 
             if (this.context.isQuake) {
-                const spawnflags = parseInt(entity.spawnflags || '0', 10);
-
-                const difficultyFlags = spawnflags & 0xF00;
+                const difficultyFlags = entity.spawnflags & 0xF00;
                 if (difficultyFlags & 0x100)
                     continue;
             }
 
-            const modelRenderer = this.modelRenderers[modelIndex];
+            const modelRenderer = this.modelRenderers[entity.bmodel];
             modelRenderer.visible = true;
         }
     }
@@ -619,8 +621,14 @@ export class BSPRenderer {
         offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
         offs += fillVec3v(d, offs, view.eyePos, view.time);
 
-        for (let i = 0; i < this.modelRenderers.length; i++)
-            this.modelRenderers[i].prepareToRender(renderInstManager, view);
+        for (const entity of this.bsp.entities) {
+            const modelIndex = entity.bmodel;
+            if (modelIndex == null || modelIndex < 0 || modelIndex >= this.modelRenderers.length) {
+                continue;
+            }
+
+            this.modelRenderers[modelIndex].prepareToRender(renderInstManager, view, entity.transform);
+        }
 
         renderInstManager.popTemplate();
     }
