@@ -620,19 +620,26 @@ class RenderOptions {
     }
 
     blendMode(): Partial<AttachmentStateSimple> {
-        if (this.mode === RenderMode.Additive) {
-            return {
-                blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                blendDstFactor: GfxBlendFactor.One,
-            };
+        switch (this.mode) {
+            case RenderMode.Additive:
+                return {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.One,
+                };
+            case RenderMode.Texture:
+                return {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                };
+            default:
+                return {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.One,
+                    blendDstFactor: GfxBlendFactor.Zero,
+                };
         }
-
-        return {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        };
     }
 
     static fromBSPEntity(ent: BSPEntity): RenderOptions {
