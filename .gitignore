@@ -50,6 +50,7 @@ node_modules
 
 rust/target/
 .pnpm-debug.log
+.pnpm-store
 .cache/
 
 data/*

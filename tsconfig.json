@@ -27,6 +27,7 @@
         "isolatedModules": true,
         "types": [
             "gl-matrix",
+            "node",
             "webxr"
         ],
         "paths": {

@@ -421,28 +421,53 @@ export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, le
     let S = '';
     const arr = buffer.createTypedArray(Uint8Array, offs);
     length = Math.min(length, arr.byteLength);
+    let lastLineHadData = true;
+    let numEmptyLines = 0;
+
     for (let i = 0; i < length; i += groupSize_) {
         let groupSize = Math.min(length - i, groupSize_);
+        let lineBuf: string = '';
+
         const addr = offs + i;
-        S += `${hexzero(addr, 8)}    `;
+        lineBuf += `${hexzero(addr, 8)}    `;
+        let hasData = false;
         for (let j = 0; j < groupSize; j++) {
             const b = arr[i + j];
-            S += ` ${hexzero(b, 2)}`;
+            hasData = hasData || b !== 0;
+            if (j === (groupSize / 2)) {
+                lineBuf += ' ';
+            }
+            lineBuf += ` ${hexzero(b, 2)}`;
         }
         for (let j = groupSize; j < groupSize_; j++)
-            S += `   `;
+            lineBuf += `   `;
 
-        S += '  ';
+        lineBuf += '  ';
         for (let j = 0; j < groupSize; j++) {
             const b = arr[i + j];
             const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
-            S += `${c}`;
+            lineBuf += `${c}`;
         }
         for (let j = groupSize; j < groupSize_; j++)
-            S += ` `;
+            lineBuf += ` `;
 
-        S += '\n';
+        lineBuf += '\n';
+
+        if (hasData || lastLineHadData) {
+            S += lineBuf;
+            numEmptyLines = 0;
+        } else if (!hasData && numEmptyLines === 0) {
+            S += "*\n";
+            numEmptyLines++;
+        }
+
+        lastLineHadData = hasData;
     }
+
+    if (!lastLineHadData) {
+        S += `${hexzero(length, 8)}\n`;
+    }
+
     console.log(S);
 }
 
