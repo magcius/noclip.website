@@ -518,8 +518,8 @@ class View {
 
     public time = 0;
 
-    public mainList = new GfxRenderInstList();
-    public skyList = new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards);
+    public mainList = new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards);
+    public skyList = new GfxRenderInstList();
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
