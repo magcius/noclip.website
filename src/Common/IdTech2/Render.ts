@@ -436,11 +436,7 @@ class BSPSurfaceRenderer {
             offs += fillVec3v(d, offs, renderOptions.color, renderOptions.mode == RenderMode.Color ? 1 : 0);
         }
 
-        var list = this.sky ? view.skyList : view.mainList;
-        if (renderOptions.isTranslucent()) {
-            list = view.xluList;
-        }
-
+        const list = this.sky ? view.skyList : view.mainList;
         list.submitRenderInst(renderInst);
     }
 }
@@ -507,8 +503,7 @@ class View {
     public time = 0;
 
     public mainList = new GfxRenderInstList();
-    public skyList = new GfxRenderInstList();
-    public xluList = new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards);
+    public skyList = new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards);
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
@@ -526,7 +521,6 @@ class View {
     public reset(): void {
         this.mainList.reset();
         this.skyList.reset();
-        this.xluList.reset();
     }
 }
 
@@ -831,14 +825,6 @@ export class IdTech2Renderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.mainView.mainList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-            });
-        });
-        builder.pushPass((pass) => {
-            pass.setDebugName('XLU');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                this.mainView.xluList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
