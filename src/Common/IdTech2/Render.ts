@@ -460,21 +460,37 @@ class BSPModelRenderer {
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
         view: View,
-        transform: ReadonlyMat4,
-        renderOptions: RenderOptions,
+        entity: BSPEntity,
     ): void {
         if (!this.visible)
             return;
+
+        const template = renderInstManager.pushTemplate();
+        const renderOptions = RenderOptions.fromBSPEntity(entity);
+        const megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+        setAttachmentStateSimple(megaStateFlags, renderOptions.blendMode());
+        template.setMegaStateFlags(megaStateFlags);
+
+        if (renderOptions.isTranslucent()) {
+            template.sortKey = setSortKeyDepth(
+                makeSortKey(GfxRendererLayer.TRANSLUCENT),
+                vec3.distance(entity.origin, view.eyePos),
+            );
+        } else {
+            template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+        }
 
         for (let i = 0; i < this.surfaceRenderers.length; i++) {
             this.surfaceRenderers[i].prepareToRender(
                 renderInstManager,
                 this.lightmapManager,
                 view,
-                transform,
+                entity.transform,
                 renderOptions,
             );
         }
+
+        renderInstManager.popTemplate();
     }
 }
 
@@ -727,43 +743,26 @@ export class BSPRenderer {
     public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, worldLightingState: WorldLightingState): void {
         this.lightmapManager.prepareToRender(renderInstManager.gfxRenderCache.device, worldLightingState);
 
+        const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 2 }]);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
+
+        let offs = template.allocateUniformBuffer(GoldSrcProgram.ub_SceneParams, 16+4);
+        const d = template.mapUniformBufferF32(GoldSrcProgram.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
+        offs += fillVec3v(d, offs, view.eyePos, view.time);
+
         for (const entity of this.bsp.entities) {
             const modelIndex = entity.bmodel;
             if (modelIndex == null || modelIndex < 0 || modelIndex >= this.modelRenderers.length) {
                 continue;
             }
 
-            const template = renderInstManager.pushTemplate();
-            template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 2 }]);
-            template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-
-            const megaStateFlags: Partial<GfxMegaStateDescriptor> = {
-                cullMode: GfxCullMode.Back,
-                frontFace: GfxFrontFaceMode.CW,
-            };
-
-            const renderOptions = RenderOptions.fromBSPEntity(entity);
-            setAttachmentStateSimple(megaStateFlags, renderOptions.blendMode());
-            template.setMegaStateFlags(megaStateFlags);
-
-            let offs = template.allocateUniformBuffer(GoldSrcProgram.ub_SceneParams, 16+4);
-            const d = template.mapUniformBufferF32(GoldSrcProgram.ub_SceneParams);
-            offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
-            offs += fillVec3v(d, offs, view.eyePos, view.time);
-
-            if (renderOptions.isTranslucent()) {
-                template.sortKey = setSortKeyDepth(
-                    makeSortKey(GfxRendererLayer.TRANSLUCENT),
-                    vec3.distance(entity.origin, view.eyePos),
-                );
-            } else {
-                template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
-            }
-
-            this.modelRenderers[modelIndex].prepareToRender(renderInstManager, view, entity.transform, renderOptions);
-
-            renderInstManager.popTemplate();
+            this.modelRenderers[modelIndex].prepareToRender(renderInstManager, view, entity);
         }
+
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
