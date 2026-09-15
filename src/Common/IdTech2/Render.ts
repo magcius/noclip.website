@@ -2,14 +2,15 @@ import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { Camera, CameraController } from "../../Camera.js";
 import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
+import { setAttachmentStateSimple, AttachmentStateSimple } from '../../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
-import { fillMatrix4x4, fillVec3v } from "../../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
+import { fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBlendMode, GfxBlendFactor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D, GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { setSortKeyDepth, GfxRendererLayer, makeSortKey, gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { getMatrixTranslation } from "../../MathHelpers.js";
 import { DeviceProgram } from "../../Program.js";
 import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
@@ -220,10 +221,18 @@ layout(std140) uniform ub_SceneParams {
 
 layout(std140) uniform ub_ModelParams {
     Mat4x4 u_ModelMatrix;
+    vec4 u_RenderOptions;
+    vec4 u_RenderColor;
 };
 
 #define u_Time (u_EyePosTime.w)
 #define u_EyePosition (u_EyePosTime.xyz)
+
+#define u_IsRenderModeTexture (u_RenderOptions.x)
+#define u_IsRenderModeSolid (u_RenderOptions.y)
+#define u_IsRenderModeAdditive (u_RenderOptions.z)
+#define u_RenderAmount (u_RenderOptions.w)
+#define u_IsRenderModeColor (u_RenderColor.w)
 
 uniform sampler2D u_TextureDiffuse;
 uniform sampler2D u_TextureLightmap;
@@ -277,8 +286,16 @@ void main() {
     t_TexCoordDiffuse.xy /= vec2(textureSize(TEXTURE(u_TextureDiffuse), 0));
     vec4 t_DiffuseSample = texture(SAMPLER_2D(u_TextureDiffuse), t_TexCoordDiffuse.xy);
 
+#if defined GAME_QUAKE
     if (t_DiffuseSample.a < 0.1)
         discard;
+#endif
+
+#if defined GAME_GOLDSRC
+    // Only rendermode "solid" has alphatest.
+    if (t_DiffuseSample.a < 0.1 && u_IsRenderModeSolid > 0.f)
+        discard;
+#endif
 
     vec2 t_TexCoordLightmap = v_TexCoord.zw / vec2(textureSize(TEXTURE(u_TextureLightmap), 0));
     vec4 t_Color = t_DiffuseSample;
@@ -286,12 +303,32 @@ void main() {
 #if defined USE_LIGHTMAP
     vec4 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), t_TexCoordLightmap.xy);
 
-    t_Color.rgb *= t_LightmapSample.rgb * 2.0;
+    #if defined GAME_GOLDSRC
+        // Translucent surfaces are not lightmapped.
+        if (u_IsRenderModeTexture + u_IsRenderModeAdditive + u_IsRenderModeColor <= 0.f) {
+            t_Color.rgb *= t_LightmapSample.rgb * 2.0;
+        }
+    #else
+        t_Color.rgb *= t_LightmapSample.rgb * 2.0;
+    #endif
 #endif
 
 #if defined GAME_QUAKE
     t_Color.rgb = t_Color.rgb * 1.4;  // Contrast
     t_Color.rgb = pow(t_Color.rgb, vec3(0.9));  // Gamma
+#endif
+
+#if defined GAME_GOLDSRC
+    if (u_IsRenderModeColor > 0.f) {
+        t_Color.rgb = u_RenderColor.rgb;
+    }
+
+    // Everything is opaque in GoldSrc unless specified otherwise via rendermode.
+    if (u_IsRenderModeTexture + u_IsRenderModeAdditive + u_IsRenderModeColor > 0.f) {
+        t_Color.a = u_RenderAmount / 255.f;
+    } else {
+        t_Color.a = 1.f;
+    }
 #endif
 
     gl_FragColor = t_Color;
@@ -361,7 +398,13 @@ class BSPSurfaceRenderer {
         this.gfxProgram = cache.createProgram(program);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, lightmapManager: LightmapManager, view: View, modelMatrix: ReadonlyMat4): void {
+    public prepareToRender(
+        renderInstManager: GfxRenderInstManager,
+        lightmapManager: LightmapManager,
+        view: View,
+        modelMatrix: ReadonlyMat4,
+        renderOptions: RenderOptions,
+    ): void {
         if (!this.visible || this.gfxProgram === null)
             return;
 
@@ -380,9 +423,17 @@ class BSPSurfaceRenderer {
             this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
-            let offs = renderInst.allocateUniformBuffer(GoldSrcProgram.ub_ModelParams, 16);
+            let offs = renderInst.allocateUniformBuffer(GoldSrcProgram.ub_ModelParams, 16 + 12 + 12);
             const d = renderInst.mapUniformBufferF32(GoldSrcProgram.ub_ModelParams);
             offs += fillMatrix4x4(d, offs, modelMatrix);
+            offs += fillVec4(
+                d, offs,
+                renderOptions.mode == RenderMode.Texture ? 1 : 0,
+                renderOptions.mode == RenderMode.Solid ? 1 : 0,
+                renderOptions.mode == RenderMode.Additive ? 1 : 0,
+                renderOptions.amount,
+            );
+            offs += fillVec3v(d, offs, renderOptions.color, renderOptions.mode == RenderMode.Color ? 1 : 0);
         }
 
         const list = this.sky ? view.skyList : view.mainList;
@@ -409,19 +460,37 @@ class BSPModelRenderer {
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
         view: View,
-        transform: ReadonlyMat4,
+        entity: BSPEntity,
     ): void {
         if (!this.visible)
             return;
+
+        const template = renderInstManager.pushTemplate();
+        const renderOptions = RenderOptions.fromBSPEntity(entity);
+        const megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+        setAttachmentStateSimple(megaStateFlags, renderOptions.blendMode());
+        template.setMegaStateFlags(megaStateFlags);
+
+        if (renderOptions.isTranslucent()) {
+            template.sortKey = setSortKeyDepth(
+                makeSortKey(GfxRendererLayer.TRANSLUCENT),
+                vec3.distance(entity.origin, view.eyePos),
+            );
+        } else {
+            template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+        }
 
         for (let i = 0; i < this.surfaceRenderers.length; i++) {
             this.surfaceRenderers[i].prepareToRender(
                 renderInstManager,
                 this.lightmapManager,
                 view,
-                transform,
+                entity.transform,
+                renderOptions,
             );
         }
+
+        renderInstManager.popTemplate();
     }
 }
 
@@ -450,7 +519,7 @@ class View {
     public time = 0;
 
     public mainList = new GfxRenderInstList();
-    public skyList = new GfxRenderInstList();
+    public skyList = new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards);
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
@@ -537,6 +606,63 @@ class LightmapManager {
     }
 }
 
+enum RenderMode {
+    Normal = 0,
+    Color,
+    Texture,
+    Glow, // only valid on sprites
+    Solid,
+    Additive,
+}
+
+class RenderOptions {
+    constructor(
+        public mode: RenderMode,
+        public amount: number, // u8
+        public color: vec3, // R8G8B8
+    ) {
+    }
+
+    isTranslucent(): boolean {
+        if (this.mode === RenderMode.Texture && this.amount < 255) {
+            return true;
+        }
+
+        if (this.mode === RenderMode.Additive) {
+            return true;
+        }
+
+        return false;
+    }
+
+    blendMode(): Partial<AttachmentStateSimple> {
+        switch (this.mode) {
+            case RenderMode.Additive:
+                return {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.One,
+                };
+            case RenderMode.Texture:
+                return {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                };
+            default:
+                return {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.One,
+                    blendDstFactor: GfxBlendFactor.Zero,
+                };
+        }
+    }
+
+    static fromBSPEntity(ent: BSPEntity): RenderOptions {
+        return new RenderOptions(ent.rendermode, ent.renderamt, ent.rendercolor);
+    }
+};
+
 export class BSPRenderer {
     public modelRenderers: BSPModelRenderer[] = [];
 
@@ -603,6 +729,12 @@ export class BSPRenderer {
                     continue;
             }
 
+            if (this.context.isGoldSrc) {
+                // In Half-Life some ladders are not using tool textures (eg. in c2a4).
+                if (entity.classname === 'func_ladder')
+                    continue;
+            }
+
             const modelRenderer = this.modelRenderers[entity.bmodel];
             modelRenderer.visible = true;
         }
@@ -627,7 +759,7 @@ export class BSPRenderer {
                 continue;
             }
 
-            this.modelRenderers[modelIndex].prepareToRender(renderInstManager, view, entity.transform);
+            this.modelRenderers[modelIndex].prepareToRender(renderInstManager, view, entity);
         }
 
         renderInstManager.popTemplate();

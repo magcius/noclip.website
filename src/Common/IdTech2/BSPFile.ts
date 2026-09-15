@@ -74,6 +74,7 @@ export interface BSPEntity {
     origin: vec3;
     rendermode: number;
     renderamt: number;
+    rendercolor: vec3;
     spawnflags: number;
 }
 
@@ -102,6 +103,7 @@ function parseEntity(kvs: VKFParamMap): BSPEntity {
         bmodel: bmodel,
         rendermode: parseInt(kvs.rendermode || "0", 10),
         renderamt: parseInt(kvs.renderamt || "0", 10),
+        rendercolor: parseVec3Str(kvs.rendercolor || ""),
         spawnflags: parseInt(kvs.spawnflags || "0", 10),
     };
 }
