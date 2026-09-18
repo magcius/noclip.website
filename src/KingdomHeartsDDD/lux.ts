@@ -1,4 +1,4 @@
-import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder, TextureHolder, TextureMapping } from "../TextureHolder";
@@ -222,10 +222,8 @@ export class LuxTexture {
 
     constructor(device: GfxDevice, public name: string, public width: number, public height: number, data: Uint8Array) {
         const gfxTexture = device.createTexture({
-            width, height,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            usage: GfxTextureUsage.Sampled,
-            dimension: GfxTextureDimension.n2D,
+            width, height, pixelFormat: GfxFormat.U8_RGBA_NORM,
+            usage: GfxTextureUsage.Sampled, dimension: GfxTextureDimension.n2D,
             depthOrArrayLayers: 1, numLevels: 1
         });
         device.setResourceName(gfxTexture, name);
@@ -262,6 +260,7 @@ export class LuxMaterialInstance {
         this.name = textures[0].name;
         this.scrollX = material.scrollX;
         this.scrollY = material.scrollY;
+        // mutliple textures are assumed to be for txa and not mips
         this.textureMappings = [];
         for (const texture of textures) {
             const tm = new TextureMapping();
@@ -272,7 +271,7 @@ export class LuxMaterialInstance {
     }
 }
 
-export class LuxShapeRenderer implements Destroyable {
+export abstract class LuxShapeRenderer implements Destroyable {
     protected hasTXA: boolean;
     protected doBlendTXA: boolean = false;
     protected gfxProgram?: GfxProgram;
@@ -340,8 +339,8 @@ export class LuxShapeRenderer implements Destroyable {
         }
         this.hasTXA = txa !== undefined;
 
-        // if weights are all zero then rigid skinning is used (assuming an animation is specified as well)
-        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount, shape.weights.filter(w => w !== 0.0).length === 0);
+        const doRigidSkinning = shape.weights.filter(w => w !== 0.0).length === 0;
+        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount, doRigidSkinning);
         
         this.drawCount = shape.indices.length;
         this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shape.indices.buffer), byteOffset: 0 };
@@ -427,20 +426,14 @@ export class LuxShapeRenderer implements Destroyable {
         }
     }
 
-    protected setMegaStateFlags(shape: LuxShape) {
+    protected abstract setMegaStateFlags(shape: LuxShape): void;
 
-    }
+    protected abstract setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void;
 
-    protected setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number) {
-        
-    }
-
-    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean) {
-
-    }
+    protected abstract setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void;
 }
 
-export class LuxModelRenderer implements Destroyable, Layer {
+export abstract class LuxModelRenderer implements Destroyable, Layer {
     public visible: boolean = true;
     public instances: LuxModelInstance[] = [];
     public bbox: AABB;
@@ -618,12 +611,10 @@ export class LuxModelRenderer implements Destroyable, Layer {
         }
     }
 
-    protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
-        return new LuxShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
-    }
+    protected abstract getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer;
 }
 
-export class LuxRoomRenderer implements Destroyable {
+export abstract class LuxRoomRenderer implements Destroyable {
     public parts: LuxModelRenderer[];
     public objects: LuxModelRenderer[];
     public sets: LuxObjectSet[];
@@ -664,7 +655,6 @@ export class LuxRoomRenderer implements Destroyable {
         }
         this.selectedSetIndices = [];
         // approximation to appearance in game
-        // idk why only world scale doesn't work, but double seems to be about right
         this.pvd.fogNear *= (WORLD_SCALE * 2);
         this.pvd.fogFar *= (WORLD_SCALE * 2);
     }
@@ -730,16 +720,12 @@ export class LuxRoomRenderer implements Destroyable {
         }
     }
 
-    protected setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]) {
+    protected abstract setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]): void;
 
-    }
-
-    protected setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
-
-    }
+    protected abstract setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void;
 }
 
-export class LuxRenderer implements SceneGfx {
+export abstract class LuxRenderer implements SceneGfx {
     public textureHolder: TextureHolder;
     protected roomRenderer?: LuxRoomRenderer;
     protected textures: LuxTexture[];
@@ -831,11 +817,7 @@ export class LuxRenderer implements SceneGfx {
         return [setPanel, layersPanel, renderOptions];
     }
 
-    protected isPlayerCharacterModel(name: string): boolean {
-        return false;
-    }
+    protected abstract isPlayerCharacterModel(name: string): boolean;
 
-    protected getSetPanel(): Panel {
-        return new Panel();
-    }
+    protected abstract getSetPanel(): Panel;
 }

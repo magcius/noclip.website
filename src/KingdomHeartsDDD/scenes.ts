@@ -102,7 +102,7 @@ class Renderer extends LuxRenderer {
         this.roomRenderer.setCullingOverride(cullingOverride);
     }
 
-    protected override getSetPanel() {
+    protected getSetPanel() {
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         setPanel.setTitle(EYE_ICON, "Object Sets");
@@ -127,7 +127,7 @@ class Renderer extends LuxRenderer {
         return setPanel;
     }
 
-    protected override isPlayerCharacterModel(name: string) {
+    protected isPlayerCharacterModel(name: string) {
         return name.toLowerCase().startsWith("p_");
     }
 }
