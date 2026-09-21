@@ -235,7 +235,7 @@ export class SpyroLevelRenderer {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offs = template.allocateUniformBuffer(Shader.ub_SceneParams, 18);
+        let offs = template.allocateUniformBuffer(Shader.ub_SceneParams, 20);
         const d = template.mapUniformBufferF32(Shader.ub_SceneParams);
         // u_Clip (16)
         mat4.mul(SCRATCH_CLIP, viewerInput.camera.clipFromWorldMatrix, NOCLIP_SPACE_CORRECTION);
@@ -263,7 +263,7 @@ export class SpyroLevelRenderer {
         for (const drawCall of drawCalls) {
             const renderInst = renderInstManager.newRenderInst();
 
-            let offs = renderInst.allocateUniformBuffer(Shader.ub_BatchParams, 3);
+            let offs = renderInst.allocateUniformBuffer(Shader.ub_BatchParams, 4);
             const d = renderInst.mapUniformBufferF32(Shader.ub_BatchParams);
             // u_Brightness (1)
             d[offs++] = additiveBlend ? BRIGHTNESS_TRANSPARENT : BRIGHTNESS_OPAQUE;
