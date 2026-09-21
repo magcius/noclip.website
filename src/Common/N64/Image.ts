@@ -71,6 +71,14 @@ function r5g5b5a1(dst: Uint8Array, dstOffs: number, p: number) {
     dst[dstOffs + 3] = (p & 0x0001) ? 0xFF : 0x00;
 }
 
+// 8 bits grayscale + 8 bits alpha.
+function i8a8(dst: Uint8Array, dstOffs: number, p: number) {
+    dst[dstOffs + 0] = (p & 0xFF00) >> 8;
+    dst[dstOffs + 1] = (p & 0xFF00) >> 8;
+    dst[dstOffs + 2] = (p & 0xFF00) >> 8;
+    dst[dstOffs + 3] = (p & 0x00FF);
+}
+
 function copyTLUTColor(dst: Uint8Array, dstOffs: number, colorTable: Uint8Array, i: number): void {
     dst[dstOffs + 0] = colorTable[(i * 4) + 0];
     dst[dstOffs + 1] = colorTable[(i * 4) + 1];
@@ -106,7 +114,6 @@ export function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcOffs: numbe
 
 export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
-    const padW = 0;
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x++) {
             const p = view.getUint32(srcIdx);
@@ -117,7 +124,20 @@ export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number
             srcIdx += 0x04;
             dstIdx += 0x04;
         }
-        srcIdx += padW;
+    }
+}
+
+export function decodeTex_RGB24(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
+    let dstIdx = 0;
+    for (let y = 0; y < tileH; y++) {
+        for (let x = 0; x < tileW; x++) {
+            dst[dstIdx + 0] = view.getUint8(srcIdx);
+            dst[dstIdx + 1] = view.getUint8(srcIdx + 1);
+            dst[dstIdx + 2] = view.getUint8(srcIdx + 2);
+            dst[dstIdx + 3] = 0xFF;
+            srcIdx += 0x03;
+            dstIdx += 0x04;
+        }
     }
 }
 
@@ -267,13 +287,22 @@ export function decodeTex_I8(dst: Uint8Array, view: DataView, srcOffs: number, t
 }
 
 export function parseTLUT(dst: Uint8Array, view: DataView, idx: number, siz: ImageSize, lutMode: TextureLUT): number {
-    // TODO(jstpierre): non-RGBA16 TLUT modes (comes from TEXTLUT field in SETOTHERMODE_H)
-    assert(lutMode === TextureLUT.G_TT_RGBA16);
+    let translator = null;
+    switch(lutMode) {
+        case TextureLUT.G_TT_RGBA16:
+            translator = r5g5b5a1;
+            break;
+        case TextureLUT.G_TT_IA16:
+            translator = i8a8;
+            break;
+        default:
+            throw new Error(`unhandled LUT format: ${TextureLUT[lutMode]}`);
+    }
 
     const tlutSize = getTLUTSize(siz);
     for (let i = 0; i < tlutSize; i++) {
         const p = view.getUint16(idx);
-        r5g5b5a1(dst, i * 4, p);
+        translator(dst, i * 4, p);
         idx += 0x02;
     }
 
