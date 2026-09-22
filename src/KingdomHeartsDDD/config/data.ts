@@ -574,10 +574,10 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["g32dc00", { name: "g32dc_000", index: 0 }], // tornado
 ]);
 
-export const BBS_MODEL_REMAP = ["b10ex01", "b10ex02", "m02vs00", "m12vs00", "m14vs00", "m04vs00", "m03vs00", "m13vs00", "m01vs00",
-    "m21vs00", "m17vs00", "m07vs00", "m18vs00", "m05vs00", "m19vs00", "b75vs00", "b74vs00", "b78vs00", "b77vs00", "b76vs00", "b71vs00",
-    "m06vs00", "m20vs00", "m09vs00", "m16vs00", "m10vs00", "m15vs00", "m08vs00", "m22vs00", "b40vs00", "b90vs00", "b60vs00", "b80vs00",
-    "g46dc00"
+export const BBS_MODEL_REMAP = [
+    "b10ex01", "b10ex02", "m02vs00", "m12vs00", "m14vs00", "m04vs00", "m03vs00", "m13vs00", "m01vs00", "m21vs00", "m17vs00", "m07vs00",
+    "m18vs00", "m05vs00", "m19vs00", "b75vs00", "b74vs00", "b78vs00", "b77vs00", "b76vs00", "b71vs00", "m06vs00", "m20vs00", "m09vs00",
+    "m16vs00", "m10vs00", "m15vs00", "m08vs00", "m22vs00", "b40vs00", "b90vs00", "b60vs00", "b80vs00", "g46dc00"
 ];
 
 export const BBS_ARC_PMO_OVERRIDE: Map<string, string> = new Map([["n02cd01", "n02cd00"]]);
@@ -597,5 +597,8 @@ export const BBS_PMO_ARC_OVERRIDE: Map<string, string[]> = new Map([
 // no idea why these are offset to some random point, every other skybox part is at world origin
 export const DREAMDROP_SKYBOX_CENTER: string[] = [
     "tm04_0_177", "tm04_1_178", "tl06_0_61", "tl06_1_65", "tl06_2_63", "tl15_0_0", "tl15_1_4", "tl15_2_2", "tl18_0_62", "tl18_1_66",
-    "tl18_2_64"
+    "tl18_2_64", "di01_2_45", "di01_3_46"
 ];
+
+// weird geometry that's not normally visible (???), turn them off by default
+export const DREAMDROP_HIDDEN_ROOM_PARTS: string[] = ["rg02_0_413", "rg02_25_414"];

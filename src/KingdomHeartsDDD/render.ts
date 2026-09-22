@@ -5,7 +5,7 @@ import { DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropRoomConfig } from "./config/room";
 import { DreamDropShader } from "./shader";
 import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxPVD, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
-import { DREAMDROP_SKYBOX_CENTER } from "./config/data";
+import { DREAMDROP_HIDDEN_ROOM_PARTS, DREAMDROP_SKYBOX_CENTER } from "./config/data";
 import { vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
 
@@ -86,6 +86,11 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
 }
 
 class ModelRenderer extends LuxModelRenderer {
+    constructor(cache: GfxRenderCache, name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
+        super(cache, name, model, materials, txas, animation);
+        this.setVisible(!DREAMDROP_HIDDEN_ROOM_PARTS.includes(this.name));
+    }
+
     protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
         return new ShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
     }

@@ -233,6 +233,21 @@ class Room implements SceneDesc {
 }
 
 /*
+Known Issues
+
+Leaf textures on destiny island have bilinear bleed, however this is present in the actual game (easy to see on the 3DS screen if you look for it)
+    They fixed this in 2.8, but I will leave it broken since that's more accurate
+Shadows in the third district are the wrong color, they are supposed to be black, not silver (they're correct everywhere else though???)
+Spellican's broomstick is stretched
+Both rhino variants have the spike ball visible (it doesn't hide when animated, as if the bone weights were to be set to 0)
+Hunchback boss has its chains missing when animated
+Tron turrets have their left arm backwards when animated
+Shop moogle's balloon is upside down (happens in BBS too, which uses almost the exact same model)
+Some of the post office pistons are rotated backwards
+Some instances of z-fighting, see note below
+Some instances of incorrect depth sorting for transparent objects, see note below
+Some TXA speeds and frame construction is wrong, see note below
+
 TODO
 
 Find a way to do proper depth sorting. Typical approaches completely break some rooms (yt04 for example)
@@ -268,25 +283,14 @@ Figure out how world map objects are loaded
     Within _grpdef/wm01.rgr, the model names and some MCV files are referenced. It's possible that
     the world map is technically handled as a cutscene, therefore the loading of models is entirely different
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
-Shadows in the third district are the wrong color, they appear as black in game (they're correct everywhere else though???)
 Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron, pinocchio and twtnw
-Model fixes
-    Spellican's broomstick is stretched
-    Both rhino variants have the spike ball visible (it doesn't hide when animated, as if the bone weights were to be set to 0)
-    Hunchback boss has its chains missing when animated
-    Tron turrets have their left arm backwards when animated
-    Shop moogle's balloon is upside down (happens in BBS too, which uses almost the exact same model)
-    Some of the post office pistons are rotated backwards
 Figure out how to handle models with different parts in separate files
     These are defined in _grpdef/*.rgr, for example the skeleton t-rex has its head as a separate model
 Rigid skinning should probably be checked for and applied at the model level, rather than the shape level
     There may also be a model flag that indicates this, rather than checking to see if the weights are all zero
-Trees on destiny island have a weird line on their leaf texure, issue with decoding or alpha check in shader?
-    This was not there during initial implementation, which was all done on di01, so something must have changed somewhere
 The container suspended from the ceiling (gl_tl110) should be moving up and down in tl05
     The animation is there for it and works fine, but only one of these containers actually moves in the
     game, so it would require additional code to enable per-instance animation application (as opposed to all instances of the model)
-Stray geometry in rg02?
 The timing of UV scrolling and TXAs may need some tweaking or further confirmation
     UV scrolling uses a multipler for 60 FPS, even though the game runs at 30 (if you're lucky). This was done using a side by side comparsion
     with an actual 3DS running the game. A frame time of 30 made the scrolling too slow. For TXAs, using a frame time of 30 resulted in a better
