@@ -10,7 +10,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
-import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui";
+import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON, Slider } from "../ui";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp } from "../MathHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -621,6 +621,7 @@ export abstract class LuxRoomRenderer implements Destroyable {
     public selectedSetIndices: number[];
     public applyTextures: boolean = true;
     public showFog: boolean = true;
+    public brightness: number = 0.13; // darknesses and 7 lights shall clash...
     private allSetIndices: number[][];
 
     constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], private pvd: LuxPVD) {
@@ -683,6 +684,8 @@ export abstract class LuxRoomRenderer implements Destroyable {
         uniformBuffer[offset++] = this.applyTextures ? 1.0 : 0.0;
         // u_ShowFog (1)
         uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
+        // u_Brightness (1)
+        uniformBuffer[offset++] = this.brightness;
 
         offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 8);
         const uniformBuffer2 = template.mapUniformBufferF32(DreamDropShader.ub_EnvParams);
@@ -778,15 +781,14 @@ export abstract class LuxRenderer implements SceneGfx {
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
-        layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
+        layersPanel.setLayers([...this.roomRenderer!.objects, ...this.roomRenderer!.parts]);
+        layersPanel.setTitle(LAYER_ICON, "Model Visibility");
 
         const setPanel = this.getSetPanel();
 
         const renderOptions = new Panel();
         renderOptions.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         renderOptions.setTitle(RENDER_HACKS_ICON, "Render Hacks");
-        // player models seem to be used to indicate spawn/entrance locations, hide by default
         const showPC = new Checkbox("Show Player Characters", false);
         showPC.onchanged = () => {
             for (const o of this.roomRenderer!.objects) {
@@ -813,6 +815,13 @@ export abstract class LuxRenderer implements SceneGfx {
             this.roomRenderer!.setCullingOverride(!backCull.checked);
         };
         renderOptions.contents.appendChild(backCull.elem);
+        const brightnessSlider = new Slider("Brightness");
+        brightnessSlider.setRange(0, 0.20, 0.01);
+        brightnessSlider.setValue(this.roomRenderer!.brightness);
+        brightnessSlider.onvalue = () => {
+            this.roomRenderer!.brightness = brightnessSlider.getValue();
+        };
+        renderOptions.contents.appendChild(brightnessSlider.elem);
 
         return [setPanel, layersPanel, renderOptions];
     }

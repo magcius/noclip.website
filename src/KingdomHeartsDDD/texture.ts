@@ -5,12 +5,14 @@ import { DreamDropCTRT } from "./bin";
 import { BBSParser, BBSTIM2Format } from "./bin_bbs";
 import { LuxTexture } from "./lux";
 
+// Credit for CTRT formats: https://github.com/OpenKH/OpenKh/blob/master/OpenKh.Ddd/Ctrt.cs
+
 export enum DreamDropCTRTFormat {
-    RGBA_8888,
-    RGB_888,
-    RGBA_5551,
-    RGB_565,
-    RGBA_4444,
+    RGBA8,
+    RGB8,
+    RGBA5551,
+    RGB565,
+    RGBA4444,
     LA8,
     HILO8, // unused
     L8,
@@ -30,15 +32,15 @@ export class DreamDropCTRTexture extends LuxTexture {
 
 export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     switch (ctrt.format) {
-        case DreamDropCTRTFormat.RGBA_8888:
+        case DreamDropCTRTFormat.RGBA8:
             return decodeTexture(TextureFormat.RGBA8, ctrt.width, ctrt.height, ctrt.data);
-        case DreamDropCTRTFormat.RGB_888:
+        case DreamDropCTRTFormat.RGB8:
             return decodeTexture(TextureFormat.RGB8, ctrt.width, ctrt.height, ctrt.data);
-        case DreamDropCTRTFormat.RGBA_5551:
+        case DreamDropCTRTFormat.RGBA5551:
             return decodeTexture(TextureFormat.RGBA5551, ctrt.width, ctrt.height, ctrt.data);
-        case DreamDropCTRTFormat.RGB_565:
+        case DreamDropCTRTFormat.RGB565:
             return decodeTexture(TextureFormat.RGB565, ctrt.width, ctrt.height, ctrt.data);
-        case DreamDropCTRTFormat.RGBA_4444:
+        case DreamDropCTRTFormat.RGBA4444:
             return decodeTexture(TextureFormat.RGBA4444, ctrt.width, ctrt.height, ctrt.data);
         case DreamDropCTRTFormat.LA8:
             return decodeTexture(TextureFormat.LA8, ctrt.width, ctrt.height, ctrt.data);
@@ -56,7 +58,7 @@ export function decodeDreamDropCTRT(ctrt: DreamDropCTRT): Uint8Array {
     }
 }
 
-// Credit: https://github.com/OpenKH/OpenKh/blob/master/OpenKh.Imaging/Tm2.cs
+// Credit for TIM2 decoding: https://github.com/OpenKH/OpenKh/blob/master/OpenKh.Imaging/Tm2.cs
 
 function fromIndexed4(image: Uint8Array, clut: Uint8Array): Uint8Array {
     let rgba = new Uint8Array(image.length * 8);

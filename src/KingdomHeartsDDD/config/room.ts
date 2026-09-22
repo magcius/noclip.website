@@ -177,6 +177,18 @@ export const BBS_NO_CULL_ROOMS = [
     "vs02", "vs10", "bd03"
 ];
 
+export const DREAMDROP_VALID_PVD = [
+    "de01", "de02", "de03", "di01", "di02", "di03", "di05", "di60", "eh01", "eh02", "eh03", "eh04", "eh05", "eh06", "eh07", "eh08", "eh10",
+    "eh11", "eh12", "eh13", "eh14", "eh20", "eh60", "eh61", "fa01", "fa02", "fa03", "fa05", "fa06", "fa07", "fa09", "fa10", "fa11", "fa15",
+    "fa16", "fa19", "fa60", "fa61", "fa62", "nd01", "nd02", "nd03", "nd04", "nd05", "nd06", "nd07", "nd08", "nd09", "nd10", "nd11", "nd12",
+    "nd13", "nd14", "nd15", "nd16", "nd17", "nd18", "nd19", "nd20", "nd60", "nd61", "pi01", "pi02", "pi03", "pi04", "pi05", "pi06", "pi07",
+    "pi08", "pi09", "pi10", "pi11", "pi12", "pi13", "pi14", "pi15", "pi16", "pi17", "pi18", "pi19", "pi60", "pi61", "rg02", "rg03", "rg04",
+    "rg05", "rg06", "rg07", "rg08", "tl01", "tl02", "tl04", "tl05", "tl06", "tl07", "tl08", "tl09", "tl10", "tl11", "tl12", "tl13", "tl14",
+    "tl15", "tl16", "tl17", "tl18", "tl60", "tl61", "tm04", "tm05", "tm06", "tm07", "tm09", "tm11", "tm13", "tm14", "tm17", "tm60", "tm61",
+    "tw01", "tw02", "tw03", "tw04", "tw05", "tw06", "tw07", "tw08", "tw09", "tw10", "tw11", "tw13", "tw14", "tw60", "tw61", "wm01", "yt01",
+    "yt02", "yt03", "yt04", "yt06", "yt07", "yt60"
+];
+
 const TXA = [
     "tw02", "tw03", "tw04", "tw07", "tm03", "tm04", "tm07", "tm13", "tm16", "tl06", "tl15", "tl18", "rg08", "pi07", "pi08", "pi10", "pi11",
     "pi13", "pi18", "nd03", "nd06", "nd08", "nd15", "fa03", "fa05", "fa06", "fa07", "fa09", "eh09", "di05"
