@@ -62,10 +62,6 @@ export default defineConfig({
   // Disable fallback to index for 404 responses.
   server: {
     htmlFallback: false,
-    // Pin the dev server to localhost:3000. strictPort makes rsbuild fail
-    // loudly if 3000 is taken instead of silently drifting to 3001, 3002, ...
-    port: 3000,
-    strictPort: true,
   },
   // Setup middleware to serve the `data` directory.
   dev: {

@@ -1573,9 +1573,7 @@ export class CircularTimeSlider implements Widget {
     public elem: HTMLElement;
     public onvalue: ((value: number) => void) | null = null;
     public onmanualchange: (() => void) | null = null;
-    // Optional override for the clock text under the dial, given the normalized time. Lets a
-    // scene whose own clock is not a 12-hour AM/PM one (HarvestMoonAWL's is the ROM's own
-    // 24-hour counter) reuse this dial without changing how it reads in every other scene.
+    // Optional override for the clock text under the dial
     private labelFormatter: ((time: number) => string) | null = null;
 
     private svg: SVGSVGElement;
