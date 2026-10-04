@@ -72,7 +72,6 @@ export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
     throw new Error("ELDA payload too small for VIF data");
   const data = payload.subarray(8);
   const view = data.createDataView();
-  const bytes = data.createTypedArray(Uint8Array);
   const commands: VifCommand[] = [];
   let idx = 0;
   const dataLen = data.byteLength;
@@ -80,9 +79,9 @@ export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
   while (idx < dataLen) {
     if (idx + 4 > dataLen) break;
 
-    const command = bytes[idx + 3];
-    const num = bytes[idx + 2];
-    const immediate = (bytes[idx + 1] << 8) | bytes[idx + 0];
+    const command = view.getUint8(idx + 3);
+    const num = view.getUint8(idx + 2);
+    const immediate = view.getUint16(idx + 0, true);
     idx += 4;
 
     const cmd: VifCommand = {
@@ -212,10 +211,10 @@ export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V4_8");
               for (let i = 0; i < count; i++) {
-                const b0 = bytes[idx],
-                  b1 = bytes[idx + 1],
-                  b2 = bytes[idx + 2],
-                  b3 = bytes[idx + 3];
+                const b0 = view.getUint8(idx),
+                  b1 = view.getUint8(idx + 1),
+                  b2 = view.getUint8(idx + 2),
+                  b3 = view.getUint8(idx + 3);
                 idx += 4;
                 unpack.v4_8.push({
                   v1: b0,

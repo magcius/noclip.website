@@ -49,6 +49,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
+import { decodeString } from "../util";
 import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 import {
@@ -804,9 +805,8 @@ class RumbleRacingSceneDesc implements SceneDesc {
       ),
     ]);
 
-    const decoder = new TextDecoder("utf-8");
     const actorTrans = JSON.parse(
-      decoder.decode(actorBlob.arrayBuffer),
+      decodeString(actorBlob),
     ) as unknown as ActorTransforms;
 
     const trackData: RumbleRacingTrackFile = processTrackFile(trackBlob, false);

@@ -8,10 +8,10 @@ export function decompress(
   srcBuffer: ArrayBufferSlice,
   outSize: number,
 ): ArrayBufferSlice {
-  const src = srcBuffer.createTypedArray(Uint8Array);
+  const srcView = srcBuffer.createDataView();
   let i = 0;
   let dst: number[] = [];
-  const n = src.length;
+  const n = srcBuffer.byteLength;
 
   while (true) {
     if (outSize > 0 && dst.length >= outSize) {
@@ -20,13 +20,13 @@ export function decompress(
     }
     if (i >= n) return toSlice(dst);
     if (i + 1 >= n) {
-      for (let k = i; k < n; k++) dst.push(src[k]);
+      for (let k = i; k < n; k++) dst.push(srcView.getUint8(k));
       i = n;
       continue;
     }
 
-    const b0 = src[i];
-    const b1 = src[i + 1];
+    const b0 = srcView.getUint8(i);
+    const b1 = srcView.getUint8(i + 1);
     const control = ((b0 << 8) | b1) >>> 0;
     i += 2;
 
@@ -35,7 +35,7 @@ export function decompress(
       if (mode === 0) {
         let count = (control & 0x07ff) | b1;
         if (i + count > n) count = Math.max(0, n - i);
-        for (let k = 0; k < count; k++) dst.push(src[i + k]);
+        for (let k = 0; k < count; k++) dst.push(srcView.getUint8(i + k));
         i += count;
       } else {
         const full = ((b0 << 8) | b1) >>> 0;
@@ -57,7 +57,7 @@ export function decompress(
         throw new Error(
           `unexpected end of input while reading extended length at input ${i}`,
         );
-      length = src[i] + 7;
+      length = srcView.getUint8(i) + 7;
       i++;
     }
     const copyLen = length + 3;
