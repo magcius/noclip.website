@@ -43,6 +43,7 @@ class WarpedRenderer implements SceneGfx {
     public waterMesh: WaterMeshData | null = null;
     public terrainMesh: TerrainMeshData | null = null;
     private drawDebug = 0;
+    private wireframe = false;
 
     public state: SCRIPT.GameState;
     public globals: RenderGlobals;
@@ -78,6 +79,14 @@ class WarpedRenderer implements SceneGfx {
             for (let i = 0; i < this.globals.meshData.length; i++)
                 this.globals.meshData[i].setRetroMode(retroMode.checked);
         };
+        if (this.globals.renderHelper.device.queryLimits().wireframeSupported) {
+            const wireframe = new UI.Checkbox('Wireframe', false);
+            wireframe.onchanged = () => {
+                const v = wireframe.checked;
+                this.wireframe = v;
+            };
+            renderHacksPanel.contents.appendChild(wireframe.elem);
+        }
         renderHacksPanel.contents.appendChild(retroMode.elem);
         return [renderHacksPanel];
     }
@@ -128,6 +137,7 @@ class WarpedRenderer implements SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const template = this.globals.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
+        template.setMegaStateFlags({ wireframe: this.wireframe })
 
         let offs = template.allocateUniformBuffer(0, 16 + 2*4);
         const sceneParamsMapped = template.mapUniformBufferF32(0);
