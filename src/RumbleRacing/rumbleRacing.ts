@@ -186,14 +186,15 @@ export function processTrackFile(
   const resourceList = getResourceList(track);
 
   for (const res of resourceList.entries) {
+    // Only parse out the resource types we need for rendering
     if (
-      res.typeTag !== "Cact" &&
-      res.typeTag !== "txf " &&
-      res.typeTag !== "txf2" &&
-      res.typeTag !== "obf " &&
-      res.typeTag !== "o3d " &&
-      res.typeTag !== "o3da" &&
-      res.typeTag !== "gmd "
+      res.typeTag !== "Cact" && // Actor data
+      res.typeTag !== "txf " && // Texture data
+      res.typeTag !== "txf2" && // also texture data (same format as txf)
+      res.typeTag !== "obf " && // Raw 3D Model data
+      res.typeTag !== "o3d " && // 3D Object container data (contains OBFs)
+      res.typeTag !== "o3da" && // same as o3d, but an array of o3d entries
+      res.typeTag !== "gmd " // Track/level metadata (light instance locations, etc.)
     ) {
       continue;
     }
@@ -274,8 +275,7 @@ export function processTrackFile(
         break;
       }
       default: {
-        const g = resource as { kind: string; getType: () => string };
-        throw new Error("UNHANDLED ASSET " + g.getType());
+        throw new Error("Unexpected resource kind");
       }
     }
   }

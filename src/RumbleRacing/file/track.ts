@@ -4,13 +4,12 @@ import { SHDR } from "../chunk/shoc/shdr";
 import { decompress } from "../chunk/shoc/decompress";
 import { parseRLst, RLst, ResourceEntry } from "../asset/RLst";
 import { parseActor, Actor } from "../asset/Cact";
-import { parseGenericAsset, GenericAsset } from "../asset/asset";
 import { parseObf, Obf } from "../asset/o3d/obf";
 import { parseO3D, O3D } from "../asset/o3d/o3d";
 import { parseTXF, TXF } from "../asset/txf/TXF";
 import { Gmd, parseGmd } from "../asset/gmd";
 
-export type ParsedAsset = Actor | Obf | O3D | TXF | Gmd | GenericAsset;
+export type ParsedAsset = Actor | Obf | O3D | TXF | Gmd;
 
 export interface TrackFile {
   fileName: string;
@@ -152,6 +151,8 @@ export function getResource(
       return parseTXF(data, header, name);
     }
     default:
-      return parseGenericAsset(data, resource.typeTag.trimEnd(), header);
+      throw new Error(
+        "Attempted to get a resource that is not needed for the scene",
+      );
   }
 }
