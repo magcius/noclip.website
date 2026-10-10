@@ -548,6 +548,17 @@ export function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFor
         throw new Error("whoops");
 }
 
+function convertPixelPSMCT16(pixels: Uint8Array, dstIdx: number, p: number, texa_0: number, texa_1: number): void {
+    // the ps2 doesn't properly interpolate these values, just shifts
+    pixels[dstIdx + 0] = (p & 0x001F) << 3;
+    pixels[dstIdx + 1] = (p & 0x03E0) >>> 2;
+    pixels[dstIdx + 2] = (p & 0x7C00) >>> 7;
+    let alpha = (p >>> 15) ? (texa_1 & 0xFF) : (texa_0 & 0xFF);
+    if ((texa_0 & 0x8000) !== 0 && p === 0)
+        alpha = 0;
+    pixels[dstIdx + 3] = Math.min(0xFF, 2*alpha);
+}
+
 export function gsMemoryMapReadImagePSMT4_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, csa: number, alphaReg: number) {
     let dstIdx = 0;
 
@@ -564,6 +575,25 @@ export function gsMemoryMapReadImagePSMT4_PSMCT32(pixels: Uint8Array, map: GSMem
             pixels[dstIdx + 2] = map.data[p + 0x02];
             const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
+
+            dstIdx += 0x04;
+        }
+    }
+}
+
+export function gsMemoryMapReadImagePSMT4_PSMCT16(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, csa: number, texa_0 = 0x80, texa_1 = 0x80) {
+    let dstIdx = 0;
+
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMT4(dbp, dbw, x, y);
+            const clutIndex = (map.data[addr >>> 1] >> ((addr & 0x01) << 2)) & 0x0F;
+
+            const cy = ((clutIndex >>> 3) & 0x1) + (csa & 0xE);
+            const cx = (clutIndex & 0x07) + ((csa & 0x1) << 3);
+            const caddr = getPixelAddressPSMCT16(cbp, 1, cx, cy);
+            const p = map.data[caddr + 0] | (map.data[caddr + 1] << 8)
+            convertPixelPSMCT16(pixels, dstIdx, p, texa_0, texa_1);
 
             dstIdx += 0x04;
         }
@@ -590,6 +620,29 @@ export function gsMemoryMapReadImagePSMT8_PSMCT32(pixels: Uint8Array, map: GSMem
             pixels[dstIdx + 2] = map.data[p + 0x02];
             const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
+
+            dstIdx += 0x04;
+        }
+    }
+}
+
+export function gsMemoryMapReadImagePSMT8_PSMCT16(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, texa_0 = 0x80, texa_1 = 0x80) {
+    let dstIdx = 0;
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMT8(dbp, dbw, x, y);
+            const clutIndex = map.data[addr];
+
+            let cy = (clutIndex & 0xE0) >>> 4;
+            if (clutIndex & 0x08)
+                cy++;
+            let cx = clutIndex & 0x07;
+            if (clutIndex & 0x10)
+                cx += 0x08;
+
+            const caddr = getPixelAddressPSMCT16(cbp, 1, cx, cy);
+            const p = map.data[caddr + 0] | (map.data[caddr + 1] << 8)
+            convertPixelPSMCT16(pixels, dstIdx, p, texa_0, texa_1);
 
             dstIdx += 0x04;
         }
@@ -671,14 +724,7 @@ export function gsMemoryMapReadImagePSMCT16(pixels: Uint8Array, map: GSMemoryMap
         for (let x = 0; x < rrw; x++) {
             const addr = getPixelAddressPSMCT16(dbp, dbw, x, y);
             const p = map.data[addr + 0] | (map.data[addr + 1] << 8);
-            // the ps2 doesn't properly interpolate these values, just shifts
-            pixels[dstIdx + 0] = (p & 0x001F) << 3;
-            pixels[dstIdx + 1] = (p & 0x03E0) << 3;
-            pixels[dstIdx + 2] = (p & 0x7C00) << 3;
-            let alpha = (p >>> 15) ? (texa_0 & 0xFF) : (texa_1 & 0xFF);
-            if ((texa_0 & 0x8000) !== 0 && p === 0)
-                alpha = 0;
-            pixels[dstIdx + 3] = Math.min(0xFF, 2*alpha);
+            convertPixelPSMCT16(pixels, dstIdx, p, texa_0, texa_1);
 
             dstIdx += 0x04;
         }
