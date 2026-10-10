@@ -121,7 +121,10 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
           if (vert.color !== null) hasVertexColors = true;
         }
 
+        // isFlipped helps us reset the direction each triangle strip is facing as well as unwind the strip correctly
         let isFlipped = false;
+        // We can ignore the first two verts because they are starting the position of the triangle strip
+        // and will never have their ADC bit set
         for (let i = 2; i < strip.vertices.length; i++) {
           if (strip.vertices[i].adcBitSet) {
             if (!strip.vertices[i - 1].adcBitSet) {
