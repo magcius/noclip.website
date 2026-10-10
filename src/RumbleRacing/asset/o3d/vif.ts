@@ -226,6 +226,11 @@ export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
               }
               break;
             }
+            default: {
+              throw new Error(
+                `Unexpected VIF unpack format: ${info.unpackFormat}`,
+              );
+            }
           }
 
           cmd.unpack = unpack;
