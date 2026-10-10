@@ -906,7 +906,6 @@ export const sceneGroup: SceneGroup = {
       textureIds: new Set([3120]), // tornado clouds
     }),
   ],
-  hidden: !IS_DEVELOPMENT,
 };
 
 interface RumbleRacingShared {
