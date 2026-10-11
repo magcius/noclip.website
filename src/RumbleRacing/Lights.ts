@@ -8,42 +8,39 @@ const HALO_SCALE = 0.4;
 const HALO_HALF_WIDTH = 0.015625;
 const RING_SHAPE = GlowShape.Ring32;
 
-export function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
-  const center = vec3.scale(vec3.create(), light.position, scale);
-  const radius = light.radius * scale;
-
+export function buildGlowDefs(light: GlowLight): GlowDef[] {
   const colorA = glowColorFromRGBA32(light.colorA);
   const colorB = glowColorFromRGBA32(light.colorB);
   const defs: GlowDef[] = [];
 
   if (light.core)
     defs.push({
-      center,
+      center: light.position,
       colorA,
       colorB,
       radiusA: 0.0,
-      radiusB: CORE_SCALE * radius * light.core,
+      radiusB: CORE_SCALE * light.radius * light.core,
       angle: 0.0,
       shape: RING_SHAPE,
     });
 
   if (light.star)
     defs.push({
-      center,
+      center: light.position,
       colorA,
       colorB,
-      radiusA: radius,
-      radiusB: STAR_OUTER_SCALE * radius,
+      radiusA: light.radius,
+      radiusB: STAR_OUTER_SCALE * light.radius,
       angle: 0.0,
       shape: GlowShape.Star1 + (light.star - 1),
     });
 
   if (light.halo) {
-    const ring = HALO_SCALE * radius * light.halo;
-    const width = HALO_HALF_WIDTH * scale;
+    const ring = HALO_SCALE * light.radius * light.halo;
+    const width = HALO_HALF_WIDTH;
     for (const outer of [ring + width, ring - width])
       defs.push({
-        center,
+        center: light.position,
         colorA,
         colorB,
         radiusA: ring,

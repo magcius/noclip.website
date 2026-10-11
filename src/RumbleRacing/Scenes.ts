@@ -60,9 +60,9 @@ import {
   glowColorFromRGBA32,
 } from "./Glow";
 import { buildGlowDefs } from "./Lights";
+import { CameraController } from "../Camera";
 
 const pathBase = `RumbleRacing`;
-const GLOBAL_SCALE = 300.0; // this feels the best
 const SOLID_PASS_ALPHA_REF = 0.99;
 
 const POWERUP_SPIN_RATE = Math.PI / 2.0;
@@ -135,10 +135,7 @@ class RumbleRacingScene implements SceneGfx {
     this.setActorTransforms();
 
     for (const actor of this.trackFile.actors) {
-      this.actorMatrices.set(
-        actor.resourceIndex,
-        buildActorMatrix(actor, GLOBAL_SCALE),
-      );
+      this.actorMatrices.set(actor.resourceIndex, buildActorMatrix(actor));
     }
 
     this.buildTrackGroups(cache);
@@ -164,7 +161,7 @@ class RumbleRacingScene implements SceneGfx {
 
     if (this.trackFile.lights !== null)
       this.trackLightGlows = this.trackFile.lights.glows.flatMap((x) =>
-        buildGlowDefs(x, GLOBAL_SCALE),
+        buildGlowDefs(x),
       );
 
     if (this.trackLightGlows.length > 0)
@@ -377,11 +374,6 @@ class RumbleRacingScene implements SceneGfx {
     template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
     const trackMatrix = mat4.create();
-    mat4.scale(trackMatrix, trackMatrix, [
-      GLOBAL_SCALE,
-      GLOBAL_SCALE,
-      GLOBAL_SCALE,
-    ]);
 
     for (const group of this.trackGroups) {
       if (!group.visible) continue;
@@ -429,9 +421,9 @@ class RumbleRacingScene implements SceneGfx {
 
     const innerRadius = innerSphere?.radius ?? 0.0;
     const radius =
-      (shellSphere !== null
+      shellSphere !== null
         ? POWERUP_GLOW_RADIUS_SCALE * Math.max(innerRadius, shellSphere.radius)
-        : innerRadius) * GLOBAL_SCALE;
+        : innerRadius;
 
     for (const actor of this.trackFile.actors) {
       if (actor.actorType !== ActorType.PowerUp) continue;
@@ -577,7 +569,13 @@ class RumbleRacingScene implements SceneGfx {
     }
   }
 
+  public adjustCameraController(c: CameraController) {
+    c.setSceneMoveSpeedMult(1 / 300);
+  }
+
   public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+    viewerInput.camera.setClipPlanes(0.1);
+
     this.updateAnimations(viewerInput);
 
     this.renderHelper.debugDraw.beginFrame(
@@ -746,7 +744,7 @@ class RumbleRacingScene implements SceneGfx {
   }
 }
 
-function buildActorMatrix(actor: ActorData, globalScale: number): mat4 {
+function buildActorMatrix(actor: ActorData): mat4 {
   const m = mat4.create();
 
   if (actor.transform) {
@@ -767,18 +765,14 @@ function buildActorMatrix(actor: ActorData, globalScale: number): mat4 {
     m[10] = t[2][2];
     m[11] = 0.0;
 
-    m[12] = t[3][0] * globalScale;
-    m[13] = t[3][1] * globalScale;
-    m[14] = t[3][2] * globalScale;
+    m[12] = t[3][0];
+    m[13] = t[3][1];
+    m[14] = t[3][2];
     m[15] = 1.0;
-
-    mat4.scale(m, m, [globalScale, globalScale, globalScale]);
 
     return m;
   }
 
-  // Fallback if no transform exists
-  mat4.scale(m, m, [globalScale, globalScale, globalScale]);
   return m;
 }
 
