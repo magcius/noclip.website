@@ -37,18 +37,6 @@ export interface UnpackData {
   v4_8: V4_8Entry[];
 }
 
-export interface VifCommand {
-  kind: VifCmd;
-  opcode: number;
-  num: number;
-  immediate: number;
-  cycle?: number;
-  mask?: number;
-  strow?: [number, number, number, number];
-  direct?: ArrayBufferSlice[];
-  unpack?: UnpackData;
-}
-
 interface UnpackInfo {
   address: number;
   unpackFormat: VifUnpackFormat;
@@ -67,12 +55,12 @@ function getUnpackInfo(command: number, immediate: number): UnpackInfo {
   };
 }
 
-export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
+export function parseVif(payload: ArrayBufferSlice): UnpackData[] {
   if (payload.byteLength < 8)
     throw new Error("ELDA payload too small for VIF data");
   const data = payload.subarray(8);
   const view = data.createDataView();
-  const commands: VifCommand[] = [];
+  const unpackData: UnpackData[] = [];
   let idx = 0;
   const dataLen = data.byteLength;
 
@@ -84,69 +72,36 @@ export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
     const immediate = view.getUint16(idx + 0, true);
     idx += 4;
 
-    const cmd: VifCommand = {
-      kind: VifCmd.NOP,
-      opcode: command,
-      num,
-      immediate,
-    };
-
     switch (command as VifCmd) {
       case VifCmd.NOP:
-        break;
-
       case VifCmd.STCYCL:
-        cmd.kind = VifCmd.STCYCL;
-        cmd.cycle = immediate;
-        break;
-
       case VifCmd.FLUSHE:
-        cmd.kind = VifCmd.FLUSHE;
-        break;
-
       case VifCmd.MSCNT:
-        cmd.kind = VifCmd.MSCNT;
         break;
 
       case VifCmd.STMASK:
-        cmd.kind = VifCmd.STMASK;
-        if (idx + 4 > dataLen) throw new Error("unexpected EOF reading MASK");
-        cmd.mask = view.getUint32(idx, true);
         idx += 4;
         break;
 
       case VifCmd.STROW:
-        cmd.kind = VifCmd.STROW;
-        if (idx + 16 > dataLen) throw new Error("unexpected EOF reading STROW");
-        cmd.strow = [
-          view.getUint32(idx, true),
-          view.getUint32(idx + 4, true),
-          view.getUint32(idx + 8, true),
-          view.getUint32(idx + 12, true),
-        ];
         idx += 16;
         break;
 
       case VifCmd.DIRECT: {
-        cmd.kind = VifCmd.DIRECT;
         if (immediate === 0)
           throw new Error("DIRECT immediate=0 is not implemented");
         const quadCount = immediate;
         const neededBytes = quadCount * 16;
         if (idx + neededBytes > dataLen)
           throw new Error("unexpected EOF reading DIRECT");
-        const quads: ArrayBufferSlice[] = [];
         for (let i = 0; i < quadCount; i++) {
-          quads.push(data.subarray(idx, 16));
           idx += 16;
         }
-        cmd.direct = quads;
         break;
       }
 
       default:
         if ((command & VifCmd.UNPACK_MASK) === VifCmd.UNPACK_MASK) {
-          cmd.kind = VifCmd.UNPACK_MASK;
           const info = getUnpackInfo(command, immediate);
           const count = num;
           const unpack: UnpackData = {
@@ -233,16 +188,14 @@ export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
             }
           }
 
-          cmd.unpack = unpack;
+          unpackData.push(unpack);
         } else {
           throw new Error(
             `unhandled VIF command 0x${command.toString(16).padStart(2, "0")} at offset ${idx - 4}`,
           );
         }
     }
-
-    commands.push(cmd);
   }
 
-  return commands;
+  return unpackData;
 }

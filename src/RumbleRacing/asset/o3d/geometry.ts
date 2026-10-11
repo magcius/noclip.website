@@ -1,8 +1,8 @@
 import { vec2, vec3 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../../../Color";
 import { GSRegister, GsPrimitiveType } from "../../../Common/PS2/GS";
-import { VifCmd, VifUnpackFormat } from "../../../Common/PS2/VIF";
-import { VifCommand, UnpackData } from "./vif";
+import { VifUnpackFormat } from "../../../Common/PS2/VIF";
+import { UnpackData } from "./vif";
 
 export const enum BlendMode {
   None,
@@ -93,7 +93,7 @@ export interface TextureMeta {
   textureEntries: TextureEntry[];
 }
 
-function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
+function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
   const result: BufferChunk[] = [];
   const gs: GSState = {
     alphaBlendEnabled: false,
@@ -101,37 +101,37 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
   };
   let i = 0;
 
-  while (i < filtered.length) {
+  while (i < unpackData.length) {
     if (
-      i + 1 < filtered.length &&
-      filtered[i].unpack?.type === VifUnpackFormat.V4_32 &&
-      filtered[i + 1].unpack?.type === VifUnpackFormat.V4_32
+      i + 1 < unpackData.length &&
+      unpackData[i].type === VifUnpackFormat.V4_32 &&
+      unpackData[i + 1].type === VifUnpackFormat.V4_32
     ) {
-      const bufHeader = filtered[i].unpack!.v4_32.map((e) => ({
+      const bufHeader = unpackData[i].v4_32.map((e) => ({
         v1: e.v1,
         v2: e.v2,
         lastOffset: e.offset,
       }));
-      applyGSRegisters(filtered[i].unpack!, gs);
+      applyGSRegisters(unpackData[i], gs);
       i++;
 
       const strips: StripChunk[] = [];
 
-      while (i < filtered.length) {
+      while (i < unpackData.length) {
         if (
-          i + 1 < filtered.length &&
-          filtered[i].unpack?.type === VifUnpackFormat.V4_32 &&
-          filtered[i + 1].unpack?.type === VifUnpackFormat.V4_32
+          i + 1 < unpackData.length &&
+          unpackData[i].type === VifUnpackFormat.V4_32 &&
+          unpackData[i + 1].type === VifUnpackFormat.V4_32
         ) {
           break;
         }
 
-        if (filtered[i].unpack?.type !== VifUnpackFormat.V4_32) {
+        if (unpackData[i].type !== VifUnpackFormat.V4_32) {
           throw new Error(`expected strip header at index ${i}`);
         }
 
-        const gifEntries = filtered[i].unpack!.v4_32;
-        applyGSRegisters(filtered[i].unpack!, gs);
+        const gifEntries = unpackData[i].v4_32;
+        applyGSRegisters(unpackData[i], gs);
         const sChunk: StripChunk = {
           gifTagV1: gifEntries.length > 0 ? gifEntries[0].v1 : 0,
           gifTagV2: gifEntries.length > 0 ? gifEntries[0].v2 : 0,
@@ -141,13 +141,13 @@ function getBufferChunks(filtered: VifCommand[]): BufferChunk[] {
         i++;
 
         while (
-          i < filtered.length &&
-          filtered[i].unpack?.type !== VifUnpackFormat.V4_32
+          i < unpackData.length &&
+          unpackData[i].type !== VifUnpackFormat.V4_32
         ) {
           const tripl: UnpackData[] = [];
-          for (let j = 0; j < 3 && i < filtered.length; j++) {
-            if (filtered[i].unpack?.type === VifUnpackFormat.V4_32) break;
-            tripl.push(filtered[i].unpack!);
+          for (let j = 0; j < 3 && i < unpackData.length; j++) {
+            if (unpackData[i].type === VifUnpackFormat.V4_32) break;
+            tripl.push(unpackData[i]);
             i++;
           }
           if (tripl.length > 2) {
@@ -183,11 +183,10 @@ function findTextureId(textures: TextureMeta, dataAddress: number): number {
 }
 
 export function getGeometry(
-  commandStream: VifCommand[],
+  unpackStream: UnpackData[],
   textures: TextureMeta,
 ): Geometry {
-  const filtered = commandStream.filter((c) => c.kind === VifCmd.UNPACK_MASK);
-  const chunks = getBufferChunks(filtered);
+  const chunks = getBufferChunks(unpackStream);
   const geometry: Geometry = { buffers: [] };
 
   for (const bChunk of chunks) {

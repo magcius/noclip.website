@@ -81,8 +81,8 @@ function buildTree(
     raw.elda,
   );
 
-  const vifCommands = eldaParseVif(raw.elda);
-  node.geometry = getGeometry(vifCommands, node.metadata.textureMetadata);
+  const vifUnpackCommands = eldaParseVif(raw.elda);
+  node.geometry = getGeometry(vifUnpackCommands, node.metadata.textureMetadata);
 
   let nodeCount = 1;
 

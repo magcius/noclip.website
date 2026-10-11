@@ -1,7 +1,7 @@
 import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import { readString } from "../../../util";
 import { AssetChunk } from "../chunk";
-import { parseVif, VifCommand } from "./vif";
+import { parseVif, UnpackData } from "./vif";
 
 export interface ELHE_Header {
   raw: AssetChunk;
@@ -49,7 +49,7 @@ export function parseELDA(chunk: AssetChunk): ELDA_Data {
   return { raw: chunk };
 }
 
-export function eldaParseVif(elda: ELDA_Data): VifCommand[] {
+export function eldaParseVif(elda: ELDA_Data): UnpackData[] {
   return parseVif(elda.raw.payload);
 }
 
