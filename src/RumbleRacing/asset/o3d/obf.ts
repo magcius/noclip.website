@@ -5,9 +5,9 @@ import {
   ELHE_Header,
   ELTL_TextureList,
   ELDA_Data,
-  eldaParseVif,
 } from "./chunk";
 import { getGeometry, Geometry, TextureMeta } from "./geometry";
+import { parseVif } from "./vif";
 
 export interface NodeMetadata {
   x: number;
@@ -81,7 +81,7 @@ function buildTree(
     raw.elda,
   );
 
-  const vifUnpackCommands = eldaParseVif(raw.elda);
+  const vifUnpackCommands = parseVif(raw.elda.raw.payload);
   node.geometry = getGeometry(vifUnpackCommands, node.metadata.textureMetadata);
 
   let nodeCount = 1;

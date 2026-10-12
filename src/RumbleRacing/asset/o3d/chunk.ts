@@ -1,7 +1,6 @@
 import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import { readString } from "../../../util";
 import { AssetChunk } from "../chunk";
-import { parseVif, UnpackData } from "./vif";
 
 export interface ELHE_Header {
   raw: AssetChunk;
@@ -47,10 +46,6 @@ export function parseELTL(chunk: AssetChunk): ELTL_TextureList {
 
 export function parseELDA(chunk: AssetChunk): ELDA_Data {
   return { raw: chunk };
-}
-
-export function eldaParseVif(elda: ELDA_Data): UnpackData[] {
-  return parseVif(elda.raw.payload);
 }
 
 export function parseObfChunks(data: ArrayBufferSlice): ObfChunk[] {
