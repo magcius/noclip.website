@@ -152,6 +152,12 @@ function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
       };
       i++;
 
+      // Running into an unpack of V4_32 would signify the next GIF header/end of model data triples
+      // so while we are not processing a V4_32, collect groups of three unpack commands.
+      // the type of the underlying unpack data triple as a set (A, B, C) determines
+      // how the data is interpreted (A = normals, or B = normals, etc.)
+      // For now we're just collecting groups of three data streams
+      // without yet caring about the semantic meaning
       while (
         i < unpackData.length &&
         unpackData[i].type !== VifUnpackFormat.V4_32
