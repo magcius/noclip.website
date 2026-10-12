@@ -2,7 +2,8 @@ import { vec2, vec3 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../../../Color";
 import { GSRegister, GsPrimitiveType } from "../../../Common/PS2/GS";
 import { VifUnpackFormat } from "../../../Common/PS2/VIF";
-import { UnpackData } from "./vif";
+import { UnpackData, V4_32 } from "./vif";
+import { assert } from "../../../util";
 
 export const enum BlendMode {
   None,
@@ -67,8 +68,8 @@ function decodeAlphaRegister(value: number): BlendMode {
   return b === 2 ? BlendMode.Additive : BlendMode.SourceOver;
 }
 
-function applyGSRegisters(unpack: UnpackData, state: GSState): void {
-  for (const entry of unpack.v4_32) {
+function applyGSRegisters(unpack: V4_32, state: GSState): void {
+  for (const entry of unpack.data) {
     if (entry.v3 >>> 8 !== 0 || entry.v4 !== 0) continue;
 
     switch (entry.v3 & 0xff) {
@@ -93,6 +94,9 @@ export interface TextureMeta {
   textureEntries: TextureEntry[];
 }
 
+// This whole function is kind of ugly, directly translated from the original imperative Go code
+// It consumes sequences of unpack commands and collects all the data up in an easier to use object
+// which represents a portion of the model that has a specific texture and GIF tag data.
 function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
   const result: BufferChunk[] = [];
   const gs: GSState = {
@@ -102,65 +106,70 @@ function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
   let i = 0;
 
   while (i < unpackData.length) {
-    if (
-      i + 1 < unpackData.length &&
-      unpackData[i].type === VifUnpackFormat.V4_32 &&
-      unpackData[i + 1].type === VifUnpackFormat.V4_32
-    ) {
-      const bufHeader = unpackData[i].v4_32.map((e) => ({
-        v1: e.v1,
-        v2: e.v2,
-        lastOffset: e.offset,
-      }));
-      applyGSRegisters(unpackData[i], gs);
-      i++;
+    const headerA = unpackData[i];
+    const headerB = unpackData[i + 1];
 
-      const strips: StripChunk[] = [];
+    // The first and second header data must be of type V4_32
+    // This should never fail with the release data
+    assert(i + 1 < unpackData.length, "not enough data to unpack");
+    assert(
+      headerA.type === VifUnpackFormat.V4_32 &&
+        headerB.type === VifUnpackFormat.V4_32,
+      "GIF headers are not the correct unpack format",
+    );
 
-      while (i < unpackData.length) {
-        if (
-          i + 1 < unpackData.length &&
-          unpackData[i].type === VifUnpackFormat.V4_32 &&
-          unpackData[i + 1].type === VifUnpackFormat.V4_32
-        ) {
-          break;
-        }
+    const bufHeader = headerA.data.map((e) => ({
+      v1: e.v1,
+      v2: e.v2,
+      lastOffset: e.offset,
+    }));
+    applyGSRegisters(headerA, gs);
+    i++;
 
-        if (unpackData[i].type !== VifUnpackFormat.V4_32) {
-          throw new Error(`expected strip header at index ${i}`);
-        }
+    const strips: StripChunk[] = [];
 
-        const gifEntries = unpackData[i].v4_32;
-        applyGSRegisters(unpackData[i], gs);
-        const sChunk: StripChunk = {
-          gifTagV1: gifEntries.length > 0 ? gifEntries[0].v1 : 0,
-          gifTagV2: gifEntries.length > 0 ? gifEntries[0].v2 : 0,
-          blendMode: gs.alphaBlendEnabled ? gs.alphaBlendMode : BlendMode.None,
-          dataTriples: [],
-        };
-        i++;
-
-        while (
-          i < unpackData.length &&
-          unpackData[i].type !== VifUnpackFormat.V4_32
-        ) {
-          const tripl: UnpackData[] = [];
-          for (let j = 0; j < 3 && i < unpackData.length; j++) {
-            if (unpackData[i].type === VifUnpackFormat.V4_32) break;
-            tripl.push(unpackData[i]);
-            i++;
-          }
-          if (tripl.length > 2) {
-            sChunk.dataTriples.push({ a: tripl[0], b: tripl[1], c: tripl[2] });
-          }
-        }
-        strips.push(sChunk);
+    while (i < unpackData.length) {
+      let gifData = unpackData[i];
+      let subsequentData = unpackData[i + 1];
+      if (
+        i + 1 < unpackData.length &&
+        gifData.type === VifUnpackFormat.V4_32 &&
+        subsequentData.type === VifUnpackFormat.V4_32
+      ) {
+        break;
       }
 
-      result.push({ bufferHeader: bufHeader, strips });
-    } else {
+      if (gifData.type !== VifUnpackFormat.V4_32) {
+        throw new Error(`expected strip header at index ${i}`);
+      }
+
+      applyGSRegisters(gifData, gs);
+      const sChunk: StripChunk = {
+        gifTagV1: gifData.data.length > 0 ? gifData.data[0].v1 : 0,
+        gifTagV2: gifData.data.length > 0 ? gifData.data[0].v2 : 0,
+        blendMode: gs.alphaBlendEnabled ? gs.alphaBlendMode : BlendMode.None,
+        dataTriples: [],
+      };
       i++;
+
+      while (
+        i < unpackData.length &&
+        unpackData[i].type !== VifUnpackFormat.V4_32
+      ) {
+        const tripl: UnpackData[] = [];
+        for (let j = 0; j < 3 && i < unpackData.length; j++) {
+          if (unpackData[i].type === VifUnpackFormat.V4_32) break;
+          tripl.push(unpackData[i]);
+          i++;
+        }
+        if (tripl.length > 2) {
+          sChunk.dataTriples.push({ a: tripl[0], b: tripl[1], c: tripl[2] });
+        }
+      }
+      strips.push(sChunk);
     }
+
+    result.push({ bufferHeader: bufHeader, strips });
   }
 
   return result;
@@ -215,21 +224,21 @@ export function getGeometry(
           cmdB.type === VifUnpackFormat.V3_32 && // B = vertices
           cmdC.type === VifUnpackFormat.V2_32 // C = uvs
         ) {
-          for (let j = 0; j < cmdA.v3_32.length; j++) {
+          for (let j = 0; j < cmdA.data.length; j++) {
             strip.vertices.push({
               normal: vec3.fromValues(
-                cmdA.v3_32[j].v1,
-                cmdA.v3_32[j].v2,
-                cmdA.v3_32[j].v3,
+                cmdA.data[j].v1,
+                cmdA.data[j].v2,
+                cmdA.data[j].v3,
               ),
               color: null,
-              adcBitSet: cmdA.v3_32[j].adcBitSet,
+              adcBitSet: cmdA.data[j].adcBitSet,
               position: vec3.fromValues(
-                cmdB.v3_32[j].v1,
-                cmdB.v3_32[j].v2,
-                cmdB.v3_32[j].v3,
+                cmdB.data[j].v1,
+                cmdB.data[j].v2,
+                cmdB.data[j].v3,
               ),
-              uv: vec2.fromValues(cmdC.v2_32[j].v1, cmdC.v2_32[j].v2),
+              uv: vec2.fromValues(cmdC.data[j].v1, cmdC.data[j].v2),
             });
           }
         } else if (
@@ -237,16 +246,16 @@ export function getGeometry(
           cmdB.type === VifUnpackFormat.V2_32 && // B = uvs
           cmdC.type === VifUnpackFormat.V4_8 // C = RGBA vertex colors
         ) {
-          for (let j = 0; j < cmdA.v3_32.length; j++) {
-            const rgba = cmdC.v4_8[j];
+          for (let j = 0; j < cmdA.data.length; j++) {
+            const rgba = cmdC.data[j];
 
             strip.vertices.push({
               position: vec3.fromValues(
-                cmdA.v3_32[j].v1,
-                cmdA.v3_32[j].v2,
-                cmdA.v3_32[j].v3,
+                cmdA.data[j].v1,
+                cmdA.data[j].v2,
+                cmdA.data[j].v3,
               ),
-              uv: vec2.fromValues(cmdB.v2_32[j].v1, cmdB.v2_32[j].v2),
+              uv: vec2.fromValues(cmdB.data[j].v1, cmdB.data[j].v2),
               normal: null,
               color: colorNewFromRGBA(
                 rgba.v1 / 0x80,
