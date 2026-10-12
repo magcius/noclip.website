@@ -111,11 +111,11 @@ function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
 
     // The first and second header data must be of type V4_32
     // This should never fail with the release data
-    assert(i + 1 < unpackData.length, "not enough data to unpack");
+    assert(i + 1 < unpackData.length, "there is enough data to unpack");
     assert(
       headerA.type === VifUnpackFormat.V4_32 &&
         headerB.type === VifUnpackFormat.V4_32,
-      "GIF headers are not the correct unpack format",
+      "GIF headers are the correct unpack format",
     );
 
     const bufHeader = headerA.data.map((e) => ({

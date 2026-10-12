@@ -6,8 +6,6 @@ import { parseChunks } from "../chunk";
 import { parseObf, Obf } from "./obf";
 
 export interface GmdBounds {
-  boxCenter: vec3;
-  boxHalfExtents: vec3;
   sphereCenter: vec3;
   sphereRadius: number;
 }
@@ -29,8 +27,6 @@ function parseGmdBounds(data: ArrayBufferSlice): GmdBounds {
   const view = data.createDataView();
 
   return {
-    boxCenter: readVec3(view, 0x30),
-    boxHalfExtents: readVec3(view, 0x40),
     sphereCenter: readVec3(view, 0x50),
     sphereRadius: view.getFloat32(0x60, true),
   };

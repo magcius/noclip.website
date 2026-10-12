@@ -11,6 +11,7 @@ import { TrackLightData } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assert } from "../util";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
@@ -45,7 +46,7 @@ export interface O3DData {
   resourceIndex: number;
   isAnimated: boolean;
   obfs: ObfData[];
-  boundingSphere: BoundingSphere | null;
+  boundingSphere: BoundingSphere;
 }
 
 export interface BoundingSphere {
@@ -244,16 +245,17 @@ export function processTrackFile(
           name: `obf_${idx}`,
           rootNode: buildObfNode(obf.rootNode),
         }));
-        const bounds = resource.gmds[0]?.bounds ?? null;
+        assert(resource.gmds.length > 0, "O3D model has header(s)");
+        const bounds = resource.gmds[0].bounds;
         out.o3ds.push({
           name: res.resourceName,
           resourceIndex: res.resourceIndex,
           isAnimated: resource.isAnimated,
           obfs,
-          boundingSphere:
-            bounds !== null
-              ? { center: bounds.sphereCenter, radius: bounds.sphereRadius }
-              : null,
+          boundingSphere: {
+            center: bounds.sphereCenter,
+            radius: bounds.sphereRadius,
+          },
         });
         break;
       }

@@ -404,8 +404,11 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private buildPowerUps(): void {
-    const findModel = (name: string) =>
-      this.trackFile.o3ds.find((o3d) => o3d.name.includes(name));
+    const findModel = (name: string) => {
+      const model = this.trackFile.o3ds.find((o3d) => o3d.name.includes(name));
+      if (!model) throw new Error("Model not found: " + name);
+      return model;
+    };
 
     const model = findModel("PU_INNER");
     const shell = findModel("PU_OUTER");
@@ -413,17 +416,14 @@ class RumbleRacingScene implements SceneGfx {
     this.powerUpInnerIndex = model?.resourceIndex;
     this.powerUpOuterIndex = shell?.resourceIndex;
 
-    const innerSphere = model?.boundingSphere ?? null;
-    const shellSphere = shell?.boundingSphere ?? null;
+    const innerSphere = model.boundingSphere;
+    const shellSphere = shell.boundingSphere;
 
-    if (innerSphere !== null)
-      vec3.copy(this.powerUpGlowOffset, innerSphere.center);
+    vec3.copy(this.powerUpGlowOffset, innerSphere.center);
 
-    const innerRadius = innerSphere?.radius ?? 0.0;
     const radius =
-      shellSphere !== null
-        ? POWERUP_GLOW_RADIUS_SCALE * Math.max(innerRadius, shellSphere.radius)
-        : innerRadius;
+      POWERUP_GLOW_RADIUS_SCALE *
+      Math.max(innerSphere.radius, shellSphere.radius);
 
     for (const actor of this.trackFile.actors) {
       if (actor.actorType !== ActorType.PowerUp) continue;
