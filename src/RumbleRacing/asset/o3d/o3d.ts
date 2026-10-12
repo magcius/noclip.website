@@ -5,11 +5,6 @@ import { readFourCC } from "../../helpers/fourCC";
 import { parseChunks } from "../chunk";
 import { parseObf, Obf } from "./obf";
 
-const GMD_BOX_CENTER = 0x30;
-const GMD_BOX_HALF_EXTENTS = 0x40;
-const GMD_SPHERE_CENTER = 0x50;
-const GMD_SPHERE_RADIUS = 0x60;
-
 export interface GmdBounds {
   boxCenter: vec3;
   boxHalfExtents: vec3;
@@ -19,7 +14,7 @@ export interface GmdBounds {
 
 export interface Gmd {
   rawData: ArrayBufferSlice;
-  bounds: GmdBounds | null;
+  bounds: GmdBounds;
 }
 
 function readVec3(view: DataView, offset: number): vec3 {
@@ -30,16 +25,14 @@ function readVec3(view: DataView, offset: number): vec3 {
   );
 }
 
-function parseGmdBounds(data: ArrayBufferSlice): GmdBounds | null {
-  if (data.byteLength < GMD_SPHERE_RADIUS + 4) return null;
-
+function parseGmdBounds(data: ArrayBufferSlice): GmdBounds {
   const view = data.createDataView();
 
   return {
-    boxCenter: readVec3(view, GMD_BOX_CENTER),
-    boxHalfExtents: readVec3(view, GMD_BOX_HALF_EXTENTS),
-    sphereCenter: readVec3(view, GMD_SPHERE_CENTER),
-    sphereRadius: view.getFloat32(GMD_SPHERE_RADIUS, true),
+    boxCenter: readVec3(view, 0x30),
+    boxHalfExtents: readVec3(view, 0x40),
+    sphereCenter: readVec3(view, 0x50),
+    sphereRadius: view.getFloat32(0x60, true),
   };
 }
 
