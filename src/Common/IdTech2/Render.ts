@@ -43,6 +43,13 @@ export class IdTech2Context {
         this.lightmapBytesPerTexel = this.isQuake ? 1 : 3;
         this.enableTextureFiltering = this.isGoldSrc;
     }
+
+    textureFilterMode(): GfxTexFilterMode {
+        return this.enableTextureFiltering
+            ? GfxTexFilterMode.Bilinear
+            : GfxTexFilterMode.Point
+        ;
+    }
 }
 
 export function getMipTexName(buffer: ArrayBufferSlice): string {
@@ -361,6 +368,7 @@ class BSPSurfaceRenderer {
     private gfxProgram: GfxProgram | null = null;
     private sky = false;
     private water = false;
+    private lastFilterMode: GfxTexFilterMode | null = null;
 
     constructor(private context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface) {
         const texName = this.surface.texName;
@@ -391,18 +399,6 @@ class BSPSurfaceRenderer {
             return;
         this.textureMapping[0].gfxTexture = miptex.gfxTexture;
 
-        const mode = context.enableTextureFiltering
-            ? GfxTexFilterMode.Bilinear
-            : GfxTexFilterMode.Point
-        ;
-        this.textureMapping[0].gfxSampler = cache.createSampler({
-            minFilter: mode,
-            magFilter: mode,
-            mipFilter: GfxMipFilterMode.Linear,
-            wrapS: GfxWrapMode.Repeat,
-            wrapT: GfxWrapMode.Repeat,
-        });
-
         const program = new GoldSrcProgram();
         program.setDefineBool('USE_LIGHTMAP', !this.sky && !this.water);
         program.setDefineBool('USE_WATER', this.water);
@@ -419,8 +415,25 @@ class BSPSurfaceRenderer {
         return true;
     }
 
+    private updateSampler(cache: GfxRenderCache) {
+        const curMode = this.context.textureFilterMode();
+        if (curMode == this.lastFilterMode) {
+            return;
+        }
+        this.lastFilterMode = curMode;
+
+        this.textureMapping[0].gfxSampler = cache.createSampler({
+            minFilter: curMode,
+            magFilter: curMode,
+            mipFilter: GfxMipFilterMode.Linear,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+        });
+    }
+
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
+        cache: GfxRenderCache,
         lightmapManager: LightmapManager,
         view: View,
         modelMatrix: ReadonlyMat4,
@@ -428,6 +441,8 @@ class BSPSurfaceRenderer {
     ): void {
         if (!this.isVisible() || this.gfxProgram === null)
             return;
+
+        this.updateSampler(cache);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -468,7 +483,7 @@ class BSPModelRenderer {
     public surfaceRenderers: BSPSurfaceRenderer[] = [];
     public isTrigger: boolean = false;
 
-    constructor(private context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager) {
+    constructor(private context: IdTech2Context, private cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager) {
         for (let i = 0; i < model.surfaces.length; i++) {
             const surface = surfaces[model.surfaces[i]];
             this.surfaceRenderers.push(new BSPSurfaceRenderer(context, cache, textureCache, surface));
@@ -512,6 +527,7 @@ class BSPModelRenderer {
         for (let i = 0; i < this.surfaceRenderers.length; i++) {
             this.surfaceRenderers[i].prepareToRender(
                 renderInstManager,
+                this.cache,
                 this.lightmapManager,
                 view,
                 entity.transform,
