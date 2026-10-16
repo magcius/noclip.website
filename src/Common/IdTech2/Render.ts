@@ -88,8 +88,6 @@ export class MIPTEXData {
             pal = buffer.createTypedArray(Uint8Array, palOffs + 0x02);
         }
 
-        const surfaces: HTMLCanvasElement[] = [];
-
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, numLevels));
         device.setResourceName(this.gfxTexture, this.name);
         let mipW = this.width, mipH = this.height;
