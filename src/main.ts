@@ -105,6 +105,7 @@ import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
 import * as Scenes_TopGearRally from './TopGearRally/scenes.js';
 import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
+import * as Scenes_HarvestMoonAWL from './HarvestMoonAWL/Scenes_HarvestMoonAWL.js';
 import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
 import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
 import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
@@ -160,6 +161,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_WiiSports.sceneGroup,
     Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
+    Scenes_HarvestMoonAWL.sceneGroup,
     Scenes_KirbyAirRide.sceneGroup,
     Scenes_LuigisMansion.sceneGroup,
     Scenes_MarioKartDoubleDash.sceneGroup,
