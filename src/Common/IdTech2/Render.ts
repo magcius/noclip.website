@@ -306,7 +306,7 @@ void main() {
     #if defined GAME_GOLDSRC
         // Translucent surfaces are not lightmapped.
         if (u_IsRenderModeTexture + u_IsRenderModeAdditive + u_IsRenderModeColor <= 0.f) {
-            t_Color.rgb *= t_LightmapSample.rgb * 2.0;
+            t_Color.rgb *= t_LightmapSample.rgb * 1.38;
         }
     #else
         t_Color.rgb *= t_LightmapSample.rgb * 2.0;
