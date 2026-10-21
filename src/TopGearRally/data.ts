@@ -1,327 +1,292 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-/**
- * TGR track binary format parser.
- *
- * TGR1 header (32 bytes, little-endian):
- *   +0x00  u32  magic 'TGR1' (0x31524754).
- *   +0x04  u32  version (1).
- *   +0x08  u32  pointerBase.
- *   +0x0C  u32  dataSize.
- *   +0x10  u32  instanceTableOffset.
- *   +0x14  u32  instanceCount.
- *   +0x18  u32  skyboxDLOffset.
- *   +0x1C  u32  dataOffset (32).
- *
- * TGR2 header (48 bytes, little-endian) extends TGR1:
- *   +0x00  u32  magic 'TGR2' (0x32524754).
- *   +0x04-0x1C  same as TGR1 (dataOffset = 0x30).
- *   +0x20  u32  winterPaletteOffset.
- *   +0x24  u32  winterPaletteCount.
- *   +0x28  u32  animTexOffset.
- *   +0x2C  u32  animTexCount.
- *
- * Winter palette override entry (variable size):
- *   +0x00  u32  destOffset (byte offset within track data).
- *   +0x04  u16  size (0x20 for CI4, 0x200 for CI8).
- *   +0x06  u16  padding.
- *   +0x08  data[size].
- *
- * Animated texture channel (variable size):
- *   +0x00  u32  destOffset.
- *   +0x04  u32  texSize.
- *   +0x08  u32  keyframeCount.
- *   Per keyframe: +0x00 u32 timeMs, then texSize bytes of data.
- */
+export const TRACK_INSTANCE_LIGHT_RAMP = 0x0003;
+export const TRACK_INSTANCE_TWO_SIDED = 0x0004;
+export const TRACK_INSTANCE_TRANSLUCENT = 0x0008;
+export const TRACK_INSTANCE_SHELTER = 0x0010;
+export const TRACK_INSTANCE_CLEAR_SKY = 0x0020;
+export const TRACK_INSTANCE_FLAT = 0x0080;
+export const TRACK_INSTANCE_NIGHT_LIT = 0x0100;
+export const TRACK_INSTANCE_RAMPED = 0x0400;
+export const TRACK_INSTANCE_DARK_OR_WET = 0x0800;
+export const TRACK_INSTANCE_UNROTATED = 0x2000;
+export const TRACK_INSTANCE_ARCADE = 0x4000;
 
-/** Single track instance with transform matrix, DL pointer, and flags. */
-export interface TGRTrackInstance {
-    /** 4x4 float matrix (row-major, big-endian in source data). */
+export enum TrackSpecialType {
+    SpinZ = 0,
+    SpinX = 1,
+    SpinY = 2,
+    Airplane = 3,
+    AirplanePathLeft = 4,
+    AirplanePathRight = 5,
+    AirplaneTrigger = 6,
+    Waterfall = 7,
+}
+
+export const TEXTURE_FORMAT_CI4 = 1;
+export const TEXTURE_FORMAT_SNOW_STILL = 0xb;
+export const TEXTURE_ROM_NONE = 0xffffffff;
+
+export interface TGRInstance {
     matrix: Float32Array;
-    /** DL offset within track data (rebased from absolute N64 pointer). */
-    dlOffset: number;
-    /** Instance flags (u16 at instance+0x4C). */
+    displayList: number;
+    groups: number;
+    hidesGroups: number;
     flags: number;
-    /** Original index in the instance table (before filtering). */
-    rawIndex: number;
 }
 
-/** Animation table entry from track header+0x164. */
-export interface TGRAnimEntry {
-    /** Animation type (0-7). */
-    type: number;
-    /** Instance index (types 0-3,7) or pointer (types 4-5). */
-    data: number;
-    /** Speed as float bits (types 0-2), node count (type 4), etc. */
-    params: number;
-}
-
-/** Dual-rail spline path for type 3 (spline follower) animations. */
-export interface TGRSplineData {
-    /** Instance that follows this spline path. */
-    followerInstanceIndex: number;
-    /** Left rail: interleaved x,y,z float triplets in N64 space. */
-    leftRail: Float32Array;
-    /** Right rail: interleaved x,y,z float triplets in N64 space. */
-    rightRail: Float32Array;
-    /** Number of nodes in each rail. */
-    nodeCount: number;
-}
-
-/** Single keyframe within an animated texture channel. */
-export interface TGRAnimTexKeyframe {
-    /** Timestamp in milliseconds within the animation cycle. */
+export interface TGRAnimationFrame {
     time: number;
-    /** Raw N64 texture data for this keyframe. */
-    texData: Uint8Array;
+    imageRom: number;
+    paletteRom: number;
 }
 
-/** Animated texture channel with multiple keyframes. */
-export interface TGRAnimTexChannel {
-    /** Byte offset within track data where texture is written. */
-    destOffset: number;
-    /** Size of each keyframe's texture data in bytes. */
-    texSize: number;
-    /** Keyframes sorted by time. */
-    keyframes: TGRAnimTexKeyframe[];
-}
-
-/** Winter palette override entry (summer/winter texture variant). */
-export interface WinterPaletteOverride {
-    /** Byte offset within track data. */
-    destOffset: number;
-    /** Palette size in bytes (0x20 for CI4, 0x200 for CI8). */
+export interface TGRTexture {
+    image: number;
+    palette: number;
+    paletteRomIndex: number;
+    format: number;
     size: number;
-    /** Raw winter palette bytes. */
-    data: Uint8Array;
+    frames: TGRAnimationFrame[] | null;
 }
 
-/** Parsed track data with all geometry, textures, and animation info. */
+export interface TGRSpecial {
+    target: number;
+    param: number;
+    type: TrackSpecialType;
+}
+
 export interface TGRTrack {
-    /** N64 DRAM base address (typically 0x80025c00). */
     pointerBase: number;
-    /** Raw track data blob (DLs, vertices, textures with summer palettes). */
-    dataBuffer: ArrayBufferSlice;
-    /** Renderable instances with valid DL pointers. */
-    instances: TGRTrackInstance[];
-    /** Skybox display list offset within track data. */
-    skyboxDLOffset: number;
-    /** Winter palette overrides for weather switching. */
-    winterOverrides: WinterPaletteOverride[];
-    /** Animation table entries from track header+0x164. */
-    animEntries: TGRAnimEntry[];
-    /** Spline follower paths parsed from animation entries. */
-    splines: TGRSplineData[];
-    /** Animated texture channels with per-keyframe data. */
-    animTexChannels: TGRAnimTexChannel[];
+    data: ArrayBufferSlice;
+    stream: ArrayBufferSlice;
+    startPosition: [number, number, number];
+    startHeading: number;
+    minZ: number;
+    maxZ: number;
+    skyDisplayList: number;
+    fogColor: [number, number, number];
+    instances: TGRInstance[];
+    gridInstances: Set<number>;
+    surfaces: Uint16Array;
+    vertices: Float32Array;
+    gridTriangles: Uint16Array;
+    gridTriangleStarts: Uint16Array;
+    textures: TGRTexture[];
+    specials: TGRSpecial[];
 }
 
-const TGR1_MAGIC = 0x31524754;
-const TGR2_MAGIC = 0x32524754;
+const TGR3_MAGIC = 0x33524754;
+const HEADER_SIZE = 0x10;
+const GRID_CELLS = 64 * 64;
 
-/**
- * Parse a TGR1/TGR2 track binary into structured data.
- * @param {ArrayBufferSlice} buffer Raw file contents.
- * @returns {TGRTrack} Parsed track data.
- */
-export function parseTGRTrack(buffer: ArrayBufferSlice): TGRTrack {
-    const view = buffer.createDataView();
+const RAY_HEADROOM = 1.5;
+const RAY_CEILING_DEPTH = -1.0;
+const GRID_SIZE = 2048;
 
-    const magic = view.getUint32(0x00, true);
-    if (magic !== TGR1_MAGIC && magic !== TGR2_MAGIC) {
-        throw new Error(`Invalid TGR track magic: 0x${magic.toString(16)}`);
+function pointInTriangle(p: number[], a: number[], b: number[], c: number[], n: number[]): boolean {
+    const side = (e0: number[], e1: number[], q: number[]): number => {
+        const ex = e1[0] - e0[0];
+        const ey = e1[1] - e0[1];
+        const ez = e1[2] - e0[2];
+        const tx = p[0] - q[0];
+        const ty = p[1] - q[1];
+        const tz = p[2] - q[2];
+        return (ey * tz - ez * ty) * n[0] + (ez * tx - ex * tz) * n[1] + (ex * ty - ey * tx) * n[2];
+    };
+    return side(a, b, b) >= 0 && side(b, c, b) >= 0 && side(c, a, a) >= 0;
+}
+
+export function castCameraRay(track: TGRTrack, x: number, y: number, z: number): number {
+    if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) {
+        return 0;
     }
-
-    const isTGR2 = magic === TGR2_MAGIC;
-
-    const pointerBase = view.getUint32(0x08, true);
-    const dataSize = view.getUint32(0x0c, true);
-    const instanceTableOffset = view.getUint32(0x10, true);
-    const instanceCount = view.getUint32(0x14, true);
-    let skyboxDLOffset = view.getUint32(0x18, true);
-    const dataOffset = view.getUint32(0x1c, true);
-
-    // Fallback: if header has no sky offset, read from track data +0x50.
-    if (skyboxDLOffset === 0 && dataOffset + 0x54 <= view.byteLength) {
-        // Big-endian in track data.
-        const skyPtr = view.getUint32(dataOffset + 0x50, false);
-        if (skyPtr >= pointerBase && skyPtr < pointerBase + dataSize) {
-            skyboxDLOffset = skyPtr - pointerBase;
-        }
-    }
-
-    // TGR2 extended header.
-    let winterPaletteOffset = 0;
-    let winterPaletteCount = 0;
-    if (isTGR2) {
-        winterPaletteOffset = view.getUint32(0x20, true);
-        winterPaletteCount = view.getUint32(0x24, true);
-    }
-
-    // Slice out the raw track data.
-    const dataBuffer = buffer.slice(dataOffset, dataOffset + dataSize);
-    const dataView = dataBuffer.createDataView();
-
-    // Parse instances.
-    const instances: TGRTrackInstance[] = [];
-    const INSTANCE_STRIDE = 0x54;
-
-    for (let i = 0; i < instanceCount; i++) {
-        const instOff = instanceTableOffset + i * INSTANCE_STRIDE;
-        if (instOff + INSTANCE_STRIDE > dataSize) {
+    const cell = (x >>> 5) + ((y >>> 5) << 6);
+    const first = track.gridTriangleStarts[cell];
+    const last = track.gridTriangleStarts[cell + 1];
+    let nearest = (track.maxZ - track.minZ) * (track.maxZ - track.minZ) + 1;
+    let nearestCeiling = nearest;
+    let ground = 0;
+    let ceiling = 0;
+    let groundHits = 0;
+    const vertex = (i: number): number[] => [track.vertices[i * 3], track.vertices[i * 3 + 1], track.vertices[i * 3 + 2]];
+    for (let k = first; k < last; k++) {
+        const index = track.gridTriangles[k];
+        if (index === 0) {
             break;
         }
+        const s = track.surfaces;
+        const vertexCount = track.vertices.length / 3;
+        if (index * 4 + 3 >= s.length || s[index * 4] >= vertexCount || s[index * 4 + 1] >= vertexCount || s[index * 4 + 2] >= vertexCount) {
+            continue;
+        }
+        const a = vertex(s[index * 4]);
+        const b = vertex(s[index * 4 + 1]);
+        const c = vertex(s[index * 4 + 2]);
+        const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        const n = [e1[1] * e2[2] - e2[1] * e1[2], e1[2] * e2[0] - e2[2] * e1[0], e1[0] * e2[1] - e2[0] * e1[1]];
+        const length = Math.hypot(n[0], n[1], n[2]);
+        if (length === 0 || n[2] < 0) {
+            continue;
+        }
+        n[0] /= length;
+        n[1] /= length;
+        n[2] /= length;
+        if (n[2] === 0) {
+            continue;
+        }
+        const t = ((a[0] - x) * n[0] + (a[1] - y) * n[1] + (a[2] - 1) * n[2]) / n[2];
+        const hit = [x, y, 1 + t];
+        if (!pointInTriangle(hit, a, b, c, n)) {
+            continue;
+        }
+        let below = z + RAY_HEADROOM - hit[2];
+        if (below >= 0) {
+            groundHits++;
+            if (below < nearest) {
+                nearest = below;
+                ground = s[index * 4 + 3] + 1;
+            }
+        }
+        below -= RAY_HEADROOM;
+        if (below <= 0 && below < nearestCeiling) {
+            ceiling = s[index * 4 + 3] + 1;
+            if (RAY_CEILING_DEPTH < below) {
+                nearestCeiling = below;
+            }
+        }
+    }
+    return groundHits !== 0 ? ground : ceiling;
+}
 
-        // Read 4x4 float matrix (big-endian in N64 data).
+export function parseTGRTrack(buffer: ArrayBufferSlice): TGRTrack {
+    const header = buffer.createDataView();
+    const magic = header.getUint32(0x00, true);
+    if (magic !== TGR3_MAGIC) {
+        throw new Error(`Invalid TGR track magic: 0x${magic.toString(16)}`);
+    }
+    const pointerBase = header.getUint32(0x04, true);
+    const dataSize = header.getUint32(0x08, true);
+    const streamSize = header.getUint32(0x0c, true);
+    const data = buffer.subarray(HEADER_SIZE, dataSize);
+    const stream = buffer.subarray(HEADER_SIZE + dataSize, streamSize);
+    const view = data.createDataView();
+    const offs = (pointer: number): number => pointer - pointerBase;
+
+    const instances: TGRInstance[] = [];
+    const instanceTable = offs(view.getUint32(0x60));
+    const instanceCount = view.getUint32(0x64);
+    for (let i = 0; i < instanceCount; i++) {
+        const o = instanceTable + i * 0x54;
         const matrix = new Float32Array(16);
         for (let j = 0; j < 16; j++) {
-            matrix[j] = dataView.getFloat32(instOff + j * 4, false);
+            matrix[j] = view.getFloat32(o + j * 4);
         }
-
-        // Skip zero-matrix instances (sentinels).
-        if (matrix[0] === 0 && matrix[5] === 0 && matrix[10] === 0) {
-            continue;
-        }
-
-        // Read DL pointer and rebase from absolute N64 address.
-        const dlPtr = dataView.getUint32(instOff + 0x44, false);
-        if (dlPtr < pointerBase || dlPtr >= pointerBase + dataSize) {
-            continue;
-        }
-        const dlOffset = dlPtr - pointerBase;
-
-        // Read flags.
-        const flags = dataView.getUint16(instOff + 0x4c, false);
-
-        instances.push({ matrix, dlOffset, flags, rawIndex: i });
+        instances.push({
+            matrix,
+            displayList: view.getUint32(o + 0x44),
+            groups: view.getUint16(o + 0x48),
+            hidesGroups: view.getUint16(o + 0x4a),
+            flags: view.getUint16(o + 0x4c),
+        });
     }
 
-    // Parse winter palette overrides (TGR2 only).
-    const winterOverrides: WinterPaletteOverride[] = [];
-    if (isTGR2 && winterPaletteCount > 0 && winterPaletteOffset > 0) {
-        let off = winterPaletteOffset;
-        for (let i = 0; i < winterPaletteCount; i++) {
-            if (off + 8 > view.byteLength) {
-                break;
-            }
-            const destOffset = view.getUint32(off, true);
-            const size = view.getUint16(off + 4, true);
-            off += 8;
-            if (off + size > view.byteLength) {
-                break;
-            }
-            const data = buffer.createTypedArray(Uint8Array, off, size);
-            winterOverrides.push({ destOffset, size, data });
-            off += size;
-        }
+    const gridInstances = new Set<number>();
+    const gridList = offs(view.getUint32(0x68));
+    const gridStarts = offs(view.getUint32(0x6c));
+    const first = view.getUint16(gridStarts);
+    const last = view.getUint16(gridStarts + GRID_CELLS * 2);
+    for (let i = first; i < last; i++) {
+        gridInstances.add(view.getUint16(gridList + i * 2));
     }
 
-    // Parse animation entries from track header.
-    const animEntries: TGRAnimEntry[] = [];
-    const ANIM_TABLE_OFFSET = 0x164;
-    const ANIM_COUNT_OFFSET = 0x224;
-    if (ANIM_COUNT_OFFSET + 4 <= dataSize) {
-        const animCount = dataView.getUint32(
-            ANIM_COUNT_OFFSET,
-            false, // Big-endian.
-        );
-        for (let i = 0; i < animCount; i++) {
-            const base = ANIM_TABLE_OFFSET + i * 12;
-            if (base + 12 > dataSize) {
-                break;
-            }
-            const data = dataView.getUint32(base, false);
-            const params = dataView.getUint32(base + 4, false);
-            const type = dataView.getUint8(base + 8);
-            animEntries.push({ type, data, params });
+    const readU16 = (start: number, count: number): Uint16Array => {
+        const out = new Uint16Array(count);
+        for (let i = 0; i < count; i++) {
+            out[i] = view.getUint16(start + i * 2);
+        }
+        return out;
+    };
+    const gridTriangleStarts = readU16(offs(view.getUint32(0x24)), GRID_CELLS + 1);
+    const gridTriangles = readU16(offs(view.getUint32(0x20)), gridTriangleStarts[GRID_CELLS]);
+    let triangleCount = view.getUint32(0x10);
+    for (const index of gridTriangles) {
+        if (index !== 0xffff && index >= triangleCount) {
+            triangleCount = index + 1;
         }
     }
+    const surfaces = readU16(offs(view.getUint32(0x0c)), triangleCount * 4);
+    let vertexCount = 0;
+    for (let i = 0; i < triangleCount; i++) {
+        vertexCount = Math.max(vertexCount, surfaces[i * 4] + 1, surfaces[i * 4 + 1] + 1, surfaces[i * 4 + 2] + 1);
+    }
+    const vertexTable = offs(view.getUint32(0x14));
+    vertexCount = Math.min(vertexCount, Math.floor((data.byteLength - vertexTable) / 12));
+    const vertices = new Float32Array(vertexCount * 3);
+    for (let i = 0; i < vertices.length; i++) {
+        vertices[i] = view.getFloat32(vertexTable + i * 4);
+    }
 
-    // Parse spline data from animation entries (types 3-5).
-    const splines: TGRSplineData[] = [];
-    {
-        let followerIdx = -1;
-        let leftRailPtr = 0;
-        let rightRailPtr = 0;
-        let nodeCount = 0;
-        for (const anim of animEntries) {
-            if (anim.type === 3) {
-                followerIdx = anim.data;
-            } else if (anim.type === 4) {
-                leftRailPtr = anim.data;
-                nodeCount = anim.params;
-            } else if (anim.type === 5) {
-                rightRailPtr = anim.data;
-            }
-        }
-        if (
-            followerIdx >= 0 &&
-            leftRailPtr >= pointerBase &&
-            rightRailPtr >= pointerBase &&
-            nodeCount > 0
-        ) {
-            const leftOff = leftRailPtr - pointerBase;
-            const rightOff = rightRailPtr - pointerBase;
-            const floatCount = nodeCount * 3;
-            if (leftOff + floatCount * 4 <= dataSize && rightOff + floatCount * 4 <= dataSize) {
-                const leftRail = new Float32Array(floatCount);
-                const rightRail = new Float32Array(floatCount);
-                for (let i = 0; i < floatCount; i++) {
-                    leftRail[i] = dataView.getFloat32(leftOff + i * 4, false);
-                    rightRail[i] = dataView.getFloat32(rightOff + i * 4, false);
-                }
-                splines.push({
-                    followerInstanceIndex: followerIdx,
-                    leftRail,
-                    rightRail,
-                    nodeCount,
+    const textures: TGRTexture[] = [];
+    const textureTable = offs(view.getUint32(0x1c));
+    const textureCount = view.getUint32(0x18);
+    for (let i = 0; i < textureCount; i++) {
+        const o = textureTable + i * 0x24;
+        const source = view.getUint32(o + 0x08);
+        const bits = view.getUint32(o + 0x20);
+        let frames: TGRAnimationFrame[] | null = null;
+        if (bits & (1 << 20)) {
+            const animation = offs(source);
+            frames = [];
+            const frameCount = view.getUint16(animation + 0x02);
+            for (let k = 0; k < frameCount; k++) {
+                const f = animation + 0x08 + k * 0x0c;
+                frames.push({
+                    time: view.getUint32(f),
+                    imageRom: view.getUint32(f + 0x04),
+                    paletteRom: view.getUint32(f + 0x08),
                 });
             }
         }
+        textures.push({
+            image: view.getUint32(o),
+            palette: view.getUint32(o + 0x04),
+            paletteRomIndex: source & 0xfff,
+            format: (bits >>> 24) & 0x0f,
+            size: bits & 0x3ffff,
+            frames,
+        });
     }
 
-    // Parse animated texture channels (TGR2 only).
-    const animTexChannels: TGRAnimTexChannel[] = [];
-    if (isTGR2) {
-        const animTexOffset = view.getUint32(0x28, true);
-        const animTexCount = view.getUint32(0x2c, true);
-        if (animTexOffset > 0 && animTexCount > 0 && animTexOffset < view.byteLength) {
-            // Skip the count u32 (redundant with header).
-            let aoff = animTexOffset + 4;
-            for (let i = 0; i < animTexCount; i++) {
-                if (aoff + 12 > view.byteLength) {
-                    break;
-                }
-                const destOffset = view.getUint32(aoff, true);
-                const texSize = view.getUint32(aoff + 4, true);
-                const kfCount = view.getUint32(aoff + 8, true);
-                aoff += 12;
-                const keyframes: TGRAnimTexKeyframe[] = [];
-                for (let k = 0; k < kfCount; k++) {
-                    if (aoff + 4 + texSize > view.byteLength) {
-                        break;
-                    }
-                    const time = view.getUint32(aoff, true);
-                    aoff += 4;
-                    const texData = buffer.createTypedArray(Uint8Array, aoff, texSize);
-                    keyframes.push({ time, texData });
-                    aoff += texSize;
-                }
-                if (keyframes.length >= 2) {
-                    animTexChannels.push({ destOffset, texSize, keyframes });
-                }
-            }
-        }
+    const specials: TGRSpecial[] = [];
+    const specialCount = view.getUint32(0x224);
+    for (let i = 0; i < specialCount; i++) {
+        const o = 0x164 + i * 0x0c;
+        specials.push({
+            target: view.getUint32(o),
+            param: view.getUint32(o + 0x04),
+            type: view.getUint8(o + 0x08),
+        });
     }
 
     return {
         pointerBase,
-        dataBuffer,
+        data,
+        stream,
+        minZ: view.getFloat32(0x38),
+        maxZ: view.getFloat32(0x3c),
+        skyDisplayList: view.getUint32(0x50),
+        startPosition: [view.getFloat32(0x40), view.getFloat32(0x44), view.getFloat32(0x48)],
+        startHeading: view.getFloat32(0x4c),
+        fogColor: [view.getUint8(0x80), view.getUint8(0x81), view.getUint8(0x82)],
         instances,
-        skyboxDLOffset,
-        winterOverrides,
-        animEntries,
-        splines,
-        animTexChannels,
+        gridInstances,
+        surfaces,
+        vertices,
+        gridTriangles,
+        gridTriangleStarts,
+        textures,
+        specials,
     };
 }
