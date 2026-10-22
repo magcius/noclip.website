@@ -1,3 +1,4 @@
+import * as UI from "../../ui";
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { Camera, CameraController } from "../../Camera.js";
@@ -32,11 +33,22 @@ export class IdTech2Context {
     public readonly isGoldSrc: boolean;
     public readonly lightmapBytesPerTexel: number;
 
+    public displayTriggers: boolean = false;
+    public enableTextureFiltering: boolean;
+
     constructor(bspVersion: number) {
         this.game = bspVersion === 29 ? 'Quake' : 'GoldSrc';
         this.isQuake = this.game === 'Quake';
         this.isGoldSrc = this.game === 'GoldSrc';
         this.lightmapBytesPerTexel = this.isQuake ? 1 : 3;
+        this.enableTextureFiltering = this.isGoldSrc;
+    }
+
+    textureFilterMode(): GfxTexFilterMode {
+        return this.enableTextureFiltering
+            ? GfxTexFilterMode.Bilinear
+            : GfxTexFilterMode.Point
+        ;
     }
 }
 
@@ -75,8 +87,6 @@ export class MIPTEXData {
             assert(palSize === 0x100);
             pal = buffer.createTypedArray(Uint8Array, palOffs + 0x02);
         }
-
-        const surfaces: HTMLCanvasElement[] = [];
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, numLevels));
         device.setResourceName(this.gfxTexture, this.name);
@@ -353,19 +363,16 @@ function isToolTexture(texName: string): boolean {
 
 class BSPSurfaceRenderer {
     private textureMapping = nArray(2, () => new TextureMapping());
-    private visible = true;
     private gfxProgram: GfxProgram | null = null;
     private sky = false;
     private water = false;
+    private lastFilterMode: GfxTexFilterMode | null = null;
 
     constructor(private context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface) {
         const texName = this.surface.texName;
 
-        if (isToolTexture(texName) || texName.startsWith('__invalid_')) {
-            this.visible = false;
+        if (texName.startsWith('__invalid_'))
             return;
-        }
-
         if (texName.startsWith('sky'))
             this.sky = true;
         if ((texName.startsWith('*') && texName !== "*default") || texName.startsWith('!'))
@@ -398,15 +405,42 @@ class BSPSurfaceRenderer {
         this.gfxProgram = cache.createProgram(program);
     }
 
+    private isVisible(): boolean {
+        if (isToolTexture(this.surface.texName)) {
+            return this.context.displayTriggers;
+        }
+
+        return true;
+    }
+
+    private updateSampler(cache: GfxRenderCache) {
+        const curMode = this.context.textureFilterMode();
+        if (curMode == this.lastFilterMode) {
+            return;
+        }
+        this.lastFilterMode = curMode;
+
+        this.textureMapping[0].gfxSampler = cache.createSampler({
+            minFilter: curMode,
+            magFilter: curMode,
+            mipFilter: GfxMipFilterMode.Linear,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+        });
+    }
+
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
+        cache: GfxRenderCache,
         lightmapManager: LightmapManager,
         view: View,
         modelMatrix: ReadonlyMat4,
         renderOptions: RenderOptions,
     ): void {
-        if (!this.visible || this.gfxProgram === null)
+        if (!this.isVisible() || this.gfxProgram === null)
             return;
+
+        this.updateSampler(cache);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -444,10 +478,10 @@ class BSPSurfaceRenderer {
 const identityMatrix = mat4.create();
 
 class BSPModelRenderer {
-    public visible: boolean = true;
     public surfaceRenderers: BSPSurfaceRenderer[] = [];
+    public isTrigger: boolean = false;
 
-    constructor(context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager) {
+    constructor(private context: IdTech2Context, private cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager) {
         for (let i = 0; i < model.surfaces.length; i++) {
             const surface = surfaces[model.surfaces[i]];
             this.surfaceRenderers.push(new BSPSurfaceRenderer(context, cache, textureCache, surface));
@@ -457,12 +491,20 @@ class BSPModelRenderer {
         }
     }
 
+    public isVisible(): boolean {
+        if (this.isTrigger && !this.context.displayTriggers) {
+            return false;
+        }
+
+        return true;
+    }
+
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
         view: View,
         entity: BSPEntity,
     ): void {
-        if (!this.visible)
+        if (!this.isVisible())
             return;
 
         const template = renderInstManager.pushTemplate();
@@ -483,6 +525,7 @@ class BSPModelRenderer {
         for (let i = 0; i < this.surfaceRenderers.length; i++) {
             this.surfaceRenderers[i].prepareToRender(
                 renderInstManager,
+                this.cache,
                 this.lightmapManager,
                 view,
                 entity.transform,
@@ -674,8 +717,14 @@ export class BSPRenderer {
 
     private lightmapManager: LightmapManager;
 
-    constructor(private context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private bsp: BSPFile) {
-        const device = cache.device;
+    constructor(
+        private context: IdTech2Context,
+        private renderCache: GfxRenderCache,
+        private textureCache: TextureCache,
+        private bsp: BSPFile,
+    ) {
+        this.modelRenderers = [];
+        const device = this.renderCache.device;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GoldSrcProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
@@ -685,7 +734,7 @@ export class BSPRenderer {
             { byteStride: (3+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U32_R;
-        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = this.renderCache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.bsp.vertexData);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.bsp.indexData);
@@ -695,13 +744,11 @@ export class BSPRenderer {
         ];
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
-        this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage, context.lightmapBytesPerTexel);
+        this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage, this.context.lightmapBytesPerTexel);
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
-            const modelRenderer = new BSPModelRenderer(context, cache, textureCache, model, this.bsp.surfaces, this.lightmapManager);
-            // Model 0 (worldspawn) is always visible; others start invisible until linked to entities
-            modelRenderer.visible = (i === 0);
+            const modelRenderer = new BSPModelRenderer(this.context, this.renderCache, this.textureCache, model, this.bsp.surfaces, this.lightmapManager);
             this.modelRenderers.push(modelRenderer);
         }
 
@@ -715,9 +762,22 @@ export class BSPRenderer {
 
             if (entity.bmodel < 0 || entity.bmodel >= this.modelRenderers.length)
                 continue;
+            const modelRenderer = this.modelRenderers[entity.bmodel];
 
-            if (entity.classname.startsWith('trigger_'))
-                continue;
+            if (
+                entity.classname.startsWith('trigger_') ||
+                // In Half-Life some ladders (and many triggers) are not using
+                // tool textures (eg. in c2a4) and won't get filtered out in
+                // the BSPSurfaceRenderer.
+                this.context.isGoldSrc && entity.classname === 'func_ladder'
+            ) {
+                entity.rendermode = RenderMode.Texture;
+                entity.renderamt = 128;
+                modelRenderer.isTrigger = true;
+                if (!this.context.displayTriggers) {
+                    continue;
+                }
+            }
 
             // rendermode 1 (Color) / 2 (Texture) / 5 (Additive) with renderamt 0 = fully transparent
             if (entity.rendermode !== 0 && entity.rendermode !== 4 && entity.renderamt === 0)
@@ -728,15 +788,6 @@ export class BSPRenderer {
                 if (difficultyFlags & 0x100)
                     continue;
             }
-
-            if (this.context.isGoldSrc) {
-                // In Half-Life some ladders are not using tool textures (eg. in c2a4).
-                if (entity.classname === 'func_ladder')
-                    continue;
-            }
-
-            const modelRenderer = this.modelRenderers[entity.bmodel];
-            modelRenderer.visible = true;
         }
     }
 
@@ -846,5 +897,31 @@ export class IdTech2Renderer implements SceneGfx {
             this.bspRenderers[i].destroy(device);
         this.renderHelper.destroy();
         this.textureCache.destroy(device);
+    }
+
+    public createPanels(): UI.Panel[] {
+        return [
+            this.createRenderSettingsPanel(),
+        ];
+    }
+
+    private createRenderSettingsPanel(): UI.Panel {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.RENDER_HACKS_ICON, 'Render Settings');
+
+        const filteringCheckbox = new UI.Checkbox('Enable texture filtering', this.context.enableTextureFiltering);
+        filteringCheckbox.onchanged = () => {
+            this.context.enableTextureFiltering = filteringCheckbox.checked;
+        };
+        panel.contents.appendChild(filteringCheckbox.elem);
+
+        const triggersCheckbox = new UI.Checkbox('Display triggers', this.context.displayTriggers);
+        triggersCheckbox.onchanged = () => {
+            this.context.displayTriggers = triggersCheckbox.checked;
+        };
+        panel.contents.appendChild(triggersCheckbox.elem);
+
+        return panel;
     }
 }
