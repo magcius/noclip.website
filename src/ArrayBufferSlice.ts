@@ -84,9 +84,10 @@ export default class ArrayBufferSlice {
     }
 
     /**
-     * Return a sub-section of the buffer starting at byte offset {@param begin} and ending at byte
-     * offset {@param end}. If no value is provided for end, or it is {@constant 0}, then the end is
-     * the same as this {@see ArrayBufferSlice}.
+     * Return a sub-section of the buffer starting at byte offset {@param begin} and ending after
+     * {@param byteLength} bytes. If no value is provided for byteLength, or it
+     * is {@constant 0}, then the end is the same as this {@see
+     * ArrayBufferSlice}.
      *
      * If you want a sub-section from a begin and *end* byte offset pair, see {@see slice}.
      *
