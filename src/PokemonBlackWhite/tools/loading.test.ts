@@ -1,0 +1,28 @@
+import { strict as assert } from 'node:assert';
+import type { DataFetcher } from '../../DataFetcher.js';
+import { BWLoading } from '../loading.js';
+
+const updates: number[] = [];
+const original = { loadProgress: 0, setProgress: (progress: number) => updates.push(progress) };
+const fetcher = { progressMeter: original } as unknown as DataFetcher;
+let cancellations = 0;
+const first = new BWLoading(fetcher, () => cancellations++);
+fetcher.progressMeter!.setProgress(1);
+assert.equal(updates.at(-1), 0.35);
+first.setProgress(0.5);
+fetcher.progressMeter!.setProgress(0.2);
+assert.equal(updates.at(-1), 0.5);
+first.destroy();
+first.destroy();
+assert.equal(cancellations, 1);
+assert.equal(fetcher.progressMeter, original);
+const second = new BWLoading(fetcher);
+first.restore();
+assert.notEqual(fetcher.progressMeter, original);
+await assert.rejects(first.yield(), { name: 'AbortError' });
+second.setProgress(0.99);
+assert.equal(updates.at(-1), 0.99);
+second.setProgress(1);
+second.restore();
+assert.equal(fetcher.progressMeter, original);
+console.log('Loading phases, monotonic progress, cancellation, and overlapping-load restoration passed.');

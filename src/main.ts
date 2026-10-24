@@ -58,6 +58,7 @@ import * as Scenes_PokemonSnap from './PokemonSnap/scenes.js';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters.js';
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum.js';
 import * as Scenes_PokemonHGSS from './nns_g3d/Scenes_PokemonHGSS.js';
+import * as Scenes_PokemonBlackWhite from './PokemonBlackWhite/scenes.js';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool.js';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes.js';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater.js';
@@ -223,6 +224,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_WorldOfWarcraft.bcSceneGroup,
     Scenes_WorldOfWarcraft.wotlkSceneGroup,
     "Experimental",
+    Scenes_PokemonBlackWhite.sceneGroup,
     Scenes_CrashWarped.sceneGroup,
     Scenes_CrazyTaxi.sceneGroup,
     Scenes_Spyro.sceneGroup,
