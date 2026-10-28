@@ -194,6 +194,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
+    Scenes_TopGearRally.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
     "PlayStation 2",
     Scenes_DragonQuest8.sceneGroup,
@@ -277,7 +278,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
-    Scenes_TopGearRally.sceneGroup,
     Scenes_KingdomHeartsBBS.sceneGroup,
 ];
 
