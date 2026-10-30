@@ -92,14 +92,14 @@ vec4 applyDirectionalLight(vec3 normal, DirectionLight dirlight) {
     return light;
 }
 
-vec4 commonVertexLighting2(vec4 ambient, vec3 normal, vec3 directionLightSelector) {
+vec4 commonVertexLighting(vec4 ambient, vec3 normal, vec3 directionLightSelector) {
     vec4 light = ambient;
 
     DirectionLight dirlight = blendDirectionalLights(directionLightSelector);
     light += applyDirectionalLight(normalize(normal), dirlight);
 
-    if (rgba.a >= 1.0 && light.a < 1.0) {
-        light.a = rgba.a;
+    if (ambient.a >= 1.0 && light.a < 1.0) {
+        light.a = ambient.a;
     }
 
     return light;

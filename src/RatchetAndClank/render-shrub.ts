@@ -83,7 +83,7 @@ void main() {
     vec3 normal = MulNormalMatrix(instanceTransform, a_Normal);
 
     vec4 rgba = a_InstanceAmbientRgba.rgba;
-    v_Rgba = commonVertexLighting2(rgba, normal, a_InstanceLightSelector);
+    v_Rgba = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
     v_Rgba.a *= a_InstanceLodAlpha;
 
     v_ST = a_ST.xy;

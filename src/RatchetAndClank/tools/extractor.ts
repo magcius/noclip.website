@@ -205,6 +205,7 @@ for (const levelSectors of tableOfContents.levelSectors) {
             mobyInstancesByOClass: null,
             mobyGroups: null,
             mobyUniqueMissionIds: null,
+            pvars: null,
             missionMobyOClasses: null,
             missionMobyInstances: null,
             missionMobyInstancesByOClass: null,
@@ -218,6 +219,7 @@ for (const levelSectors of tableOfContents.levelSectors) {
             shrubGroups: null,
             sky: null,
             skyTextures: null,
+            fxTextures: null,
         };
 
         const testMission = missions.find(m => m.missionNumber === missionNumber) ?? null;

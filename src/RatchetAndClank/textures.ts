@@ -5,7 +5,7 @@ import { SkyHeader, SkyTextureEntry, TieClass } from "./bin-core";
 import { TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
 import { assert } from "../util";
 import { IS_DEVELOPMENT } from "../BuildVersion";
-import { TextureEntry } from "./bin-index";
+import { FxTextureEntry, TextureEntry } from "./bin-index";
 import { GN } from "./utils";
 
 export interface PaletteTexture {
@@ -17,7 +17,8 @@ export interface PaletteTexture {
     unswizzled: boolean,
 };
 
-export function readPalette8TextureWithPaletteInGsRam(gn: GN, textureEntry: TextureEntry, textureData: DataViewExt, gsRam: DataViewExt, ownerType: string, i: number): PaletteTexture {
+// loads a tie/shrub/tfrag/moby texture, data from the core file texture block, palette from gs ram
+export function readTexture_Regular(gn: GN, textureEntry: TextureEntry, textureData: DataViewExt, gsRam: DataViewExt, ownerType: string, i: number): PaletteTexture {
     let pixels = textureData.subview(textureEntry.dataOffset, textureEntry.width * textureEntry.height).getTypedArrayView(Uint8Array);
     if (gn == 4) pixels = unswizzleTexture(pixels, textureEntry)
 
@@ -34,7 +35,26 @@ export function readPalette8TextureWithPaletteInGsRam(gn: GN, textureEntry: Text
     };
 }
 
-export function readPalette8TextureSky(gn: GN, skyView: DataViewExt, skyHeader: SkyHeader, textureEntry: SkyTextureEntry, i: number): PaletteTexture {
+// loads an fx texture from the fx bank
+export function readTexture_Fx(gn: GN, textureEntry: FxTextureEntry, fxBank: DataViewExt, i: number): PaletteTexture {
+    let pixels = fxBank.subview(textureEntry.dataOffsetInFxBank, textureEntry.width * textureEntry.height).getTypedArrayView(Uint8Array);
+    if (gn == 4) pixels = unswizzleTexture(pixels, textureEntry)
+
+    let rgbaPalette = fxBank.subview(textureEntry.palette, 256 * 4).subdivide(0, 256, 4).map(view => view.getUint8_Rgba(0));
+    rgbaPalette = unswizzlePalette(rgbaPalette);
+
+    return {
+        name: `FX Texture ${i}`,
+        textureEntry,
+        pixels,
+        palette: rgbaPalette,
+        hasAlpha: paletteHasAlpha(pixels, rgbaPalette),
+        unswizzled: false,
+    };
+}
+
+// loads sky texture from a sky texture view (of core data)
+export function readTexture_Sky(gn: GN, skyView: DataViewExt, skyHeader: SkyHeader, textureEntry: SkyTextureEntry, i: number): PaletteTexture {
     let pixels = skyView.subview(skyHeader.textureData + textureEntry.dataOffset, textureEntry.width * textureEntry.height).getTypedArrayView(Uint8Array);
     if (gn == 4) pixels = unswizzleTexture(pixels, textureEntry)
 
@@ -89,7 +109,7 @@ function unswizzlePaletteMapIndex(index: number) {
 }
 
 // Replaces the pixel array with an unswizzled copy. Idempotent.
-export function unswizzleTexture(pixels: Uint8Array, entry: TextureEntry | SkyTextureEntry) {
+export function unswizzleTexture(pixels: Uint8Array, entry: TextureEntry | FxTextureEntry | SkyTextureEntry) {
     const width = entry.width;
     const height = entry.height;
     const dbw = Math.ceil(width / 64);

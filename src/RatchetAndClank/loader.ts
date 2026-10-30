@@ -1,10 +1,10 @@
-import { InstanceGroupBlock, MissionGameplayHeader, OcclusionMappings, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readInstanceGroupBlock, readLevelSettings, readMissionGameplayHeader, readMobyInstance, readOcclusionMappings, readPathBlock, readPointLightBlock, readPointLightInstance, readShrubInstance, readTieAmbientRgbaBlock, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
+import { InstanceGroupBlock, MissionGameplayHeader, OcclusionMappings, Pvar, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readInstanceGroupBlock, readLevelSettings, readMissionGameplayHeader, readMobyInstance, readOcclusionMappings, readPathBlock, readPointLightBlock, readPointLightInstance, readPvars, readShrubInstance, readTieAmbientRgbaBlock, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
 import { DataViewExt } from "./DataViewExt";
 import { GsRamTableEntry, MobyClass, Occlusion, readCollision, readGsRamTableEntry, readMobyClass, readOcclusion, readShrubClass, readSky, readTfrag, readTfragBlockHeader, readTfragHeader, readTieClass, ShrubClass, SIZEOF_GS_RAM_TABLE_ENTRY, SIZEOF_TFRAG_HEADER, TieClass } from "./bin-core";
 import { filterInstancesByChunkPlane, filterMobyInstancesByChunkPlane, GN, makeClassOClassMap, makeInstanceOClassMap as makeInstancesByOClass, makeTextureIndicesByOClassMap, populateMobyOcclusionBits, populateTieOcclusionBits } from "./utils";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readPalette8TextureSky, readPalette8TextureWithPaletteInGsRam } from "./textures";
-import { ClassEntry, readClassEntry, readLevelCoreHeader, readTextureEntry, readTitleHeader, SIZEOF_MOBY_CLASS_ENTRY, SIZEOF_SHRUB_CLASS_ENTRY, SIZEOF_TEXTURE_ENTRY, SIZEOF_TIE_CLASS_ENTRY, TextureEntry } from "./bin-index";
+import { readTexture_Sky, readTexture_Regular, readTexture_Fx } from "./textures";
+import { ClassEntry, FxTextureEntry, readClassEntry, readFxTextureEntry, readLevelCoreHeader, readTextureEntry, readTitleHeader, SIZEOF_MOBY_CLASS_ENTRY, SIZEOF_SHRUB_CLASS_ENTRY, SIZEOF_TEXTURE_ENTRY, SIZEOF_TIE_CLASS_ENTRY, TextureEntry } from "./bin-index";
 import { DirectionLightInstance, GameplayHeader, LevelSettings, MobyInstance, PointLightInstance, Spline } from "./bin-gameplay";
 import { PaletteTexture } from "./textures";
 import { Collision, Sky, Tfrag } from "./bin-core";
@@ -53,6 +53,7 @@ export interface LevelResources {
     mobyInstancesByOClass: MobyInstance[][] | null,
     mobyGroups: InstanceGroupBlock | null,
     mobyUniqueMissionIds: Set<number> | null,
+    pvars: Pvar[] | null,
 
     missionMobyOClasses: number[] | null,
     missionMobyInstances: MobyInstance[] | null,
@@ -69,6 +70,8 @@ export interface LevelResources {
 
     sky: Sky | null,
     skyTextures: PaletteTexture[] | null,
+
+    fxTextures: PaletteTexture[] | null,
 };
 
 async function toDataViewExt(slicePromise: Promise<ArrayBufferSlice>): Promise<DataViewExt> {
@@ -187,6 +190,7 @@ export function load(gn: GN, levelNumber: number, filterChunk: number | null, ou
         loadSkyData(gn, levelNumber, out, coreDataFilePromise, indexDataPromise),
         loadTieAmbientRgbas(gn, out, gameplayFilePromise, gameplayArtFilePromise, gameplayHeaderPromise),
         loadOverlaySections(gn, out, overlayFilePromise),
+        loadPvars(gn, out, gameplayFilePromise, gameplayHeaderPromise),
     ]);
 }
 
@@ -256,6 +260,7 @@ type LoadIndexDataResult = {
     tieTextureEntries: TextureEntry[],
     mobyTextureEntries: TextureEntry[],
     shrubTextureEntries: TextureEntry[],
+    fxTextureEntries: FxTextureEntry[],
     gsTable: GsRamTableEntry[],
     mobyGsStashList: number[],
     tieClassTextureIndices: Map<number, number[]>,
@@ -290,6 +295,7 @@ function readIndexData(gn: GN, coreIndexFile: DataViewExt, levelCoreHeader: Leve
     const tieTextureEntries = coreIndexFile.subdivide(levelCoreHeader.tieTextures.offset, levelCoreHeader.tieTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
     const mobyTextureEntries = coreIndexFile.subdivide(levelCoreHeader.mobyTextures.offset, levelCoreHeader.mobyTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
     const shrubTextureEntries = coreIndexFile.subdivide(levelCoreHeader.shrubTextures.offset, levelCoreHeader.shrubTextures.count, SIZEOF_TEXTURE_ENTRY).map(readTextureEntry);
+    const fxTextureEntries = coreIndexFile.subdivide(levelCoreHeader.fxTextures.offset, levelCoreHeader.fxTextures.count, SIZEOF_TEXTURE_ENTRY).map(readFxTextureEntry);
 
     const mobyStashCount = gn === 1 ? 0 : levelCoreHeader.gadgetOffsetOrMobyStashCount;
     const gsTable = coreIndexFile.subdivide(levelCoreHeader.gsRam.offset, levelCoreHeader.gsRam.count + mobyStashCount, SIZEOF_GS_RAM_TABLE_ENTRY).map(readGsRamTableEntry);
@@ -308,6 +314,7 @@ function readIndexData(gn: GN, coreIndexFile: DataViewExt, levelCoreHeader: Leve
         tieTextureEntries,
         mobyTextureEntries,
         shrubTextureEntries,
+        fxTextureEntries,
         gsTable,
         mobyGsStashList,
         tieClassTextureIndices,
@@ -445,10 +452,12 @@ async function loadTextureData(gn: GN, out: LevelResources, coreDataFilePromise:
     const [coreDataFile, gsRamFile, indexData] = await Promise.all([coreDataFilePromise, gsRamFilePromise, indexDataPromise]);
 
     const textureData = coreDataFile.subview(indexData.levelCoreHeader.texturesBaseOffset);
-    out.tfragTextures = indexData.tfragTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(gn, entry, textureData, gsRamFile, "Tfrag", i));
-    out.tieTextures = indexData.tieTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(gn, entry, textureData, gsRamFile, "Tie", i));
-    out.mobyTextures = indexData.mobyTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(gn, entry, textureData, gsRamFile, "Moby", i));
-    out.shrubTextures = indexData.shrubTextureEntries.map((entry, i) => readPalette8TextureWithPaletteInGsRam(gn, entry, textureData, gsRamFile, "Shrub", i));
+    const fxBank = coreDataFile.subview(indexData.levelCoreHeader.fxBankOffset);
+    out.tfragTextures = indexData.tfragTextureEntries.map((entry, i) => readTexture_Regular(gn, entry, textureData, gsRamFile, "Tfrag", i));
+    out.tieTextures = indexData.tieTextureEntries.map((entry, i) => readTexture_Regular(gn, entry, textureData, gsRamFile, "Tie", i));
+    out.mobyTextures = indexData.mobyTextureEntries.map((entry, i) => readTexture_Regular(gn, entry, textureData, gsRamFile, "Moby", i));
+    out.shrubTextures = indexData.shrubTextureEntries.map((entry, i) => readTexture_Regular(gn, entry, textureData, gsRamFile, "Shrub", i));
+    out.fxTextures = indexData.fxTextureEntries.map((entry, i) => readTexture_Fx(gn, entry, fxBank, i));
 }
 
 async function loadLevelSettings(gn: GN, out: LevelResources, gameplayFilePromise: Promise<DataViewExt>, gameplayHeaderPromise: Promise<GameplayHeader>) {
@@ -508,7 +517,7 @@ export async function loadSkyData(gn: GN, levelNumber: number, out: LevelResourc
 
     const sky = readSky(gn, levelNumber, coreDataFile.subview(indexData.levelCoreHeader.sky));
     out.sky = sky;
-    out.skyTextures = sky.textureEntries.map((textureEntry, i) => readPalette8TextureSky(gn, coreDataFile.subview(indexData.levelCoreHeader.sky), sky.header!, textureEntry, i));
+    out.skyTextures = sky.textureEntries.map((textureEntry, i) => readTexture_Sky(gn, coreDataFile.subview(indexData.levelCoreHeader.sky), sky.header!, textureEntry, i));
 }
 
 async function loadOcclusionMappings(gn: GN, out: LevelResources, gameplayFilePromise: Promise<DataViewExt>, artFilePromise: Promise<DataViewExt> | null, gameplayHeaderPromise: Promise<GameplayHeader>, occlusionPromise: Promise<Occlusion | null>) {
@@ -595,4 +604,9 @@ export async function loadOverlaySections(gn: GN, out: LevelResources, overlayFi
     if (!overlayFile) return;
 
     out.overlaySections = readOverlaySections(overlayFile);
+}
+
+export async function loadPvars(gn: GN, out: LevelResources, gameplayFilePromise: Promise<DataViewExt>, gameplayHeaderPromise: Promise<GameplayHeader>) {
+    const [gameplayFile, gameplayHeader] = await Promise.all([gameplayFilePromise, gameplayHeaderPromise]);
+    out.pvars = readPvars(gameplayFile, gameplayHeader.pvarTable, gameplayHeader.pvarData);
 }

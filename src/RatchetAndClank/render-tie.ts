@@ -119,7 +119,7 @@ void main() {
         ivec2 normalTexcoord = ivec2(int(a_NormalIndices[i]), int(a_InstanceExtraData.w));
         vec4 normalTexData = texelFetch(TEXTURE(u_TieNormalsTexture), normalTexcoord, 0);
         vec3 normal = MulNormalMatrix(instanceTransform, normalTexData.xyz);
-        colors[i] = commonVertexLighting2(rgba, normal, a_InstanceLightSelector);
+        colors[i] = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
     }
     // mix colors based on lodMorphFactor
     v_Rgba = mix(colors[0], mix(colors[1], colors[2], 0.5), lodMorphFactor);
@@ -149,7 +149,7 @@ void main() {
         ivec2 normalTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData.w));
         vec4 normalTexData = texelFetch(TEXTURE(u_TieNormalsTexture), normalTexcoord, 0);
         vec3 normal = normalize(inverseTransform * normalTexData.xyz);
-        colors[i] = commonVertexLighting2(rgba, normal, a_InstanceLightSelector);
+        colors[i] = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
     }
     v_Rgba = (colors[0] + colors[1] + colors[2] + colors[3]) / 4.0;
 

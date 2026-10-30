@@ -16,6 +16,8 @@ export type GameplayHeader = {
     mobyClasses: number,
     mobyInstances: number,
     mobyGroups: number,
+    pvarTable: number,
+    pvarData: number,
     shapesCuboids: number,
     shapesSpheres: number,
     shapesCylinders: number,
@@ -83,6 +85,8 @@ export function readGameplayHeader(gn: GN, view: DataViewExt, artFileView_rac4: 
                 mobyClasses: view.getInt32(0x40),
                 mobyInstances: view.getInt32(0x44),
                 mobyGroups: view.getInt32(0x48),
+                pvarTable: view.getInt32(0x54),
+                pvarData: view.getInt32(0x58),
                 shapesCuboids: view.getInt32(0x60),
                 shapesSpheres: view.getInt32(0x64),
                 shapesCylinders: view.getInt32(0x68),
@@ -155,6 +159,8 @@ export function readGameplayHeader(gn: GN, view: DataViewExt, artFileView_rac4: 
                 mobyClasses: view.getInt32(0x48),
                 mobyInstances: view.getInt32(0x4c),
                 mobyGroups: view.getInt32(0x50),
+                pvarTable: view.getInt32(0x5c),
+                pvarData: view.getInt32(0x60),
                 shapesCuboids: view.getInt32(0x68),
                 shapesSpheres: view.getInt32(0x6c),
                 shapesCylinders: view.getInt32(0x70),
@@ -225,6 +231,8 @@ export function readGameplayHeader(gn: GN, view: DataViewExt, artFileView_rac4: 
                 mobyClasses: view.getInt32(0x2c),
                 mobyInstances: view.getInt32(0x30),
                 mobyGroups: view.getInt32(0x34),
+                pvarTable: view.getInt32(0x40),
+                pvarData: view.getInt32(0x44),
                 shapesCuboids: view.getInt32(0x4c),
                 shapesSpheres: view.getInt32(0x50),
                 shapesCylinders: view.getInt32(0x54),
@@ -275,6 +283,8 @@ export function readMissionGameplayHeader(view: DataViewExt) {
         mobyClasses: view.getInt32(0x0),
         mobyInstances: view.getInt32(0x4),
         mobyGroups: view.getInt32(0x8),
+        pvarTable: view.getInt32(0x14),
+        pvarData: view.getInt32(0x18)
     }
 }
 
@@ -494,6 +504,7 @@ export interface MobyInstance {
     color: { r: number, g: number, b: number },
     lightSelector: DirectionLightSelector,
     skipOcclusionCheck: number,
+    pvarIndex: number,
 
     // the position within the original instance array
     _i: number,
@@ -1045,4 +1056,24 @@ export function readOcclusionMappings(view: DataViewExt): OcclusionMappings {
         tieMappings,
         mobyMappings,
     }
+}
+
+export interface Pvar {
+    index: number;
+    data: DataViewExt;
+}
+
+export function readPvars(gameplayFileView: DataViewExt, tablePtr: number, dataPtr: number): Pvar[] {
+    const table = gameplayFileView.subview(tablePtr, dataPtr - tablePtr).subdivide(0, 0xFFFF, 8).map(view => {
+        return {
+            offset: view.getInt32(0x0),
+            size: view.getInt32(0x4)
+        }
+    });
+    return table.map((entry, index) => {
+        return {
+            index,
+            data: gameplayFileView.subview(dataPtr + entry.offset, entry.size)
+        }
+    });
 }

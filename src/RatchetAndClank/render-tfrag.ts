@@ -73,7 +73,7 @@ void main() {
     vec3 normal = MulNormalMatrix(worldTransform, a_Normal);
     vec3 lightSelector = a_DirectionLightSelector;
 
-    v_Rgba = commonVertexLighting2(vec4(a_AmbientColor, 1.0), normal, lightSelector);
+    v_Rgba = commonVertexLighting(vec4(a_AmbientColor, 1.0), normal, lightSelector);
 
     v_ST = a_ST.xy;
     v_FogFactor = fogFactor(t_PositionWorld.xyz);

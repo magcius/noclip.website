@@ -73,6 +73,7 @@ class RatchetAndClankScene implements SceneGfx {
         tieNormalsTexture: GfxTexture | null,
         skyTextures: GfxTexture[],
         debugTextures: GfxTexture[],
+        fxTextures: GfxTexture[],
     };
 
     private geometries: {
@@ -144,6 +145,7 @@ class RatchetAndClankScene implements SceneGfx {
             mobyInstancesByOClass: null,
             mobyGroups: null,
             mobyUniqueMissionIds: null,
+            pvars: null,
             missionMobyOClasses: null,
             missionMobyInstances: null,
             missionMobyInstancesByOClass: null,
@@ -157,6 +159,7 @@ class RatchetAndClankScene implements SceneGfx {
             shrubGroups: null,
             sky: null,
             skyTextures: null,
+            fxTextures: null,
         };
 
         this.samplerGeneral = cache.createSampler({
@@ -180,6 +183,7 @@ class RatchetAndClankScene implements SceneGfx {
             tieRgbaTexture: null,
             tieNormalsTexture: null,
             skyTextures: [],
+            fxTextures: [],
             debugTextures: [],
         }
 
@@ -396,6 +400,26 @@ class RatchetAndClankScene implements SceneGfx {
         ];
     }
 
+    getOrCreateFxTextures() {
+        const existing = this.textures.fxTextures;
+        if (existing.length > 0) return existing;
+
+        const { fxTextures } = this.levelResources;
+        if (!fxTextures) return null;
+
+        const gfxTextures: GfxTexture[] = [];
+        for (let i = 0; i < fxTextures.length; i++) {
+            const fxTexture = fxTextures[i];
+            const gfxTexture = createGfxTextureForPaletteTexture(this.renderHelper.device, fxTexture).pixelsTexture;
+            this.textures.fxTextures.push(gfxTexture);
+            this.textureHolder.viewerTextures.push({ gfxTexture: gfxTexture });
+            gfxTextures.push(gfxTexture);
+        }
+        this.textureHolder.onnewtextures();
+        this.textures.fxTextures = gfxTextures;
+        return this.textures.fxTextures;
+    }
+
     private fillSceneParams(template: GfxRenderInst, viewerInput: ViewerRenderInput, cameraPosition: vec3): void {
         const levelSettings = this.levelResources.levelSettings ?? {
             backgroundColor: OpaqueBlack,
@@ -514,6 +538,7 @@ class RatchetAndClankScene implements SceneGfx {
 
         // textures shared between tfrags, ties, and shrubs
         const atlasTextures = this.getOrCreateAtlasTextures();
+        const fxTextures = this.getOrCreateFxTextures();
 
         // sky
         const skyTextures = this.getOrCreateSkyTextures();
@@ -892,6 +917,7 @@ class RatchetAndClankScene implements SceneGfx {
             this.textures.tieRgbaTexture,
             this.textures.tieNormalsTexture,
             ...this.textures.skyTextures,
+            ...this.textures.fxTextures,
             ...this.textures.debugTextures,
         ]);
         allTextures.forEach((texture) => {

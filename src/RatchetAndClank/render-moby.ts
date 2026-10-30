@@ -84,7 +84,7 @@ void main() {
     normal = MulNormalMatrix(instanceTransform, normal);
 
     float lodAlpha = a_InstanceExtraData.x;
-    vec4 rgba = commonVertexLighting2(a_InstanceAmbientRgba, normal, a_InstanceLightSelector);
+    vec4 rgba = commonVertexLighting(a_InstanceAmbientRgba, normal, a_InstanceLightSelector);
     rgba.a *= lodAlpha;
 
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(positionWorld, 1.0f);

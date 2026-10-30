@@ -185,3 +185,19 @@ export function readTextureEntry(view: DataViewExt): TextureEntry {
         pad: view.getInt16(0xe),
     };
 }
+
+export interface FxTextureEntry {
+    palette: number,
+    dataOffsetInFxBank: number,
+    width: number,
+    height: number,
+}
+export const SIZEOF_FX_TEXTURE_ENTRY = 0x10;
+export function readFxTextureEntry(view: DataViewExt): FxTextureEntry {
+    return {
+        palette: view.getInt32(0x0),
+        dataOffsetInFxBank: view.getInt32(0x4),
+        width: view.getInt32(0x8),
+        height: view.getInt32(0xc),
+    };
+}
