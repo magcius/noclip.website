@@ -13,10 +13,6 @@ import { Color, White } from "../Color";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert } from "../util";
 
-export interface ExcludeInfo {
-  textureIds?: Set<number>;
-}
-
 export interface JsonBuffer {
   bufferIndex: number;
   textureId: number;

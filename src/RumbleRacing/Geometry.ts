@@ -12,16 +12,12 @@ import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { BlendMode } from "./asset/o3d/geometry";
-import {
-  ExcludeInfo,
-  JsonBuffer,
-  O3DData,
-  ObfData,
-  ObfJsonNode,
-} from "./rumbleRacing";
+import { JsonBuffer, O3DData, ObfData, ObfJsonNode } from "./rumbleRacing";
 import { TrackProgram } from "./TrackProgram";
 
 const VERTEX_STRIDE = 12;
+
+const TORNADO_TEXTURES = [1584, 3120];
 
 export interface DrawBatch {
   indexCount: number;
@@ -37,23 +33,19 @@ export interface DrawBatch {
   samplerBindings: GfxSamplerBinding[] | null;
 }
 
-function collectBuffers(
-  node: ObfJsonNode,
-  exclude: ExcludeInfo,
-  out: JsonBuffer[],
-): void {
+function collectBuffers(node: ObfJsonNode, out: JsonBuffer[]): void {
   if (node === undefined || node === null) return;
 
   for (const buffer of node.buffers) {
     if (buffer.positions.length === 0) continue;
 
-    if (exclude.textureIds?.has(buffer.textureId)) continue;
+    if (TORNADO_TEXTURES.includes(buffer.textureId)) continue;
 
     out.push(buffer);
   }
 
   if (node.children) {
-    for (const child of node.children) collectBuffers(child, exclude, out);
+    for (const child of node.children) collectBuffers(child, out);
   }
 }
 
@@ -128,7 +120,7 @@ export class MergedGeometry {
   public batches: DrawBatch[] = [];
   public inputLayout: GfxInputLayout;
 
-  constructor(cache: GfxRenderCache, obfs: ObfData[], exclude: ExcludeInfo) {
+  constructor(cache: GfxRenderCache, obfs: ObfData[]) {
     const device = cache.device;
 
     this.inputLayout = cache.createInputLayout({
@@ -169,8 +161,7 @@ export class MergedGeometry {
 
     const sourceBuffers: JsonBuffer[] = [];
     for (const obf of obfs) {
-      if (obf && obf.rootNode)
-        collectBuffers(obf.rootNode, exclude, sourceBuffers);
+      if (obf && obf.rootNode) collectBuffers(obf.rootNode, sourceBuffers);
     }
 
     const groups = new Map<string, JsonBuffer[]>();
@@ -201,14 +192,14 @@ export class O3DGeometry {
   public animationFrame = 0;
   public isAnimated: boolean;
 
-  constructor(cache: GfxRenderCache, o3d: O3DData, exclude: ExcludeInfo) {
+  constructor(cache: GfxRenderCache, o3d: O3DData) {
     this.isAnimated = o3d.isAnimated;
 
     if (this.isAnimated) {
       for (const obf of o3d.obfs)
-        this.frames.push(new MergedGeometry(cache, [obf], exclude));
+        this.frames.push(new MergedGeometry(cache, [obf]));
     } else {
-      this.frames.push(new MergedGeometry(cache, o3d.obfs, exclude));
+      this.frames.push(new MergedGeometry(cache, o3d.obfs));
     }
   }
 

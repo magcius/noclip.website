@@ -2,13 +2,11 @@ import {
   ActorData,
   ActorTransforms,
   ActorType,
-  ExcludeInfo,
   ObfData,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
 import { mat4, vec3 } from "gl-matrix";
-import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
   makeBackbufferDescSimple,
   standardFullClearRenderPassDescriptor,
@@ -127,7 +125,6 @@ class RumbleRacingScene implements SceneGfx {
     private sceneContext: SceneContext,
     private trackFile: RumbleRacingTrackFile,
     private actorTrans: ActorTransforms,
-    private exclude: ExcludeInfo,
   ) {
     this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
     const cache = this.renderHelper.renderCache;
@@ -142,10 +139,7 @@ class RumbleRacingScene implements SceneGfx {
 
     for (let i = 0; i < this.trackFile.o3ds.length; i++) {
       const o3d = this.trackFile.o3ds[i];
-      this.o3dGeometries.set(
-        o3d.resourceIndex,
-        new O3DGeometry(cache, o3d, this.exclude),
-      );
+      this.o3dGeometries.set(o3d.resourceIndex, new O3DGeometry(cache, o3d));
     }
 
     this.glowRenderer = new GlowRenderer(cache);
@@ -196,13 +190,13 @@ class RumbleRacingScene implements SceneGfx {
     }
 
     this.trackGroups.push({
-      geometry: new MergedGeometry(cache, track, this.exclude),
+      geometry: new MergedGeometry(cache, track),
       visible: true,
       label: "Track",
     });
 
     this.trackGroups.push({
-      geometry: new MergedGeometry(cache, panorama, this.exclude),
+      geometry: new MergedGeometry(cache, panorama),
       visible: true,
       label: "Track Panorama",
     });
@@ -781,7 +775,6 @@ class RumbleRacingSceneDesc implements SceneDesc {
     public internalName: string,
     public id: string,
     public name: string,
-    public exclude: ExcludeInfo,
   ) {}
 
   public async createScene(
@@ -834,12 +827,7 @@ class RumbleRacingSceneDesc implements SceneDesc {
     // Add powerup models (the only models we parsed out of the global track file)
     trackData.o3ds.push(...shared.globalTrackFile.o3ds);
 
-    return new RumbleRacingScene(
-      sceneContext,
-      trackData,
-      actorTrans,
-      this.exclude,
-    );
+    return new RumbleRacingScene(sceneContext, trackData, actorTrans);
   }
 }
 
@@ -848,57 +836,27 @@ export const sceneGroup: SceneGroup = {
   name: "Rumble Racing",
   sceneDescs: [
     "Beach Blast",
-    new RumbleRacingSceneDesc("BB1", "SunBurn", "Sun Burn", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("BB2", "SurfAndTurf", "Surf And Turf", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
+    new RumbleRacingSceneDesc("BB1", "SunBurn", "Sun Burn"),
+    new RumbleRacingSceneDesc("BB2", "SurfAndTurf", "Surf And Turf"),
     "Bad Lands",
-    new RumbleRacingSceneDesc("BL1", "SoRefined", "So Refined", {
-      textureIds: new Set([1584]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("BL2", "CoalCuts", "Coal Cuts", {
-      // seems like there are no tornado clouds in this level for some reason?
-    }),
+    new RumbleRacingSceneDesc("BL1", "SoRefined", "So Refined"),
+    new RumbleRacingSceneDesc("BL2", "CoalCuts", "Coal Cuts"),
     "Daytona",
-    new RumbleRacingSceneDesc("DA1", "FlipOut", "Flip Out", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("DA2", "TheGauntlet", "The Gauntlet", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("DA3", "WildKingdom", "Wild Kingdom", {
-      // no clouds in wild kingdom
-    }),
+    new RumbleRacingSceneDesc("DA1", "FlipOut", "Flip Out"),
+    new RumbleRacingSceneDesc("DA2", "TheGauntlet", "The Gauntlet"),
+    new RumbleRacingSceneDesc("DA3", "WildKingdom", "Wild Kingdom"),
     "Joke Tracks",
-    new RumbleRacingSceneDesc("JT1", "CircusMinimus", "Circus Minimus", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("JT2", "OuterLimits", "Outer Limits", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
+    new RumbleRacingSceneDesc("JT1", "CircusMinimus", "Circus Minimus"),
+    new RumbleRacingSceneDesc("JT2", "OuterLimits", "Outer Limits"),
     "Mountain Air",
-    new RumbleRacingSceneDesc("MA1", "PassingThrough", "Passing Through", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("MA2", "FallsDown", "Falls Down", {
-      textureIds: new Set([1584]), // tornado clouds
-    }),
+    new RumbleRacingSceneDesc("MA1", "PassingThrough", "Passing Through"),
+    new RumbleRacingSceneDesc("MA2", "FallsDown", "Falls Down"),
     "Metropolis",
-    new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("MP2", "CarGo", "Car Go", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
+    new RumbleRacingSceneDesc("MP1", "TouchAndGo", "Touch And Go"),
+    new RumbleRacingSceneDesc("MP2", "CarGo", "Car Go"),
     "Southern Exposure",
-    new RumbleRacingSceneDesc("SE1", "TrueGrits", "True Grits", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
-    new RumbleRacingSceneDesc("SE2", "OverEasy", "Over Easy", {
-      textureIds: new Set([3120]), // tornado clouds
-    }),
+    new RumbleRacingSceneDesc("SE1", "TrueGrits", "True Grits"),
+    new RumbleRacingSceneDesc("SE2", "OverEasy", "Over Easy"),
   ],
 };
 
