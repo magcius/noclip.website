@@ -172,7 +172,7 @@ class RumbleRacingScene implements SceneGfx {
     });
 
     this.handleTextures();
-    this.resolveBatchTextures();
+    this.resolveBatchTextures(sceneContext.device);
   }
 
   private buildTrackGroups(cache: GfxRenderCache): void {
@@ -200,11 +200,16 @@ class RumbleRacingScene implements SceneGfx {
     });
   }
 
-  private resolveBatchTextures(): void {
+  private resolveBatchTextures(device: GfxDevice): void {
     const resolve = (geometry: MergedGeometry) => {
       geometry.batches = geometry.batches.filter((batch) => {
         const gfxTexture = this.textureMap.get(batch.textureId);
-        if (gfxTexture === undefined) return false;
+        if (gfxTexture === undefined) {
+          // don't leak memory if we're filtering out this batch
+          device.destroyBuffer(batch.indexBuffer);
+          device.destroyBuffer(batch.vertexBuffer);
+          return false;
+        }
         batch.samplerBindings = [
           { gfxTexture, gfxSampler: this.linearSampler },
         ];
