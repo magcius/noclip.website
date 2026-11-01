@@ -87,7 +87,6 @@ interface TrackGeometryGroup {
 
 interface PowerUp {
   baseMatrix: mat4;
-  glowCenter: vec3;
   glowDefs: GlowDef[];
 }
 
@@ -117,7 +116,6 @@ class RumbleRacingScene implements SceneGfx {
   private trackLightBatch: GlowBatch | null = null;
   private powerUpGlowBatch: GlowBatch | null = null;
   private powerUps: PowerUp[] = [];
-  private powerUpGlowOffset = vec3.create();
   private powerUpInnerIndex: number | undefined;
   private powerUpOuterIndex: number | undefined;
 
@@ -413,8 +411,6 @@ class RumbleRacingScene implements SceneGfx {
     const innerSphere = model.boundingSphere;
     const shellSphere = shell.boundingSphere;
 
-    vec3.copy(this.powerUpGlowOffset, innerSphere.center);
-
     const radius =
       POWERUP_GLOW_RADIUS_SCALE *
       Math.max(innerSphere.radius, shellSphere.radius);
@@ -424,11 +420,12 @@ class RumbleRacingScene implements SceneGfx {
       if (actor.transform === undefined) continue;
 
       const baseMatrix = this.actorMatrices.get(actor.resourceIndex)!;
-      const glowCenter = vec3.create();
+      const powerupCenter = vec3.create();
+      vec3.transformMat4(powerupCenter, vec3.create(), baseMatrix);
 
       const glowDefs: GlowDef[] = [
         {
-          center: glowCenter,
+          center: powerupCenter,
           colorA: POWERUP_GLOW_CLEAR,
           colorB: POWERUP_GLOW_RING,
           radiusA: 0.0,
@@ -437,7 +434,7 @@ class RumbleRacingScene implements SceneGfx {
           shape: GlowShape.Ring24,
         },
         {
-          center: glowCenter,
+          center: powerupCenter,
           colorA: POWERUP_GLOW_CLEAR,
           colorB: POWERUP_GLOW_RING,
           radiusA: 1.1 * radius,
@@ -446,7 +443,7 @@ class RumbleRacingScene implements SceneGfx {
           shape: GlowShape.Ring24,
         },
         {
-          center: glowCenter,
+          center: powerupCenter,
           colorA: POWERUP_GLOW_CLEAR,
           colorB: POWERUP_GLOW_STAR,
           radiusA: 3.0 * radius,
@@ -456,7 +453,7 @@ class RumbleRacingScene implements SceneGfx {
         },
       ];
 
-      this.powerUps.push({ baseMatrix, glowCenter, glowDefs });
+      this.powerUps.push({ baseMatrix, glowDefs });
     }
   }
 
@@ -520,13 +517,6 @@ class RumbleRacingScene implements SceneGfx {
   private renderPowerUpGlows(viewerInput: ViewerRenderInput): void {
     const batch = this.powerUpGlowBatch;
     if (batch === null) return;
-
-    for (const powerUp of this.powerUps)
-      vec3.transformMat4(
-        powerUp.glowCenter,
-        this.powerUpGlowOffset,
-        this.powerUpMatrix(powerUp, viewerInput),
-      );
 
     batch.upload(this.renderHelper.device);
 
