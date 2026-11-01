@@ -1,6 +1,10 @@
 import { assert } from "../util";
 import { DataViewExt } from "./DataViewExt";
 
+/*
+'Overlay' is a custom dynamic linked library format
+*/
+
 export interface OverlaySectionHeader {
     addr: number;
     size: number;
@@ -21,15 +25,37 @@ export interface OverlaySection {
     data: DataViewExt;
 }
 export function readOverlaySections(view: DataViewExt): OverlaySection[] {
+    /*
+    struct {
+        // 0x0
+        Header header;
+        // 0x10
+        u8 data[header.size];
+    } sections[until end of file];
+    */
     const sections: OverlaySection[] = [];
-    let offset = 0;
-    while (offset < view.byteLength) {
-        const header = readOverlaySectionHeader(view.subview(offset));
-        const data = view.subview(offset + 0x10, header.size);
+    let ptr = 0;
+    while (ptr < view.byteLength) {
+        const header = readOverlaySectionHeader(view.subview(ptr));
+        const data = view.subview(ptr + 0x10, header.size);
         sections.push({ header, data });
-        offset += 0x10 + header.size;
+        ptr += 0x10 + header.size;
     }
     return sections;
+}
+
+// takes an overlay file and snips the last section off (which is the game code)
+export function snipOverlay(view: DataViewExt): DataViewExt {
+    const sectionCount = readOverlaySections(view).length;
+    let i = 0;
+    let ptr = 0;
+    while (ptr < view.byteLength) {
+        const header = readOverlaySectionHeader(view.subview(ptr));
+        ptr += 0x10 + header.size;
+        if (i >= sectionCount - 1) return view.subview(0, ptr);
+        i++;
+    }
+    assert(false);
 }
 
 export function readOverlayVMem(sections: OverlaySection[], addr: number, size: number): DataViewExt {
@@ -43,35 +69,36 @@ export function readOverlayVMem(sections: OverlaySection[], addr: number, size: 
     assert(false);
 }
 
-// adhoc worldspace mesh
-// novalis flowing water
 export interface WaterMesh_KindA {
     descriptor: ReturnType<typeof readWaterMeshDescriptor_KindA>;
-    positions: DataViewExt;
-    uvs: DataViewExt;
+    positions: Float32Array;
+    texcoords: Float32Array;
 }
 export function readWaterMesh_KindA(sections: OverlaySection[], addr: number): WaterMesh_KindA {
     const descriptor = readWaterMeshDescriptor_KindA(readOverlayVMem(sections, addr, SIZEOF_WATER_MESH_DESCRIPTOR_KIND_A));
-    const positions = readOverlayVMem(sections, descriptor.verticesVaddr, descriptor.vertexCount * 4 * 4);
-    const uvs = readOverlayVMem(sections, descriptor.uvsVaddr, descriptor.vertexCount * 4 * 2);
-    return { descriptor, positions, uvs };
+    const positions = readOverlayVMem(sections, descriptor.verticesVaddr, descriptor.vertexCount * 4 * 4).getTypedArrayView(Float32Array);
+    const texcoords = readOverlayVMem(sections, descriptor.texcoordsVaddr, descriptor.vertexCount * 4 * 2).getTypedArrayView(Float32Array);
+    return { descriptor, positions, texcoords };
 }
 
 export const SIZEOF_WATER_MESH_DESCRIPTOR_KIND_A = 0x60;
 export function readWaterMeshDescriptor_KindA(view: DataViewExt) {
     return {
         verticesVaddr: view.getUint32(0x0),
-        uvsVaddr: view.getUint32(0x4),
-        boundsSphereVaddr: view.getUint32(0x8),
+        texcoordsVaddr: view.getUint32(0x4),
+        bphereVaddr: view.getUint32(0x8),
         vertexCount: view.getInt32(0xC),
-        scrollSpeed: view.getFloat32_Xy(0x10),
+        scrollSpeed1: view.getFloat32(0x10),
+        scrollSpeed2: view.getFloat32(0x14),
         wobbleAmplitude: view.getFloat32(0x18),
         phaseStep: view.getInt32(0x1C),
         direction1: view.getFloat32_Xy(0x20),
         direction2: view.getFloat32_Xy(0x28),
-        rgba: view.getUint32(0x30),
-        fxTextures: view.getInt32_Xy(0x34),
-        fix: view.getUint8_Xy(0x3c),
+        rgba: view.getUint8_Rgba(0x30),
+        fxTexture1: view.getInt32(0x34),
+        fxTexture2: view.getInt32(0x38),
+        fix1: view.getUint8(0x3c),
+        fix2: view.getUint8(0x3d),
         runtimeScroll1: view.getFloat32_Xy(0x40),
         runtimeScroll2: view.getFloat32_Xy(0x48),
         phase: view.getInt32(0x50),
@@ -79,8 +106,6 @@ export function readWaterMeshDescriptor_KindA(view: DataViewExt) {
     }
 }
 
-// adhoc worldspace mesh
-// gaspar volcano flowing lava
 export interface WaterMesh_KindB {
     descriptor: ReturnType<typeof readWaterMeshDescriptor_KindB>,
     vertexCount: number;
@@ -117,8 +142,6 @@ export function readWaterMeshDescriptor_KindB(view: DataViewExt) {
     }
 }
 
-// adhoc worldspace meshes
-// gaspar lava ocean (the part with the cutout), hoven ice, oltanis ice
 export interface WaterMesh_KindC {
     descriptor: ReturnType<typeof readWaterMeshDescriptor_KindC>,
     positions: DataViewExt;
@@ -154,54 +177,58 @@ export function readWaterMeshDescriptor_KindC(view: DataViewExt) {
     };
 }
 
-// adhoc worldspace mesh
-// hoven ocean
 export interface WaterMesh_KindD {
     stripCount: number;
+    uvScrollSpeeds: { x: number; y: number }[];
     vertexCounts: number[];
     positions: DataViewExt[];
     texcoords: DataViewExt[];
-    ambientColors: DataViewExt[];
+    colors: DataViewExt[];
 }
-export const readWaterMeshes_KindD = (sections: OverlaySection[], positionsVaddr: number, texcoordsVaddr: number, ambientVaddr: number, vertexCountsVaddr: number, count: number): WaterMesh_KindD => {
+export const readWaterMeshes_KindD = (sections: OverlaySection[], positionsVaddr: number, texcoordsVaddr: number, colorsVaddr: number, vertexCountsVaddr: number, uvScrollSpeedVaddr: number, uvScrollSpeedCount: number, count: number): WaterMesh_KindD => {
     // input addresses point to arrays of pointers (except count which is an array of ints)
     const waterMeshes: WaterMesh_KindD = {
         stripCount: count,
+        uvScrollSpeeds: [],
         vertexCounts: [],
         positions: [],
         texcoords: [],
-        ambientColors: [],
+        colors: [],
+    }
+    for (let i = 0; i < uvScrollSpeedCount; i++) {
+        waterMeshes.uvScrollSpeeds.push(readOverlayVMem(sections, uvScrollSpeedVaddr + i * 8, 8).getFloat32_Xy(0));
     }
     for (let i = 0; i < count; i++) {
         const vertexCount = readOverlayVMem(sections, vertexCountsVaddr + i * 4, 4).getInt32(0);
         waterMeshes.vertexCounts.push(vertexCount);
         const positionsIndirectVaddr = readOverlayVMem(sections, positionsVaddr + i * 4, 4).getUint32(0);
         const texcoordsIndirectVaddr = readOverlayVMem(sections, texcoordsVaddr + i * 4, 4).getUint32(0);
-        const ambientIndirectVaddr = readOverlayVMem(sections, ambientVaddr + i * 4, 4).getUint32(0);
+        const colorsIndirectVaddr = readOverlayVMem(sections, colorsVaddr + i * 4, 4).getUint32(0);
         waterMeshes.positions.push(readOverlayVMem(sections, positionsIndirectVaddr, vertexCount * 4 * 3));
         waterMeshes.texcoords.push(readOverlayVMem(sections, texcoordsIndirectVaddr, vertexCount * 4 * 2));
-        waterMeshes.ambientColors.push(readOverlayVMem(sections, ambientIndirectVaddr, vertexCount * 4));
+        waterMeshes.colors.push(readOverlayVMem(sections, colorsIndirectVaddr, vertexCount * 4));
     }
     return waterMeshes;
 }
 
-// a 16x16 patch of water
-// used in many places for small pools of water, can be moved by mobys
 export interface WaterGrid_KindE {
     descriptor: ReturnType<typeof readWaterGridDescriptor_KindE>;
     data: DataViewExt;
 }
 
 export const SIZEOF_WATER_GRID_KIND_E = 0x1190;
-export function readWaterGrid_KindE(sections: OverlaySection[], dataVaddr: number, maskVaddr: number | null): WaterGrid_KindE {
-    const view = readOverlayVMem(sections, dataVaddr, SIZEOF_WATER_GRID_DESCRIPTOR_KIND_E);
+
+// reads one item from the arrays (each moby instance usually only cares about one entry)
+export function readWaterGrid_KindE(sections: OverlaySection[], dataVaddr: number, maskVaddr: number | null, maskStride: number = 2, index: number): WaterGrid_KindE {
+    const gridVaddr = dataVaddr + index * SIZEOF_WATER_GRID_KIND_E;
+    const view = readOverlayVMem(sections, gridVaddr, SIZEOF_WATER_GRID_DESCRIPTOR_KIND_E);
     const descriptor = readWaterGridDescriptor_KindE(view);
-    if (maskVaddr) {
-        descriptor.activeMask = readOverlayVMem(sections, maskVaddr, 2).getUint16(0);
+    if (maskVaddr !== null) {
+        descriptor.activeMask = readOverlayVMem(sections, maskVaddr + index * maskStride, 2).getUint16(0);
     } else {
         descriptor.activeMask = 0xFFFF;
     }
-    const data = readOverlayVMem(sections, dataVaddr + SIZEOF_WATER_GRID_DESCRIPTOR_KIND_E, SIZEOF_WATER_GRID_KIND_E - SIZEOF_WATER_GRID_DESCRIPTOR_KIND_E);
+    const data = readOverlayVMem(sections, gridVaddr + SIZEOF_WATER_GRID_DESCRIPTOR_KIND_E, SIZEOF_WATER_GRID_KIND_E - SIZEOF_WATER_GRID_DESCRIPTOR_KIND_E);
     return { descriptor, data };
 }
 
@@ -224,8 +251,6 @@ export function readWaterGridDescriptor_KindE(view: DataViewExt) {
     }
 }
 
-// runtime generated grid of 7x7 water patches
-// used for most oceans
 export interface WaterGrid_KindF {
     descriptor: ReturnType<typeof readWaterGrid_KindF>;
     mask: DataViewExt;
@@ -261,4 +286,58 @@ export function readWaterGrid_KindF(sections: OverlaySection[], dataVaddr: numbe
         descriptor,
         mask: readOverlayVMem(sections, descriptor.maskVaddr, maskSize),
     };
+}
+
+export function readWaterMesh_KindG(sections: OverlaySection[], positionVaddr: number, texcoordsVaddr: number, vertexCount: number, scale: number) {
+    const positions = readOverlayVMem(sections, positionVaddr, vertexCount * 0x0C).getTypedArrayView(Float32Array);
+    const texcoords = readOverlayVMem(sections, texcoordsVaddr, vertexCount * 0x08).getTypedArrayView(Float32Array);
+
+    return {
+        positions,
+        texcoords,
+        scale
+    };
+}
+
+export interface WaterMesh_KindH {
+    quadCount: number;
+    positions: { x: number; y: number; z: number }[];
+    texcoords: { x: number; y: number }[];
+}
+export function readWaterMesh_KindH(sections: OverlaySection[], vertexRecordsVaddr: number, quadIndicesVaddr: number, texcoordsVaddr: number, quadCount: number): WaterMesh_KindH {
+    const indicesView = readOverlayVMem(sections, quadIndicesVaddr, quadCount * 8 * 2);
+    const positionIndices: number[] = [];
+    const texcoordIndices: number[] = [];
+
+    // find max index value for positions and texcoords
+    let positionCount = 0;
+    let texcoordCount = 0;
+    for (let i = 0; i < quadCount * 4; i++) {
+        const positionIndex = indicesView.getUint16(i * 4);
+        const texcoordIndex = indicesView.getUint16(i * 4 + 2);
+        positionIndices.push(positionIndex);
+        texcoordIndices.push(texcoordIndex);
+        positionCount = Math.max(positionCount, positionIndex + 1);
+        texcoordCount = Math.max(texcoordCount, texcoordIndex + 1);
+    }
+
+    // remove index buffer
+    // we cannot use use two interleaved index buffers...
+    const positionRecords = readOverlayVMem(sections, vertexRecordsVaddr, positionCount * 0x10)
+        .subdivide(0, positionCount, 0x10)
+        .map(view => view.getFloat32_Xyz(0));
+    const texcoordRecords = readOverlayVMem(sections, texcoordsVaddr, texcoordCount * 0x08)
+        .subdivide(0, texcoordCount, 0x08)
+        .map(view => view.getFloat32_Xy(0));
+    const positions = [];
+    const texcoords = [];
+    for (let quad = 0; quad < quadCount; quad++) {
+        for (let corner = 0; corner < 4; corner++) {
+            const index = quad * 4 + corner;
+            positions.push(positionRecords[positionIndices[index]]);
+            texcoords.push(texcoordRecords[texcoordIndices[index]]);
+        }
+    }
+
+    return { quadCount, positions, texcoords };
 }

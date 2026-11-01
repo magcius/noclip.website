@@ -1,11 +1,11 @@
-import { InstanceGroupBlock, MissionGameplayHeader, OcclusionMappings, Pvar, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readInstanceGroupBlock, readLevelSettings, readMissionGameplayHeader, readMobyInstance, readOcclusionMappings, readPathBlock, readPointLightBlock, readPointLightInstance, readPvars, readShrubInstance, readTieAmbientRgbaBlock, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
+import { InstanceGroupBlock, MissionGameplayHeader, OcclusionMappings, Pvar, readClassPositionBlock, readDirectionLightInstance, readGameplayHeader, readGrindPathBlock, readInstanceBlock, readInstanceGroupBlock, readLevelSettings, readMissionGameplayHeader, readMobyInstance, readOcclusionMappings, readPathBlock, readPointLightBlock, readPointLightInstance, readPvars, readShapeArray, readShrubInstance, readTieAmbientRgbaBlock, readTieInstance, ShrubInstance, SIZEOF_DIRECTION_LIGHT_INSTANCE, SIZEOF_MOBY_INSTANCE, SIZEOF_POINT_LIGHT_INSTANCE, SIZEOF_SHRUB_INSTANCE, SIZEOF_TIE_INSTANCE, TieAmbientRgbaBlock, TieInstance } from "./bin-gameplay";
 import { DataViewExt } from "./DataViewExt";
 import { GsRamTableEntry, MobyClass, Occlusion, readCollision, readGsRamTableEntry, readMobyClass, readOcclusion, readShrubClass, readSky, readTfrag, readTfragBlockHeader, readTfragHeader, readTieClass, ShrubClass, SIZEOF_GS_RAM_TABLE_ENTRY, SIZEOF_TFRAG_HEADER, TieClass } from "./bin-core";
 import { filterInstancesByChunkPlane, filterMobyInstancesByChunkPlane, GN, makeClassOClassMap, makeInstanceOClassMap as makeInstancesByOClass, makeTextureIndicesByOClassMap, populateMobyOcclusionBits, populateTieOcclusionBits } from "./utils";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readTexture_Sky, readTexture_Regular, readTexture_Fx } from "./textures";
 import { ClassEntry, FxTextureEntry, readClassEntry, readFxTextureEntry, readLevelCoreHeader, readTextureEntry, readTitleHeader, SIZEOF_MOBY_CLASS_ENTRY, SIZEOF_SHRUB_CLASS_ENTRY, SIZEOF_TEXTURE_ENTRY, SIZEOF_TIE_CLASS_ENTRY, TextureEntry } from "./bin-index";
-import { DirectionLightInstance, GameplayHeader, LevelSettings, MobyInstance, PointLightInstance, Spline } from "./bin-gameplay";
+import { DirectionLightInstance, GameplayHeader, GameplayShape, LevelSettings, MobyInstance, PointLightInstance, Spline } from "./bin-gameplay";
 import { PaletteTexture } from "./textures";
 import { Collision, Sky, Tfrag } from "./bin-core";
 import { LevelCoreHeader } from "./bin-index";
@@ -14,8 +14,11 @@ import { WadDecompressor } from "./decompress";
 import { assert } from "../util";
 import { LevelDataHeader, LevelDescriptor } from "./bin-toc";
 import { OverlaySection, readOverlaySections } from "./bin-overlay";
+import { MobyImpl } from "./moby-impl/moby";
 
 export interface LevelResources {
+    gn: GN,
+    levelNumber: number,
     metadata: MetaFile | null,
     levelCoreHeader: LevelCoreHeader | null,
     gameplayHeader: GameplayHeader | null,
@@ -28,6 +31,10 @@ export interface LevelResources {
     occlusionMappings: OcclusionMappings | null;
     paths: Spline[] | null,
     grindPaths: Spline[] | null,
+    shapesCuboids: GameplayShape[] | null,
+    shapesSpheres: GameplayShape[] | null,
+    shapesCylinders: GameplayShape[] | null,
+    shapesPills: GameplayShape[] | null,
     directionLights: DirectionLightInstance[] | null,
     pointLights: PointLightInstance[] | null,
     collisionGetter: (() => Collision) | null,
@@ -53,12 +60,15 @@ export interface LevelResources {
     mobyInstancesByOClass: MobyInstance[][] | null,
     mobyGroups: InstanceGroupBlock | null,
     mobyUniqueMissionIds: Set<number> | null,
+    mobyImpls: MobyImpl[] | null,
+    mobyImplShared: Record<string, number> | null,
     pvars: Pvar[] | null,
 
     missionMobyOClasses: number[] | null,
     missionMobyInstances: MobyInstance[] | null,
     missionMobyInstancesByOClass: MobyInstance[][] | null,
     missionMobyGroups: InstanceGroupBlock | null,
+
 
     shrubTextures: PaletteTexture[] | null,
     shrubOClasses: number[] | null,
@@ -173,6 +183,7 @@ export function load(gn: GN, levelNumber: number, filterChunk: number | null, ou
 
     return Promise.all([
         loadMetadata(gn, out, metadataFilePromise),
+        loadShapeData(out, gameplayFilePromise, gameplayHeaderPromise),
         loadPathData(gn, out, gameplayFilePromise, gameplayHeaderPromise),
         loadDirectionLights(gn, out, gameplayFilePromise, gameplayArtFilePromise, gameplayHeaderPromise),
         loadPointLights(gn, out, gameplayFilePromise, gameplayHeaderPromise),
@@ -473,6 +484,15 @@ async function loadPathData(gn: GN, out: LevelResources, gameplayFilePromise: Pr
 
     out.grindPaths = readGrindPathBlock(gameplayFile.subview(gameplayHeader.grindPaths));
     out.paths = readPathBlock(gameplayFile.subview(gameplayHeader.paths));
+}
+
+async function loadShapeData(out: LevelResources, gameplayFilePromise: Promise<DataViewExt>, gameplayHeaderPromise: Promise<GameplayHeader>) {
+    const [gameplayFile, gameplayHeader] = await Promise.all([gameplayFilePromise, gameplayHeaderPromise]);
+
+    out.shapesCuboids = readShapeArray(gameplayFile.subview(gameplayHeader.shapesCuboids));
+    out.shapesSpheres = readShapeArray(gameplayFile.subview(gameplayHeader.shapesSpheres));
+    out.shapesCylinders = readShapeArray(gameplayFile.subview(gameplayHeader.shapesCylinders));
+    out.shapesPills = readShapeArray(gameplayFile.subview(gameplayHeader.shapesPills));
 }
 
 async function loadDirectionLights(gn: GN, out: LevelResources, gameplayFilePromise: Promise<DataViewExt>, artFilePromise: Promise<DataViewExt> | null, gameplayHeaderPromise: Promise<GameplayHeader>) {

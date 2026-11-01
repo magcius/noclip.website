@@ -317,6 +317,8 @@ function translateBlendFactor(blendFactor: GfxBlendFactor): GLenum {
     case GfxBlendFactor.OneMinusDstAlpha: return WebGLRenderingContext.ONE_MINUS_DST_ALPHA;
     case GfxBlendFactor.ConstantColor: return WebGLRenderingContext.CONSTANT_COLOR;
     case GfxBlendFactor.OneMinusConstantColor: return WebGLRenderingContext.ONE_MINUS_CONSTANT_COLOR;
+    case GfxBlendFactor.ConstantAlpha: return WebGLRenderingContext.CONSTANT_ALPHA;
+    case GfxBlendFactor.OneMinusConstantAlpha: return WebGLRenderingContext.ONE_MINUS_CONSTANT_ALPHA;
     }
 }
 

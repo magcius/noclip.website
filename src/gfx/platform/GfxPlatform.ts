@@ -42,6 +42,8 @@ export enum GfxBlendFactor {
     OneMinusDstAlpha,
     ConstantColor,
     OneMinusConstantColor,
+    ConstantAlpha,
+    OneMinusConstantAlpha,
 }
 
 export enum GfxBlendMode {
@@ -56,8 +58,8 @@ export enum GfxMipFilterMode { Nearest, Linear }
 export enum GfxPrimitiveTopology { Triangles, Lines }
 
 export enum GfxBufferUsage {
-    Index   = 0b00001,
-    Vertex  = 0b00010,
+    Index = 0b00001,
+    Vertex = 0b00010,
     Uniform = 0b00100,
     Storage = 0b01000,
     CopySrc = 0b10000,
@@ -65,14 +67,14 @@ export enum GfxBufferUsage {
 }
 
 export enum GfxBufferFrequencyHint {
-    Static  = 0x01,
+    Static = 0x01,
     Dynamic = 0x02,
 }
 
 export enum GfxVertexBufferFrequency {
-    PerVertex   = 0x01,
+    PerVertex = 0x01,
     PerInstance = 0x02,
-    Constant    = 0x03,
+    Constant = 0x03,
 }
 
 export enum GfxTextureDimension {
@@ -80,18 +82,18 @@ export enum GfxTextureDimension {
 }
 
 export enum GfxTextureUsage {
-    Sampled      = 0x01,
+    Sampled = 0x01,
     RenderTarget = 0x02,
 }
 
 export enum GfxChannelWriteMask {
-    None        = 0x00,
-    Red         = 0x01,
-    Green       = 0x02,
-    Blue        = 0x04,
-    Alpha       = 0x08,
+    None = 0x00,
+    Red = 0x01,
+    Green = 0x02,
+    Blue = 0x04,
+    Alpha = 0x08,
 
-    RGB         = 0x07,
+    RGB = 0x07,
     AllChannels = 0x0F,
 }
 

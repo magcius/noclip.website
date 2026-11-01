@@ -10,8 +10,10 @@ export const RatchetShaderLib = {
         12, // fog params
         16 * 16, // directional lights
         4 * 32 * 4, // texture remaps (3 arrays of 64 vec4s)
+        4, // scene time
     ].reduce((a, b) => a + b, 0),
     SceneParams: `
+#define PI 3.14159265
 
 // size 12
 struct CameraData {
@@ -38,6 +40,7 @@ struct DirectionLight {
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
     CameraData u_CameraData;
+    vec4 u_Time; // x = scene time in seconds
     vec4 u_LodSettings; // x = preset, y = bias
     vec4 u_RenderSettings; // x = enable textures
     vec4 u_BackgroundColor;
@@ -125,13 +128,12 @@ ${GfxShaderLibrary.MonochromeNTSCLinear}
 
 const float SATURATION_ADJUST = 1.1;
 
-vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest) {
+vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest, vec3 fogColor) {
     // texture color is multiplied with vertex color immediately
     rgba *= textureSample;
 
     // fog step (ignores alpha)
     vec3 rgb = rgba.rgb;
-    vec3 fogColor = u_FogParams.color.rgb;
     rgb = mix(rgb, fogColor, fogFactor);
 
     // bring back alpha
@@ -141,9 +143,13 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float 
     if (rgba.a < alphaTest) discard;
 
     // with saturation filter (not authentic but looks washed out without it)
-    // rgba.rgb = mix(vec3(MonochromeNTSCLinear(rgba.rgb)), rgba.rgb, SATURATION_ADJUST);
+    rgba.rgb = mix(vec3(MonochromeNTSCLinear(rgba.rgb)), rgba.rgb, SATURATION_ADJUST);
 
     return rgba;
+}
+
+vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest) {
+    return commonFragmentShader(rgba, textureSample, fogFactor, alphaTest, u_FogParams.color.rgb);
 }
 
     `,

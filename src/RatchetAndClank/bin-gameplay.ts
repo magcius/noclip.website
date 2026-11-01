@@ -516,6 +516,8 @@ export interface MobyInstance {
     _positionPretransformed: vec3,
     // instance scale
     _scalePretransformed: number,
+    // don't render this instance
+    _skipDraw: boolean,
 
     [unknown: string]: unknown,
 };
@@ -572,6 +574,7 @@ export function readMobyInstance(gn: GN, view: DataViewExt, i: number): MobyInst
                 _matrixPretransformed,
                 _positionPretransformed,
                 _scalePretransformed,
+                _skipDraw: false,
             }
         }
         case 2:
@@ -617,6 +620,7 @@ export function readMobyInstance(gn: GN, view: DataViewExt, i: number): MobyInst
                 _matrixPretransformed,
                 _positionPretransformed,
                 _scalePretransformed,
+                _skipDraw: false,
             };
         }
         case 4: {
@@ -658,6 +662,7 @@ export function readMobyInstance(gn: GN, view: DataViewExt, i: number): MobyInst
                 _matrixPretransformed,
                 _positionPretransformed,
                 _scalePretransformed,
+                _skipDraw: false,
             };
         }
         default: {
@@ -947,6 +952,27 @@ export function readSpline(view: DataViewExt): Spline {
         count,
         points,
     };
+}
+
+export interface GameplayShape {
+    matrix: mat4,
+    inverseMatrix: mat4,
+}
+export function readShapeArray(view: DataViewExt): GameplayShape[] {
+    const count = view.getInt32(0x0);
+    return view.subdivide(0x10, count, 0x80).map(shapeView => {
+        const matrix = shapeView.getMat4Slice(0x0);
+        const inverseMatrix = shapeView.getMat4Slice(0x40).slice();
+        // inverse matrix is 4x3 so clear last row
+        inverseMatrix[12] = 0;
+        inverseMatrix[13] = 0;
+        inverseMatrix[14] = 0;
+        inverseMatrix[15] = 1;
+        return {
+            matrix,
+            inverseMatrix,
+        };
+    });
 }
 
 export type TieAmbientRgbaBlock = {

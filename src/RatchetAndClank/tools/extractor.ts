@@ -10,6 +10,7 @@ import { WadDecompressor } from "../decompress.ts";
 import { assert } from '../../util.ts';
 import { LevelResources, load } from '../loader.ts';
 import { GN } from '../utils.ts';
+import { snipOverlay } from '../bin-overlay.ts';
 
 const encoder = new TextEncoder();
 
@@ -133,7 +134,7 @@ for (const levelSectors of tableOfContents.levelSectors) {
     assert(levelCoreDataWad.byteLength === levelCoreHeader.assetsCompressedSize);
 
     // level_n_overlay
-    const levelOverlayFile = levelData.subview(levelDataHeader.overlay.offset, levelDataHeader.overlay.size);
+    const levelOverlayFile = snipOverlay(levelData.subview(levelDataHeader.overlay.offset, levelDataHeader.overlay.size));
 
     // level_n_n_tfrag and level_n_n_collision
     const chunkFiles: { tfragFile: DataViewExt, collisionFile: DataViewExt }[] = [];
@@ -172,6 +173,8 @@ for (const levelSectors of tableOfContents.levelSectors) {
     async function test(chunkNumber: number | null, missionNumber: number | null) {
         // test parsing everything
         const resources: LevelResources = {
+            gn: gn,
+            levelNumber: levelNum,
             metadata: null,
             levelCoreHeader: null,
             gameplayHeader: null,
@@ -183,6 +186,10 @@ for (const levelSectors of tableOfContents.levelSectors) {
             occlusionMappings: null,
             paths: null,
             grindPaths: null,
+            shapesCuboids: null,
+            shapesSpheres: null,
+            shapesCylinders: null,
+            shapesPills: null,
             directionLights: null,
             pointLights: null,
             collisionGetter: null,
@@ -205,6 +212,8 @@ for (const levelSectors of tableOfContents.levelSectors) {
             mobyInstancesByOClass: null,
             mobyGroups: null,
             mobyUniqueMissionIds: null,
+            mobyImpls: null,
+            mobyImplShared: null,
             pvars: null,
             missionMobyOClasses: null,
             missionMobyInstances: null,

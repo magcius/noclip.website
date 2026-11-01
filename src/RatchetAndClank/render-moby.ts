@@ -136,7 +136,7 @@ export class MobyGeometry {
     private mainMeshVertexCount: number | null = null;
     private bangleVertexCount: number | null = null;
 
-    constructor(private cache: GfxRenderCache, public oClass: number, public moby: MobyClass, public lod: number, private textureIndices: number[], private textureAtlases: TextureAtlases) {
+    constructor(private cache: GfxRenderCache, public oClass: number, public moby: MobyClass, public lod: number, public textureIndices: number[], private textureAtlases: TextureAtlases) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 // per vertex
@@ -419,6 +419,8 @@ export class MobyRenderer {
                 if ((occlusionChecker.mask[bit >> 3] & (1 << (bit % 8))) === 0) continue;
             }
 
+            if (mobyInstance._skipDraw) continue;
+
             if (mobyInstance.mission !== -1) {
                 // despawns enemies on completed missions
                 const bit = 1 << mobyInstance.mission;
@@ -475,6 +477,7 @@ export class MobyRenderer {
             if (!mobyInstancesToDraw.length) continue;
             const mobyGeometry = mobyGeometriesByLod[lod];
             if (!mobyGeometry) continue;
+            if (mobyGeometry.textureIndices.length === 0) continue; // skip textureless mobys (usually these are mobys that render particles, their mesh is just a bounding box)
 
             const renderInst = this.renderHelper.renderInstManager.newRenderInst();
             renderInst.setGfxProgram(this.mobyProgram);

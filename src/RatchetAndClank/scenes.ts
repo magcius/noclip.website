@@ -25,7 +25,8 @@ import { MobyGeometry, MobyRenderer } from "./render-moby";
 import { nArray } from "../util";
 import { AABB } from "../Geometry";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw";
-import { renderWaterMeshes_Rac1 } from "./hardcoded";
+import { MOBY_IMPL_REGISTRY, MobyDrawKit } from "./moby-impl/moby";
+import { WaterRenderer } from "./render-water";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
 
@@ -35,6 +36,7 @@ class RatchetAndClankScene implements SceneGfx {
     private renderInstList = new GfxRenderInstList();
 
     private samplerGeneral: GfxSampler;
+    private samplerWater: GfxSampler;
     private samplerSky: GfxSampler;
 
     private occlusionChecker: OcclusionChecker | null = null;
@@ -95,6 +97,7 @@ class RatchetAndClankScene implements SceneGfx {
         moby: MobyRenderer,
         shrub: ShrubRenderer,
         sky: SkyRenderer,
+        water: WaterRenderer,
         collision: CollisionRenderer,
     };
 
@@ -112,6 +115,8 @@ class RatchetAndClankScene implements SceneGfx {
         const cache = this.renderHelper.renderCache;
 
         this.levelResources = {
+            gn: gn,
+            levelNumber: this.levelNumber,
             metadata: null,
             levelCoreHeader: null,
             gameplayHeader: null,
@@ -123,6 +128,10 @@ class RatchetAndClankScene implements SceneGfx {
             occlusionMappings: null,
             paths: null,
             grindPaths: null,
+            shapesCuboids: null,
+            shapesSpheres: null,
+            shapesCylinders: null,
+            shapesPills: null,
             directionLights: null,
             pointLights: null,
             collisionGetter: null,
@@ -145,6 +154,8 @@ class RatchetAndClankScene implements SceneGfx {
             mobyInstancesByOClass: null,
             mobyGroups: null,
             mobyUniqueMissionIds: null,
+            mobyImpls: null,
+            mobyImplShared: null,
             pvars: null,
             missionMobyOClasses: null,
             missionMobyInstances: null,
@@ -168,6 +179,14 @@ class RatchetAndClankScene implements SceneGfx {
             mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
+        });
+
+        this.samplerWater = cache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
         });
 
         this.samplerSky = cache.createSampler({
@@ -206,6 +225,7 @@ class RatchetAndClankScene implements SceneGfx {
             moby: new MobyRenderer(this.renderHelper),
             shrub: new ShrubRenderer(this.renderHelper),
             sky: new SkyRenderer(this.renderHelper, this.gn),
+            water: new WaterRenderer(this.renderHelper),
             collision: new CollisionRenderer(this.renderHelper),
         };
 
@@ -215,18 +235,31 @@ class RatchetAndClankScene implements SceneGfx {
         if (this.levelNumber === TITLE_SCREEN_RAC1) {
             // load special case title level for rac1
             const filePromises = loadTitleFileFromNetwork(sceneContext.dataFetcher, this.resourceBasePath);
-            this.loadingPromise = load_Rac1TitleLevel(this.levelResources, filePromises.titleFilePromise)
+            this.loadingPromise = load_Rac1TitleLevel(this.levelResources, filePromises.titleFilePromise);
         } else {
             // load normal level
             this.filePromises = loadFilesFromNetwork(sceneContext.dataFetcher, this.resourceBasePath, this.gn, this.chunkNumber, this.missionNumber);
-            this.loadingPromise = load(this.gn, this.levelNumber, this.chunkNumber, this.levelResources, this.filePromises)
+            this.loadingPromise = load(this.gn, this.levelNumber, this.chunkNumber, this.levelResources, this.filePromises);
         }
 
-        this.loadingPromise.then(() => {
-            if (IS_DEVELOPMENT) console.log(this);
-            this.populateMissionsList();
-        }).catch((e) => {
+        this.loadingPromise.catch((e) => {
             console.error(`Error loading title level:`, e);
+        }).then(() => {
+            if (IS_DEVELOPMENT) console.log(this);
+
+            // setup missions ui
+            this.populateMissionsList();
+
+            // make moby impls
+            const mobyInstances = this.levelResources.mobyInstances!;
+            this.levelResources.mobyImpls = [];
+            this.levelResources.mobyImplShared = {};
+            for (let i = 0; i < mobyInstances!.length; i++) {
+                const MobyImplConstructor = MOBY_IMPL_REGISTRY.get(mobyInstances[i].oClass)!;
+                if (MobyImplConstructor) {
+                    this.levelResources.mobyImpls.push(new MobyImplConstructor(mobyInstances[i], this.levelResources));
+                }
+            }
         });
     }
 
@@ -445,6 +478,9 @@ class RatchetAndClankScene implements SceneGfx {
         offs += fillVec3v(data, offs, cameraDirection, 0);
         offs += fillVec4(data, offs, nearClip, farClip, viewerInput.camera.isOrthographic ? 1 : 0, 0);
 
+        // scene time (4 floats)
+        offs += fillVec4(data, offs, viewerInput.time, 0, 0, 0);
+
         // lod settings (4 floats)
         offs += fillVec4(data, offs, this.settings.lodSetting, this.settings.lodBias, 0, 0);
 
@@ -498,6 +534,11 @@ class RatchetAndClankScene implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const cameraPosition = vec3.create();
         mat4.getTranslation(cameraPosition, viewerInput.camera.worldMatrix);
+        const cameraForward = vec3.fromValues(
+            -viewerInput.camera.worldMatrix[8],
+            -viewerInput.camera.worldMatrix[9],
+            -viewerInput.camera.worldMatrix[10],
+        );
         const isOrtho = viewerInput.camera.isOrthographic;
         const cameraFrustum = viewerInput.camera.frustum;
 
@@ -539,6 +580,32 @@ class RatchetAndClankScene implements SceneGfx {
         // textures shared between tfrags, ties, and shrubs
         const atlasTextures = this.getOrCreateAtlasTextures();
         const fxTextures = this.getOrCreateFxTextures();
+
+        const drawKit: MobyDrawKit = {
+            renderInstList: this.renderInstList,
+            renderHelper: this.renderHelper,
+            instanceDataBuffer: this.instanceDataBuffer,
+            dt: viewerInput.deltaTime,
+            cameraPosition,
+            cameraForward,
+            cameraFrustum: viewerInput.camera.frustum,
+            occlusionChecker: this.occlusionChecker,
+            lodSetting,
+            lodBias,
+            renderers: {
+                water: this.renderers.water,
+            },
+            fxTextures,
+            fxSampler: this.samplerWater,
+        };
+
+        // moby update
+        if (this.levelResources.mobyImpls) {
+            for (let i = 0; i < this.levelResources.mobyImpls.length; i++) {
+                const mobyImpl = this.levelResources.mobyImpls[i];
+                mobyImpl.update(drawKit);
+            }
+        }
 
         // sky
         const skyTextures = this.getOrCreateSkyTextures();
@@ -587,6 +654,26 @@ class RatchetAndClankScene implements SceneGfx {
             }
         }
 
+        // moby draw callback (after ties)
+        if (this.settings.enableMobys && this.levelResources.mobyImpls) {
+            for (let i = 0; i < this.levelResources.mobyImpls.length; i++) {
+                const mobyImpl = this.levelResources.mobyImpls[i];
+                mobyImpl.drawAfterTies(drawKit);
+            }
+        }
+
+        // shrubs
+        const shrubInstancesByOClass = this.levelResources.shrubInstancesByOClass;
+        if (this.settings.enableShrubs && shrubInstancesByOClass && atlasTextures) {
+            for (let i = 0; i < shrubInstancesByOClass.length; i++) {
+                const shrubInstances = shrubInstancesByOClass[i];
+                const oClass = shrubInstances[0].oClass;
+                const geometry = this.getOrCreateShrubGeometry(oClass);
+                if (!geometry) continue;
+                this.renderers.shrub.renderShrub(this.renderInstList, geometry, shrubInstances, atlasTextures, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
+            }
+        }
+
         // mobys
         const mobyInstancesByOClass = this.levelResources.mobyInstancesByOClass;
         if (this.settings.enableMobys && mobyInstancesByOClass && atlasTextures) {
@@ -613,19 +700,11 @@ class RatchetAndClankScene implements SceneGfx {
             }
         }
 
-        if (this.levelResources.overlaySections) {
-            renderWaterMeshes_Rac1(this.levelNumber, this.levelResources.overlaySections, this.renderHelper);
-        }
-
-        // shrubs
-        const shrubInstancesByOClass = this.levelResources.shrubInstancesByOClass;
-        if (this.settings.enableShrubs && shrubInstancesByOClass && atlasTextures) {
-            for (let i = 0; i < shrubInstancesByOClass.length; i++) {
-                const shrubInstances = shrubInstancesByOClass[i];
-                const oClass = shrubInstances[0].oClass;
-                const geometry = this.getOrCreateShrubGeometry(oClass);
-                if (!geometry) continue;
-                this.renderers.shrub.renderShrub(this.renderInstList, geometry, shrubInstances, atlasTextures, cameraPosition, cameraFrustum, lodSetting, lodBias, this.instanceDataBuffer);
+        // moby draw callback (after mobys)
+        if (this.settings.enableMobys && this.levelResources.mobyImpls) {
+            for (let i = 0; i < this.levelResources.mobyImpls.length; i++) {
+                const mobyImpl = this.levelResources.mobyImpls[i];
+                mobyImpl.drawAfterMobys(drawKit);
             }
         }
 
@@ -900,6 +979,12 @@ class RatchetAndClankScene implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
 
+        if (this.levelResources.mobyImpls) {
+            for (const mobyImpl of this.levelResources.mobyImpls) {
+                mobyImpl.destroy(device);
+            }
+        }
+
         const allGeometries = [
             this.geometries.tfrag,
             ...(Array.from(this.geometries.ties.values()).flat(1)),
@@ -925,6 +1010,9 @@ class RatchetAndClankScene implements SceneGfx {
                 device.destroyTexture(texture);
             }
         });
+
+        // (this one holds textures)
+        this.renderers.water.destroy(device);
 
         this.instanceDataBuffer.destroy();
 
