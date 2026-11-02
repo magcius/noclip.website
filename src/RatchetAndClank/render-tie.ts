@@ -57,7 +57,7 @@ layout(binding = 3) uniform sampler2DArray u_Texture_128;
 layout(binding = 4) uniform sampler2DArray u_Texture_256;
 
 layout(binding = 5) uniform sampler2D u_AmbientRgbaTexture;
-layout(binding = 6) uniform sampler2D u_TieNormalsTexture;
+layout(binding = 6) uniform sampler2D u_TieNormalsTexture; // rac1 - contains x/y/z normals, rac234 - contains weird wrong-axis azimuth/elevation values
 
 `;
 
@@ -116,9 +116,12 @@ void main() {
         ivec2 ambientRgbaTexcoord = ivec2(int(rgbaIndices[i]), int(a_InstanceExtraData.x));
         vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
         rgba.rgb /= 128.0 / 255.0;
+
         ivec2 normalTexcoord = ivec2(int(a_NormalIndices[i]), int(a_InstanceExtraData.w));
         vec4 normalTexData = texelFetch(TEXTURE(u_TieNormalsTexture), normalTexcoord, 0);
-        vec3 normal = MulNormalMatrix(instanceTransform, normalTexData.xyz);
+        vec3 normal = normalTexData.xyz;
+        normal = mat3(instanceTransform) * normal;
+
         colors[i] = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
     }
     // mix colors based on lodMorphFactor
@@ -126,7 +129,6 @@ void main() {
 
 #else
 
-    mat3 inverseTransform = inverse(mat3(instanceTransform));
     vec4 colors[4];
     for (int i = 0; i < 4; i++) {
         if (a_RemapSources[i] == -1.0) {
@@ -140,15 +142,19 @@ void main() {
             continue;
         }
         ivec2 ambientRgbaTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData.x));
-        vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
+        vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0) * (255.0 / 128.0);
         if (a_RemapSources[i] == 511.0) {
             // last row means emissive
             colors[i] = rgba;
             continue;
         }
-        ivec2 normalTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData.w));
-        vec4 normalTexData = texelFetch(TEXTURE(u_TieNormalsTexture), normalTexcoord, 0);
-        vec3 normal = normalize(inverseTransform * normalTexData.xyz);
+
+        ivec2 azimuthElevationTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData.w));
+        vec4 azimuthElevationTexData = texelFetch(TEXTURE(u_TieNormalsTexture), azimuthElevationTexcoord, 0);
+        vec3 normal = normalFromAzumithElevationWeirdVersion(azimuthElevationTexData.x, azimuthElevationTexData.y);
+        normal = mat3(instanceTransform) * normal;
+        normal.xz = -normal.xz; // ???
+
         colors[i] = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
     }
     v_Rgba = (colors[0] + colors[1] + colors[2] + colors[3]) / 4.0;

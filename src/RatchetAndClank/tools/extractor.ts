@@ -252,7 +252,8 @@ for (const levelSectors of tableOfContents.levelSectors) {
             if (gn === 1 && (key === "tieGroups" || key === "shrubGroups")) continue; // not in rac1
             if (missionNumber === null && key.startsWith("mission")) continue; // no mission
             if (key === "occlusion" || key === "occlusionMappings") continue; // occlusion is optional
-            if (!resources[key as keyof typeof resources]) {
+            if (key === "mobyImpls" || key === "mobyImplShared") continue; // not populated in extractor
+            if (resources[key as keyof typeof resources] === null) {
                 throw new Error(`Level ${levelNum}: ${key} was not populated`);
             }
         }

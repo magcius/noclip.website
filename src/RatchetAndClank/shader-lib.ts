@@ -52,16 +52,16 @@ layout(std140) uniform ub_SceneParams {
     LightingFunctions: `
 
 vec3 normalFromAzumithElevation(float azimuth, float elevation) {
-    float cosAzimuth = cos(azimuth);
-    float sinAzimuth = sin(azimuth);
-    float cosElevation = cos(elevation);
-    float sinElevation = sin(elevation);
-
     return vec3(
-        sinAzimuth * cosElevation,
-        cosAzimuth * cosElevation,
-        sinElevation
+        cos(azimuth) * cos(elevation),
+        sin(azimuth) * cos(elevation),
+        sin(elevation)
     );
+}
+
+vec3 normalFromAzumithElevationWeirdVersion(float azimuth, float elevation) {
+    // no idea why...
+    return normalFromAzumithElevation(azimuth, elevation).xzy * vec3(-1.0, -1.0, 1.0);
 }
 
 DirectionLight blendDirectionalLights(vec3 directionLightSelector) {

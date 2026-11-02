@@ -1244,7 +1244,6 @@ export const sceneGroup4: SceneGroup = {
 
         "Multiplayer",
         new RatchetAndClankSceneDesc(4, 41, 1, "MP Battledome Tower"),
-        new RatchetAndClankSceneDesc(4, 41, 0, "MP Battledome Tower (Unused)"),
         new RatchetAndClankSceneDesc(4, 42, null, "MP Catacrom Graveyard"),
         new RatchetAndClankSceneDesc(4, 44, null, "MP Sarathos Swamp"),
         new RatchetAndClankSceneDesc(4, 45, 0, "MP Dark Cathedral"),
@@ -1258,7 +1257,6 @@ export const sceneGroup4: SceneGroup = {
 
         "Multiplayer (Splitscreen)",
         new RatchetAndClankSceneDesc(4, SPLITSCREEN_RAC4 + 41, 1, "Splitscreen MP Battledome Tower"),
-        new RatchetAndClankSceneDesc(4, SPLITSCREEN_RAC4 + 41, 0, "Splitscreen MP Battledome Tower (Unused)"),
         new RatchetAndClankSceneDesc(4, SPLITSCREEN_RAC4 + 42, null, "Splitscreen MP Catacrom Graveyard"),
         new RatchetAndClankSceneDesc(4, SPLITSCREEN_RAC4 + 44, null, "Splitscreen MP Sarathos Swamp"),
         new RatchetAndClankSceneDesc(4, SPLITSCREEN_RAC4 + 45, 0, "Splitscreen MP Dark Cathedral"),

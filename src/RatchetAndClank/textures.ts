@@ -415,7 +415,7 @@ export function createTieNormalsTexture(gn: GN, device: GfxDevice, tieClasses: M
             data[ptr + 0] = normalsData[j].x;
             data[ptr + 1] = normalsData[j].y;
             data[ptr + 2] = normalsData[j].z;
-            data[ptr + 3] = 1;
+            data[ptr + 3] = normalsData[j].w;
         }
     }
 

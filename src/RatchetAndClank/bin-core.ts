@@ -31,7 +31,7 @@ export function readGsRamTableEntry(view: DataViewExt) {
 
 export interface TieClass {
     header: TieClassHeader,
-    normalsData: { x: number, y: number, z: number }[],
+    normalsData: { x: number, y: number, z: number, w: number }[],
     rgbaRemaps: (RgbaRemaps | null)[] | null; // [lod], not present in rac1
     nearDist: number,
     midDist: number,
@@ -150,12 +150,10 @@ function readTieNormalEntry_rac234(view: DataViewExt) {
     const elevation = view.getUint8(0x6) * angleScale;
     const azimuth = view.getUint8(0x7) * angleScale;
 
-    const c = Math.cos(elevation);
-
     return {
-        x: -c * Math.cos(azimuth),
-        y: -c * Math.sin(azimuth),
-        z: -Math.sin(elevation),
+        x: azimuth,
+        y: elevation,
+        z: 0,
         w: 0,
     }
 }

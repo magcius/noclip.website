@@ -5,10 +5,10 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { RatchetShaderLib } from "./shader-lib";
 import { MobyClass, MobyMeshPacket, MobyVertex } from "./bin-core";
-import { MegaBuffer, noclipSpaceFromRatchetSpace, OcclusionChecker } from "./utils";
+import { MegaBuffer, OcclusionChecker } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
-import { mat4, quat, vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { MobyInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
@@ -81,7 +81,7 @@ void main() {
     vec3 positionWorld = instanceTransform * vec4(a_Position.xyz, 1.0f);
 
     vec3 normal = normalFromAzumithElevation(a_NormalAzimuthElevationRad.x, a_NormalAzimuthElevationRad.y);
-    normal = MulNormalMatrix(instanceTransform, normal);
+    normal = mat3(instanceTransform) * normal;
 
     float lodAlpha = a_InstanceExtraData.x;
     vec4 rgba = commonVertexLighting(a_InstanceAmbientRgba, normal, a_InstanceLightSelector);

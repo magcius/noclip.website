@@ -9,11 +9,11 @@ import { WaterGeometry } from "../render-water";
 import { GfxTopology, makeTriangleIndexBuffer } from "../../gfx/helpers/TopologyHelpers";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 
-export interface WaterKindADecl {
+export interface WaterDecl_A {
     vaddr: number;
     count: number;
 }
-export const RAC1_WATER_KIND_A = new Map<number, WaterKindADecl>([
+export const RAC1_WATER_KIND_A = new Map<number, WaterDecl_A>([
     [676, { vaddr: 0x1e2fc0, count: 8 }],
     [678, { vaddr: 0x1e3380, count: 2 }],
     [761, { vaddr: 0x1fbc80, count: 4 }],
@@ -28,7 +28,7 @@ export const RAC1_WATER_KIND_A = new Map<number, WaterKindADecl>([
 export class Water_A implements MobyImpl {
     overlaySections: OverlaySection[];
 
-    decl: WaterKindADecl;
+    decl: WaterDecl_A;
     meshes: WaterMesh_KindA[];
     geometries: WaterGeometry[] | null = null;
 
