@@ -1,7 +1,7 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import { DataViewExt } from "./DataViewExt";
 import { GN, matrixToNoclipSpace, noclipSpaceFromRatchetSpace } from "./utils";
-import { assert } from "../util";
+import { align, assert } from "../util";
 import { clamp } from "../MathHelpers";
 
 export type GameplayHeader = {
@@ -678,6 +678,8 @@ export interface ShrubInstance {
     color: { r: number, g: number, b: number },
     lightSelector: DirectionLightSelector,
 
+    // original index within the instance array
+    _i: number,
     // pre-transformed matrix
     _matrixPretransformed: mat4,
     // translation of pre-transformed matrix
@@ -686,7 +688,7 @@ export interface ShrubInstance {
     _scalePretransformed: number,
 }
 export const SIZEOF_SHRUB_INSTANCE = 0x70;
-export function readShrubInstance(view: DataViewExt): ShrubInstance {
+export function readShrubInstance(view: DataViewExt, instanceIndex: number): ShrubInstance {
     /*
     https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L673
     */
@@ -703,6 +705,7 @@ export function readShrubInstance(view: DataViewExt): ShrubInstance {
         color: view.getInt32_Rgb(0x50),
         lightSelector: readDirectionLightSelector(view.subview(0x60)),
 
+        _i: instanceIndex,
         _matrixPretransformed,
         _positionPretransformed,
         _scalePretransformed,
@@ -760,7 +763,7 @@ export function readInstanceGroupBlock(view: DataViewExt): InstanceGroupBlock {
         };
     }
 
-    const memberDataOffset = 0x10 + groupCount * 4;
+    const memberDataOffset = align(0x10 + groupCount * 4, 0x10);
     const pointers = view.subview(0x10, groupCount * 4).getTypedArrayView(Int32Array);
     const memberData = view.subview(memberDataOffset).getTypedArrayView(Uint16Array);
 

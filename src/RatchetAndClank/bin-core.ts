@@ -369,6 +369,7 @@ export function readTieClassHeader(gn: GN, view: DataViewExt): TieClassHeader {
                 farDist: view.getFloat32(0x18),
                 packetCounts: view.getArrayOfNumbers(0x20, 3, Uint8Array),
                 textureCount: view.getUint8(0x23),
+                modeBits: view.getInt16(0x24),
                 adGifsOffset: view.getUint32(0x2c),
                 bsphere: view.getFloat32_Xyzw(0x30),
                 scale: view.getFloat32(0x40),
@@ -380,7 +381,6 @@ export function readTieClassHeader(gn: GN, view: DataViewExt): TieClassHeader {
                 ambientRgbasOffset: 0,
 
                 // fields that probably exist but idk where
-                modeBits: 0,
                 lodHeaders: [null, null, null],
                 instanceIndex: 0,
                 ambientSize: 0,

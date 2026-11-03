@@ -77,11 +77,6 @@ flat out vec4 v_RenderParams;
 
 ${RatchetShaderLib.LightingFunctions}
 
-float seededRandom(vec3 position, float seed) {
-    float positionSeed = dot(position, vec3(12.9898, 78.233, 37.719)) + seed;
-    return fract(sin(positionSeed) * 43758.5453);
-}
-
 float waterFogFactor(vec3 positionWorld) {
     if (u_FogParams.color.a == 0.0)
         return 0.0;

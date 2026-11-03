@@ -32,8 +32,9 @@ export class TieProgram extends DeviceProgram {
     public static a_InstanceTransform2 = 8;
     public static a_InstanceLightSelector = 9;
     public static a_InstanceExtraData = 10;
+    public static a_InstanceExtraData2 = 11;
 
-    public static elementsPerInstance = 20; // transform (12), lights (4), extra (4)
+    public static elementsPerInstance = 21; // transform (12), lights (4), extra data (3 + 2)
 
     public static ub_SceneParams = 0;
     public static ub_TieParams = 1;
@@ -78,7 +79,8 @@ layout(location = ${TieProgram.a_InstanceTransform0}) in vec4 a_InstanceTransfor
 layout(location = ${TieProgram.a_InstanceTransform1}) in vec4 a_InstanceTransform1;
 layout(location = ${TieProgram.a_InstanceTransform2}) in vec4 a_InstanceTransform2;
 layout(location = ${TieProgram.a_InstanceLightSelector}) in vec3 a_InstanceLightSelector;
-layout(location = ${TieProgram.a_InstanceExtraData}) in vec4 a_InstanceExtraData; // x = ambient row, y = LOD morph, z = mode bits, w = class index
+layout(location = ${TieProgram.a_InstanceExtraData}) in vec3 a_InstanceExtraData; // x = ambient row, y = LOD morph, z = mode bits
+layout(location = ${TieProgram.a_InstanceExtraData2}) in vec2 a_InstanceExtraData2; // x = class index, y = instance index
 
 out vec2 v_ST;
 out vec4 v_Rgba;
@@ -93,10 +95,12 @@ ${GfxShaderLibrary.MulNormalMatrix}
 void main() {
     float lodMorphFactor = a_InstanceExtraData.y;
     vec3 morphedPosition = a_Position + a_LodMorphOffset * lodMorphFactor;
+    morphedPosition.xy += windSkew(a_InstanceExtraData2.y, u_Time.x / 1000.0, a_InstanceExtraData.z) * morphedPosition.z;
+
     mat4x3 instanceTransform = mat4x3(transpose(mat4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, vec4(0, 0, 0, 1))));
     vec3 positionWorld = instanceTransform * vec4(morphedPosition, 1.0f);
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(positionWorld, 1.0f);
-    v_ST = a_ST;
+
 
     /*
     In the original, lighing is done on the CPU against a palette of (color,normal) pairs.
@@ -117,7 +121,7 @@ void main() {
         vec4 rgba = texelFetch(TEXTURE(u_AmbientRgbaTexture), ambientRgbaTexcoord, 0);
         rgba.rgb /= 128.0 / 255.0;
 
-        ivec2 normalTexcoord = ivec2(int(a_NormalIndices[i]), int(a_InstanceExtraData.w));
+        ivec2 normalTexcoord = ivec2(int(a_NormalIndices[i]), int(a_InstanceExtraData2.x));
         vec4 normalTexData = texelFetch(TEXTURE(u_TieNormalsTexture), normalTexcoord, 0);
         vec3 normal = normalTexData.xyz;
         normal = mat3(instanceTransform) * normal;
@@ -149,7 +153,7 @@ void main() {
             continue;
         }
 
-        ivec2 azimuthElevationTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData.w));
+        ivec2 azimuthElevationTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData2.x));
         vec4 azimuthElevationTexData = texelFetch(TEXTURE(u_TieNormalsTexture), azimuthElevationTexcoord, 0);
         vec3 normal = normalFromAzumithElevationWeirdVersion(azimuthElevationTexData.x, azimuthElevationTexData.y);
         normal = mat3(instanceTransform) * normal;
@@ -161,6 +165,7 @@ void main() {
 
 #endif
     
+    v_ST = a_ST;
     v_FogFactor = fogFactor(positionWorld.xyz);
     v_TextureIndex = int(a_ExtraData.x);
     v_Clamp = int(a_ExtraData.y);
@@ -221,7 +226,8 @@ export class TieGeometry {
                     { location: TieProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceLightSelector, format: GfxFormat.F32_RGB, bufferByteOffset: 12 * 4, bufferIndex: 1, },
-                    { location: TieProgram.a_InstanceExtraData, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: 1, },
+                    { location: TieProgram.a_InstanceExtraData, format: GfxFormat.F32_RGB, bufferByteOffset: 16 * 4, bufferIndex: 1, },
+                    { location: TieProgram.a_InstanceExtraData2, format: GfxFormat.F32_RG, bufferByteOffset: 19 * 4, bufferIndex: 1, },
                 ],
                 vertexBufferDescriptors: [
                     { byteStride: TieProgram.elementsPerVertex(this.gn) * 4, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -241,7 +247,8 @@ export class TieGeometry {
                     { location: TieProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceLightSelector, format: GfxFormat.F32_RGB, bufferByteOffset: 12 * 4, bufferIndex: 1, },
-                    { location: TieProgram.a_InstanceExtraData, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: 1, },
+                    { location: TieProgram.a_InstanceExtraData, format: GfxFormat.F32_RGB, bufferByteOffset: 16 * 4, bufferIndex: 1, },
+                    { location: TieProgram.a_InstanceExtraData2, format: GfxFormat.F32_RG, bufferByteOffset: 19 * 4, bufferIndex: 1, },
                 ],
                 vertexBufferDescriptors: [
                     { byteStride: TieProgram.elementsPerVertex(this.gn) * 4, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -484,7 +491,7 @@ export class TieRenderer {
 
     renderTie(renderInstList: GfxRenderInstList, tieGeometriesByLod: (TieGeometry | null)[], tieClass: TieClass, tieInstanceBatch: TieInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, occlusionChecker: OcclusionChecker | null, cameraFrustum: Frustum, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
 
-        type TieDrawInstance = { objectMatrix: mat4, lightSelector: DirectionLightSelector, rgbasRow: number, lodMorphFactor: number };
+        type TieDrawInstance = { objectMatrix: mat4, lightSelector: DirectionLightSelector, rgbasRow: number, lodMorphFactor: number, windSeed: number };
         const tieInstancesToDrawByLod: TieDrawInstance[][] = [[], [], []];
         for (let i = 0; i < tieInstanceBatch.length; i++) {
             const tieInstance = tieInstanceBatch[i];
@@ -536,6 +543,7 @@ export class TieRenderer {
                 lightSelector: tieInstance.lightSelector,
                 lodMorphFactor,
                 rgbasRow: tieInstance._i,
+                windSeed: tieInstance._i,
             });
         }
 
@@ -557,7 +565,11 @@ export class TieRenderer {
                 const inst = tieInstancesToDraw[i];
                 instanceDataBuffer.ptr += fillMatrix4x3(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.objectMatrix);
                 instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.lightSelector.lightIndices[0], inst.lightSelector.lightIndices[1], inst.lightSelector.weight, 0);
-                instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.rgbasRow, inst.lodMorphFactor, tieClass.header.modeBits, tieClass._classIndex);
+                instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = inst.rgbasRow;
+                instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = inst.lodMorphFactor;
+                instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = tieClass.header.modeBits;
+                instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = tieClass._classIndex;
+                instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = inst.windSeed;
             }
 
             renderInst.setVertexInput(

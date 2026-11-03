@@ -467,8 +467,8 @@ class RatchetAndClankScene implements SceneGfx {
         let offs = 0;
 
         // camera transform (16 floats)
-        const nearClip = 0.05;
-        const farClip = 1024;
+        const nearClip = 1 / 64;
+        const farClip = 4096;
         viewerInput.camera.setClipPlanes(nearClip, farClip);
         offs += fillMatrix4x4(data, offs, viewerInput.camera.clipFromWorldMatrix);
 

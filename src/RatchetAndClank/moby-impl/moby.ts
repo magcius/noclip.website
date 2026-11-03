@@ -1,8 +1,8 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import { assert } from "../../util";
-import { MobyInstance } from "../bin-gameplay";
+import { MobyInstance, TieInstance } from "../bin-gameplay";
 import { LevelResources } from "../loader";
-import { MegaBuffer, noclipSpaceFromRatchetSpace, OcclusionChecker } from "../utils";
+import { matrixToNoclipSpace, MegaBuffer, noclipSpaceFromRatchetSpace, OcclusionChecker } from "../utils";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager";
 import { Frustum } from "../../Geometry";
@@ -19,6 +19,7 @@ import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { WaterRenderer } from "../render-water";
 import { GfxDevice, GfxSampler, GfxTexture } from "../../gfx/platform/GfxPlatform";
 import { GoldBolt } from "./gold-bolt";
+import { TieRotationController } from "./tie-rotation-controller";
 
 export interface MobyConstructor {
     new(mobyInstance: MobyInstance, resources: LevelResources): MobyImpl;
@@ -68,6 +69,12 @@ export function updateTransform(mobyInstance: MobyInstance) {
     mat4.mul(mobyInstance._matrixPretransformed, noclipSpaceFromRatchetSpace, mobyInstance._matrixPretransformed);
     mobyInstance._positionPretransformed = mat4.getTranslation(vec3.create(), mobyInstance._matrixPretransformed);
     mobyInstance._scalePretransformed = vec3.length(vec3.fromValues(mobyInstance._matrixPretransformed[0], mobyInstance._matrixPretransformed[1], mobyInstance._matrixPretransformed[2]));
+}
+
+export function updateTransformForTie(tie: TieInstance) {
+    tie._matrixPretransformed = matrixToNoclipSpace(tie.matrix);
+    tie._positionPretransformed = mat4.getTranslation(vec3.create(), tie._matrixPretransformed);
+    tie._scalePretransformed = vec3.length(vec3.fromValues(tie._matrixPretransformed[0], tie._matrixPretransformed[1], tie._matrixPretransformed[2]));
 }
 
 export function cuboidContainsPoint(point: vec3, resources: LevelResources, cuboidIndex: number): boolean {
@@ -146,4 +153,5 @@ export const MOBY_IMPL_REGISTRY = new Map<number, MobyConstructor>([
     [1901, Water_D],
     [1903, Water_D],
     [1919, Water_D],
+    [3174, TieRotationController]
 ]);

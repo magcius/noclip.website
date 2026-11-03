@@ -51,6 +51,28 @@ layout(std140) uniform ub_SceneParams {
     `,
     LightingFunctions: `
 
+// returns an x,y amount of skew to apply to a vertex in modelspace, as a ratio of height
+vec2 windSkew(float seed, float t, float mode) {
+    // only allow mode values of 2 (windy) or 4 (very windy), reduce to 1 or 2
+    if (mode == 2.0 || mode == 4.0) {
+        mode = mode / 2.0;
+    } else {
+        return vec2(0.0, 0.0);
+    }
+
+    float w1 = seed * 67.0 + t;
+    float w2 = seed * 123.0 + t * (mode - 1.0);
+    float w3 = ((sin(w1) * sin(w1 / 2.0)) * 0.2 + 0.8) * 0.1;
+    float sx = (sin(w2 + 64.0) * 0.02 + w3);
+    float sy = sin(w2 / 2.0) * 0.02;
+    return vec2(sx, sy) * mode;
+}
+
+float seededRandom(vec3 position, float seed) {
+    float positionSeed = dot(position, vec3(12.9898, 78.233, 37.719)) + seed;
+    return fract(sin(positionSeed) * 43758.5453);
+}
+
 vec3 normalFromAzumithElevation(float azimuth, float elevation) {
     return vec3(
         cos(azimuth) * cos(elevation),
@@ -126,8 +148,6 @@ float fogFactor(vec3 vertexPosWorld) {
     CommonFragmentShader: `
 ${GfxShaderLibrary.MonochromeNTSCLinear}
 
-const float SATURATION_ADJUST = 1.1;
-
 vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest, vec3 fogColor) {
     // texture color is multiplied with vertex color immediately
     rgba *= textureSample;
@@ -141,9 +161,6 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float 
 
     // alpha test
     if (rgba.a < alphaTest) discard;
-
-    // with saturation filter (not authentic but looks washed out without it)
-    rgba.rgb = mix(vec3(MonochromeNTSCLinear(rgba.rgb)), rgba.rgb, SATURATION_ADJUST);
 
     return rgba;
 }
@@ -171,18 +188,18 @@ vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
     int bucketSize = 1 << bucket;
     int slice = remap.y;
 
-    if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
-        // GS manual page 62
-        // ps2 selects mips based on depth not texcoords
-        // L and K are guesses
-        // the mesh classes have mip biases that aren't implemented yet
-        float K = float(bucket) - 10.0 - (u_LodSettings.y / 40.0);
-        float L = 0.0;
-        float LOD = (log2(1.0 / gl_FragCoord.w) * pow(2.0, L)) + K;
+    // if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
+    //     // GS manual page 62
+    //     // ps2 selects mips based on depth not texcoords
+    //     // L and K are guesses
+    //     // the mesh classes have mip biases that aren't implemented yet
+    //     float K = float(bucket) - 10.0 - (u_LodSettings.y / 40.0);
+    //     float L = 0.0;
+    //     float LOD = (log2(1.0 / gl_FragCoord.w) * pow(2.0, L)) + K;
 
-        float maxLod = float(bucket) - 2.0;
-        lod = int(clamp(LOD, 0.0, maxLod));
-    }
+    //     float maxLod = float(bucket) - 2.0;
+    //     lod = int(clamp(LOD, 0.0, maxLod));
+    // }
 
     vec2 texSize = vec2(bucketSize) / pow(2.0, float(lod));
     vec2 texelCoord = st * texSize - 0.5;
@@ -264,4 +281,3 @@ vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
 }
 `
 };
-

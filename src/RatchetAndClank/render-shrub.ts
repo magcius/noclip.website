@@ -30,9 +30,9 @@ export class ShrubProgram extends DeviceProgram {
     public static a_InstanceTransform2 = 6;
     public static a_InstanceAmbientRgba = 7;
     public static a_InstanceLightSelector = 8;
-    public static a_InstanceLodAlpha = 9;
+    public static a_InstanceExtraData = 9;
 
-    public static elementsPerInstance = 21; // transform (12), ambient rgba (4), directional lights (4), lod alpha (1)
+    public static elementsPerInstance = 23; // transform (12), ambient rgba (4), directional lights (4), extra data (lod alpha, mode bits, instance index)
 
     public static ub_SceneParams = 0;
     public static ub_ShrubParams = 1;
@@ -64,7 +64,7 @@ layout(location = ${ShrubProgram.a_InstanceTransform1}) in vec4 a_InstanceTransf
 layout(location = ${ShrubProgram.a_InstanceTransform2}) in vec4 a_InstanceTransform2;
 layout(location = ${ShrubProgram.a_InstanceAmbientRgba}) in vec4 a_InstanceAmbientRgba;
 layout(location = ${ShrubProgram.a_InstanceLightSelector}) in vec3 a_InstanceLightSelector;
-layout(location = ${ShrubProgram.a_InstanceLodAlpha}) in float a_InstanceLodAlpha;
+layout(location = ${ShrubProgram.a_InstanceExtraData}) in vec3 a_InstanceExtraData; // x = LOD alpha, y = mode bits, z = instance index
 
 out vec4 v_Rgba;
 out vec2 v_ST;
@@ -77,14 +77,17 @@ ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
     mat4x3 instanceTransform = mat4x3(transpose(mat4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, vec4(0, 0, 0, 1))));
-    vec3 positionWorld = instanceTransform * vec4(a_Position.xyz, 1.0f);
+    vec3 morphedPosition = a_Position;
+    morphedPosition.xy += windSkew(a_InstanceExtraData.z, u_Time.x / 1000.0, a_InstanceExtraData.y) * morphedPosition.z;
+
+    vec3 positionWorld = instanceTransform * vec4(morphedPosition, 1.0f);
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(positionWorld, 1.0f);
 
     vec3 normal = MulNormalMatrix(instanceTransform, a_Normal);
 
     vec4 rgba = a_InstanceAmbientRgba.rgba;
     v_Rgba = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
-    v_Rgba.a *= a_InstanceLodAlpha;
+    v_Rgba.a *= a_InstanceExtraData.x;
 
     v_ST = a_ST.xy;
     v_FogFactor = fogFactor(positionWorld.xyz);
@@ -135,7 +138,7 @@ export class ShrubGeometry {
                 { location: ShrubProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
                 { location: ShrubProgram.a_InstanceAmbientRgba, format: GfxFormat.F32_RGBA, bufferByteOffset: 12 * 4, bufferIndex: 1, },
                 { location: ShrubProgram.a_InstanceLightSelector, format: GfxFormat.F32_RGB, bufferByteOffset: 16 * 4, bufferIndex: 1, },
-                { location: ShrubProgram.a_InstanceLodAlpha, format: GfxFormat.F32_R, bufferByteOffset: 20 * 4, bufferIndex: 1, },
+                { location: ShrubProgram.a_InstanceExtraData, format: GfxFormat.F32_RGB, bufferByteOffset: 20 * 4, bufferIndex: 1, },
             ],
             vertexBufferDescriptors: [
                 { byteStride: ShrubProgram.elementsPerVertex * 0x4, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -311,7 +314,7 @@ export class ShrubRenderer {
     }
 
     renderShrub(renderInstList: GfxRenderInstList, shrubGeometry: ShrubGeometry, shrubInstances: ShrubInstance[], textureMappings: GfxSamplerBinding[], cameraPosition: vec3, cameraFrustum: Frustum, settingLodPreset: number, settingLodBias: number, instanceDataBuffer: MegaBuffer): void {
-        type ShrubDrawInstance = { objectMatrix: mat4, lightSelector: ShrubInstance["lightSelector"], rgb: { r: number, g: number, b: number }, lodAlpha: number };
+        type ShrubDrawInstance = { objectMatrix: mat4, lightSelector: ShrubInstance["lightSelector"], rgb: { r: number, g: number, b: number }, lodAlpha: number, windSeed: number };
         const shrubInstancesToDraw: ShrubDrawInstance[] = [];
         for (let i = 0; i < shrubInstances.length; i++) {
             const shrubInstance = shrubInstances[i];
@@ -348,6 +351,7 @@ export class ShrubRenderer {
                 lightSelector: shrubInstance.lightSelector,
                 rgb: shrubInstance.color,
                 lodAlpha,
+                windSeed: shrubInstance._i,
             })
         }
 
@@ -366,6 +370,8 @@ export class ShrubRenderer {
             instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, color.r / 0x80, color.g / 0x80, color.b / 0x80, 1);
             instanceDataBuffer.ptr += fillVec4(instanceDataBuffer.f32View, instanceDataBuffer.ptr, inst.lightSelector.lightIndices[0], inst.lightSelector.lightIndices[1], inst.lightSelector.weight, 0);
             instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = inst.lodAlpha;
+            instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = shrubGeometry.shrub.header.modeBits;
+            instanceDataBuffer.f32View[instanceDataBuffer.ptr++] = inst.windSeed;
         }
 
         const vertexData = shrubGeometry.getOrCreateVertexBuffer();
