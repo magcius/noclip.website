@@ -13,16 +13,16 @@ import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { MobyInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
 import { assert } from "../util";
-import { packRemap, TextureAtlases } from "./textures";
+import { decodeLodK, packRemap, TextureAtlases } from "./textures";
 import { invlerp, saturate } from "../MathHelpers";
 
 export class MobyProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_NormalAzimuthElevationRad = 1;
     public static a_ST = 2;
-    public static a_TextureParams = 3; // x = texture index, y = clamp flag
+    public static a_TextureParams = 3; // x = texture index, y = clamp flag, z = LOD K
 
-    public static elementsPerVertex = 9; // position (3), normal (2), st (2), texture params (2)
+    public static elementsPerVertex = 10; // position (3), normal (2), st (2), texture params (3)
 
     public static a_InstanceTransform0 = 4;
     public static a_InstanceTransform1 = 5;
@@ -56,7 +56,7 @@ layout(binding = 4) uniform sampler2DArray u_Texture_256;
 layout(location = ${MobyProgram.a_Position}) in vec3 a_Position;
 layout(location = ${MobyProgram.a_NormalAzimuthElevationRad}) in vec2 a_NormalAzimuthElevationRad;
 layout(location = ${MobyProgram.a_ST}) in vec2 a_ST;
-layout(location = ${MobyProgram.a_TextureParams}) in vec2 a_TextureParams; // x = texture index, y = clamp flag
+layout(location = ${MobyProgram.a_TextureParams}) in vec3 a_TextureParams; // x = texture index, y = clamp flag, z = LOD K
 
 layout(location = ${MobyProgram.a_InstanceTransform0}) in vec4 a_InstanceTransform0;
 layout(location = ${MobyProgram.a_InstanceTransform1}) in vec4 a_InstanceTransform1;
@@ -75,6 +75,7 @@ out vec2 v_ST;
 out float v_FogFactor;
 flat out int v_TextureIndex;
 flat out int v_Clamp;
+flat out float v_LodK;
 
 void main() {
     mat4x3 instanceTransform = mat4x3(transpose(mat4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, vec4(0, 0, 0, 1))));
@@ -95,6 +96,7 @@ void main() {
     v_FogFactor = fogFactor(positionWorld.xyz);
     v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
+    v_LodK = a_TextureParams.z;
 }
 `;
 
@@ -110,6 +112,7 @@ in vec2 v_ST;
 in float v_FogFactor;
 flat in int v_TextureIndex;
 flat in int v_Clamp;
+flat in float v_LodK;
 
 void main() {
     if (v_TextureIndex < 0) {
@@ -120,7 +123,7 @@ void main() {
 
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
     ivec2 texRemap = getTexRemap(v_TextureIndex);
-    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST, v_LodK);
     gl_FragColor = commonFragmentShader(vec4(v_Rgba.rgb, v_Rgba.a), textureSample, v_FogFactor, 0.01);
 }
 
@@ -143,7 +146,7 @@ export class MobyGeometry {
                 { location: MobyProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
                 { location: MobyProgram.a_NormalAzimuthElevationRad, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 4, bufferIndex: 0, },
                 { location: MobyProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 5 * 4, bufferIndex: 0, },
-                { location: MobyProgram.a_TextureParams, format: GfxFormat.F32_RG, bufferByteOffset: 7 * 4, bufferIndex: 0, },
+                { location: MobyProgram.a_TextureParams, format: GfxFormat.F32_RGB, bufferByteOffset: 7 * 4, bufferIndex: 0, },
                 // per instance
                 { location: MobyProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 4, bufferIndex: 1, },
                 { location: MobyProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
@@ -263,6 +266,7 @@ export class MobyGeometry {
         interface MobyVertexWithTex extends MobyVertexWithST {
             textureIndex: number;
             clamp: number;
+            lodK: number;
         }
         let mainMeshVertexCount = 0;
         let bangleVertexCount = 0;
@@ -270,6 +274,7 @@ export class MobyGeometry {
         let currentMaterial = {
             texture: 0,
             clamp: 0,
+            lodK: 0,
         };
 
         for (let packetIndex = 0; packetIndex < allPackets.length; packetIndex++) {
@@ -313,6 +318,7 @@ export class MobyGeometry {
                     currentMaterial = {
                         texture: textureIndex,
                         clamp: adGif.clamp.low + (adGif.clamp.high << 2),
+                        lodK: decodeLodK(adGif.tex1.low),
                     };
                     adGifIndex++;
                 }
@@ -340,6 +346,7 @@ export class MobyGeometry {
                             t: v.t,
                             textureIndex: currentMaterial.texture,
                             clamp: currentMaterial.clamp,
+                            lodK: currentMaterial.lodK,
                         });
                     }
 
@@ -367,6 +374,7 @@ export class MobyGeometry {
             vertexArrayBuffer[vertexPtr++] = texcoordScale * v.t;
             vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.mobyTextureRemap[v.textureIndex]);
             vertexArrayBuffer[vertexPtr++] = v.clamp;
+            vertexArrayBuffer[vertexPtr++] = v.lodK;
         }
 
         return { vertexArrayBuffer, vertexCount: outputVerts.length, mainMeshVertexCount, bangleVertexCount };

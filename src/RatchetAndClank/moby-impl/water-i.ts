@@ -29,6 +29,11 @@ const SURFACE_UV_SPEED_VADDR_BY_LEVEL = new Map<number, number>([
     [16, 0x1D8A10],
 ]);
 
+/**
+ * A dynamic ocean plane centered on the camera
+ * 
+ * - Used on pokitaru and kalebo iii
+ */
 export class Water_I implements MobyImpl {
     pvars: Water_I_Pvars;
     private horizonGeometry: WaterGeometry | null = null;

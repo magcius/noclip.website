@@ -15,11 +15,11 @@ import { Water_F } from "./water-f";
 import { Water_G } from "./water-g";
 import { Water_H } from "./water-h";
 import { Water_I } from "./water-i";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { WaterRenderer } from "../render-water";
 import { GfxDevice, GfxSampler, GfxTexture } from "../../gfx/platform/GfxPlatform";
 import { GoldBolt } from "./gold-bolt";
-import { TieRotationController } from "./tie-rotation-controller";
+import { TieRotationAnimator } from "./tie-rotation-animator";
+import { Trophy } from "./trophy";
 
 export interface MobyConstructor {
     new(mobyInstance: MobyInstance, resources: LevelResources): MobyImpl;
@@ -153,5 +153,14 @@ export const MOBY_IMPL_REGISTRY = new Map<number, MobyConstructor>([
     [1901, Water_D],
     [1903, Water_D],
     [1919, Water_D],
-    [3174, TieRotationController]
+    [3174, TieRotationAnimator],
+    [7501, Trophy],
+    [7502, Trophy],
+    [7503, Trophy],
+    [7504, Trophy],
+    [7505, Trophy],
+    [7506, Trophy],
+    [7507, Trophy],
+    [7508, Trophy],
+    [7509, Trophy],
 ]);

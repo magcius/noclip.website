@@ -147,8 +147,8 @@ function readTieNormalEntry_rac234(view: DataViewExt) {
     }
     */
     const angleScale = 2 * Math.PI / 256;
-    const elevation = view.getUint8(0x6) * angleScale;
-    const azimuth = view.getUint8(0x7) * angleScale;
+    const azimuth = view.getUint8(0x6) * angleScale;
+    const elevation = view.getUint8(0x7) * angleScale;
 
     return {
         x: azimuth,
@@ -265,8 +265,8 @@ export function readTieRgbaRemaps(view: DataViewExt, oClass: number): RgbaRemaps
             const packed = view.getUint32(0x0);
             const dest = packed & 0x7FF;
             assert(dest % 4 === 0);
-            const a = (packed >> 21) & 0x7FC;
-            const b = (packed >> 12) & 0x7FC;
+            const b = (packed >> 21) & 0x7FC; // <- reverse order
+            const a = (packed >> 12) & 0x7FC;
             return { dest, src: [a, a, a, b], kind: RgbaRemapKind.AAAB };
         });
 
@@ -610,8 +610,6 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
         if (gn === 1) {
             normalIndices = [regularNormalIndices[i], regularNormalIndices[i], regularNormalIndices[i]];
             rgbaIndices = [regularRgbaIndices[i] - 64, regularRgbaIndices[i] - 64, regularRgbaIndices[i] - 64];
-        } else {
-            // TODO: rgba remaps for rac2
         }
         const commandValue: TieVertexWithNormalAndRgba = {
             writeOrder: vertexWriteOrder++,
@@ -639,8 +637,6 @@ export function readTiePacketBody(gn: GN, view: DataViewExt, tiePacketHeader: Ti
                 morphingRgbaIndices[i].y - 64,
                 morphingRgbaIndices[i].z - 64,
             ];
-        } else {
-            // TODO: rgba remaps for rac2
         }
         const commandValue: TieVertexWithNormalAndRgba = {
             writeOrder: vertexWriteOrder++,

@@ -519,9 +519,9 @@ class RatchetAndClankScene implements SceneGfx {
             if (i < directionalLights.length) {
                 const light = directionalLights[i];
                 offs += fillVec4(data, offs, -light.directionA.x, -light.directionA.z, light.directionA.y, 0);
-                offs += fillVec4(data, offs, light.colorA.r, light.colorA.g, light.colorA.b, -light.colorA.a);
+                offs += fillVec4(data, offs, light.colorA.r, light.colorA.g, light.colorA.b, light.colorA.a);
                 offs += fillVec4(data, offs, -light.directionB.x, -light.directionB.z, light.directionB.y, 0);
-                offs += fillVec4(data, offs, light.colorB.r, light.colorB.g, light.colorB.b, -light.colorB.a);
+                offs += fillVec4(data, offs, light.colorB.r, light.colorB.g, light.colorB.b, light.colorB.a);
             } else {
                 offs += fillVec4(data, offs, 0, 0, 0, 0);
                 offs += fillVec4(data, offs, 0, 0, 0, 0);
@@ -630,7 +630,7 @@ class RatchetAndClankScene implements SceneGfx {
         if (this.settings.enableTfrag && atlasTextures) {
             const tfragGeometry = this.getOrCreateTfragGeometry();
             if (tfragGeometry) {
-                this.renderers.tfrag.renderTfrag(this.renderInstList, tfragGeometry, lodSetting, atlasTextures);
+                this.renderers.tfrag.renderTfrag(this.renderInstList, tfragGeometry, lodSetting, atlasTextures, cameraPosition);
             }
         }
 

@@ -81,11 +81,6 @@ vec3 normalFromAzumithElevation(float azimuth, float elevation) {
     );
 }
 
-vec3 normalFromAzumithElevationWeirdVersion(float azimuth, float elevation) {
-    // no idea why...
-    return normalFromAzumithElevation(azimuth, elevation).xzy * vec3(-1.0, -1.0, 1.0);
-}
-
 DirectionLight blendDirectionalLights(vec3 directionLightSelector) {
     DirectionLight blended = DirectionLight(
         vec4(0.0), vec4(0.0),
@@ -182,24 +177,24 @@ Custom texture sampling function that can dynamically select textures and sampli
 - clampRegister: bit 1 = S clamp, bit 3 = T clamp (other bits are used for region clamp, not supported)
 - st: the texture coordinates
 */
-vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
+vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st, float lodK) {
     int lod = 0;
     int bucket = remap.x + 4;
     int bucketSize = 1 << bucket;
     int slice = remap.y;
 
-    // if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
-    //     // GS manual page 62
-    //     // ps2 selects mips based on depth not texcoords
-    //     // L and K are guesses
-    //     // the mesh classes have mip biases that aren't implemented yet
-    //     float K = float(bucket) - 10.0 - (u_LodSettings.y / 40.0);
-    //     float L = 0.0;
-    //     float LOD = (log2(1.0 / gl_FragCoord.w) * pow(2.0, L)) + K;
+    if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
+        // GS manual page 62
+        // formula is: LOD = (log2(1/Q) << L) + K
+        // PS2 selects mips based on depth not texcoords
+        float K = lodK - ((u_LodSettings.y - 16.0) / 16.0);
+        float L = 0.0;
+        float NEARCLIP = 1.0 / 64.0;
+        float Q = NEARCLIP * gl_FragCoord.w; // something is wrong with this math, it should give the same results regardless of the near clip, but by coincidence it looks about right
+        float LOD = log2(1.0 / Q) + K;
 
-    //     float maxLod = float(bucket) - 2.0;
-    //     lod = int(clamp(LOD, 0.0, maxLod));
-    // }
+        lod = int(clamp(LOD, 0.0, float(bucket)));
+    }
 
     vec2 texSize = vec2(bucketSize) / pow(2.0, float(lod));
     vec2 texelCoord = st * texSize - 0.5;

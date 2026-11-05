@@ -4,7 +4,7 @@ import { MobyInstance } from "../bin-gameplay";
 import { LevelResources } from "../loader";
 import { MobyDrawKit, MobyImpl, ownPvars, updateTransformForTie } from "./moby";
 
-export class TieRotationController implements MobyImpl {
+export class TieRotationAnimator implements MobyImpl {
     pvars: {
         groupId: number;
         // both unknowns are group indices

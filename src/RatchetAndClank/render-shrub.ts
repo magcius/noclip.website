@@ -6,16 +6,16 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
 import { RatchetShaderLib } from "./shader-lib";
-import { ShrubClass, ShrubImaginaryGsCommand, ShrubVertex } from "./bin-core";
+import { ShrubClass, ShrubVertex } from "./bin-core";
 import { ImaginaryGsCommandType, MegaBuffer } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { mat4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ShrubInstance } from "./bin-gameplay";
 import { Frustum } from "../Geometry";
-import { packRemap, TextureAtlases } from "./textures";
-import { invlerp, lerp, saturate } from "../MathHelpers";
+import { decodeLodK, packRemap, TextureAtlases } from "./textures";
+import { invlerp, saturate } from "../MathHelpers";
 
 export class ShrubProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -23,7 +23,7 @@ export class ShrubProgram extends DeviceProgram {
     public static a_TextureParams = 2;
     public static a_ST = 3;
 
-    public static elementsPerVertex = 10; // position (3), normal (3), texture params (2), st (2)
+    public static elementsPerVertex = 11; // position (3), normal (3), texture params (3), st (2)
 
     public static a_InstanceTransform0 = 4;
     public static a_InstanceTransform1 = 5;
@@ -56,7 +56,7 @@ layout(binding = 4) uniform sampler2DArray u_Texture_256;
 
 layout(location = ${ShrubProgram.a_Position}) in vec3 a_Position;
 layout(location = ${ShrubProgram.a_Normal}) in vec3 a_Normal;
-layout(location = ${ShrubProgram.a_TextureParams}) in vec2 a_TextureParams; // x = texture index, y = clamp flag
+layout(location = ${ShrubProgram.a_TextureParams}) in vec3 a_TextureParams; // x = texture index, y = clamp flag, z = LOD K
 layout(location = ${ShrubProgram.a_ST}) in vec2 a_ST;
 
 layout(location = ${ShrubProgram.a_InstanceTransform0}) in vec4 a_InstanceTransform0;
@@ -71,6 +71,7 @@ out vec2 v_ST;
 out float v_FogFactor;
 flat out int v_TextureIndex;
 flat out int v_Clamp;
+flat out float v_LodK;
 
 ${RatchetShaderLib.LightingFunctions}
 ${GfxShaderLibrary.MulNormalMatrix}
@@ -93,6 +94,7 @@ void main() {
     v_FogFactor = fogFactor(positionWorld.xyz);
     v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
+    v_LodK = a_TextureParams.z;
 }
 `;
 
@@ -103,6 +105,7 @@ in vec2 v_ST;
 in float v_FogFactor;
 flat in int v_TextureIndex;
 flat in int v_Clamp;
+flat in float v_LodK;
 
 ${RatchetShaderLib.CommonFragmentShader}
 ${RatchetShaderLib.Sampler}
@@ -110,7 +113,7 @@ ${RatchetShaderLib.Sampler}
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
     ivec2 texRemap = getTexRemap(v_TextureIndex);
-    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST, v_LodK);
     gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor, 0.01);
 }
 
@@ -130,8 +133,8 @@ export class ShrubGeometry {
                 // per vertex
                 { location: ShrubProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
                 { location: ShrubProgram.a_Normal, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 4, bufferIndex: 0, },
-                { location: ShrubProgram.a_TextureParams, format: GfxFormat.F32_RG, bufferByteOffset: 6 * 4, bufferIndex: 0, },
-                { location: ShrubProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 8 * 4, bufferIndex: 0, },
+                { location: ShrubProgram.a_TextureParams, format: GfxFormat.F32_RGB, bufferByteOffset: 6 * 4, bufferIndex: 0, },
+                { location: ShrubProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 9 * 4, bufferIndex: 0, },
                 // per instance
                 { location: ShrubProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 4, bufferIndex: 1, },
                 { location: ShrubProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
@@ -205,7 +208,7 @@ export class ShrubGeometry {
         currentPrimitiveType = null;
         const vertexArrayBuffer = new Float32Array(vertexCount * ShrubProgram.elementsPerVertex);
         let vertexPtr = 0;
-        let currentMaterial: { texture: number, clamp: number } | undefined;
+        let currentMaterial: { texture: number, clamp: number, lodK: number } | undefined;
         const tri = [null, null, null] as [ShrubVertex | null, ShrubVertex | null, ShrubVertex | null];
 
         for (let packetIndex = 0; packetIndex < shrub.body.packets.length; packetIndex++) {
@@ -227,6 +230,7 @@ export class ShrubGeometry {
                         currentMaterial = {
                             texture: command.value.adGif.tex0.low,
                             clamp: command.value.adGif.clamp.low + (command.value.adGif.clamp.high << 2),
+                            lodK: decodeLodK(command.value.adGif.tex1.low),
                         };
                         break;
                     }
@@ -263,6 +267,7 @@ export class ShrubGeometry {
                                 vertexArrayBuffer[vertexPtr++] = normalScale * normal.z;
                                 vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.shrubTextureRemap[textureIndices[currentMaterial.texture]]);
                                 vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
+                                vertexArrayBuffer[vertexPtr++] = currentMaterial.lodK;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * vertex.s;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * vertex.t;
                             }

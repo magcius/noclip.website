@@ -8,6 +8,11 @@ import { IS_DEVELOPMENT } from "../BuildVersion";
 import { FxTextureEntry, TextureEntry } from "./bin-index";
 import { GN } from "./utils";
 
+// transform the raw value stored in AdGif.tex1.low to its semantic value
+export function decodeLodK(ps2LodK: number): number {
+    return ((ps2LodK << 20) >> 20) / 16;
+}
+
 export interface PaletteTexture {
     name: string,
     textureEntry: { width: number, height: number },

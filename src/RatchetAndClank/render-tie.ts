@@ -13,7 +13,7 @@ import { RgbaRemapKind, TieClass, TieVertexWithNormalAndRgba } from "./bin-core"
 import { DirectionLightSelector, TieInstance } from "./bin-gameplay";
 import { RatchetShaderLib } from "./shader-lib";
 import { GN, ImaginaryGsCommandType, MegaBuffer, OcclusionChecker } from "./utils";
-import { packRemap, TextureAtlases } from "./textures";
+import { decodeLodK, packRemap, TextureAtlases } from "./textures";
 import { invlerp } from "../MathHelpers";
 
 export class TieProgram extends DeviceProgram {
@@ -25,7 +25,7 @@ export class TieProgram extends DeviceProgram {
     public static a_NormalIndices = 5;
     public static a_RemapSources = 4;
 
-    public static elementsPerVertex(gn: GN): number { return gn === 1 ? 16 : 14; }
+    public static elementsPerVertex(gn: GN): number { return gn === 1 ? 17 : 15; }
 
     public static a_InstanceTransform0 = 6;
     public static a_InstanceTransform1 = 7;
@@ -66,7 +66,7 @@ layout(binding = 6) uniform sampler2D u_TieNormalsTexture; // rac1 - contains x/
 
 layout(location = ${TieProgram.a_Position}) in vec3 a_Position;
 layout(location = ${TieProgram.a_LodMorphOffset}) in vec3 a_LodMorphOffset;
-layout(location = ${TieProgram.a_ExtraData}) in vec2 a_ExtraData; // x = texture index, y = clamp
+layout(location = ${TieProgram.a_ExtraData}) in vec3 a_ExtraData; // x = texture index, y = clamp, z = LOD K
 layout(location = ${TieProgram.a_ST}) in vec2 a_ST;
 #ifdef RAC1
 layout(location = ${TieProgram.a_RgbaIndices}) in vec3 a_RgbaIndices;
@@ -87,6 +87,7 @@ out vec4 v_Rgba;
 out float v_FogFactor;
 flat out int v_TextureIndex;
 flat out int v_Clamp;
+flat out float v_LodK;
 flat out int v_ModeBits;
 
 ${RatchetShaderLib.LightingFunctions}
@@ -155,9 +156,8 @@ void main() {
 
         ivec2 azimuthElevationTexcoord = ivec2(int(a_RemapSources[i]), int(a_InstanceExtraData2.x));
         vec4 azimuthElevationTexData = texelFetch(TEXTURE(u_TieNormalsTexture), azimuthElevationTexcoord, 0);
-        vec3 normal = normalFromAzumithElevationWeirdVersion(azimuthElevationTexData.x, azimuthElevationTexData.y);
+        vec3 normal = normalFromAzumithElevation(azimuthElevationTexData.x, azimuthElevationTexData.y).xyz;
         normal = mat3(instanceTransform) * normal;
-        normal.xz = -normal.xz; // ???
 
         colors[i] = commonVertexLighting(rgba, normal, a_InstanceLightSelector);
     }
@@ -169,6 +169,7 @@ void main() {
     v_FogFactor = fogFactor(positionWorld.xyz);
     v_TextureIndex = int(a_ExtraData.x);
     v_Clamp = int(a_ExtraData.y);
+    v_LodK = a_ExtraData.z;
     v_ModeBits = int(a_InstanceExtraData.z);
 }
 
@@ -183,13 +184,14 @@ in vec4 v_Rgba;
 in float v_FogFactor;
 flat in int v_TextureIndex;
 flat in int v_Clamp;
+flat in float v_LodK;
 flat in int v_ModeBits;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
 
     ivec2 texRemap = getTexRemap(v_TextureIndex);
-    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST, v_LodK);
 
     if ((v_ModeBits & 0x20) != 0) {
         // TODO: if this flag is set, the alpha channel is treated as a specular mask
@@ -218,10 +220,10 @@ export class TieGeometry {
                 vertexAttributeDescriptors: [
                     { location: TieProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
                     { location: TieProgram.a_LodMorphOffset, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_ExtraData, format: GfxFormat.F32_RG, bufferByteOffset: 6 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 8 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_RgbaIndices, format: GfxFormat.F32_RGB, bufferByteOffset: 10 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_NormalIndices, format: GfxFormat.F32_RGB, bufferByteOffset: 13 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_ExtraData, format: GfxFormat.F32_RGB, bufferByteOffset: 6 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 9 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_RgbaIndices, format: GfxFormat.F32_RGB, bufferByteOffset: 11 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_NormalIndices, format: GfxFormat.F32_RGB, bufferByteOffset: 14 * 4, bufferIndex: 0, },
                     { location: TieProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
@@ -240,9 +242,9 @@ export class TieGeometry {
                 vertexAttributeDescriptors: [
                     { location: TieProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
                     { location: TieProgram.a_LodMorphOffset, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_ExtraData, format: GfxFormat.F32_RG, bufferByteOffset: 6 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 8 * 4, bufferIndex: 0, },
-                    { location: TieProgram.a_RemapSources, format: GfxFormat.F32_RGBA, bufferByteOffset: 10 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_ExtraData, format: GfxFormat.F32_RGB, bufferByteOffset: 6 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 9 * 4, bufferIndex: 0, },
+                    { location: TieProgram.a_RemapSources, format: GfxFormat.F32_RGBA, bufferByteOffset: 11 * 4, bufferIndex: 0, },
                     { location: TieProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 1, },
                     { location: TieProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 1, },
@@ -367,6 +369,7 @@ export class TieGeometry {
                                 vertexArrayBuffer[vertexPtr++] = positionScale * vertex.lodMorphOffsetZ;
                                 vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.tieTextureRemap[textureIndices[currentMaterial.texture]]);
                                 vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
+                                vertexArrayBuffer[vertexPtr++] = decodeLodK(tie.adGifs[currentMaterial.texture].tex1.low);
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.s;
                                 vertexArrayBuffer[vertexPtr++] = texcoordScale * fixedTexcoord.t;
                                 assert(vertex.q === 4096);
