@@ -208,18 +208,11 @@ export class Water_E implements MobyImpl {
 
             if (transforms.length === 0) continue;
             drawKit.renderers.water.renderWater(
-                drawKit.renderInstList,
-                geometry,
-                transforms,
-                this.uvScrolls[gridIndex],
-                this.zWobble,
-                0,
-                (this.waterFixOverride ?? waterGrid.descriptor.fixWater) / 0x80,
-                drawKit.fxTextures[this.waterTextureOverride ?? waterGrid.descriptor.fxWater],
-                drawKit.fxSampler,
-                drawKit.instanceDataBuffer,
-                false,
-                false
+                drawKit, geometry, transforms, drawKit.fxTextures[this.waterTextureOverride ?? waterGrid.descriptor.fxWater],
+                { uvScroll: this.uvScrolls[gridIndex], zWobble: this.zWobble, randomSeed: 0, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: (this.waterFixOverride ?? waterGrid.descriptor.fixWater) / 0x80, useTextureAlpha: false, useVertexColorAlpha: false },
+                null,
+                { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
             );
         }
     }

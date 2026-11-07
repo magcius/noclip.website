@@ -125,11 +125,11 @@ vec4 commonVertexLighting(vec4 ambient, vec3 normal, vec3 directionLightSelector
     return light;
 }
 
-float fogFactor(vec3 vertexPosWorld) {
-    float nearDist = u_FogParams.distanceNearFar.x;
-    float farDist = u_FogParams.distanceNearFar.y;
-    float nearIntensity = u_FogParams.intensityNearFar.x;
-    float farIntensity = u_FogParams.intensityNearFar.y;
+float fogFactor(vec3 vertexPosWorld, FogParams fogParams) {
+    float nearDist = fogParams.distanceNearFar.x;
+    float farDist = fogParams.distanceNearFar.y;
+    float nearIntensity = fogParams.intensityNearFar.x;
+    float farIntensity = fogParams.intensityNearFar.y;
 
     // for ortho, use arbitrary constant fog factor
     if (u_CameraData.extras.z == 1.0) return (nearIntensity + farIntensity) / 2.0;
@@ -187,7 +187,7 @@ vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st, float lodK) {
         // GS manual page 62
         // formula is: LOD = (log2(1/Q) << L) + K
         // PS2 selects mips based on depth not texcoords
-        float K = lodK - ((u_LodSettings.y - 16.0) / 16.0);
+        float K = lodK - (u_LodSettings.y / 16.0 + 1.0);
         float L = 0.0;
         float NEARCLIP = 1.0 / 64.0;
         float Q = NEARCLIP * gl_FragCoord.w; // something is wrong with this math, it should give the same results regardless of the near clip, but by coincidence it looks about right

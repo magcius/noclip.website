@@ -142,23 +142,11 @@ export class Water_H implements MobyImpl {
             const decl = this.decls[meshIndex];
             const uvScroll = decl.uvScroll ? this.secondMeshUVScroll : ZERO_VEC2;
             drawKit.renderers.water.renderWater(
-                drawKit.renderInstList,
-                geometries[meshIndex],
-                [transform],
-                uvScroll,
-                ZERO_VEC2,
-                this.mobyInstance.uid + meshIndex,
-                1,
-                drawKit.fxTextures[decl.textureId],
-                drawKit.fxSampler,
-                drawKit.instanceDataBuffer,
-                false,
-                false,
-                undefined,
+                drawKit, geometries[meshIndex], [transform], drawKit.fxTextures[decl.textureId],
+                { uvScroll, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid + meshIndex, uvRandomSeed: this.mobyInstance.uid + meshIndex, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
                 null,
-                null,
-                null,
-                true,
+                { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
             );
         }
     }

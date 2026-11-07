@@ -6,7 +6,7 @@ import { getBits, GN, ImaginaryGsCommand, ImaginaryGsCommandBuffer, readA1BGR5 }
 import { readVifCommandList, VifUnpackReader } from "./vif";
 import { VifUnpackFormat } from "../Common/PS2/VIF";
 import { DirectionLightSelector, readDirectionLightSelector } from "./bin-gameplay";
-import { RAC1_SKY_ANGULAR_VELOCITY, RAC1_SKY_ROTATION } from "./hardcoded";
+import { RAC1_SKY_ANGULAR_VELOCITY, RAC1_SKY_ROTATION } from "./sky-data";
 
 export interface GsRamTableEntry {
     psm: number,

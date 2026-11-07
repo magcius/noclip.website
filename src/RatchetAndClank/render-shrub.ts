@@ -91,7 +91,7 @@ void main() {
     v_Rgba.a *= a_InstanceExtraData.x;
 
     v_ST = a_ST.xy;
-    v_FogFactor = fogFactor(positionWorld.xyz);
+    v_FogFactor = fogFactor(positionWorld.xyz, u_FogParams);
     v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
     v_LodK = a_TextureParams.z;

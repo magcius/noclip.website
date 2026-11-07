@@ -166,7 +166,7 @@ void main() {
 #endif
     
     v_ST = a_ST;
-    v_FogFactor = fogFactor(positionWorld.xyz);
+    v_FogFactor = fogFactor(positionWorld.xyz, u_FogParams);
     v_TextureIndex = int(a_ExtraData.x);
     v_Clamp = int(a_ExtraData.y);
     v_LodK = a_ExtraData.z;

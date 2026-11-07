@@ -3,15 +3,14 @@ import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSampler, GfxTexture, GfxTextureDimension, GfxSamplerFormatKind, GfxTextureUsage, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxTexture, GfxTextureDimension, GfxSamplerFormatKind, GfxTextureUsage, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
-import { MegaBuffer } from "./utils";
 import { RatchetShaderLib } from "./shader-lib";
 import { create1x1x1ErrorArrayTexture } from "./textures";
+import type { MobyDrawKit } from "./moby-impl/moby";
 
 export interface WaterFogParams {
     near: number;
@@ -21,20 +20,42 @@ export interface WaterFogParams {
     color: { r: number; g: number; b: number };
 }
 
+interface WaterAnimationParams {
+    uvScroll: vec2;
+    zWobble: vec2;
+    randomSeed: number;
+    uvRandomSeed: number;
+    useWorldspaceWobble: boolean;
+    uvWorldSpaceScale: number;
+}
+
+interface WaterAlphaOptions {
+    blendAlpha: number;
+    useTextureAlpha: boolean;
+    useVertexColorAlpha: boolean;
+}
+
+interface WaterRenderOptions {
+    depthWrite: boolean;
+    useAdditiveBlend: boolean;
+    vertexColorTexture: GfxTexture | null;
+    vertexColorLayers: number[] | null;
+}
+
 // mud, lava, ice and glass are considered "honorary water"
 export class WaterProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_ST = 1;
     public static a_VertexColor = 2;
-    public static a_InstanceTransform0 = 3;
-    public static a_InstanceTransform1 = 4;
-    public static a_InstanceTransform2 = 5;
-    public static a_UVScroll = 6;
-    public static a_ZWobble = 7;
-    public static a_VertexColorTexturePosition = 8;
-    public static a_FogColor = 9;
-    public static a_FogParams = 10;
-    public static a_RenderParams = 11;
+    public static a_ColorLutCoords = 3;
+    public static a_InstanceTransform0 = 4;
+    public static a_InstanceTransform1 = 5;
+    public static a_InstanceTransform2 = 6;
+    public static a_InstanceUVParams = 7;
+    public static a_InstanceWobbleParams = 8;
+    public static a_InstanceFogColor = 9;
+    public static a_InstanceFogParams = 10;
+    public static a_InstanceRenderParams = 11;
 
     public static elementsPerInstance = 32;
 
@@ -59,15 +80,15 @@ layout(binding = 1) uniform sampler2DArray u_VertexColorTexture;
 layout(location = ${WaterProgram.a_Position}) in vec3 a_Position;
 layout(location = ${WaterProgram.a_ST}) in vec2 a_ST;
 layout(location = ${WaterProgram.a_VertexColor}) in vec4 a_VertexColor;
+layout(location = ${WaterProgram.a_ColorLutCoords}) in vec2 a_ColorLutCoords;
 layout(location = ${WaterProgram.a_InstanceTransform0}) in vec4 a_InstanceTransform0;
 layout(location = ${WaterProgram.a_InstanceTransform1}) in vec4 a_InstanceTransform1;
 layout(location = ${WaterProgram.a_InstanceTransform2}) in vec4 a_InstanceTransform2;
-layout(location = ${WaterProgram.a_UVScroll}) in vec4 a_UVScrollAndColorLayer;
-layout(location = ${WaterProgram.a_ZWobble}) in vec4 a_ZWobble;
-layout(location = ${WaterProgram.a_VertexColorTexturePosition}) in vec2 a_VertexColorTexturePosition;
-layout(location = ${WaterProgram.a_FogColor}) in vec4 a_FogColor;
-layout(location = ${WaterProgram.a_FogParams}) in vec4 a_FogParams;
-layout(location = ${WaterProgram.a_RenderParams}) in vec4 a_RenderParams;
+layout(location = ${WaterProgram.a_InstanceUVParams}) in vec4 a_InstanceUVParams; // xy = uv scroll, z = color lut layer, w = uv scale
+layout(location = ${WaterProgram.a_InstanceWobbleParams}) in vec4 a_InstanceWobbleParams; // x = wobble amount, y = wobble period, z = vertical wobble seed, w = uv wobble seed
+layout(location = ${WaterProgram.a_InstanceFogColor}) in vec4 a_InstanceFogColor;
+layout(location = ${WaterProgram.a_InstanceFogParams}) in vec4 a_InstanceFogParams; // same as u_FogParams, overrides if fog alpha is non-zero
+layout(location = ${WaterProgram.a_InstanceRenderParams}) in vec4 a_InstanceRenderParams; // x=enable texture alpha, y=use color from lut texture instead of vertex color attribute, z=wobble seed is world position, w=unused
 
 out vec4 v_Rgba;
 out vec2 v_ST;
@@ -77,52 +98,49 @@ flat out vec4 v_RenderParams;
 
 ${RatchetShaderLib.LightingFunctions}
 
-float waterFogFactor(vec3 positionWorld) {
-    if (u_FogParams.color.a == 0.0)
-        return 0.0;
-
-    if (a_FogColor.a == 0.0)
-        return fogFactor(positionWorld);
-
-    if (u_CameraData.extras.z == 1.0)
-        return (a_FogParams.z + a_FogParams.w) / 2.0;
-
-    float distanceWorld = length(positionWorld - u_CameraData.position.xyz);
-    float distanceFogRange = 1.0 - clamp((a_FogParams.y - distanceWorld) / (a_FogParams.y - a_FogParams.x), 0.0, 1.0);
-    return a_FogParams.z + distanceFogRange * (a_FogParams.w - a_FogParams.z);
-}
-
 void main() {
     mat4x3 instanceTransform = mat4x3(transpose(mat4(a_InstanceTransform0, a_InstanceTransform1, a_InstanceTransform2, vec4(0.0, 0.0, 0.0, 1.0))));
-    vec3 positionWorldBase = instanceTransform * vec4(a_Position, 1.0);
-    vec3 positionLocal = a_Position;
+    vec3 positionWorld = instanceTransform * vec4(a_Position, 1.0);
+
+    // calcualte wobble amount for vertical world displacement and uvs
     float zWobble = 0.0;
-    float phase = seededRandom(positionWorldBase, a_ZWobble.z) * 2.0 * PI;
-    if (a_RenderParams.z > 0.5)
-        phase = (positionWorldBase.x + positionWorldBase.z) / 8.0; // not sure about this scale
-    float uvDirectionPhase = seededRandom(positionWorldBase, a_ZWobble.w) * 2.0 * PI;
-    float uvPhase = seededRandom(positionWorldBase, a_ZWobble.w + 19.19) * 2.0 * PI;
-    float uvWobble = 0.0;
-    if (a_ZWobble.y > 0.0) {
-        if (a_RenderParams.z > 0.5) {
-            zWobble = a_ZWobble.x * sin(phase + (u_Time.x / 1000.0) / a_ZWobble.y);
+    float phase = seededRandom(positionWorld, a_InstanceWobbleParams.z) * 2.0 * PI;
+    if (a_InstanceRenderParams.z > 0.5) {
+        phase = (positionWorld.x + positionWorld.z) / 8.0; // not sure about this scale
+    }
+    float uvWobbleDirectionPhase = seededRandom(positionWorld, a_InstanceWobbleParams.w) * 2.0 * PI;
+    vec2 uvWobbleDirection = vec2(cos(uvWobbleDirectionPhase), sin(uvWobbleDirectionPhase));
+    float uvWobbleAmount = 0.0;
+    if (a_InstanceWobbleParams.y > 0.0) {
+        if (a_InstanceRenderParams.z > 0.5) {
+            zWobble = a_InstanceWobbleParams.x * sin(phase + (u_Time.x / 1000.0) / a_InstanceWobbleParams.y);
         } else {
-            zWobble = a_ZWobble.x * sin(2.0 * PI * (u_Time.x / 60.0) / a_ZWobble.y + phase);
-            uvWobble = a_ZWobble.x * 0.5 * sin(2.0 * PI * (u_Time.x / 60.0) / a_ZWobble.y + uvPhase);
+            zWobble = a_InstanceWobbleParams.x * sin(2.0 * PI * (u_Time.x / 60.0) / a_InstanceWobbleParams.y + phase);
+            float uvPhase = seededRandom(positionWorld, a_InstanceWobbleParams.w + 19.19) * 2.0 * PI;
+            uvWobbleAmount = a_InstanceWobbleParams.x * 0.5 * sin(2.0 * PI * (u_Time.x / 60.0) / a_InstanceWobbleParams.y + uvPhase);
         }
     }
-    positionLocal.z += zWobble;
-    vec3 positionWorld = instanceTransform * vec4(positionLocal, 1.0);
+    positionWorld.y += zWobble;
 
-    v_Rgba = a_RenderParams.y > 0.5 ? texture(u_VertexColorTexture, vec3(a_VertexColorTexturePosition, a_UVScrollAndColorLayer.z)) : a_VertexColor;
-    vec2 wobbleDirection = vec2(cos(uvDirectionPhase), sin(uvDirectionPhase));
+    // get color from vertex color or color lut
+    v_Rgba = a_InstanceRenderParams.y > 0.5 ? texture(u_VertexColorTexture, vec3(a_ColorLutCoords, a_InstanceUVParams.z)) : a_VertexColor;
     vec2 uvPosition = a_ST;
-    if (a_UVScrollAndColorLayer.w != 0.0)
-        uvPosition = positionWorld.xz * a_UVScrollAndColorLayer.w;
-    v_ST = uvPosition + a_UVScrollAndColorLayer.xy + uvWobble * wobbleDirection;
-    v_FogFactor = waterFogFactor(positionWorld);
-    v_FogColor = mix(u_FogParams.color.rgb, a_FogColor.rgb, a_FogColor.a);
-    v_RenderParams = a_RenderParams;
+    if (a_InstanceUVParams.w != 0.0) {
+        uvPosition = positionWorld.xz * a_InstanceUVParams.w;
+    }
+    v_ST = uvPosition + a_InstanceUVParams.xy + (uvWobbleAmount * uvWobbleDirection);
+
+    // override fog if custom fog is provided
+    FogParams fogParams = u_FogParams;
+    if (a_InstanceFogColor.a != 0.0) {
+        fogParams.color = a_InstanceFogColor;
+        fogParams.distanceNearFar = vec4(a_InstanceFogParams.xy, 0.0, 0.0);
+        fogParams.intensityNearFar = vec4(a_InstanceFogParams.zw, 0.0, 0.0);
+    }
+    v_FogFactor = u_FogParams.color.a == 0.0 ? 0.0 : fogFactor(positionWorld, fogParams);
+    v_FogColor = fogParams.color.rgb;
+
+    v_RenderParams = a_InstanceRenderParams;
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(positionWorld, 1.0);
 }
 `;
@@ -138,13 +156,11 @@ flat in vec4 v_RenderParams;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
-    vec4 textureSample = vec4(1.0);
-    if (v_RenderParams.w > 0.5) {
-        textureSample = texture(u_FxTexture, v_ST);
-        if (v_RenderParams.x > 0.5)
-            textureSample.a *= 2.0;
-        else
-            textureSample.a = 1.0;
+    vec4 textureSample = texture(u_FxTexture, v_ST);
+    if (v_RenderParams.x == 1.0) {
+        textureSample.a *= 2.0;
+    } else {
+        textureSample.a = 1.0;
     }
     gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor, 0.01, v_FogColor);
 }
@@ -157,7 +173,7 @@ export class WaterGeometry {
     public positionBuffer: GfxBuffer;
     public texcoordBuffer: GfxBuffer;
     public vertexColorBuffer: GfxBuffer;
-    public vertexColorTexturePositionBuffer: GfxBuffer;
+    public colorLutCoordsBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public vertexCount: number;
     public indexCount: number;
@@ -182,32 +198,32 @@ export class WaterGeometry {
         this.positionBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, positions.buffer, positions.byteOffset, positions.byteLength);
         this.texcoordBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, texcoords.buffer, texcoords.byteOffset, texcoords.byteLength);
         this.vertexColorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, colors.buffer, colors.byteOffset, colors.byteLength);
-        this.vertexColorTexturePositionBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, colorTexturePositions.buffer, colorTexturePositions.byteOffset, colorTexturePositions.byteLength);
+        this.colorLutCoordsBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, colorTexturePositions.buffer, colorTexturePositions.byteOffset, colorTexturePositions.byteLength);
 
         this.indexCount = indices.length;
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indices.buffer, indices.byteOffset, indices.byteLength);
 
-        const instanceBufferIndex = 3;
         const vertexAttributeDescriptors = [
             { location: WaterProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0 },
             { location: WaterProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 0, bufferIndex: 1 },
             { location: WaterProgram.a_VertexColor, format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: 2 },
-            { location: WaterProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_UVScroll, format: GfxFormat.F32_RGBA, bufferByteOffset: 12 * 4, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_ZWobble, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_VertexColorTexturePosition, format: GfxFormat.F32_RG, bufferByteOffset: 0, bufferIndex: 4 },
-            { location: WaterProgram.a_FogColor, format: GfxFormat.F32_RGBA, bufferByteOffset: 20 * 4, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_FogParams, format: GfxFormat.F32_RGBA, bufferByteOffset: 24 * 4, bufferIndex: instanceBufferIndex },
-            { location: WaterProgram.a_RenderParams, format: GfxFormat.F32_RGBA, bufferByteOffset: 28 * 4, bufferIndex: instanceBufferIndex },
+            { location: WaterProgram.a_ColorLutCoords, format: GfxFormat.F32_RG, bufferByteOffset: 0, bufferIndex: 3 },
+
+            { location: WaterProgram.a_InstanceTransform0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceTransform1, format: GfxFormat.F32_RGBA, bufferByteOffset: 4 * 4, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceTransform2, format: GfxFormat.F32_RGBA, bufferByteOffset: 8 * 4, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceUVParams, format: GfxFormat.F32_RGBA, bufferByteOffset: 12 * 4, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceWobbleParams, format: GfxFormat.F32_RGBA, bufferByteOffset: 16 * 4, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceFogColor, format: GfxFormat.F32_RGBA, bufferByteOffset: 20 * 4, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceFogParams, format: GfxFormat.F32_RGBA, bufferByteOffset: 24 * 4, bufferIndex: 4 },
+            { location: WaterProgram.a_InstanceRenderParams, format: GfxFormat.F32_RGBA, bufferByteOffset: 28 * 4, bufferIndex: 4 },
         ];
         const vertexBufferDescriptors = [
             { byteStride: 3 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
             { byteStride: 2 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
             { byteStride: 4 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: WaterProgram.elementsPerInstance * 4, frequency: GfxVertexBufferFrequency.PerInstance },
             { byteStride: 2 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: WaterProgram.elementsPerInstance * 4, frequency: GfxVertexBufferFrequency.PerInstance },
         ];
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat: GfxFormat.U16_R });
@@ -217,7 +233,7 @@ export class WaterGeometry {
         device.destroyBuffer(this.positionBuffer);
         device.destroyBuffer(this.texcoordBuffer);
         device.destroyBuffer(this.vertexColorBuffer);
-        device.destroyBuffer(this.vertexColorTexturePositionBuffer);
+        device.destroyBuffer(this.colorLutCoordsBuffer);
         device.destroyBuffer(this.indexBuffer);
     }
 }
@@ -257,9 +273,13 @@ export class WaterRenderer {
         device.destroyTexture(this.fallbackVertexColorTexture);
     }
 
-    renderWater(renderInstList: GfxRenderInstList, geometry: WaterGeometry, transforms: mat4[], uvScroll: vec2, zWobble: vec2, randomSeed: number, blendAlpha: number, texture: GfxTexture | null, fxSampler: GfxSampler, instanceDataBuffer: MegaBuffer, useTextureAlpha: boolean, depthWrite: boolean, uvRandomSeed: number = randomSeed, vertexColorTexture: GfxTexture | null = null, vertexColorLayers: number[] | null = null, fogParams: WaterFogParams | null = null, useVertexColorAlpha: boolean = false, useWorldspaceWobble: boolean = false, useTexture: boolean = true, useAdditiveBlend: boolean = false, uvWorldSpaceScale: number = 0): void {
+    renderWater(drawKit: MobyDrawKit, geometry: WaterGeometry, transforms: mat4[], texture: GfxTexture | null, animation: WaterAnimationParams, alpha: WaterAlphaOptions, fogParams: WaterFogParams | null, options: WaterRenderOptions): void {
         if (transforms.length === 0 || geometry.vertexCount === 0) return;
 
+        const { instanceDataBuffer, fxSampler, renderInstList } = drawKit;
+        const { uvScroll, zWobble, randomSeed, uvRandomSeed, useWorldspaceWobble, uvWorldSpaceScale } = animation;
+        const { blendAlpha, useTextureAlpha, useVertexColorAlpha } = alpha;
+        const { depthWrite, useAdditiveBlend, vertexColorTexture, vertexColorLayers } = options;
         const instanceDataStartBytes = instanceDataBuffer.ptr * 4;
         for (let i = 0; i < transforms.length; i++) {
             instanceDataBuffer.ptr += fillMatrix4x3(instanceDataBuffer.f32View, instanceDataBuffer.ptr, transforms[i]);
@@ -287,7 +307,7 @@ export class WaterRenderer {
                 useTextureAlpha ? 1 : 0,
                 vertexColorTexture !== null ? 1 : 0,
                 useWorldspaceWobble ? 1 : 0,
-                useTexture ? 1 : 0,
+                0,
             );
         }
 
@@ -309,8 +329,8 @@ export class WaterRenderer {
                 { buffer: geometry.positionBuffer, byteOffset: 0 },
                 { buffer: geometry.texcoordBuffer, byteOffset: 0 },
                 { buffer: geometry.vertexColorBuffer, byteOffset: 0 },
+                { buffer: geometry.colorLutCoordsBuffer, byteOffset: 0 },
                 { buffer: instanceDataBuffer.gfxBuffer, byteOffset: instanceDataStartBytes },
-                { buffer: geometry.vertexColorTexturePositionBuffer, byteOffset: 0 },
             ],
             { buffer: geometry.indexBuffer, byteOffset: 0 },
         );

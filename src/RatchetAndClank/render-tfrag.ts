@@ -77,7 +77,7 @@ void main() {
     v_Rgba = commonVertexLighting(vec4(a_AmbientColor, 1.0), normal, lightSelector);
 
     v_ST = a_ST.xy;
-    v_FogFactor = fogFactor(t_PositionWorld.xyz);
+    v_FogFactor = fogFactor(t_PositionWorld.xyz, u_FogParams);
     v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
     v_LodK = a_TextureParams.z;

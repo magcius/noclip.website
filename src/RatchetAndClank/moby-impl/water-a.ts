@@ -116,10 +116,25 @@ export class Water_A implements MobyImpl {
             const descriptor = this.meshes[i].descriptor;
 
             const zWobble = vec2.fromValues(this.zWobbleAmplitude, this.zWobblePeriod);
-            const randomSeed1 = this.mobyInstance.uid + i;
-            drawKit.renderers.water.renderWater(drawKit.renderInstList, geometry, [m], this.scroll1, zWobble, randomSeed1, descriptor.fix1 / 0x80, drawKit.fxTextures[descriptor.fxTexture1], drawKit.fxSampler, drawKit.instanceDataBuffer, false, false);
-            const uvRandomSeed2 = randomSeed1 + 1.23;
-            drawKit.renderers.water.renderWater(drawKit.renderInstList, geometry, [m], this.scroll2, zWobble, randomSeed1, descriptor.fix2 / 0x80, drawKit.fxTextures[descriptor.fxTexture2], drawKit.fxSampler, drawKit.instanceDataBuffer, false, false, uvRandomSeed2);
+
+            const seed1 = this.mobyInstance.uid + i;
+            const seed2 = this.mobyInstance.uid + i + 1.234;
+
+            drawKit.renderers.water.renderWater(
+                drawKit, geometry, [m], drawKit.fxTextures[descriptor.fxTexture1],
+                { uvScroll: this.scroll1, zWobble, randomSeed: seed1, uvRandomSeed: seed1, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: descriptor.fix1 / 0x80, useTextureAlpha: false, useVertexColorAlpha: false },
+                null,
+                { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
+            );
+
+            drawKit.renderers.water.renderWater(
+                drawKit, geometry, [m], drawKit.fxTextures[descriptor.fxTexture2],
+                { uvScroll: this.scroll2, zWobble, randomSeed: seed1, uvRandomSeed: seed2, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: descriptor.fix2 / 0x80, useTextureAlpha: false, useVertexColorAlpha: false },
+                null,
+                { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
+            );
         }
     }
 

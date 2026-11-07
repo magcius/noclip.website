@@ -153,7 +153,10 @@ export const MOBY_IMPL_REGISTRY = new Map<number, MobyConstructor>([
     [1901, Water_D],
     [1903, Water_D],
     [1919, Water_D],
+    [2366, Water_I],
+    [2583, Water_I],
     [3174, TieRotationAnimator],
+    [4789, Water_I],
     [7501, Trophy],
     [7502, Trophy],
     [7503, Trophy],
@@ -163,4 +166,11 @@ export const MOBY_IMPL_REGISTRY = new Map<number, MobyConstructor>([
     [7507, Trophy],
     [7508, Trophy],
     [7509, Trophy],
+]);
+
+export const MOBYS_IMMUNE_TO_CHUNKING = new Set<number>([
+    // water planes
+    2366,
+    2583,
+    4789,
 ]);

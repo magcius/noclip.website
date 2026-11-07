@@ -178,50 +178,20 @@ export class Water_D implements MobyImpl {
             const decl = this.decls[i];
 
             drawKit.renderers.water.renderWater(
-                drawKit.renderInstList,
-                geometry,
-                [transform],
-                this.uvScrolls[i][0],
-                this.zWobble,
-                this.mobyInstance.uid + i,
-                1,
-                drawKit.fxTextures[decl.textureId],
-                drawKit.fxSampler,
-                drawKit.instanceDataBuffer,
-                !decl.ignoreTextureAlpha, // texture alpha
-                decl.depthWrite ?? false, // depth write
-                0,
+                drawKit, geometry, [transform], drawKit.fxTextures[decl.textureId],
+                { uvScroll: this.uvScrolls[i][0], zWobble: this.zWobble, randomSeed: this.mobyInstance.uid + i, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: 1, useTextureAlpha: !decl.ignoreTextureAlpha, useVertexColorAlpha: false },
                 null,
-                null,
-                null,
-                false,
-                false,
-                true,
-                decl.additive ?? false
+                { depthWrite: decl.depthWrite ?? false, useAdditiveBlend: decl.additive ?? false, vertexColorTexture: null, vertexColorLayers: null },
             );
 
             if (decl.additiveSecondDraw) {
                 drawKit.renderers.water.renderWater(
-                    drawKit.renderInstList,
-                    geometry,
-                    [transform],
-                    this.uvScrolls[i][1],
-                    this.zWobble,
-                    this.mobyInstance.uid + i,
-                    1,
-                    drawKit.fxTextures[decl.textureId],
-                    drawKit.fxSampler,
-                    drawKit.instanceDataBuffer,
-                    !decl.ignoreTextureAlpha, // texture alpha
-                    decl.depthWrite ?? false, // depth write
-                    0,
+                    drawKit, geometry, [transform], drawKit.fxTextures[decl.textureId],
+                    { uvScroll: this.uvScrolls[i][1], zWobble: this.zWobble, randomSeed: this.mobyInstance.uid + i, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                    { blendAlpha: 1, useTextureAlpha: !decl.ignoreTextureAlpha, useVertexColorAlpha: false },
                     null,
-                    null,
-                    null,
-                    false,
-                    false,
-                    true,
-                    true,
+                    { depthWrite: decl.depthWrite ?? false, useAdditiveBlend: true, vertexColorTexture: null, vertexColorLayers: null },
                 );
             }
         }

@@ -102,22 +102,11 @@ export class Water_C implements MobyImpl {
         const transform = mat4.clone(noclipSpaceFromRatchetSpace);
         for (let i = 0; i < geometries.length; i++) {
             drawKit.renderers.water.renderWater(
-                drawKit.renderInstList,
-                geometries[i],
-                [transform],
-                ZERO_VEC2,
-                ZERO_VEC2,
-                0,
-                1,
-                drawKit.fxTextures[this.decl.textureId],
-                drawKit.fxSampler,
-                drawKit.instanceDataBuffer,
-                false,
-                true,
-                undefined,
-                null,
-                null,
+                drawKit, geometries[i], [transform], drawKit.fxTextures[this.decl.textureId],
+                { uvScroll: ZERO_VEC2, zWobble: ZERO_VEC2, randomSeed: 0, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: false },
                 this.decl.fogParams ?? null,
+                { depthWrite: true, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
             );
         }
     }

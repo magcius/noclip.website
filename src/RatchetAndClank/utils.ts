@@ -7,6 +7,7 @@ import { ClassEntry } from "./bin-index";
 import { ChunkPlane, MobyInstance, OcclusionMappings, TieInstance } from "./bin-gameplay";
 import { Occlusion } from "./bin-core";
 import { DataViewExt } from "./DataViewExt";
+import { MOBYS_IMMUNE_TO_CHUNKING } from "./moby-impl/moby";
 
 // game number shorthand
 export type GN = 1 | 2 | 3 | 4;
@@ -100,7 +101,7 @@ export function filterMobyInstancesByChunkPlane(chunkNumber: number | null, inst
         const instance = instances[i];
         const pos = vec3.fromValues(instance.position.x, instance.position.y, instance.position.z);
         vec3.transformMat4(pos, pos, noclipSpaceFromRatchetSpace);
-        if (ownerChunk(pos, chunkPlanes) === chunkNumber) {
+        if (ownerChunk(pos, chunkPlanes) === chunkNumber || MOBYS_IMMUNE_TO_CHUNKING.has(instance.oClass)) {
             out.push(instance);
         }
     }

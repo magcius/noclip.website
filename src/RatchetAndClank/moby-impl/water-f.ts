@@ -240,21 +240,9 @@ export class Water_F implements MobyImpl {
 
             if (transforms.length === 0) continue;
             drawKit.renderers.water.renderWater(
-                drawKit.renderInstList,
-                geometry,
-                transforms,
-                ZERO_VEC2,
-                ZERO_VEC2,
-                this.mobyInstance.uid,
-                this.alpha,
-                texture,
-                drawKit.fxSampler,
-                drawKit.instanceDataBuffer,
-                false,
-                this.alpha === 1,
-                undefined,
-                colorTextures[gridIndex],
-                colorTextureLayers,
+                drawKit, geometry, transforms, texture,
+                { uvScroll: ZERO_VEC2, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid, uvRandomSeed: this.mobyInstance.uid, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+                { blendAlpha: this.alpha, useTextureAlpha: false, useVertexColorAlpha: false },
                 {
                     near: descriptor.fogNear,
                     far: descriptor.fogFar,
@@ -262,6 +250,7 @@ export class Water_F implements MobyImpl {
                     farIntensity: descriptor.fogFarIntensity,
                     color: descriptor.fogColor,
                 },
+                { depthWrite: this.alpha === 1, useAdditiveBlend: false, vertexColorTexture: colorTextures[gridIndex], vertexColorLayers: colorTextureLayers },
             );
         }
     }
@@ -350,7 +339,7 @@ function untangleStripOrderedColors(overlaySections: OverlaySection[], colorsVad
     for (let i = 0; i < 7; i++) strips.push(buf.subview(i * 18 * SIZEOF_COLOR, 16 * SIZEOF_COLOR));
     let ptr = outPtrStart;
 
-    // even texcoords from top edge of each strip
+    // even colors from top edge of each strip
     for (let row = 0; row < 7; row++) {
         for (let col = 0; col < 8; col++) {
             out[ptr++] = strips[row].getUint8((col * 2) * SIZEOF_COLOR + 0x0);
@@ -360,7 +349,7 @@ function untangleStripOrderedColors(overlaySections: OverlaySection[], colorsVad
         }
     }
 
-    // odd texcoords from bottom edge of last row
+    // odd colors from bottom edge of last row
     for (let col = 0; col < 8; col++) {
         out[ptr++] = strips[6].getUint8((col * 2 + 1) * SIZEOF_COLOR + 0x0);
         out[ptr++] = strips[6].getUint8((col * 2 + 1) * SIZEOF_COLOR + 0x1);
