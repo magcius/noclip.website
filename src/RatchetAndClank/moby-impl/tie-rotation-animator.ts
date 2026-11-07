@@ -2,10 +2,10 @@ import { mat4, quat, vec3 } from "gl-matrix";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { MobyInstance } from "../bin-gameplay";
 import { LevelResources } from "../loader";
-import { MobyDrawKit, MobyImpl, ownPvars, updateTransformForTie } from "./moby";
+import { MobyUpdateKit, MobyImpl, ownPvars, updateTransformForTie } from "./moby";
 
 export class TieRotationAnimator implements MobyImpl {
-    pvars: {
+    private pvars: {
         groupId: number;
         // both unknowns are group indices
         unknown4: number;
@@ -25,7 +25,7 @@ export class TieRotationAnimator implements MobyImpl {
         };
     }
 
-    update(drawKit: MobyDrawKit) {
+    update(updateKit: MobyUpdateKit) {
         if (!this.resources.tieGroups) return;
         if (!this.resources.tieInstances) return;
 
@@ -33,7 +33,7 @@ export class TieRotationAnimator implements MobyImpl {
         const group = this.resources.tieGroups.groups[this.pvars.groupId];
 
         // Angular velocity is in degrees per second
-        const elapsedAngle = drawKit.dt / 1000;
+        const elapsedAngle = updateKit.dt / 1000;
         const r = mat4.fromQuat(mat4.create(), quat.fromEuler(quat.create(),
             this.pvars.angularVelocity.x * elapsedAngle,
             this.pvars.angularVelocity.y * elapsedAngle,
@@ -84,10 +84,10 @@ export class TieRotationAnimator implements MobyImpl {
 
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
+    drawAfterMobys(updateKit: MobyUpdateKit) {
     }
 
     destroy(device: GfxDevice) {

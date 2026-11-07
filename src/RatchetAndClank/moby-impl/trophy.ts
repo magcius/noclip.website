@@ -1,11 +1,11 @@
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { MobyInstance } from "../bin-gameplay";
 import { LevelResources } from "../loader";
-import { MobyDrawKit, MobyImpl, updateTransform } from "./moby";
+import { MobyUpdateKit, MobyImpl, updateTransform } from "./moby";
 
 export class Trophy implements MobyImpl {
-    initialZ = 0;
-    phase = 0;
+    private initialZ = 0;
+    private phase = 0;
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         this.initialZ = mobyInstance.position.z;
@@ -21,22 +21,22 @@ export class Trophy implements MobyImpl {
         }
     }
 
-    update(drawKit: MobyDrawKit) {
+    update(updateKit: MobyUpdateKit) {
         if (this.resources.levelNumber !== 3) {
             this.mobyInstance.position.z = this.initialZ + 1 + 0.3 * Math.sin(this.phase);
-            this.mobyInstance.rotation.x += 120 * (Math.PI / 180) * (drawKit.dt / 1000);
-            this.mobyInstance.rotation.y += 40 * (Math.PI / 180) * (drawKit.dt / 1000);
-            this.mobyInstance.rotation.z += 20 * (Math.PI / 180) * (drawKit.dt / 1000);
-            this.phase += 90 * (Math.PI / 180) * (drawKit.dt / 1000);
+            this.mobyInstance.rotation.x += 120 * (Math.PI / 180) * (updateKit.dt / 1000);
+            this.mobyInstance.rotation.y += 40 * (Math.PI / 180) * (updateKit.dt / 1000);
+            this.mobyInstance.rotation.z += 20 * (Math.PI / 180) * (updateKit.dt / 1000);
+            this.phase += 90 * (Math.PI / 180) * (updateKit.dt / 1000);
 
             updateTransform(this.mobyInstance);
         }
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
+    drawAfterMobys(updateKit: MobyUpdateKit) {
     }
 
     destroy(device: GfxDevice) {

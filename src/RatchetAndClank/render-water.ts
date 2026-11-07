@@ -10,7 +10,7 @@ import { DeviceProgram } from "../Program";
 import { assert } from "../util";
 import { RatchetShaderLib } from "./shader-lib";
 import { create1x1x1ErrorArrayTexture } from "./textures";
-import type { MobyDrawKit } from "./moby-impl/moby";
+import type { MobyUpdateKit } from "./moby-impl/moby";
 
 export interface WaterFogParams {
     near: number;
@@ -273,10 +273,10 @@ export class WaterRenderer {
         device.destroyTexture(this.fallbackVertexColorTexture);
     }
 
-    renderWater(drawKit: MobyDrawKit, geometry: WaterGeometry, transforms: mat4[], texture: GfxTexture | null, animation: WaterAnimationParams, alpha: WaterAlphaOptions, fogParams: WaterFogParams | null, options: WaterRenderOptions): void {
+    renderWater(updateKit: MobyUpdateKit, geometry: WaterGeometry, transforms: mat4[], texture: GfxTexture | null, animation: WaterAnimationParams, alpha: WaterAlphaOptions, fogParams: WaterFogParams | null, options: WaterRenderOptions): void {
         if (transforms.length === 0 || geometry.vertexCount === 0) return;
 
-        const { instanceDataBuffer, fxSampler, renderInstList } = drawKit;
+        const { instanceDataBuffer, fxSampler, renderInstList } = updateKit;
         const { uvScroll, zWobble, randomSeed, uvRandomSeed, useWorldspaceWobble, uvWorldSpaceScale } = animation;
         const { blendAlpha, useTextureAlpha, useVertexColorAlpha } = alpha;
         const { depthWrite, useAdditiveBlend, vertexColorTexture, vertexColorLayers } = options;

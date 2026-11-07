@@ -1,10 +1,10 @@
 import { mat4, vec2, vec3 } from "gl-matrix";
 import { assert } from "../../util";
 import { MobyInstance } from "../bin-gameplay";
-import { OverlaySection, readWaterGrid_KindE } from "../bin-overlay";
+import { readWaterGrid_KindE } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace } from "../utils";
-import { MobyDrawKit, MobyImpl, ownPvars } from "./moby";
+import { MobyUpdateKit, MobyImpl, ownPvars } from "./moby";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { WaterGeometry } from "../render-water";
 
@@ -36,25 +36,22 @@ export const RAC1_WATER_KIND_E = new Map<number, WaterDecl_E>([
  * - Oltanis orbit water that moves up and down
  */
 export class Water_E implements MobyImpl {
-    overlaySections: OverlaySection[];
-
-    grids: ReturnType<typeof readWaterGrid_KindE>[] = [];
-    geometry: WaterGeometry | null = null;
+    private grids: ReturnType<typeof readWaterGrid_KindE>[] = [];
+    private geometry: WaterGeometry | null = null;
 
     // the water patch being controlled by this
     // null means "draw all but don't touch position"
-    controlTargetPatch: number | null = null;
+    private controlTargetPatch: number | null = null;
 
-    uvScrolls: vec2[] = [];
-    zWobble = vec2.fromValues(0.05, 40);
-    waterTextureOverride: number | null = null;
-    envTextureOverride: number | null = null;
-    waterFixOverride: number | null = null;
-    envFixOverride: number | null = null;
+    private uvScrolls: vec2[] = [];
+    private zWobble = vec2.fromValues(0.05, 40);
+    private waterTextureOverride: number | null = null;
+    private envTextureOverride: number | null = null;
+    private waterFixOverride: number | null = null;
+    private envFixOverride: number | null = null;
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const pv = ownPvars(mobyInstance, resources);
 
@@ -112,13 +109,13 @@ export class Water_E implements MobyImpl {
         if (this.controlTargetPatch === null) {
             for (let i = 0; i < waterDecl_E.count; i++) {
                 const waterGrid = readWaterGrid_KindE(
-                    this.overlaySections, waterDecl_E.dataVaddr, waterDecl_E.masksVaddr, waterDecl_E.maskSize, i
+                    resources.overlaySections, waterDecl_E.dataVaddr, waterDecl_E.masksVaddr, waterDecl_E.maskSize, i
                 );
                 this.grids.push(waterGrid);
             }
         } else {
             const waterGrid = readWaterGrid_KindE(
-                this.overlaySections, waterDecl_E.dataVaddr, waterDecl_E.masksVaddr, waterDecl_E.maskSize, this.controlTargetPatch
+                resources.overlaySections, waterDecl_E.dataVaddr, waterDecl_E.masksVaddr, waterDecl_E.maskSize, this.controlTargetPatch
             );
             this.grids.push(waterGrid);
         }
@@ -126,8 +123,8 @@ export class Water_E implements MobyImpl {
         this.uvScrolls = this.grids.map(() => vec2.create());
     }
 
-    update(drawKit: MobyDrawKit) {
-        const dtSeconds = drawKit.dt / 1000;
+    update(updateKit: MobyUpdateKit) {
+        const dtSeconds = updateKit.dt / 1000;
         for (let i = 0; i < this.grids.length; i++) {
             const waterGrid = this.grids[i];
             const descriptor = waterGrid.descriptor;
@@ -144,7 +141,7 @@ export class Water_E implements MobyImpl {
         }
     }
 
-    private getOrCreateGeometry(drawKit: MobyDrawKit): WaterGeometry {
+    private getOrCreateGeometry(updateKit: MobyUpdateKit): WaterGeometry {
         if (this.geometry) return this.geometry;
 
         const positions = new Float32Array(5 * 5 * 3);
@@ -176,17 +173,17 @@ export class Water_E implements MobyImpl {
             }
         }
 
-        this.geometry = new WaterGeometry(drawKit.renderHelper.renderCache, positions, texcoords, null, indices);
+        this.geometry = new WaterGeometry(updateKit.renderHelper.renderCache, positions, texcoords, null, indices);
         return this.geometry;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    drawAfterMobys(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
-        const geometry = this.getOrCreateGeometry(drawKit);
+        const geometry = this.getOrCreateGeometry(updateKit);
         for (let gridIndex = 0; gridIndex < this.grids.length; gridIndex++) {
             const waterGrid = this.grids[gridIndex];
             const basePosition = waterGrid.descriptor.center;
@@ -207,8 +204,8 @@ export class Water_E implements MobyImpl {
             }
 
             if (transforms.length === 0) continue;
-            drawKit.renderers.water.renderWater(
-                drawKit, geometry, transforms, drawKit.fxTextures[this.waterTextureOverride ?? waterGrid.descriptor.fxWater],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometry, transforms, updateKit.fxTextures[this.waterTextureOverride ?? waterGrid.descriptor.fxWater],
                 { uvScroll: this.uvScrolls[gridIndex], zWobble: this.zWobble, randomSeed: 0, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
                 { blendAlpha: (this.waterFixOverride ?? waterGrid.descriptor.fixWater) / 0x80, useTextureAlpha: false, useVertexColorAlpha: false },
                 null,

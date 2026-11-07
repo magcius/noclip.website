@@ -26,13 +26,13 @@ export interface MobyConstructor {
 }
 
 export interface MobyImpl {
-    update(drawKit: MobyDrawKit): void;
-    drawAfterTies(drawKit: MobyDrawKit): void;
-    drawAfterMobys(drawKit: MobyDrawKit): void;
+    update(updateKit: MobyUpdateKit): void;
+    drawAfterTies(updateKit: MobyUpdateKit): void;
+    drawAfterMobys(updateKit: MobyUpdateKit): void;
     destroy(device: GfxDevice): void;
 }
 
-export interface MobyDrawKit {
+export interface MobyUpdateKit {
     renderInstList: GfxRenderInstList;
     renderHelper: GfxRenderHelper;
     instanceDataBuffer: MegaBuffer

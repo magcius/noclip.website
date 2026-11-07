@@ -1,10 +1,10 @@
 import { mat4, vec2 } from "gl-matrix";
 import { assert } from "../../util";
 import { MobyInstance } from "../bin-gameplay";
-import { OverlaySection, readWaterMeshes_KindB } from "../bin-overlay";
+import { readWaterMeshes_KindB } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace } from "../utils";
-import { MobyDrawKit, MobyImpl } from "./moby";
+import { MobyUpdateKit, MobyImpl } from "./moby";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { WaterGeometry } from "../render-water";
 import { GfxTopology, makeTriangleIndexBuffer } from "../../gfx/helpers/TopologyHelpers";
@@ -25,18 +25,15 @@ export const RAC1_WATER_KIND_B = new Map<number, WaterDecl_B>([
  * TODO: this should use a texture passed in from Water_Gaspar
  */
 export class Water_B implements MobyImpl {
-    overlaySections: OverlaySection[];
+    private decl: WaterDecl_B;
+    private meshes: ReturnType<typeof readWaterMeshes_KindB>;
+    private geometry: WaterGeometry | null = null;
 
-    decl: WaterDecl_B;
-    meshes: ReturnType<typeof readWaterMeshes_KindB>;
-    geometry: WaterGeometry | null = null;
-
-    uvScroll = vec2.create();
-    uvScrollVelocity = vec2.fromValues(0, -60 / 2048);
+    private uvScroll = vec2.create();
+    private uvScrollVelocity = vec2.fromValues(0, -60 / 2048);
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const decl = RAC1_WATER_KIND_B.get(mobyInstance.oClass);
         assert(decl !== undefined);
@@ -45,11 +42,11 @@ export class Water_B implements MobyImpl {
         this.meshes = readWaterMeshes_KindB(resources.overlaySections, this.decl.vaddr, this.decl.count);
     }
 
-    update(drawKit: MobyDrawKit) {
-        vec2.scaleAndAdd(this.uvScroll, this.uvScroll, this.uvScrollVelocity, drawKit.dt / 1000);
+    update(updateKit: MobyUpdateKit) {
+        vec2.scaleAndAdd(this.uvScroll, this.uvScroll, this.uvScrollVelocity, updateKit.dt / 1000);
     }
 
-    private getOrCreateGeometry(drawKit: MobyDrawKit): WaterGeometry {
+    private getOrCreateGeometry(updateKit: MobyUpdateKit): WaterGeometry {
         if (this.geometry) return this.geometry;
 
         const totalVertexCount = this.meshes.reduce((sum, mesh) => sum + mesh.vertexCount, 0);
@@ -85,7 +82,7 @@ export class Water_B implements MobyImpl {
         }
 
         this.geometry = new WaterGeometry(
-            drawKit.renderHelper.renderCache,
+            updateKit.renderHelper.renderCache,
             positions,
             texcoords,
             null,
@@ -94,17 +91,17 @@ export class Water_B implements MobyImpl {
         return this.geometry;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    drawAfterTies(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
         const FIRST_TEXTURE_ID = 44;
-        const animationFrame = 0; // TODO: Math.floor(this.animationTime * 16) % 16;
+        const animationFrame = 0; // TODO: texture should be passed in from gaspar water moby
         const textureId1 = FIRST_TEXTURE_ID + animationFrame;
 
-        const geometry = this.getOrCreateGeometry(drawKit);
+        const geometry = this.getOrCreateGeometry(updateKit);
         const transform = mat4.clone(noclipSpaceFromRatchetSpace);
-        drawKit.renderers.water.renderWater(
-            drawKit, geometry, [transform], drawKit.fxTextures[textureId1],
+        updateKit.renderers.water.renderWater(
+            updateKit, geometry, [transform], updateKit.fxTextures[textureId1],
             { uvScroll: this.uvScroll, zWobble: vec2.create(), randomSeed: 0, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
             { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: false },
             null,
@@ -112,7 +109,7 @@ export class Water_B implements MobyImpl {
         );
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
+    drawAfterMobys(updateKit: MobyUpdateKit) {
     }
 
     destroy(device: GfxDevice) {

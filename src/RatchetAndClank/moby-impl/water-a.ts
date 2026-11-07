@@ -1,10 +1,10 @@
 import { mat4, vec2 } from "gl-matrix";
 import { assert } from "../../util";
 import { MobyInstance } from "../bin-gameplay";
-import { OverlaySection, readWaterMesh_KindA, SIZEOF_WATER_MESH_DESCRIPTOR_KIND_A, WaterMesh_KindA } from "../bin-overlay";
+import { readWaterMesh_KindA, SIZEOF_WATER_MESH_DESCRIPTOR_KIND_A, WaterMesh_KindA } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace } from "../utils";
-import { MobyDrawKit, MobyImpl } from "./moby";
+import { MobyUpdateKit, MobyImpl } from "./moby";
 import { WaterGeometry } from "../render-water";
 import { GfxTopology, makeTriangleIndexBuffer } from "../../gfx/helpers/TopologyHelpers";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
@@ -26,22 +26,19 @@ export const RAC1_WATER_KIND_A = new Map<number, WaterDecl_A>([
  * - Novalis flowing water
  */
 export class Water_A implements MobyImpl {
-    overlaySections: OverlaySection[];
+    private decl: WaterDecl_A;
+    private meshes: WaterMesh_KindA[];
+    private geometries: WaterGeometry[] | null = null;
 
-    decl: WaterDecl_A;
-    meshes: WaterMesh_KindA[];
-    geometries: WaterGeometry[] | null = null;
+    private zOffset = 0;
+    private zWobbleAmplitude = 0;
+    private zWobblePeriod = 0;
 
-    zOffset = 0;
-    zWobbleAmplitude = 0;
-    zWobblePeriod = 0;
-
-    scroll1 = vec2.create();
-    scroll2 = vec2.create();
+    private scroll1 = vec2.create();
+    private scroll2 = vec2.create();
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const decl = RAC1_WATER_KIND_A.get(mobyInstance.oClass);
         assert(decl !== undefined);
@@ -66,16 +63,16 @@ export class Water_A implements MobyImpl {
         }
     }
 
-    update(drawKit: MobyDrawKit) {
+    update(updateKit: MobyUpdateKit) {
         for (let i = 0; i < this.meshes.length; i++) {
             const waterMesh = this.meshes[i];
             const multiplier = 120; // not sure about units
-            vec2.scaleAndAdd(this.scroll1, this.scroll1, vec2.fromValues(waterMesh.descriptor.direction1.x, waterMesh.descriptor.direction1.y), waterMesh.descriptor.scrollSpeed1 * (drawKit.dt / multiplier));
-            vec2.scaleAndAdd(this.scroll2, this.scroll2, vec2.fromValues(waterMesh.descriptor.direction2.x, waterMesh.descriptor.direction2.y), waterMesh.descriptor.scrollSpeed2 * (drawKit.dt / multiplier));
+            vec2.scaleAndAdd(this.scroll1, this.scroll1, vec2.fromValues(waterMesh.descriptor.direction1.x, waterMesh.descriptor.direction1.y), waterMesh.descriptor.scrollSpeed1 * (updateKit.dt / multiplier));
+            vec2.scaleAndAdd(this.scroll2, this.scroll2, vec2.fromValues(waterMesh.descriptor.direction2.x, waterMesh.descriptor.direction2.y), waterMesh.descriptor.scrollSpeed2 * (updateKit.dt / multiplier));
         }
     }
 
-    getOrCreateGeometries(drawKit: MobyDrawKit): WaterGeometry[] {
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): WaterGeometry[] {
         if (this.geometries) return this.geometries;
 
         this.geometries = [];
@@ -87,7 +84,7 @@ export class Water_A implements MobyImpl {
             for (let j = 0; j < vertexCount; j++) {
                 positions[j * 3 + 0] = positionsWithPadding[j * 4 + 0];
                 positions[j * 3 + 1] = positionsWithPadding[j * 4 + 1];
-                positions[j * 3 + 2] = positionsWithPadding[j * 4 + 2] + this.zOffset;
+                positions[j * 3 + 2] = positionsWithPadding[j * 4 + 2];
             }
             const texcoords = waterMesh.texcoords;
             const vertexColors = new Float32Array(vertexCount * 4);
@@ -98,19 +95,20 @@ export class Water_A implements MobyImpl {
                 vertexColors[j * 4 + 3] = 1;
             }
             const indices = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, vertexCount);
-            this.geometries.push(new WaterGeometry(drawKit.renderHelper.renderCache, positions, texcoords, vertexColors, indices));
+            this.geometries.push(new WaterGeometry(updateKit.renderHelper.renderCache, positions, texcoords, vertexColors, indices));
         }
         return this.geometries;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    drawAfterMobys(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
-        const geometries = this.getOrCreateGeometries(drawKit);
+        const geometries = this.getOrCreateGeometries(updateKit);
         const m = mat4.clone(noclipSpaceFromRatchetSpace);
+        mat4.translate(m, m, [0, 0, this.zOffset]);
         for (let i = 0; i < geometries.length; i++) {
             const geometry = geometries[i];
             const descriptor = this.meshes[i].descriptor;
@@ -120,16 +118,16 @@ export class Water_A implements MobyImpl {
             const seed1 = this.mobyInstance.uid + i;
             const seed2 = this.mobyInstance.uid + i + 1.234;
 
-            drawKit.renderers.water.renderWater(
-                drawKit, geometry, [m], drawKit.fxTextures[descriptor.fxTexture1],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometry, [m], updateKit.fxTextures[descriptor.fxTexture1],
                 { uvScroll: this.scroll1, zWobble, randomSeed: seed1, uvRandomSeed: seed1, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
                 { blendAlpha: descriptor.fix1 / 0x80, useTextureAlpha: false, useVertexColorAlpha: false },
                 null,
                 { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
             );
 
-            drawKit.renderers.water.renderWater(
-                drawKit, geometry, [m], drawKit.fxTextures[descriptor.fxTexture2],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometry, [m], updateKit.fxTextures[descriptor.fxTexture2],
                 { uvScroll: this.scroll2, zWobble, randomSeed: seed1, uvRandomSeed: seed2, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
                 { blendAlpha: descriptor.fix2 / 0x80, useTextureAlpha: false, useVertexColorAlpha: false },
                 null,

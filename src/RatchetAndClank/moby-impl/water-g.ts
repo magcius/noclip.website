@@ -1,11 +1,11 @@
 import { mat4, vec2, vec3 } from "gl-matrix";
 import { assert } from "../../util";
 import { MobyInstance } from "../bin-gameplay";
-import { OverlaySection, readWaterMesh_KindG } from "../bin-overlay";
+import { readWaterMesh_KindG } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace } from "../utils";
-import { MobyDrawKit, MobyImpl } from "./moby";
-import { GfxDevice, GfxTexture } from "../../gfx/platform/GfxPlatform";
+import { MobyUpdateKit, MobyImpl } from "./moby";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { WaterGeometry } from "../render-water";
 import { GfxTopology, makeTriangleIndexBuffer } from "../../gfx/helpers/TopologyHelpers";
 
@@ -32,7 +32,7 @@ export const RAC1_WATER_KIND_G = new Map<number, WaterDecl_G[]>([
     [1567, [{ positionVaddr: 0x1df100, texcoordsVaddr: 0x1df520, vertexCount: 88, scale: 1 }]],
 ]);
 
-const RAC1_WATER_KIND_G_UV_SCROLL = new Map<number, { pass1: [number, number]; pass2: [number, number] }>([
+const RAC1_WATER_KIND_G_UV_SCROLL = new Map([
     [1405, { pass1: [0.1, -0.0628], pass2: [0.1, 0.0628] }],
     [1406, { pass1: [0.025, -0.0157], pass2: [0.025, 0.0157] }],
     [1407, { pass1: [0.025, -0.0157], pass2: [0.025, 0.0157] }],
@@ -50,20 +50,19 @@ const TEXTURE_ID = 45;
  * - Used on quartu and veldin orbit
  */
 export class Water_G implements MobyImpl {
-    overlaySections: OverlaySection[];
+    private decls: WaterDecl_G[];
+    private meshes: ReturnType<typeof readWaterMesh_KindG>[];
+    private geometries: WaterGeometry[] | null = null;
 
-    decls: WaterDecl_G[];
-    meshes: ReturnType<typeof readWaterMesh_KindG>[];
-    geometries: WaterGeometry[] | null = null;
     private uvScroll1 = vec2.create();
     private uvScroll2 = vec2.create();
     private uvScrollVelocity1 = vec2.create();
     private uvScrollVelocity2 = vec2.create();
+
     private zWobble = vec2.fromValues(0.1, 2);
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const decls = RAC1_WATER_KIND_G.get(mobyInstance.oClass);
         assert(decls !== undefined);
@@ -81,14 +80,14 @@ export class Water_G implements MobyImpl {
         }
     }
 
-    update(drawKit: MobyDrawKit) {
+    update(updateKit: MobyUpdateKit) {
         this.mobyInstance._skipDraw = true;
-        const dtSeconds = drawKit.dt / 1000;
+        const dtSeconds = updateKit.dt / 1000;
         vec2.scaleAndAdd(this.uvScroll1, this.uvScroll1, this.uvScrollVelocity1, dtSeconds);
         vec2.scaleAndAdd(this.uvScroll2, this.uvScroll2, this.uvScrollVelocity2, dtSeconds);
     }
 
-    private getOrCreateGeometries(drawKit: MobyDrawKit): WaterGeometry[] {
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): WaterGeometry[] {
         if (this.geometries) return this.geometries;
 
         this.geometries = [];
@@ -96,7 +95,7 @@ export class Water_G implements MobyImpl {
             const indices = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, mesh.positions.length / 3);
             const vertexColors = new Float32Array(mesh.positions.length / 3 * 4).fill(0.5);
             this.geometries.push(new WaterGeometry(
-                drawKit.renderHelper.renderCache,
+                updateKit.renderHelper.renderCache,
                 mesh.positions,
                 mesh.texcoords,
                 vertexColors,
@@ -106,13 +105,13 @@ export class Water_G implements MobyImpl {
         return this.geometries;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    drawAfterMobys(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
-        const geometries = this.getOrCreateGeometries(drawKit);
+        const geometries = this.getOrCreateGeometries(updateKit);
         const base = vec3.fromValues(this.mobyInstance.position.x, this.mobyInstance.position.y, this.mobyInstance.position.z);
         for (let i = 0; i < this.meshes.length; i++) {
             const waterMesh = this.meshes[i];
@@ -123,15 +122,15 @@ export class Water_G implements MobyImpl {
             const geometry = geometries[i];
             const randomSeed = this.mobyInstance.uid + i;
 
-            drawKit.renderers.water.renderWater(
-                drawKit, geometry, transforms, drawKit.fxTextures[TEXTURE_ID],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometry, transforms, updateKit.fxTextures[TEXTURE_ID],
                 { uvScroll: this.uvScroll1, zWobble, randomSeed, uvRandomSeed: randomSeed, useWorldspaceWobble: true, uvWorldSpaceScale: 0 },
                 { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
                 null,
                 { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
             );
-            drawKit.renderers.water.renderWater(
-                drawKit, geometry, transforms, drawKit.fxTextures[TEXTURE_ID],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometry, transforms, updateKit.fxTextures[TEXTURE_ID],
                 { uvScroll: this.uvScroll2, zWobble, randomSeed, uvRandomSeed: randomSeed, useWorldspaceWobble: true, uvWorldSpaceScale: 0 },
                 { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
                 null,

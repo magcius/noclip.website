@@ -322,7 +322,7 @@ export function readWaterMesh_KindH(sections: OverlaySection[], vertexRecordsVad
     }
 
     // remove index buffer
-    // we cannot use use two interleaved index buffers...
+    // this mesh has two interleaved index buffers...
     const positionRecords = readOverlayVMem(sections, vertexRecordsVaddr, positionCount * 0x10)
         .subdivide(0, positionCount, 0x10)
         .map(view => view.getFloat32_Xyz(0));

@@ -1,10 +1,10 @@
 import { mat4, vec2 } from "gl-matrix";
 import { assert } from "../../util";
 import { MobyInstance } from "../bin-gameplay";
-import { OverlaySection, readWaterMeshes_KindC } from "../bin-overlay";
+import { readWaterMeshes_KindC } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace } from "../utils";
-import { MobyDrawKit, MobyImpl } from "./moby";
+import { MobyUpdateKit, MobyImpl } from "./moby";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { WaterFogParams, WaterGeometry } from "../render-water";
 import { GfxTopology, makeTriangleIndexBuffer } from "../../gfx/helpers/TopologyHelpers";
@@ -34,15 +34,12 @@ export const RAC1_WATER_KIND_C = new Map<number, WaterDecl_C>([
  * - Used for ice on hoven and oltanis
  */
 export class Water_C implements MobyImpl {
-    overlaySections: OverlaySection[];
-
-    decl: WaterDecl_C;
-    meshes: ReturnType<typeof readWaterMeshes_KindC>;
-    geometries: WaterGeometry[] | null = null;
+    private decl: WaterDecl_C;
+    private meshes: ReturnType<typeof readWaterMeshes_KindC>;
+    private geometries: WaterGeometry[] | null = null;
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const decl = RAC1_WATER_KIND_C.get(mobyInstance.oClass);
         assert(decl !== undefined);
@@ -51,10 +48,10 @@ export class Water_C implements MobyImpl {
         this.meshes = readWaterMeshes_KindC(resources.overlaySections, this.decl.vaddr, this.decl.count, this.decl.hasNormals);
     }
 
-    update(drawKit: MobyDrawKit) {
+    update(updateKit: MobyUpdateKit) {
     }
 
-    private getOrCreateGeometries(drawKit: MobyDrawKit): WaterGeometry[] {
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): WaterGeometry[] {
         if (this.geometries) return this.geometries;
 
         this.geometries = [];
@@ -84,7 +81,7 @@ export class Water_C implements MobyImpl {
 
             const indices = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, vertexCount);
             this.geometries.push(new WaterGeometry(
-                drawKit.renderHelper.renderCache,
+                updateKit.renderHelper.renderCache,
                 positions,
                 texcoords,
                 vertexColors,
@@ -95,14 +92,14 @@ export class Water_C implements MobyImpl {
         return this.geometries;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    drawAfterTies(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
-        const geometries = this.getOrCreateGeometries(drawKit);
+        const geometries = this.getOrCreateGeometries(updateKit);
         const transform = mat4.clone(noclipSpaceFromRatchetSpace);
         for (let i = 0; i < geometries.length; i++) {
-            drawKit.renderers.water.renderWater(
-                drawKit, geometries[i], [transform], drawKit.fxTextures[this.decl.textureId],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometries[i], [transform], updateKit.fxTextures[this.decl.textureId],
                 { uvScroll: ZERO_VEC2, zWobble: ZERO_VEC2, randomSeed: 0, uvRandomSeed: 0, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
                 { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: false },
                 this.decl.fogParams ?? null,
@@ -111,7 +108,7 @@ export class Water_C implements MobyImpl {
         }
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
+    drawAfterMobys(updateKit: MobyUpdateKit) {
     }
 
     destroy(device: GfxDevice) {

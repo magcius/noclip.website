@@ -25,7 +25,7 @@ import { MobyGeometry, MobyRenderer } from "./render-moby";
 import { nArray } from "../util";
 import { AABB } from "../Geometry";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw";
-import { MOBY_IMPL_REGISTRY, MobyDrawKit } from "./moby-impl/moby";
+import { MOBY_IMPL_REGISTRY, MobyUpdateKit } from "./moby-impl/moby";
 import { WaterRenderer } from "./render-water";
 
 const pathBase = (gn: GN) => `RatchetAndClank${gn}`;
@@ -581,7 +581,7 @@ class RatchetAndClankScene implements SceneGfx {
         const atlasTextures = this.getOrCreateAtlasTextures();
         const fxTextures = this.getOrCreateFxTextures();
 
-        const drawKit: MobyDrawKit = {
+        const updateKit: MobyUpdateKit = {
             renderInstList: this.renderInstList,
             renderHelper: this.renderHelper,
             instanceDataBuffer: this.instanceDataBuffer,
@@ -603,7 +603,7 @@ class RatchetAndClankScene implements SceneGfx {
         if (this.levelResources.mobyImpls) {
             for (let i = 0; i < this.levelResources.mobyImpls.length; i++) {
                 const mobyImpl = this.levelResources.mobyImpls[i];
-                mobyImpl.update(drawKit);
+                mobyImpl.update(updateKit);
             }
         }
 
@@ -658,7 +658,7 @@ class RatchetAndClankScene implements SceneGfx {
         if (this.settings.enableMobys && this.levelResources.mobyImpls) {
             for (let i = 0; i < this.levelResources.mobyImpls.length; i++) {
                 const mobyImpl = this.levelResources.mobyImpls[i];
-                mobyImpl.drawAfterTies(drawKit);
+                mobyImpl.drawAfterTies(updateKit);
             }
         }
 
@@ -704,7 +704,7 @@ class RatchetAndClankScene implements SceneGfx {
         if (this.settings.enableMobys && this.levelResources.mobyImpls) {
             for (let i = 0; i < this.levelResources.mobyImpls.length; i++) {
                 const mobyImpl = this.levelResources.mobyImpls[i];
-                mobyImpl.drawAfterMobys(drawKit);
+                mobyImpl.drawAfterMobys(updateKit);
             }
         }
 

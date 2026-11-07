@@ -1,11 +1,11 @@
 import { mat4, vec2 } from "gl-matrix";
 import { assert } from "../../util";
 import { MobyInstance } from "../bin-gameplay";
-import { OverlaySection, readWaterMesh_KindH, WaterMesh_KindH } from "../bin-overlay";
+import { readWaterMesh_KindH, WaterMesh_KindH } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace } from "../utils";
-import { MobyDrawKit, MobyImpl } from "./moby";
-import { GfxDevice, GfxTexture } from "../../gfx/platform/GfxPlatform";
+import { MobyUpdateKit, MobyImpl } from "./moby";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { WaterGeometry } from "../render-water";
 
 interface WaterDecl_H {
@@ -21,9 +21,9 @@ interface WaterDecl_H {
 }
 export const RAC1_WATER_KIND_H = new Map<number, WaterDecl_H[]>([
     [1402, [
-        { quadCount: 22, positionsVaddr: 0x1db030, texcoordsVaddr: 0x1db3a0, quadIndicesVaddr: 0x1db240, positionScale: 1, textureId: 43, uvScroll: false, alpha: 0x50, color: 0x50 },
-        { quadCount: 25, positionsVaddr: 0x1da3c0, texcoordsVaddr: 0x1da7a0, quadIndicesVaddr: 0x1da610, positionScale: 1, textureId: 43, uvScroll: true, alpha: 0x50, color: 0x50 },
-        { quadCount: 38, positionsVaddr: 0x1da8d0, texcoordsVaddr: 0x1dae80, quadIndicesVaddr: 0x1dac20, positionScale: 1, textureId: 43, uvScroll: false, alpha: 0x50, color: 0x50 },
+        { quadCount: 22, positionsVaddr: 0x1db030, texcoordsVaddr: 0x1db3a0, quadIndicesVaddr: 0x1db240, positionScale: 1, textureId: 43, uvScroll: false, alpha: 0x20, color: 0x50 },
+        { quadCount: 25, positionsVaddr: 0x1da3c0, texcoordsVaddr: 0x1da7a0, quadIndicesVaddr: 0x1da610, positionScale: 1, textureId: 43, uvScroll: true, alpha: 0x20, color: 0x50 },
+        { quadCount: 38, positionsVaddr: 0x1da8d0, texcoordsVaddr: 0x1dae80, quadIndicesVaddr: 0x1dac20, positionScale: 1, textureId: 43, uvScroll: false, alpha: 0x20, color: 0x50 },
     ]],
     [1062, [
         { quadCount: 58, positionsVaddr: 0x1eed30, texcoordsVaddr: 0x1ef6b0, quadIndicesVaddr: 0x1ef310, positionScale: 0.01, textureId: 0x2a, uvScroll: false, alpha: 0x20, color: 0x50 },
@@ -31,8 +31,8 @@ export const RAC1_WATER_KIND_H = new Map<number, WaterDecl_H[]>([
         { quadCount: 864, positionsVaddr: 0x1dbff0, texcoordsVaddr: 0x1e2cf0, quadIndicesVaddr: 0x1df6f0, positionScale: 0.01, textureId: 0x2a, uvScroll: false, alpha: 0x20, color: 0x50 },
     ]],
     [1083, [
-        { quadCount: 96, positionsVaddr: 0x1fb5f0, texcoordsVaddr: 0x1fc2f0, quadIndicesVaddr: 0x1fbcf0, positionScale: 0.01, textureId: 0x15, uvScroll: false, alpha: 0x20, color: 0x20 },
-        { quadCount: 96, positionsVaddr: 0x1f77b0, texcoordsVaddr: 0x1f84b0, quadIndicesVaddr: 0x1f7eb0, positionScale: 0.01, textureId: 0x15, uvScroll: false, alpha: 0x20, color: 0x20 },
+        { quadCount: 96, positionsVaddr: 0x1fb5f0, texcoordsVaddr: 0x1fc2f0, quadIndicesVaddr: 0x1fbcf0, positionScale: 0.01, textureId: 0x15, uvScroll: false, alpha: 0x20, color: 0x50 },
+        { quadCount: 96, positionsVaddr: 0x1f77b0, texcoordsVaddr: 0x1f84b0, quadIndicesVaddr: 0x1f7eb0, positionScale: 0.01, textureId: 0x15, uvScroll: false, alpha: 0x20, color: 0x50 },
         // these are "damaged" versions of above
         // { quadCount: 64, positionsVaddr: 0x1f5330, texcoordsVaddr: 0x1f5d30, quadIndicesVaddr: 0x1f5930, positionScale: 0.01, textureId: 0x15, uvScroll: false, alpha: 0x20 },
         // { quadCount: 64, positionsVaddr: 0x1f2eb0, texcoordsVaddr: 0x1f38b0, quadIndicesVaddr: 0x1f34b0, positionScale: 0.01, textureId: 0x15, uvScroll: false, alpha: 0x20 },
@@ -51,16 +51,13 @@ const SECOND_MESH_UV_SCROLL_VELOCITY = vec2.fromValues(0.05, 0.05);
  * - Used for hydrodisplacer water on veldin finale
  */
 export class Water_H implements MobyImpl {
-    overlaySections: OverlaySection[];
-
-    decls: WaterDecl_H[];
-    meshes: WaterMesh_KindH[] = [];
-    geometries: WaterGeometry[] | null = null;
+    private decls: WaterDecl_H[];
+    private meshes: WaterMesh_KindH[] = [];
+    private geometries: WaterGeometry[] | null = null;
     private secondMeshUVScroll = vec2.create();
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const decls = RAC1_WATER_KIND_H.get(mobyInstance.oClass);
         assert(decls !== undefined);
@@ -69,7 +66,7 @@ export class Water_H implements MobyImpl {
         for (let i = 0; i < decls.length; i++) {
             const decl = decls[i];
             this.meshes.push(readWaterMesh_KindH(
-                this.overlaySections,
+                resources.overlaySections,
                 decl.positionsVaddr,
                 decl.quadIndicesVaddr,
                 decl.texcoordsVaddr,
@@ -78,12 +75,12 @@ export class Water_H implements MobyImpl {
         }
     }
 
-    update(drawKit: MobyDrawKit) {
+    update(updateKit: MobyUpdateKit) {
         this.mobyInstance._skipDraw = true;
-        vec2.scaleAndAdd(this.secondMeshUVScroll, this.secondMeshUVScroll, SECOND_MESH_UV_SCROLL_VELOCITY, drawKit.dt / 1000);
+        vec2.scaleAndAdd(this.secondMeshUVScroll, this.secondMeshUVScroll, SECOND_MESH_UV_SCROLL_VELOCITY, updateKit.dt / 1000);
     }
 
-    private getOrCreateGeometries(drawKit: MobyDrawKit): WaterGeometry[] {
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): WaterGeometry[] {
         if (this.geometries) return this.geometries;
 
         this.geometries = [];
@@ -120,7 +117,7 @@ export class Water_H implements MobyImpl {
             }
 
             this.geometries.push(new WaterGeometry(
-                drawKit.renderHelper.renderCache,
+                updateKit.renderHelper.renderCache,
                 positions,
                 texcoords,
                 vertexColors,
@@ -130,19 +127,19 @@ export class Water_H implements MobyImpl {
         return this.geometries;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    drawAfterMobys(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
-        const geometries = this.getOrCreateGeometries(drawKit);
+        const geometries = this.getOrCreateGeometries(updateKit);
         const transform = mat4.clone(noclipSpaceFromRatchetSpace);
         for (let meshIndex = 0; meshIndex < geometries.length; meshIndex++) {
             const decl = this.decls[meshIndex];
             const uvScroll = decl.uvScroll ? this.secondMeshUVScroll : ZERO_VEC2;
-            drawKit.renderers.water.renderWater(
-                drawKit, geometries[meshIndex], [transform], drawKit.fxTextures[decl.textureId],
+            updateKit.renderers.water.renderWater(
+                updateKit, geometries[meshIndex], [transform], updateKit.fxTextures[decl.textureId],
                 { uvScroll, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid + meshIndex, uvRandomSeed: this.mobyInstance.uid + meshIndex, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
                 { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
                 null,

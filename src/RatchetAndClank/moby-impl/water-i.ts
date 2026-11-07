@@ -1,10 +1,8 @@
 import { mat4, vec2, vec3 } from "gl-matrix";
-import { assert } from "../../util";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { MobyInstance } from "../bin-gameplay";
-import { readOverlayVMem } from "../bin-overlay";
 import { LevelResources } from "../loader";
-import { MobyDrawKit, MobyImpl, ownPvars } from "./moby";
+import { MobyUpdateKit, MobyImpl, ownPvars } from "./moby";
 import { WaterGeometry } from "../render-water";
 import { lerp } from "../../MathHelpers";
 
@@ -31,19 +29,19 @@ const ZERO_VEC2 = vec2.create();
  * - Used on pokitaru and kalebo iii
  */
 export class Water_I implements MobyImpl {
-    pvars: Water_I_Pvars;
+    private pvars: Water_I_Pvars;
 
-    surfaceGeometry: WaterGeometry | null = null;
-    rippleGeometry1: WaterGeometry | null = null;
-    rippleGeometry2: WaterGeometry | null = null;
+    private surfaceGeometry: WaterGeometry | null = null;
+    private rippleGeometry1: WaterGeometry | null = null;
+    private rippleGeometry2: WaterGeometry | null = null;
 
-    baseTextureId: number; // texture id from pvar is added to this
+    private baseTextureId: number; // texture id from pvar is added to this
 
-    surfaceUVVelocity1 = vec2.fromValues(0.04, 0.04); // these should be read from the overlay, but the data always has these values so I must be missing something
-    surfaceUVVelocity2 = vec2.fromValues(0, -0.04);
+    private surfaceUVVelocity1 = vec2.fromValues(0.04, 0.04); // these should be read from the overlay, but the data always has these values so I must be missing something
+    private surfaceUVVelocity2 = vec2.fromValues(0, -0.04);
 
-    surfaceUVScroll1 = vec2.create();
-    surfaceUVScroll2 = vec2.create();
+    private surfaceUVScroll1 = vec2.create();
+    private surfaceUVScroll2 = vec2.create();
 
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         const pv = ownPvars(mobyInstance, resources);
@@ -79,13 +77,13 @@ export class Water_I implements MobyImpl {
         }
     }
 
-    update(drawKit: MobyDrawKit) {
-        const dtSeconds = drawKit.dt / 1000;
+    update(updateKit: MobyUpdateKit) {
+        const dtSeconds = updateKit.dt / 1000;
         vec2.scaleAndAdd(this.surfaceUVScroll1, this.surfaceUVScroll1, this.surfaceUVVelocity1, dtSeconds);
         vec2.scaleAndAdd(this.surfaceUVScroll2, this.surfaceUVScroll2, this.surfaceUVVelocity2, dtSeconds);
     }
 
-    private getOrCreateGeometries(drawKit: MobyDrawKit): [WaterGeometry, WaterGeometry, WaterGeometry] {
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): [WaterGeometry, WaterGeometry, WaterGeometry] {
         if (this.surfaceGeometry && this.rippleGeometry1 && this.rippleGeometry2) {
             return [this.surfaceGeometry, this.rippleGeometry1, this.rippleGeometry2];
         }
@@ -94,11 +92,9 @@ export class Water_I implements MobyImpl {
         const texcoords: number[] = [];
         const colors: number[] = [];
         const indices: number[] = [];
-        const tileSize = this.pvars.tileSize;
-        const reach = Math.max(Math.abs(this.pvars.oceanForwardReach), tileSize * 2);
-        const halfWidth = 1000;
-        const middleEnd = Math.max(reach / 2, tileSize / 2 + 0.01);
-        const farEnd = Math.max(reach, middleEnd + 0.01);
+        const halfWidth = 100000;
+        const middleEnd = this.pvars.oceanForwardReach;
+        const farEnd = 3000;
 
         const addBand = (nearDistance: number, farDistance: number, nearColor: { a: number, r: number, g: number, b: number }, farColor: { a: number, r: number, g: number, b: number }) => {
             const firstVertex = positions.length / 3;
@@ -121,10 +117,10 @@ export class Water_I implements MobyImpl {
             );
         };
 
-        addBand(-reach, middleEnd, this.pvars.colorSurfaceNear, this.pvars.colorSurfaceFar);
+        addBand(-middleEnd, middleEnd, this.pvars.colorSurfaceNear, this.pvars.colorSurfaceFar);
         addBand(middleEnd, farEnd, this.pvars.colorSurfaceFar, this.pvars.colorHorizonTop);
         this.surfaceGeometry = new WaterGeometry(
-            drawKit.renderHelper.renderCache,
+            updateKit.renderHelper.renderCache,
             new Float32Array(positions),
             new Float32Array(texcoords),
             new Float32Array(colors),
@@ -181,7 +177,7 @@ export class Water_I implements MobyImpl {
                 }
             }
             return new WaterGeometry(
-                drawKit.renderHelper.renderCache,
+                updateKit.renderHelper.renderCache,
                 surfacePositions,
                 surfaceTexcoords,
                 surfaceColors,
@@ -194,8 +190,8 @@ export class Water_I implements MobyImpl {
         return [this.surfaceGeometry, this.rippleGeometry1, this.rippleGeometry2];
     }
 
-    private getCameraTransform(drawKit: MobyDrawKit): mat4 {
-        const forward = vec3.fromValues(drawKit.cameraForward[0], 0, drawKit.cameraForward[2]);
+    private getCameraTransform(updateKit: MobyUpdateKit): mat4 {
+        const forward = vec3.fromValues(updateKit.cameraForward[0], 0, updateKit.cameraForward[2]);
         if (vec3.squaredLength(forward) < 0.000001)
             vec3.set(forward, 0, 0, -1);
         else
@@ -212,13 +208,13 @@ export class Water_I implements MobyImpl {
         transform[8] = 0;
         transform[9] = 1;
         transform[10] = 0;
-        transform[12] = drawKit.cameraPosition[0];
+        transform[12] = updateKit.cameraPosition[0];
         transform[13] = this.pvars.height;
-        transform[14] = drawKit.cameraPosition[2];
+        transform[14] = updateKit.cameraPosition[2];
         return transform;
     }
 
-    private getSurfaceTransform(drawKit: MobyDrawKit): mat4 {
+    private getSurfaceTransform(updateKit: MobyUpdateKit): mat4 {
         const transform = mat4.create();
         transform[0] = 1;
         transform[4] = 0;
@@ -227,42 +223,42 @@ export class Water_I implements MobyImpl {
         transform[8] = 0;
         transform[9] = 1;
         transform[10] = 0;
-        transform[12] = drawKit.cameraPosition[0];
+        transform[12] = updateKit.cameraPosition[0];
         transform[13] = this.pvars.height;
-        transform[14] = drawKit.cameraPosition[2];
+        transform[14] = updateKit.cameraPosition[2];
         return transform;
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
+    drawAfterTies(updateKit: MobyUpdateKit) {
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
+    drawAfterMobys(updateKit: MobyUpdateKit) {
         if (this.resources.gn >= 2) return;
-        if (!drawKit.fxTextures) return;
+        if (!updateKit.fxTextures) return;
 
-        const [surfaceGeometry, rippleGeometry1, rippleGeometry2] = this.getOrCreateGeometries(drawKit);
-        const transform = this.getCameraTransform(drawKit);
-        const surfaceTransform = this.getSurfaceTransform(drawKit);
+        const [surfaceGeometry, rippleGeometry1, rippleGeometry2] = this.getOrCreateGeometries(updateKit);
+        const transform = this.getCameraTransform(updateKit);
+        const surfaceTransform = this.getSurfaceTransform(updateKit);
         const surfaceSize = this.pvars.tileSize * 2;
 
-        drawKit.renderers.water.renderWater(
-            drawKit, surfaceGeometry, [transform], drawKit.fxTextures[22],
+        updateKit.renderers.water.renderWater(
+            updateKit, surfaceGeometry, [transform], updateKit.fxTextures[22],
             { uvScroll: ZERO_VEC2, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid, uvRandomSeed: this.mobyInstance.uid, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
             { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
             null,
             { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null },
         );
 
-        drawKit.renderers.water.renderWater(
-            drawKit, rippleGeometry1, [surfaceTransform], drawKit.fxTextures[this.baseTextureId + this.pvars.fxTextureId],
+        updateKit.renderers.water.renderWater(
+            updateKit, rippleGeometry1, [surfaceTransform], updateKit.fxTextures[this.baseTextureId + this.pvars.fxTextureId],
             { uvScroll: this.surfaceUVScroll1, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid + 1, uvRandomSeed: this.mobyInstance.uid + 1, useWorldspaceWobble: false, uvWorldSpaceScale: 4 / surfaceSize },
             { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
             null,
             { depthWrite: false, useAdditiveBlend: true, vertexColorTexture: null, vertexColorLayers: null },
         );
 
-        drawKit.renderers.water.renderWater(
-            drawKit, rippleGeometry2, [surfaceTransform], drawKit.fxTextures[this.baseTextureId + this.pvars.fxTextureId + 1],
+        updateKit.renderers.water.renderWater(
+            updateKit, rippleGeometry2, [surfaceTransform], updateKit.fxTextures[this.baseTextureId + this.pvars.fxTextureId + 1],
             { uvScroll: this.surfaceUVScroll2, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid + 2, uvRandomSeed: this.mobyInstance.uid + 2, useWorldspaceWobble: false, uvWorldSpaceScale: 6 / surfaceSize },
             { blendAlpha: 1, useTextureAlpha: true, useVertexColorAlpha: true },
             null,

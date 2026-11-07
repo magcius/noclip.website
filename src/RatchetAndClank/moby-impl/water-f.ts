@@ -4,12 +4,11 @@ import { MobyInstance } from "../bin-gameplay";
 import { OverlaySection, readOverlayVMem, readWaterGrid_KindF } from "../bin-overlay";
 import { LevelResources } from "../loader";
 import { noclipSpaceFromRatchetSpace, ratchetSpaceFromNoclipSpace } from "../utils";
-import { cuboidContainsPoint, MobyDrawKit, MobyImpl, ownPvars } from "./moby";
+import { cuboidContainsPoint, MobyUpdateKit, MobyImpl, ownPvars } from "./moby";
 import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../../gfx/platform/GfxPlatform";
 import { WaterGeometry } from "../render-water";
 import { VifUnpackFormat } from "../../Common/PS2/VIF";
 import { readVifCommandList, VifUnpackReader } from "../vif";
-import { White } from "../../Color";
 
 const ZERO_VEC2 = vec2.create();
 
@@ -48,29 +47,25 @@ const RAC1_WATER_KIND_F_UV_VADDRS = new Map<number, number>([
  * - Used for lava on umbris
  */
 export class Water_F implements MobyImpl {
-    overlaySections: OverlaySection[];
+    private decls: WaterDecl_F;
+    private grids: ReturnType<typeof readWaterGrid_KindF>[] = [];
+    private geometry: WaterGeometry | null = null;
 
-    decls: WaterDecl_F;
-    grids: ReturnType<typeof readWaterGrid_KindF>[] = [];
-    geometry: WaterGeometry | null = null;
+    private colorTextureData: Uint8Array[] = [];
+    private colorTextures: GfxTexture[] | null = null;
+    private vertexTexcoords: Float32Array;
 
-    colorTextureData: Uint8Array[] = [];
-    colorTextures: GfxTexture[] | null = null;
-    vertexTexcoords: Float32Array;
+    private lateRender = false; // the phase in which the ocean renders can vary
 
-    lateRender = false; // the phase in which the ocean renders can vary
-
-    alpha = 1;
-    bobAmplitude = 0;
-    bobFrequency = 0;
-    noRenderInCuboidIndexes: number[] = []; // if camera is in one of these cuboids, skip render
+    private alpha = 1;
+    private bobAmplitude = 0;
+    private bobFrequency = 0;
+    private noRenderInCuboidIndexes: number[] = []; // if camera is in one of these cuboids, skip render
 
     private elapsedTime = 0;
 
-
     constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
         assert(resources.overlaySections !== null);
-        this.overlaySections = resources.overlaySections;
 
         const decls = RAC1_WATER_KIND_F.get(mobyInstance.oClass);
         assert(decls !== undefined);
@@ -116,10 +111,10 @@ export class Water_F implements MobyImpl {
             }
         }
 
-        this.vertexTexcoords = untangleStripOrderedTexcoords(this.overlaySections, uvVaddr, uvScale);
+        this.vertexTexcoords = untangleStripOrderedTexcoords(resources.overlaySections, uvVaddr, uvScale);
 
         for (let i = 0; i < this.decls.vaddrs.length; i++) {
-            const waterGrid = readWaterGrid_KindF(this.overlaySections, this.decls.vaddrs[i]);
+            const waterGrid = readWaterGrid_KindF(resources.overlaySections, this.decls.vaddrs[i]);
             this.grids.push(waterGrid);
 
             const blockCountX = waterGrid.descriptor.cellsX / 7;
@@ -128,18 +123,17 @@ export class Water_F implements MobyImpl {
             const colors = new Uint8Array(blockCount * 8 * 8 * 4);
             for (let blockIndex = 0; blockIndex < blockCount; blockIndex++) {
                 const colorVaddr = waterGrid.descriptor.colorsVaddr + blockIndex * SIZEOF_COLOR_BLOCK;
-                untangleStripOrderedColors(this.overlaySections, colorVaddr, colors, blockIndex * 8 * 8 * 4);
+                untangleStripOrderedColors(resources.overlaySections, colorVaddr, colors, blockIndex * 8 * 8 * 4);
             }
             this.colorTextureData.push(colors);
         }
     }
 
-    update(drawKit: MobyDrawKit) {
-        if (this.mobyInstance.oClass === 879)
-            this.elapsedTime += drawKit.dt / 1000;
+    update(updateKit: MobyUpdateKit) {
+        this.elapsedTime += updateKit.dt / 1000;
     }
 
-    private getOrCreateGeometries(drawKit: MobyDrawKit): WaterGeometry {
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): WaterGeometry {
         if (this.geometry) return this.geometry;
 
         const colorLutPositions = new Float32Array(8 * 8 * 2);
@@ -178,7 +172,7 @@ export class Water_F implements MobyImpl {
         }
 
         this.geometry = new WaterGeometry(
-            drawKit.renderHelper.renderCache,
+            updateKit.renderHelper.renderCache,
             positions,
             this.vertexTexcoords,
             null,
@@ -189,19 +183,41 @@ export class Water_F implements MobyImpl {
         return this.geometry;
     }
 
-    private draw(drawKit: MobyDrawKit) {
-        if (!drawKit.fxTextures) return;
+    private getOrCreateColorTextures(device: GfxDevice): GfxTexture[] {
+        if (this.colorTextures) return this.colorTextures;
+
+        this.colorTextures = [];
+        for (let gridIndex = 0; gridIndex < this.grids.length; gridIndex++) {
+            const descriptor = this.grids[gridIndex].descriptor;
+            const blockCount = (descriptor.cellsX / 7) * (descriptor.cellsY / 7);
+            const texture = device.createTexture({
+                dimension: GfxTextureDimension.n2DArray,
+                pixelFormat: GfxFormat.U8_RGBA_NORM,
+                width: 8,
+                height: 8,
+                depthOrArrayLayers: blockCount,
+                numLevels: 1,
+                usage: GfxTextureUsage.Sampled,
+            });
+            device.uploadTextureData(texture, 0, [this.colorTextureData[gridIndex]]);
+            this.colorTextures.push(texture);
+        }
+        return this.colorTextures;
+    }
+
+    private draw(updateKit: MobyUpdateKit) {
+        if (!updateKit.fxTextures) return;
 
         for (let i = 0; i < this.noRenderInCuboidIndexes.length; i++) {
             // skip rendering if the camera is inside this cuboid
             const cuboidIndex = this.noRenderInCuboidIndexes[i];
             if (cuboidIndex === -1) continue;
-            const cameraPositionRatchetSpace = vec3.transformMat4(vec3.create(), drawKit.cameraPosition, ratchetSpaceFromNoclipSpace);
+            const cameraPositionRatchetSpace = vec3.transformMat4(vec3.create(), updateKit.cameraPosition, ratchetSpaceFromNoclipSpace);
             if (cuboidContainsPoint(cameraPositionRatchetSpace, this.resources, cuboidIndex)) return;
         }
 
-        const colorTextures = this.getOrCreateColorTextures(drawKit.renderHelper.device);
-        const geometry = this.getOrCreateGeometries(drawKit);
+        const colorTextures = this.getOrCreateColorTextures(updateKit.renderHelper.device);
+        const geometry = this.getOrCreateGeometries(updateKit);
 
         for (let gridIndex = 0; gridIndex < this.grids.length; gridIndex++) {
             const waterGrid = this.grids[gridIndex];
@@ -209,7 +225,7 @@ export class Water_F implements MobyImpl {
             assert(waterGrid.descriptor.cellsX % 7 == 0);
             assert(waterGrid.descriptor.cellsY % 7 == 0);
 
-            const texture = drawKit.fxTextures[descriptor.firstFx];
+            const texture = updateKit.fxTextures[descriptor.firstFx];
             if (!texture) continue;
 
             const blockCountX = descriptor.cellsX / 7;
@@ -239,8 +255,8 @@ export class Water_F implements MobyImpl {
             }
 
             if (transforms.length === 0) continue;
-            drawKit.renderers.water.renderWater(
-                drawKit, geometry, transforms, texture,
+            updateKit.renderers.water.renderWater(
+                updateKit, geometry, transforms, texture,
                 { uvScroll: ZERO_VEC2, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid, uvRandomSeed: this.mobyInstance.uid, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
                 { blendAlpha: this.alpha, useTextureAlpha: false, useVertexColorAlpha: false },
                 {
@@ -255,34 +271,12 @@ export class Water_F implements MobyImpl {
         }
     }
 
-    drawAfterTies(drawKit: MobyDrawKit) {
-        if (!this.lateRender) this.draw(drawKit);
+    drawAfterTies(updateKit: MobyUpdateKit) {
+        if (!this.lateRender) this.draw(updateKit);
     }
 
-    drawAfterMobys(drawKit: MobyDrawKit) {
-        if (this.lateRender) this.draw(drawKit);
-    }
-
-    private getOrCreateColorTextures(device: GfxDevice): GfxTexture[] {
-        if (this.colorTextures) return this.colorTextures;
-
-        this.colorTextures = [];
-        for (let gridIndex = 0; gridIndex < this.grids.length; gridIndex++) {
-            const descriptor = this.grids[gridIndex].descriptor;
-            const blockCount = (descriptor.cellsX / 7) * (descriptor.cellsY / 7);
-            const texture = device.createTexture({
-                dimension: GfxTextureDimension.n2DArray,
-                pixelFormat: GfxFormat.U8_RGBA_NORM,
-                width: 8,
-                height: 8,
-                depthOrArrayLayers: blockCount,
-                numLevels: 1,
-                usage: GfxTextureUsage.Sampled,
-            });
-            device.uploadTextureData(texture, 0, [this.colorTextureData[gridIndex]]);
-            this.colorTextures.push(texture);
-        }
-        return this.colorTextures;
+    drawAfterMobys(updateKit: MobyUpdateKit) {
+        if (this.lateRender) this.draw(updateKit);
     }
 
     destroy(device: GfxDevice) {
