@@ -259,9 +259,9 @@ class RumbleRacingScene implements SceneGfx {
     this.textureHolder.onnewtextures();
   }
 
-  private getProgram(hasVertexColors: boolean, alphaTest: boolean): GfxProgram {
+  private getProgram(hasVertexColors: boolean, hasTexture: boolean, alphaTest: boolean): GfxProgram {
     const ignoreVertexColors = hasVertexColors && !this.showVertexColors;
-    const ignoreTextures = !this.showTextures;
+    const ignoreTextures = !(this.showTextures && hasTexture);
 
     const key =
       (hasVertexColors ? 1 : 0) |
@@ -304,7 +304,7 @@ class RumbleRacingScene implements SceneGfx {
   ): GfxRenderInst {
     const renderInst = this.renderHelper.renderInstManager.newRenderInst();
     renderInst.setGfxProgram(
-      this.getProgram(batch.hasVertexColors, alphaTestRef > 0.0),
+      this.getProgram(batch.hasVertexColors, batch.hasTexture, alphaTestRef > 0.0),
     );
     renderInst.setSamplerBindings(0, batch.samplerBindings!);
     renderInst.setVertexInput(
@@ -330,6 +330,7 @@ class RumbleRacingScene implements SceneGfx {
     tint: vec3 = WHITE_TINT,
   ): void {
     for (const batch of geometry.batches) {
+      if (!batch.visible) continue
       if (batch.blendMode === BlendMode.None) {
         this.renderInstList.submitRenderInst(
           this.newBatchInst(geometry, batch, modelMatrix, 0.0, tint),

@@ -23,7 +23,9 @@ export interface DrawBatch {
   indexCount: number;
   textureId: number;
   hasVertexColors: boolean;
+  hasTexture: boolean;
   blendMode: BlendMode;
+  visible: boolean;
 
   vertexBuffer: GfxBuffer;
   indexBuffer: GfxBuffer;
@@ -104,9 +106,11 @@ function buildBatch(device: GfxDevice, group: JsonBuffer[]): DrawBatch {
   );
 
   return {
+    visible: true,
     indexCount: totalIndices,
     textureId: group[0].textureId,
     hasVertexColors: group[0].hasVertexColors,
+    hasTexture: group[0].hasTexture,
     blendMode: group[0].blendMode,
     vertexBuffer,
     indexBuffer,
@@ -166,7 +170,7 @@ export class MergedGeometry {
 
     const groups = new Map<string, JsonBuffer[]>();
     for (const buffer of sourceBuffers) {
-      const key = `${buffer.textureId}|${buffer.blendMode}|${buffer.hasVertexColors ? 1 : 0}`;
+      const key = `${buffer.textureId}|${buffer.blendMode}|${buffer.hasVertexColors ? 1 : 0}|${buffer.hasTexture ? 1 : 0}`;
       let group = groups.get(key);
       if (group === undefined) {
         group = [];

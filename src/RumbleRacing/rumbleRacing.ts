@@ -22,6 +22,7 @@ export interface JsonBuffer {
   normals: vec3[];
   colors: Color[];
   hasVertexColors: boolean;
+  hasTexture: boolean;
   blendMode: BlendMode;
   indices: number[];
 }
@@ -106,9 +107,12 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       const normals: vec3[] = [];
       const colors: Color[] = [];
       let hasVertexColors = false;
+      let hasTexture = false;
 
       for (const strip of buf.primitives) {
         const base = positions.length;
+        if (strip.textured)
+          hasTexture = true;
 
         for (const vert of strip.vertices) {
           positions.push(vert.position);
@@ -146,6 +150,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
       jNode.buffers.push({
         bufferIndex: bufIdx,
         textureId: buf.textureId,
+        hasTexture,
         name: `${node.metadata.headerOffset}_buf${bufIdx}`,
         positions,
         uvs,

@@ -15,6 +15,7 @@ export interface Primitive {
   totalVertsInPrimitive: number;
   primType: GsPrimitiveType;
   blendMode: BlendMode;
+  textured: boolean;
   vertices: {
     position: vec3;
     normal: vec3 | null;
@@ -46,6 +47,7 @@ interface StripChunk {
   gifTagV1: number;
   gifTagV2: number;
   blendMode: BlendMode;
+  textured: boolean;
   dataTriples: Triple[];
 }
 
@@ -56,11 +58,13 @@ interface BufferChunk {
 
 const GS_PRMODE = 0x1b;
 
+const PRMODE_TEXTURE_MAPPING_ENABLE = 1 << 4;
 const PRMODE_ALPHA_BLEND_ENABLE = 1 << 6;
 
 interface GSState {
   alphaBlendEnabled: boolean;
   alphaBlendMode: BlendMode;
+  textureEnabled: boolean;
 }
 
 function decodeAlphaRegister(value: number): BlendMode {
@@ -75,6 +79,7 @@ function applyGSRegisters(unpack: V4_32, state: GSState): void {
     switch (entry.v3 & 0xff) {
       case GS_PRMODE:
         state.alphaBlendEnabled = (entry.v1 & PRMODE_ALPHA_BLEND_ENABLE) !== 0;
+        state.textureEnabled = (entry.v1 & PRMODE_TEXTURE_MAPPING_ENABLE) !== 0;
         break;
       case GSRegister.ALPHA_1:
       case GSRegister.ALPHA_2:
@@ -102,6 +107,7 @@ function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
   const gs: GSState = {
     alphaBlendEnabled: false,
     alphaBlendMode: BlendMode.SourceOver,
+    textureEnabled: false,
   };
   let i = 0;
 
@@ -148,6 +154,7 @@ function getBufferChunks(unpackData: UnpackData[]): BufferChunk[] {
         gifTagV1: gifData.data.length > 0 ? gifData.data[0].v1 : 0,
         gifTagV2: gifData.data.length > 0 ? gifData.data[0].v2 : 0,
         blendMode: gs.alphaBlendEnabled ? gs.alphaBlendMode : BlendMode.None,
+        textured: gs.textureEnabled,
         dataTriples: [],
       };
       i++;
@@ -219,6 +226,7 @@ export function getGeometry(
         totalVertsInPrimitive: sChunk.gifTagV1 & 0x7fff,
         primType: ((sChunk.gifTagV2 & (0b111 << 15)) >> 15) as GsPrimitiveType,
         blendMode: sChunk.blendMode,
+        textured: sChunk.textured,
         vertices: [],
       };
 
