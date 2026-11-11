@@ -3,6 +3,7 @@
 // https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/docs/ttyd-opc-summary.txt
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { IS_DEVELOPMENT } from "../BuildVersion.js";
 import { MathConstants } from "../MathHelpers.js";
 import { hexzero0x, hexzero, decodeString, readString, assert, nullify } from "../util.js";
 import { WorldRenderer } from "./render.js";
@@ -239,6 +240,7 @@ export class evt_exec {
     public loopRecord: evt_loop_record[] = [];
     public entryAddress: number;
     public debug = false;
+    public errored = false;
 
     constructor(public id: number, public pc: number, public readonly entry: mapentry) {
         this.entryAddress = this.pc;
@@ -998,14 +1000,25 @@ export class evtmgr {
     }
 
     private execevt(evt: evt_exec): void {
+        if (evt.errored)
+            return;
         let instCount = 0;
+        try {
+            while (this.runevtcmd(evt)) {
+                this.execone(evt);
 
-        while (this.runevtcmd(evt)) {
-            this.execone(evt);
-
-            // Yield to another thread, for now.
-            if (instCount++ > 1000)
-                break;
+                // Yield to another thread, for now.
+                if (instCount++ > 1000)
+                    break;
+            }
+        } catch (error) {
+            if (IS_DEVELOPMENT) {
+                throw error;
+            } else {
+                evt.errored = true;
+                console.warn(`event with entry ${evt.entryAddress.toString(16)} errored at ${evt.pc.toString(16)} (${op[evt.opcode]}):`, error)
+                return;
+            }
         }
 
         if (evt.flags & evt_flags.active) {
