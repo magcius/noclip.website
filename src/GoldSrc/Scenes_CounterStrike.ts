@@ -34,7 +34,7 @@ export class CounterStrikeSceneDesc implements SceneDesc {
         const bspFile = new BSPFile(bspData);
 
         const context = new IdTech2Context(bspFile.version);
-        const renderer = new IdTech2Renderer(device, context);
+        const renderer = new IdTech2Renderer(device, context, bspFile.defaultWorldMatrix);
 
         renderer.textureCache.addBSP(bspFile);
 

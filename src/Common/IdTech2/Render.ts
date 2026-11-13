@@ -781,11 +781,15 @@ export class IdTech2Renderer implements SceneGfx {
 
     public mainView = new View();
 
-    constructor(device: GfxDevice, public context: IdTech2Context) {
+    constructor(device: GfxDevice, public context: IdTech2Context, private defaultWorldMatrix: mat4) {
         this.renderHelper = new GfxRenderHelper(device);
         this.textureCache = new TextureCache(this.renderHelper.renderCache);
         this.textureHolder = this.textureCache;
         this.worldLightingState = new WorldLightingState();
+    }
+
+    public getDefaultWorldMatrix(dst: mat4) {
+        mat4.mul(dst, noclipSpaceFromSourceEngineSpace, this.defaultWorldMatrix);
     }
 
     public adjustCameraController(c: CameraController): void {
