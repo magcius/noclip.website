@@ -228,10 +228,10 @@ class Renderer extends LuxRenderer {
         this.roomRenderer.setCullingOverride(cullingOverride);
     }
 
-    protected override getSetPanel(): Panel {
+    protected getSetPanel(): Panel {
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
-        setPanel.setTitle(EYE_ICON, "Object Sets");
+        setPanel.setTitle(EYE_ICON, "Object Set Visibility");
         const setNames = this.roomRenderer!.sets.map(s => getPrettyDataSetName(s.name));
         const select = new MultiSelect();
         select.setStrings(setNames);
@@ -255,7 +255,7 @@ class Renderer extends LuxRenderer {
         return setPanel;
     }
 
-    protected override isPlayerCharacterModel(name: string) {
+    protected isPlayerCharacterModel(name: string) {
         return name.toLowerCase().startsWith("p") && name.substring(3, 5).toLowerCase() === "ex";
     }
 }
@@ -298,7 +298,7 @@ TODO
 
 ...applicable items from Dream Drop's todo and:
 
-Most models' eye textures have wrong UVs for some reason. They're either almost right or nightmare fuel
+Most models' eye/face textures have wrong UVs for some reason. They're either almost right or nightmare fuel
     This issue, or another with the same symptoms, can happen with other parts, but is most common in the eye texture
     It seems to have something to do with needing to scale by the texture width/height and only affects UVs that are single bytes.
     I haven't been able to figure out a consistent way to scale by texture dimensions, since one way will work for some
@@ -306,9 +306,9 @@ Most models' eye textures have wrong UVs for some reason. They're either almost 
     have to do with aspect ratio, rather than width and height, since the very few eye textures that do look right happen to be squares.
     Also, some models will have random polygons seemingly with the wrong texture, however this is because back-face culling is needed for those parts
     and therefore has nothing to do with the UV scaling issue
-Investigate webgl texture error in jb10 (possibly a mismatched texture header? It's an unfinished room, so that's may be just how it actually is)
+Investigate webgl texture error in jb10 (possibly a mismatched texture header?)
 Confirm if rg01 and rg12 have slightly different names or not ("Outer Garden" vs "Outer Gardens")
-Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but (mostly) works
+Redo the pipeline of OLO object model names to actual model files (since their location is not provided). It's a mess right now but mostly works
     Ideally, remove all the hardcoded stuff in config/data.ts, but some of it is needed to avoid 404s with the current setup (although some still happen)
     m32ex04 has too complex of a model -> animation pipeline for current logic
     After looking some more, it seems like the OLO name can refer to multiple models, it's not always 1:1 (but usually is anyway), see b50vs00 for an example
@@ -319,8 +319,9 @@ Figure out why the shop moogle has its balloon upside down and aurora's crown is
     b01ls00 is also very messed up, has extra geometry not attached to skeleton
     g27dc00 has stray geometry as well
 Filter out objects that are meant for collision but still have visible geometry, usually the invisible walls in boss rooms
-Check for texture scrolling within PMOs themselves like DDD. Right now they are only from PMP material definitjons
+Check for texture scrolling within PMOs themselves like DDD. Right now they are only from PMP material definitions
 Have better functions for parsing arc files instead of "parseXFromARC" convention
+    Might be better to pass in a type to a generic function, or something like that
 Do another pass at animations for gimmicks (most were skipped during the first pass since the parsing still had an issue)
 Solid white geometry in ls08?
 
@@ -333,8 +334,8 @@ Add TXAs
     the same as DDD, except their data is just the pixel/image portion of a TIM2, rather than the entire texture. This will
     require a lot of tweaking to how textures are loaded and re-parsed, since the pixels need to be overridden from the base
     texture. Might be best to re-write the entire TIM2 code with TXAs in mind, instead of trying to jerry-rig the existing stuff.
-    Honestly, this is a lot of effort with little pay off, since TXAs are less common in BBS than in DDD (other than eye blinking/mouth moving while talking).
-    The parsing is already present in bin_bbs.ts, just not used right now.
+    Honestly, this is a lot of effort with little pay off since TXAs are less common in BBS than DDD (aside from eye blinking/mouth moving while talking).
+    The parsing is already present in bin_bbs.ts. The parsing needs more rigorous testing but is mostly correct
 Save points
 
 May your heart be your guiding key
@@ -360,7 +361,7 @@ const sceneDescs = [
     new Room("DP11", "Chamber of Waking"),
     new Room("DP12", "Castle Oblivion"),
     new Room("DP13", "Character Selection"),
-    "Dwarf Woodlands", // sw = snow white
+    "Dwarf Woodlands",
     new Room("SW12", "Mountain Trail"),
     new Room("SW01", "Mine Entrance"),
     new Room("SW02", "The Mine"),
@@ -387,7 +388,7 @@ const sceneDescs = [
     new Room("CD10", "Foyer"),
     new Room("CD11", "Passage"),
     new Room("CD12", "Antechamber"),
-    "Enchanted Dominion", // sb = sleeping beauty
+    "Enchanted Dominion",
     new Room("SB01", "Dungeon Cell"),
     new Room("SB02", "Gates"), // default?
     new Room("SB39", "Gates"), // story event?
@@ -406,9 +407,9 @@ const sceneDescs = [
     new Room("SB12", "Audience Chamber (Boss)"),
     new Room("SB14", "Hallway"),
     new Room("SB16", "Tower Room"),
-    new Room("SB15", "Aurora's Chamber (Bed)"), // cutscene?
-    new Room("SB18", "Aurora's Chamber (No Bed)"), // has map chest and shop moogle, default?
-    "Myseterious Tower", // yt = yensid tower
+    new Room("SB15", "Aurora's Chamber"),
+    new Room("SB18", "Aurora's Chamber (No Bed)"),
+    "Myseterious Tower",
     new Room("YT02", "Mysterious Tower"),
     new Room("YT03", "Entrance"),
     new Room("YT04", "Sorcerer's Chamber"),
@@ -428,14 +429,14 @@ const sceneDescs = [
     new Room("RG01", "Outer Garden"),
     new Room("RG12", "Outer Gardens"),
     new Room("RG11", "Purification Facility"),
-    "Olympus Coliseum", // he = hercules
+    "Olympus Coliseum",
     new Room("HE01", "Coliseum Gates"),
     new Room("HE02", "Vestibule"),
     new Room("HE03", "West Bracket"),
     new Room("HE04", "East Bracket"),
     new Room("HE06", "East Bracket (Night)"),
-    new Room("HE05", "Town Near Thebes"), // yes it's really called that...
-    "Deep Space", // ls = lilo & stitch
+    new Room("HE05", "Town Near Thebes"),
+    "Deep Space",
     new Room("LS01", "Prison Block"),
     new Room("LS02", "Turo Transporter"),
     new Room("LS03", "Durgon Transporter"),
@@ -455,7 +456,7 @@ const sceneDescs = [
     new Room("DI02", "Beach (Evening)"),
     new Room("DI03", "Beach (Night)"),
     new Room("DI04", "Main Island"),
-    "Neverland", // pp = peter pan
+    "Neverland",
     new Room("PP01", "Cove"),
     new Room("PP02", "Cliff"),
     new Room("PP03", "Mermaid Lagoon"),
@@ -503,7 +504,7 @@ const sceneDescs = [
     new Room("KG50", "Ventus's Mind"),
     new Room("KG51", "Ventus's Mind (Boss)"),
     new Room("KG53", "Sora's Mind"),
-    "Mirage Arena", // vs = versus?
+    "Mirage Arena",
     new Room("VS01", "Hub"),
     new Room("VS02", "Coliseum"),
     new Room("VS03", "Arena"),
@@ -518,7 +519,7 @@ const sceneDescs = [
     new Room("VS12", "Summit"),
     new Room("VS13", "Launch Deck"),
     new Room("VS14", "Ship Exterior"),
-    "Command Board", // bd = board
+    "Command Board",
     new Room("BD01", "Land of Departure BG"),
     new Room("BD03", "Cinderella BG"),
     new Room("BD09", "Lilo & Stitch BG"),

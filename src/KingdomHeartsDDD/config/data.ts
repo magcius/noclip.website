@@ -1,4 +1,4 @@
-export const BBS_ARC_BOSS = ["B01CD00D", "B01DC00", "B01EX00D", "B01HE00D", "B01LS00D", "B01PP00D", "B01RG00D", "B01SB00D", "B01SW00D", "B01VS00D",
+export const BBS_ARC_BOSS = [
     "B01VS00D2", "B02CD00D", "B02DC00", "B02LS00D", "B02PP00D", "B02RG00D", "B02SW00", "B02VS00", "B03CD00D", "B03DC00", "B03RG00D", "B03SB00D",
     "B03SW00", "B03VS00", "B04CD00D", "B04RG00D", "B05CD00D", "B05RG00D", "B06RG00D", "B07RG00D", "B08RG00D", "B10CD00D", "B10DC00", "B10EX00D",
     "B10EX01", "B10EX02", "B10HE00D", "B10LS00D", "B10SB00D", "B10SW00D", "B10VS", "B10VS00D", "B10VS00D2", "B11EX00D", "B11SB00D", "B11SW00",
@@ -9,19 +9,21 @@ export const BBS_ARC_BOSS = ["B01CD00D", "B01DC00", "B01EX00D", "B01HE00D", "B01
     "B62VS00", "B63EX00D", "B63VS00", "B64EX00D", "B64VS00", "B65VS00", "B66VS00", "B67VS00", "B68EX00D", "B68VS00", "B69EX00D", "B70EX00D",
     "B70EX_FACE", "B71EX00D", "B71VS00", "B72EX00", "B72EX00D", "B73EX00D", "B74VS00", "B75VS00", "B76VS00", "B77VS00", "B78EX00D", "B78VS00",
     "B79EX00D", "B80EX00D", "B80EX_FACE", "B80VS00", "B81EX00D", "B82EX00", "B82EX00D", "B83EX00D", "B88EX00D", "B89EX00D", "B90EX", "B90EX00",
-    "B90VS00", "B91EX00", "B92EX00", "B93EX00", "B94EX00", "B95EX00", "B96EX00", "B97EX00", "B98EX00", "B99EX00", "BWAQ_SB", "BWTE_SW", "BWVE_CD"
+    "B90VS00", "B91EX00", "B92EX00", "B93EX00", "B94EX00", "B95EX00", "B96EX00", "B97EX00", "B98EX00", "B99EX00", "BWAQ_SB", "BWTE_SW", "BWVE_CD",
+    "B01CD00D", "B01DC00", "B01EX00D", "B01HE00D", "B01LS00D", "B01PP00D", "B01RG00D", "B01SB00D", "B01SW00D", "B01VS00D"
 ];
 
-export const BBS_ARC_ENEMY = ["M01EX00D", "M01LS00", "M01SB00D", "M01SW00", "M01VS00", "M02EX00D", "M02SB00D", "M02SW00", "M02VS00", "M03DC00",
+export const BBS_ARC_ENEMY = [
     "M03EX00D", "M03SB00D", "M03SW00", "M03VS00", "M04EX00", "M04SW00", "M04VS00", "M05EX00D", "M05SW00", "M05VS00", "M06EX00", "M06SW00", "M06VS00",
     "M07DC00", "M07EX00D", "M07SW00", "M07VS00", "M08EX00", "M08VS00", "M09EX00D", "M09VS00", "M10EX00", "M10VS00", "M11EX00", "M12EX00", "M12VS00",
     "M13EX00", "M13VS00", "M14EX00D", "M14VS00", "M15EX00", "M15VS00", "M16EX00", "M16VS00", "M17EX00", "M17VS00", "M18EX00", "M18VS00", "M19EX00",
     "M19VS00", "M20EX00D", "M20VS00", "M21EX00", "M21VS00", "M22EX00D", "M22VS00", "M23EX00", "M23VS00", "M24EX", "M24EX00", "M24EX01", "M24EX02",
     "M25EX00D", "M25VS00", "M26EX00", "M27EX00", "M28EX00", "M30EX00D", "M32EX", "M32EX00D", "M32EX01D", "M32EX02D", "M32EX03D", "M32EX04", "M32VS00",
-    "M32VS01", "M32VS02", "M51VS00", "M52VS00"
+    "M32VS01", "M32VS02", "M51VS00", "M52VS00", "M01EX00D", "M01LS00", "M01SB00D", "M01SW00", "M01VS00", "M02EX00D", "M02SB00D", "M02SW00", "M02VS00",
+    "M03DC00"
 ];
 
-export const BBS_ARC_GIMMICK = ["G01CD00", "G01DC00", "G01DP00", "G01EX00", "G01HE00", "G01JB00", "G01KG00", "G01LS00", "G01LUA", "G01PP00", "G01RG00",
+export const BBS_ARC_GIMMICK = [
     "G01SB00", "G01SW00", "G01VS00", "G01WM00", "G01YT00", "G02CD00", "G02DC00", "G02DP00", "G02EX00", "G02HE00", "G02JB00", "G02JF00", "G02KG00",
     "G02LS00", "G02LUA", "G02PP00", "G02RG00", "G02SB00", "G02SW00", "G02YT00", "G03CD00", "G03DC00", "G03DP00", "G03EX00", "G03HE00", "G03JB00",
     "G03KG00", "G03LS00", "G03LUA", "G03PP00", "G03RG00", "G03SB00", "G03SW00", "G03YT00", "G05JF00", "G06JF00", "G07JF00", "G08JF00", "G09JF00",
@@ -43,19 +45,20 @@ export const BBS_ARC_GIMMICK = ["G01CD00", "G01DC00", "G01DP00", "G01EX00", "G01
     "G51SB00", "G51SW00", "G51WM00", "G52CD00", "G52DP00", "G52KG00", "G52LS00", "G52RG00", "G52SW00", "G52VS00", "G53CD00", "G53DP00", "G53KG00",
     "G53SW00", "G53VS00", "G54DP00", "G54SB00", "G55DP00", "G55LS00", "G55SB00", "G56DC00", "G56DP00", "G56LS00", "G57DP00", "G58SB00", "G59DC00",
     "G59SB00", "G60DC00", "G60LS00", "G61DC00", "G61LS00", "G62DC00", "G63DC00", "G90DC00", "G91DC00", "G92DC00", "G93DC00", "G94DC00", "G95DC00",
-    "G99HE00", "G99LS00"
+    "G99HE00", "G99LS00", "G01CD00", "G01DC00", "G01DP00", "G01EX00", "G01HE00", "G01JB00", "G01KG00", "G01LS00", "G01LUA", "G01PP00", "G01RG00"
 ];
 
-export const BBS_ARC_NPC = ["N01BD00", "N01EX00", "N01HE00", "N01LS00", "N01PP00", "N01SB01", "N01SW00", "N01SW01", "N01YT00", "N02CD00", "N02CD01",
+export const BBS_ARC_NPC = [
     "N02HE00", "N02LS00", "N02PP00", "N02SW00", "N02YT00", "N03HE00", "N03PP00", "N03SB00", "N03SW00", "N03YT00", "N04CD00", "N04DC00", "N04PP00",
     "N04SW00", "N04YT00", "N05BD00", "N05CD00", "N05DC00", "N05LS00", "N05SB00", "N05SW00", "N06BD00", "N06DC00", "N06DC10", "N06SB00", "N06SW00",
     "N06SW01", "N07DC00", "N07DC01", "N07DC02", "N07SB00", "N07SW00", "N08DC00", "N08SB00", "N08SW00", "N09CD00", "N09RG00", "N09SW00", "N10BD00",
     "N10EX00", "N10SW00", "N11CD00", "N11EX00", "N11RG00", "N12EX00", "N13BD00", "N13CD00", "N13EX00", "N15DC00", "N15DCDT", "N16DC00", "N17BD00",
     "N17DC00", "N18BD00", "N19BD00", "N20BD00", "N20DC00", "N21BD00", "N22BD00", "N22DC00", "N23BD00", "N24BD00", "N25BD00", "N26BD00", "N27BD00",
-    "N28BD00", "N29BD00", "N29BD01", "N30DC00", "N30HE00", "N32EX00"
+    "N28BD00", "N29BD00", "N29BD01", "N30DC00", "N30HE00", "N32EX00", "N01BD00", "N01EX00", "N01HE00", "N01LS00", "N01PP00", "N01SB01", "N01SW00",
+    "N01SW01", "N01YT00", "N02CD00", "N02CD01"
 ];
 
-export const BBS_ARC_PC = ["P01BASE", "P01BD00", "P01EX_004", "P01EX_009", "P01EX_101", "P01EX_102", "P01EX_105", "P01EX_111", "P01EX_115", "P01EX_116",
+export const BBS_ARC_PC = [
     "P01EX_122", "P01EX_123", "P01EX_133", "P01EX_137", "P01EX_140", "P01EX_150", "P01EX_151", "P01EX_152", "P01EX_153", "P01EX_154", "P01EX_155",
     "P01EX_156", "P01EX_157", "P01EX_200", "P01EX_204", "P01EX_205", "P01EX_206", "P01EX_313", "P01EX_346", "P01EX_352", "P01EX_457", "P01EX_501",
     "P01EX_506", "P01EX_511", "P01EX_601", "P01EX_602", "P01EX_603", "P01EX_605", "P01EX_609", "P01EX_620", "P01EX_621", "P01EX_622", "P01EX_624",
@@ -89,26 +92,29 @@ export const BBS_ARC_PC = ["P01BASE", "P01BD00", "P01EX_004", "P01EX_009", "P01E
     "XDC119VE", "XDC119VX", "XDC121VE", "XDC121VX", "XDC122AQ", "XDC122AX", "XDC131VE", "XDC131VX", "XDC134VE", "XDC134VX", "XDC187VE", "XDC187VX",
     "XDC192AQ", "XDC192AX", "XDC197EX", "XDC241AQ", "XDC241AX", "XDC241TE", "XDC241TX", "XDC241VE", "XDC241VX", "XDC257AQ", "XDC257AX", "XDC257TE",
     "XDC257TX", "XDC257VE", "XDC257VX", "XDC258AQ", "XDC258AX", "XDC258TE", "XDC258TX", "XDC258VE", "XDC258VX", "XDL10EX", "XDL17EX", "XDL27AQ", "XDL27TE",
-    "XDL27VE", "XSL01EX", "XSL16TE", "XSL16TX", "XSL17AQ", "XSL17AX", "XSL18EX", "XSL18VE", "XSL18VX"
+    "XDL27VE", "XSL01EX", "XSL16TE", "XSL16TX", "XSL17AQ", "XSL17AX", "XSL18EX", "XSL18VE", "XSL18VX", "P01BASE", "P01BD00", "P01EX_004", "P01EX_009",
+    "P01EX_101", "P01EX_102", "P01EX_105", "P01EX_111", "P01EX_115", "P01EX_116"
 ];
 
-export const BBS_ARC_WEAPON = ["W01AQ00", "W01AQ0D", "W01TE00", "W01TE0D", "W01VE00", "W01VE0D", "W02AQ00", "W02EX10", "W02TE00", "W02VE00", "W03AQ00",
-    "W03EX10", "W03TE00", "W03VE00", "W04AQ00", "W04EX10", "W04TE00", "W04VE00", "W05AQ00", "W05EX10", "W05TE00", "W05VE00", "W06AQ00", "W06EX10",
-    "W06TE00", "W06VE00", "W07AQ00", "W07EX10", "W07TE00", "W07VE00", "W09AQ00", "W09EX10", "W09TE00", "W09VE00", "W10AQ00", "W10EX10", "W10TE00",
-    "W10VE00", "W11AQ00", "W11EX10", "W11TE00", "W11VE00", "W12AQ00", "W12TE00", "W13AQ00", "W13TE00", "W14AQ00", "W14TE00", "W14VE00", "W15VE00",
-    "W16AQ00", "W16EX10", "W16TE00", "W16VE00", "W17AQ00", "W17EX10", "W17TE00", "W17VE00", "W20TERRA", "W30AQUA", "W30TERRA", "W30VENTUS"
+export const BBS_ARC_WEAPON = [
+    "W01AQ00", "W01AQ0D", "W01TE00", "W01TE0D", "W01VE00", "W01VE0D", "W02AQ00", "W02EX10", "W02TE00", "W02VE00", "W03AQ00", "W03EX10", "W03TE00",
+    "W03VE00", "W04AQ00", "W04EX10", "W04TE00", "W04VE00", "W05AQ00", "W05EX10", "W05TE00", "W05VE00", "W06AQ00", "W06EX10", "W06TE00", "W06VE00",
+    "W07AQ00", "W07EX10", "W07TE00", "W07VE00", "W09AQ00", "W09EX10", "W09TE00", "W09VE00", "W10AQ00", "W10EX10", "W10TE00", "W10VE00", "W11AQ00",
+    "W11EX10", "W11TE00", "W11VE00", "W12AQ00", "W12TE00", "W13AQ00", "W13TE00", "W14AQ00", "W14TE00", "W14VE00", "W15VE00", "W16AQ00", "W16EX10",
+    "W16TE00", "W16VE00", "W17AQ00", "W17EX10", "W17TE00", "W17VE00", "W20TERRA", "W30AQUA", "W30TERRA", "W30VENTUS"
 ];
 
-export const DREAMDROP_VALID_BOSS = ["b_de020", "b_de02s", "b_de030", "b_de03s", "b_de040", "b_de04s", "b_de050", "b_de05s", "b_de060", "b_de06s",
-    "b_de070", "b_de07s", "b_de080", "b_de08s", "b_de090", "b_de09s", "b_de100", "b_de10s", "b_de110", "b_de11s", "b_de120", "b_de12s", "b_de130",
-    "b_de13s", "b_de140", "b_de14s", "b_de150", "b_de15s", "b_de160", "b_de16s", "b_de300", "b_de301", "b_de310", "b_de311", "b_de320", "b_de321",
-    "b_de340", "b_de350", "b_de360", "b_de370", "b_de380", "b_de990", "b_di110", "b_di120", "b_di12s", "b_eh110", "b_eh11s", "b_eh120", "b_eh12s",
-    "b_eh130", "b_eh13s", "b_eh140", "b_eh14s", "b_eh150", "b_eh15s", "b_eh160", "b_eh16s", "b_eh170", "b_eh180", "b_eh18s", "b_eh190", "b_eh19s",
-    "b_eh210", "b_eh21s", "b_fa110", "b_tl130", "b_tl13s", "b_tl140", "b_tl14s", "b_tl150", "b_tl15s", "b_tm110", "b_tm11s", "b_tm150", "b_tm15s",
-    "b_tw200", "b_tw20s", "b_yt100", "b_yt101", "b_yt10s"
+export const DREAMDROP_VALID_BOSS = [
+    "b_de020", "b_de02s", "b_de030", "b_de03s", "b_de040", "b_de04s", "b_de050", "b_de05s", "b_de060", "b_de06s", "b_de070", "b_de07s", "b_de080",
+    "b_de08s", "b_de090", "b_de09s", "b_de100", "b_de10s", "b_de110", "b_de11s", "b_de120", "b_de12s", "b_de130", "b_de13s", "b_de140", "b_de14s",
+    "b_de150", "b_de15s", "b_de160", "b_de16s", "b_de300", "b_de301", "b_de310", "b_de311", "b_de320", "b_de321", "b_de340", "b_de350", "b_de360",
+    "b_de370", "b_de380", "b_de990", "b_di110", "b_di120", "b_di12s", "b_eh110", "b_eh11s", "b_eh120", "b_eh12s", "b_eh130", "b_eh13s", "b_eh140",
+    "b_eh14s", "b_eh150", "b_eh15s", "b_eh160", "b_eh16s", "b_eh170", "b_eh180", "b_eh18s", "b_eh190", "b_eh19s", "b_eh210", "b_eh21s", "b_fa110",
+    "b_tl130", "b_tl13s", "b_tl140", "b_tl14s", "b_tl150", "b_tl15s", "b_tm110", "b_tm11s", "b_tm150", "b_tm15s", "b_tw200", "b_tw20s", "b_yt100",
+    "b_yt101", "b_yt10s"
 ];
 
-export const DREAMDROP_VALID_D_OBJ = ["d_di010", "d_di210", "d_di211", "d_di212", "d_di213", "d_di214", "d_di215", "d_di216", "d_di217", "d_di218",
+export const DREAMDROP_VALID_D_OBJ = [
     "d_di219", "d_di220", "d_di221", "d_di222", "d_di223", "d_di224", "d_di225", "d_di226", "d_di227", "d_di228", "d_di229", "d_di230", "d_di231",
     "d_di232", "d_di233", "d_di234", "d_di235", "d_di236", "d_di237", "d_di238", "d_di239", "d_di240", "d_di241", "d_di242", "d_di243", "d_di244",
     "d_di245", "d_di246", "d_di247", "d_di248", "d_di249", "d_di250", "d_di251", "d_di252", "d_di253", "d_di254", "d_di255", "d_di256", "d_di257",
@@ -141,17 +147,19 @@ export const DREAMDROP_VALID_D_OBJ = ["d_di010", "d_di210", "d_di211", "d_di212"
     "d_tw030", "d_tw040", "d_tw110", "d_tw120", "d_tw130", "d_tw140", "d_tw210", "d_tw220", "d_tw230", "d_tw240", "d_tw250", "d_tw260", "d_tw270",
     "d_tw280", "d_tw290", "d_tw300", "d_tw310", "d_yt010", "d_yt210", "d_yt220", "d_yt230", "d_yt240", "d_yt250", "d_yt260", "d_yt270", "d_yt280",
     "d_yt290", "d_yt300", "d_yt310", "d_yt320", "d_yt330", "d_yt340", "d_yt350", "d_yt360", "d_yt370", "d_yt380", "d_yt390", "d_yt400", "d_yt410",
-    "d_yt420", "d_yt430", "d_yt440", "d_yt450", "d_yt460", "d_yt470", "d_yt480", "d_yt490"
+    "d_yt420", "d_yt430", "d_yt440", "d_yt450", "d_yt460", "d_yt470", "d_yt480", "d_yt490", "d_di010", "d_di210", "d_di211", "d_di212", "d_di213",
+    "d_di214", "d_di215", "d_di216", "d_di217", "d_di218"
 ];
 
-export const DREAMDROP_VALID_E_OBJ = ["e_bs010", "e_bs020", "e_bs030", "e_de010", "e_de011", "e_de01s", "e_de020", "e_de021", "e_de02s", "e_de030",
+export const DREAMDROP_VALID_E_OBJ = [
     "e_de031", "e_de03s", "e_de040", "e_de041", "e_de04s", "e_de050", "e_de051", "e_de05s", "e_de060", "e_de061", "e_de06s", "e_de070", "e_de071",
     "e_de07s", "e_de080", "e_de081", "e_de08s", "e_de090", "e_de091", "e_de09s", "e_de100", "e_de101", "e_de10s", "e_de110", "e_de111", "e_de11s",
     "e_de120", "e_de121", "e_de12s", "e_de130", "e_de131", "e_de13s", "e_de140", "e_de141", "e_de14s", "e_de150", "e_de151", "e_de160", "e_de170",
-    "e_de17s", "e_de180", "e_de181", "e_de190", "e_de191", "e_de200", "e_de20s", "e_de210", "e_pc010", "e_pc020", "e_pc030"
+    "e_de17s", "e_de180", "e_de181", "e_de190", "e_de191", "e_de200", "e_de20s", "e_de210", "e_pc010", "e_pc020", "e_pc030", "e_bs010", "e_bs020",
+    "e_bs030", "e_de010", "e_de011", "e_de01s", "e_de020", "e_de021", "e_de02s", "e_de030"
 ];
 
-export const DREAMDROP_VALID_ENEMY = ["m_de010", "m_de011", "m_de012", "m_de01s", "m_de020", "m_de021", "m_de022", "m_de02s", "m_de030", "m_de031",
+export const DREAMDROP_VALID_ENEMY = [
     "m_de032", "m_de03s", "m_de040", "m_de041", "m_de04s", "m_de050", "m_de051", "m_de05s", "m_de060", "m_de061", "m_de06s", "m_de070", "m_de071",
     "m_de07s", "m_de080", "m_de081", "m_de08s", "m_de090", "m_de091", "m_de09s", "m_de100", "m_de101", "m_de10s", "m_de110", "m_de111", "m_de112",
     "m_de11s", "m_de130", "m_de131", "m_de132", "m_de13s", "m_de140", "m_de141", "m_de142", "m_de14s", "m_de160", "m_de161", "m_de162", "m_de16s",
@@ -165,10 +173,11 @@ export const DREAMDROP_VALID_ENEMY = ["m_de010", "m_de011", "m_de012", "m_de01s"
     "m_de590", "m_de591", "m_de592", "m_de59s", "m_de620", "m_de621", "m_de622", "m_de62s", "m_de640", "m_de641", "m_de64s", "m_de650", "m_de651",
     "m_de65s", "m_de670", "m_de671", "m_de67s", "m_de680", "m_de681", "m_de68s", "m_de700", "m_de70s", "m_de710", "m_de71s", "m_de720", "m_de72s",
     "m_de730", "m_de73s", "m_de740", "m_de74s", "m_de750", "m_de75s", "m_de831", "m_de83s", "m_de990", "m_fa120", "m_fa121", "m_tl040", "m_tl04s",
-    "m_tl120", "m_tl12s", "m_tl130", "m_tl13s", "m_tl160", "m_tl16s", "m_tm120", "m_tm12s", "m_tm130", "m_tm13s", "m_tm140", "m_tm14s"
+    "m_tl120", "m_tl12s", "m_tl130", "m_tl13s", "m_tl160", "m_tl16s", "m_tm120", "m_tm12s", "m_tm130", "m_tm13s", "m_tm140", "m_tm14s", "m_de010",
+    "m_de011", "m_de012", "m_de01s", "m_de020", "m_de021", "m_de022", "m_de02s", "m_de030", "m_de031"
 ];
 
-export const DREAMDROP_VALID_F_OBJ = ["f_de010", "f_de01s", "f_de020", "f_de02s", "f_de030", "f_de03s", "f_de040", "f_de04s", "f_de05", "f_de050",
+export const DREAMDROP_VALID_F_OBJ = [
     "f_de05s", "f_de060", "f_de06s", "f_de070", "f_de07s", "f_de080", "f_de08s", "f_de090", "f_de091", "f_de092", "f_de09s", "f_de100", "f_de101",
     "f_de102", "f_de110", "f_de111", "f_de112", "f_de120", "f_de121", "f_de122", "f_de500", "f_de501", "f_de502", "f_de503", "f_de504", "f_de505",
     "f_de506", "f_de507", "f_di010", "f_di020", "f_di030", "f_eh010", "f_eh01s", "f_eh020", "f_eh030", "f_eh040", "f_eh050", "f_eh060", "f_eh06s",
@@ -185,11 +194,12 @@ export const DREAMDROP_VALID_F_OBJ = ["f_de010", "f_de01s", "f_de020", "f_de02s"
     "f_tm07s", "f_tm080", "f_tm08s", "f_tm090", "f_tm09s", "f_tm100", "f_tm10s", "f_tm110", "f_tm12", "f_tm120", "f_tm130", "f_tm140", "f_tm150",
     "f_tm160", "f_tm170", "f_tm180", "f_tm18s", "f_tm190", "f_tm200", "f_tm20s", "f_tm210", "f_tm21s", "f_tm220", "f_tm230", "f_tw010", "f_tw01s",
     "f_tw020", "f_tw030", "f_tw040", "f_yt010", "f_yt020", "f_yt02s", "f_yt030", "f_yt03s", "f_yt040", "f_yt050", "f_yt05s", "f_yt060", "f_yt070",
-    "f_yt07s", "f_yt080", "f_yt08s", "f_yt090", "f_yt100", "f_yt10s", "f_yt110", "f_yt120", "f_yt12s", "f_yt150"
+    "f_yt07s", "f_yt080", "f_yt08s", "f_yt090", "f_yt100", "f_yt10s", "f_yt110", "f_yt120", "f_yt12s", "f_yt150", "f_de010", "f_de01s", "f_de020",
+    "f_de02s", "f_de030", "f_de03s", "f_de040", "f_de04s", "f_de05", "f_de050"
 ];
 
 // collision-only objects and objects not normally visible are commented out
-export const DREAMDROP_VALID_GIM = ["bin", "f_tm02s", "g_de100", "g_di100", "g_di110", "g_di120", "g_eh010", "g_eh020", "g_eh100", "g_eh110", "g_eh120",
+export const DREAMDROP_VALID_GIM = [
     "g_eh130", "g_eh140", "g_eh150", "g_eh180", "g_eh250", "g_eh260", "g_eh270", "g_eh280", "g_eh340", "g_eh350", "g_eh360", "g_eh370", "g_eh380",
     "g_eh390", "g_eh400", "g_eh410", "g_eh420", "g_eh430", "g_eh440", "g_eh450", "g_eh460", "g_eh470", "g_eh480", "g_eh500", "g_eh510", "g_eh520",
     "g_eh530", "g_eh540", "g_eh550", "g_eh560", "g_eh570", "g_eh580", "g_eh590", "g_eh600", "g_eh610", "g_eh620", "g_eh630", "g_eh640", "g_eh650",
@@ -219,26 +229,28 @@ export const DREAMDROP_VALID_GIM = ["bin", "f_tm02s", "g_de100", "g_di100", "g_d
     "g_tw320", "g_tw330", "g_tw340", "g_tw350", "g_tw360", "g_tw380", "g_tw390", "g_tw400", "g_tw500", "g_tw510", "g_tw520", "g_tw530", "g_tw540",
     "g_tw550", "g_tw560", "g_tw570", "g_tw580", "g_tw590", "g_tw630", "g_tw640", "g_tw650", "g_tw660", "g_tw670", "g_tw680", "g_tw690", "g_tw700",
     "g_tw710", "g_tw720", "g_tw730", "g_tw740", "g_tw750", "g_tw760", "g_tw770", "g_tw790", "g_tw800", "g_wm010", "g_wm020", "g_wm030", "g_wm040",
-    "g_wm050", "g_wm060", "g_wm070", "g_wm080", "g_wm500", "g_wm510", "g_yt010", "g_yt020"
+    "g_wm050", "g_wm060", "g_wm070", "g_wm080", "g_wm500", "g_wm510", "g_yt010", "g_yt020", "bin", "f_tm02s", "g_de100", "g_di100", "g_di110", "g_di120",
+    "g_eh010", "g_eh020", "g_eh100", "g_eh110", "g_eh120"
 ];
 
-export const DREAMDROP_VALID_HIGH = ["h_di020", "h_di02s", "h_di030", "h_di03s", "h_di040", "h_di04s", "h_eh010", "h_eh01s", "h_eh020", "h_eh02s",
-    "h_eh060", "h_eh06s", "h_eh070", "h_eh07s", "h_eh110", "h_eh11s", "h_eh120", "h_eh12s", "h_eh130", "h_eh13s", "h_eh140", "h_eh14s", "h_eh150",
-    "h_eh15s", "h_eh220", "h_eh22s", "h_ex010", "h_ex01s", "h_ex020", "h_ex02s", "h_ex030", "h_ex03s", "h_ex040", "h_ex04s", "h_ex050", "h_ex05s",
-    "h_ex060", "h_ex06s", "h_ex070", "h_ex07s", "h_ex080", "h_ex08s", "h_ex090", "h_ex09s", "h_ex100", "h_ex10s", "h_ex110", "h_ex11s", "h_ex120",
-    "h_ex12s", "h_ex130", "h_ex13s", "h_ex140", "h_ex14s", "h_ex150", "h_ex15s", "h_ex160", "h_ex16s", "h_ex170", "h_ex17s", "h_fa010", "h_fa01s",
-    "h_nd010", "h_nd01s", "h_nd020", "h_nd02s", "h_nd060", "h_nd06s", "h_nd070", "h_nd07s", "h_nd080", "h_nd08s", "h_nd090", "h_nd09s", "h_nd100",
-    "h_nd10s", "h_pi010", "h_pi01s", "h_pi020", "h_pi02s", "h_pi030", "h_pi03s", "h_pi050", "h_pi05s", "h_pi060", "h_pi06s", "h_pi070", "h_pi07s",
-    "h_pi100", "h_pi10s", "h_rg010", "h_rg01s", "h_rg020", "h_rg02s", "h_rg050", "h_rg05s", "h_rg060", "h_rg06s", "h_rg070", "h_rg07s", "h_rg080",
-    "h_rg08s", "h_rg100", "h_rg10s", "h_rg110", "h_rg11s", "h_rg120", "h_rg12s", "h_rg130", "h_rg13s", "h_tl010", "h_tl01s", "h_tl020", "h_tl02s",
-    "h_tl030", "h_tl03s", "h_tl050", "h_tl05s", "h_tl060", "h_tl06s", "h_tl070", "h_tl07s", "h_tl130", "h_tl13s", "h_tm010", "h_tm01s", "h_tm020",
-    "h_tm02s", "h_tm030", "h_tm03s", "h_tm040", "h_tm04s", "h_tm060", "h_tm06s", "h_tm070", "h_tm07s", "h_tm110", "h_tm11s", "h_tm150", "h_tm15s",
-    "h_tw100", "h_tw10s", "h_tw110", "h_tw11s", "h_tw120", "h_tw12s", "h_tw130", "h_tw13s", "h_tw140", "h_tw14s", "h_tw150", "h_tw15s", "h_tw200",
-    "h_tw20s", "h_yt010", "h_yt01s", "h_yt020", "h_yt02s", "h_yt030", "h_yt03s", "h_yt040", "h_yt04s", "h_yt050", "h_yt05s", "h_yt060", "h_yt06s",
-    "h_yt070", "h_yt07s", "h_yt080", "h_yt08s", "h_yt120", "h_yt12s"
+export const DREAMDROP_VALID_HIGH = [
+    "h_di020", "h_di02s", "h_di030", "h_di03s", "h_di040", "h_di04s", "h_eh010", "h_eh01s", "h_eh020", "h_eh02s", "h_eh060", "h_eh06s", "h_eh070",
+    "h_eh07s", "h_eh110", "h_eh11s", "h_eh120", "h_eh12s", "h_eh130", "h_eh13s", "h_eh140", "h_eh14s", "h_eh150", "h_eh15s", "h_eh220", "h_eh22s",
+    "h_ex010", "h_ex01s", "h_ex020", "h_ex02s", "h_ex030", "h_ex03s", "h_ex040", "h_ex04s", "h_ex050", "h_ex05s", "h_ex060", "h_ex06s", "h_ex070",
+    "h_ex07s", "h_ex080", "h_ex08s", "h_ex090", "h_ex09s", "h_ex100", "h_ex10s", "h_ex110", "h_ex11s", "h_ex120", "h_ex12s", "h_ex130", "h_ex13s",
+    "h_ex140", "h_ex14s", "h_ex150", "h_ex15s", "h_ex160", "h_ex16s", "h_ex170", "h_ex17s", "h_fa010", "h_fa01s", "h_nd010", "h_nd01s", "h_nd020",
+    "h_nd02s", "h_nd060", "h_nd06s", "h_nd070", "h_nd07s", "h_nd080", "h_nd08s", "h_nd090", "h_nd09s", "h_nd100", "h_nd10s", "h_pi010", "h_pi01s",
+    "h_pi020", "h_pi02s", "h_pi030", "h_pi03s", "h_pi050", "h_pi05s", "h_pi060", "h_pi06s", "h_pi070", "h_pi07s", "h_pi100", "h_pi10s", "h_rg010",
+    "h_rg01s", "h_rg020", "h_rg02s", "h_rg050", "h_rg05s", "h_rg060", "h_rg06s", "h_rg070", "h_rg07s", "h_rg080", "h_rg08s", "h_rg100", "h_rg10s",
+    "h_rg110", "h_rg11s", "h_rg120", "h_rg12s", "h_rg130", "h_rg13s", "h_tl010", "h_tl01s", "h_tl020", "h_tl02s", "h_tl030", "h_tl03s", "h_tl050",
+    "h_tl05s", "h_tl060", "h_tl06s", "h_tl070", "h_tl07s", "h_tl130", "h_tl13s", "h_tm010", "h_tm01s", "h_tm020", "h_tm02s", "h_tm030", "h_tm03s",
+    "h_tm040", "h_tm04s", "h_tm060", "h_tm06s", "h_tm070", "h_tm07s", "h_tm110", "h_tm11s", "h_tm150", "h_tm15s", "h_tw100", "h_tw10s", "h_tw110",
+    "h_tw11s", "h_tw120", "h_tw12s", "h_tw130", "h_tw13s", "h_tw140", "h_tw14s", "h_tw150", "h_tw15s", "h_tw200", "h_tw20s", "h_yt010", "h_yt01s",
+    "h_yt020", "h_yt02s", "h_yt030", "h_yt03s", "h_yt040", "h_yt04s", "h_yt050", "h_yt05s", "h_yt060", "h_yt06s", "h_yt070", "h_yt07s", "h_yt080",
+    "h_yt08s", "h_yt120", "h_yt12s"
 ];
 
-export const DREAMDROP_VALID_NPC = ["n_de010", "n_de01s", "n_de020", "n_de02s", "n_de030", "n_de03s", "n_de040", "n_de04s", "n_de050", "n_de05s",
+export const DREAMDROP_VALID_NPC = [
     "n_de060", "n_de06s", "n_de070", "n_de07s", "n_de080", "n_de08s", "n_de090", "n_de09s", "n_de100", "n_de10s", "n_de110", "n_de11s", "n_de130",
     "n_de13s", "n_de140", "n_de14s", "n_de160", "n_de16s", "n_de200", "n_de20s", "n_de210", "n_de21s", "n_de220", "n_de22s", "n_de230", "n_de23s",
     "n_de240", "n_de24s", "n_de250", "n_de25s", "n_de260", "n_de26s", "n_de290", "n_de29s", "n_de300", "n_de30s", "n_de310", "n_de31s", "n_de340",
@@ -259,21 +271,23 @@ export const DREAMDROP_VALID_NPC = ["n_de010", "n_de01s", "n_de020", "n_de02s", 
     "n_tm020", "n_tm02s", "n_tm030", "n_tm03s", "n_tm040", "n_tm04s", "n_tm050", "n_tm05s", "n_tm060", "n_tm06s", "n_tm070", "n_tm07s", "n_tm080",
     "n_tm08s", "n_tm090", "n_tm09s", "n_tw100", "n_tw10s", "n_tw110", "n_tw11s", "n_tw120", "n_tw12s", "n_tw130", "n_tw13s", "n_tw140", "n_tw14s",
     "n_tw160", "n_tw16s", "n_yt010", "n_yt01s", "n_yt020", "n_yt02s", "n_yt030", "n_yt03s", "n_yt050", "n_yt05s", "n_yt060", "n_yt06s", "n_yt090",
-    "n_yt09s"
+    "n_yt09s", "n_de010", "n_de01s", "n_de020", "n_de02s", "n_de030", "n_de03s", "n_de040", "n_de04s", "n_de050", "n_de05s"
 ];
 
-export const DREAMDROP_VALID_PC = ["p_ex010", "p_ex01s", "p_ex020", "p_ex02s", "p_ex030", "p_ex03s", "p_ex040", "p_ex04s", "p_ex150", "p_tl010",
-    "p_tl01s", "p_tl020", "p_tl02s", "p_tl060", "p_tl06s", "p_tl070", "p_tl07s"
+export const DREAMDROP_VALID_PC = [
+    "p_ex010", "p_ex01s", "p_ex020", "p_ex02s", "p_ex030", "p_ex03s", "p_ex040", "p_ex04s", "p_ex150", "p_tl010", "p_tl01s", "p_tl020", "p_tl02s",
+    "p_tl060", "p_tl06s", "p_tl070", "p_tl07s"
 ];
 
-export const DREAMDROP_VALID_WEP = ["w_ex180", "w_ex18s", "w_ex200", "w_ex20s", "w_ex210", "w_ri010", "w_ri011", "w_ri01s", "w_ri020", "w_ri021",
-    "w_ri02s", "w_ri030", "w_ri031", "w_ri03s", "w_ri040", "w_ri041", "w_ri04s", "w_ri050", "w_ri051", "w_ri05s", "w_ri070", "w_ri071", "w_ri07s",
-    "w_ri080", "w_ri081", "w_ri08s", "w_ri090", "w_ri091", "w_ri09s", "w_ri100", "w_ri101", "w_ri10s", "w_ri110", "w_ri111", "w_ri11s", "w_ri120",
-    "w_ri12s", "w_ri130", "w_ri131", "w_ri13s", "w_ri140", "w_ri141", "w_ri14s", "w_ri150", "w_ri151", "w_ri15s", "w_ri160", "w_ri161", "w_ri16s",
-    "w_ri170", "w_ri17s", "w_so010", "w_so011", "w_so01s", "w_so020", "w_so021", "w_so02s", "w_so030", "w_so031", "w_so03s", "w_so040", "w_so041",
-    "w_so04s", "w_so050", "w_so051", "w_so05s", "w_so070", "w_so071", "w_so07s", "w_so080", "w_so081", "w_so08s", "w_so090", "w_so091", "w_so09s",
-    "w_so100", "w_so101", "w_so10s", "w_so110", "w_so111", "w_so11s", "w_so130", "w_so131", "w_so13s", "w_so150", "w_so151", "w_so15s", "w_so160",
-    "w_so161", "w_so16s", "w_so170", "w_so17s"
+export const DREAMDROP_VALID_WEP = [
+    "w_ex180", "w_ex18s", "w_ex200", "w_ex20s", "w_ex210", "w_ri010", "w_ri011", "w_ri01s", "w_ri020", "w_ri021", "w_ri02s", "w_ri030", "w_ri031",
+    "w_ri03s", "w_ri040", "w_ri041", "w_ri04s", "w_ri050", "w_ri051", "w_ri05s", "w_ri070", "w_ri071", "w_ri07s", "w_ri080", "w_ri081", "w_ri08s",
+    "w_ri090", "w_ri091", "w_ri09s", "w_ri100", "w_ri101", "w_ri10s", "w_ri110", "w_ri111", "w_ri11s", "w_ri120", "w_ri12s", "w_ri130", "w_ri131",
+    "w_ri13s", "w_ri140", "w_ri141", "w_ri14s", "w_ri150", "w_ri151", "w_ri15s", "w_ri160", "w_ri161", "w_ri16s", "w_ri170", "w_ri17s", "w_so010",
+    "w_so011", "w_so01s", "w_so020", "w_so021", "w_so02s", "w_so030", "w_so031", "w_so03s", "w_so040", "w_so041", "w_so04s", "w_so050", "w_so051",
+    "w_so05s", "w_so070", "w_so071", "w_so07s", "w_so080", "w_so081", "w_so08s", "w_so090", "w_so091", "w_so09s", "w_so100", "w_so101", "w_so10s",
+    "w_so110", "w_so111", "w_so11s", "w_so130", "w_so131", "w_so13s", "w_so150", "w_so151", "w_so15s", "w_so160", "w_so161", "w_so16s", "w_so170",
+    "w_so17s"
 ];
 
 /**
@@ -374,25 +388,26 @@ export const DREAMDROP_PAM: Map<string, { name: string, index: number }> = new M
 /**
  * List of PMOs with TXAs of the same name to automatically load
  */
-export const DREAMDROP_TXA = ["g_fa100", "g_tw390", "g_tw520", "g_tm730", "g_fa280", "g_fa300", "g_fa270", "g_fa290", "g_fa450", "g_fa350", "g_fa160",
-    "d_eh110", "d_eh120", "d_eh130", "d_pi120", "d_tl010", "d_tl020", "d_tl030", "g_pi610", "g_pi280", "g_pi270"
+export const DREAMDROP_TXA = [
+    "g_fa100", "g_tw390", "g_tw520", "g_tm730", "g_fa280", "g_fa300", "g_fa270", "g_fa290", "g_fa450", "g_fa350", "g_fa160", "d_eh110", "d_eh120",
+    "d_eh130", "d_pi120", "d_tl010", "d_tl020", "d_tl030", "g_pi610", "g_pi280", "g_pi270"
 ];
 
-export const BBS_VALID_PRESET_ARC = ["CD01AQ", "CD01EX", "CD01VE", "CD02AQ", "CD02EX", "CD02VE", "CD03AQ", "CD03EX", "CD03VE", "CD04AQ", "CD05AQ",
-    "CD05EX", "CD05TE", "CD06AQ", "CD06EX", "CD06TE", "CD07AQ", "CD07EX", "CD07TE", "CD08AQ", "CD08EX", "CD08TE", "CD09AQ", "CD09EX", "CD09TE",
-    "CD10AQ", "CD10EX", "CD10TE", "CD11AQ", "CD11EX", "CD11TE", "CD12AQ", "CD12EX", "CD12TE", "CD13AQ", "CD13VE", "DC02AQ", "DC02EX", "DC02TE",
-    "DC02VE", "DC03AQ", "DC03EX", "DC03TE", "DC03VE", "DC04AQ", "DC04EX", "DC04TE", "DC04VE", "DC05AQ", "DC05EX", "DC05TE", "DC05VE", "DC06AQ",
-    "DC06EX", "DC06TE", "DC06VE", "DC07AQ", "DC07EX", "DC07TE", "DC07VE", "DC08AQ", "DC08EX", "DC08TE", "DC08VE", "DC09AQ", "DC09EX", "DC09TE",
-    "DC09VE", "DC10AQ", "DC10EX", "DC10TE", "DC10VE", "DC11AQ", "DC11TE", "DC11VE", "DC12AQ", "DC12EX", "DC12TE", "DC12VE", "DC13AQ", "DC13EX",
-    "DC13TE", "DC13VE", "DC14AQ", "DC14EX", "DC14TE", "DC14VE", "DC15AQ", "DC15TE", "DC15VE", "DI01EX", "DI01VE", "DI02AQ", "DI02EX", "DI02TE",
-    "DI02VE", "DI03EX", "DI03VE", "DI04AQ", "DI04EX", "DP01AQ", "DP01TE", "DP01VE", "DP02AQ", "DP02TE", "DP02VE", "DP03AQ", "DP03VE", "DP04VE",
-    "DP05AQ", "DP05EX", "DP05TE", "DP05VE", "DP06AQ", "DP06EX", "DP06TE", "DP06VE", "DP07AQ", "DP07EX", "DP07TE", "DP07VE", "DP08AQ", "DP08TE",
-    "DP09AQ", "DP11AQ", "DP12AQ", "DP13VE", "DP14EX", "DP15AQ", "DP15EX", "DP15TE", "DP15VE", "DP16AQ", "DP16EX", "DP16TE", "DP16VE", "HE01AQ",
-    "HE01EX", "HE01TE", "HE01VE", "HE02AQ", "HE02EX", "HE02TE", "HE02VE", "HE03AQ", "HE03TE", "HE03VE", "HE04AQ", "HE04TE", "HE05AQ", "HE05EX",
-    "HE05TE", "HE05VE", "HE06AQ", "JB01EX", "JB09EX", "JB11EX", "JB50AQ", "JB50TE", "JB50VE", "JB51AQ", "JB51VE", "JB52AQ", "JB52VE", "JB53VE",
-    "KG01AQ", "KG01EX", "KG01TE", "KG01VE", "KG02AQ", "KG02EX", "KG02TE", "KG02VE", "KG03AQ", "KG03EX", "KG03TE", "KG03VE", "KG04AQ", "KG04TE",
-    "KG04VE", "KG05AQ", "KG05TE", "KG05VE", "KG06AQ", "KG06TE", "KG06VE", "KG07AQ", "KG07EX", "KG07TE", "KG07VE", "KG08AQ", "KG08TE", "KG08VE",
-    "KG09AQ", "KG09TE", "KG09VE", "KG10TE", "KG11TE", "KG12AQ", "KG12VE", "KG50VE", "KG51VE", "KG52VE", "KG53AQ", "KG55TE", "KG56AQ", "KG56TE",
+export const BBS_VALID_PRESET_ARC = [
+    "CD01AQ", "CD01EX", "CD01VE", "CD02AQ", "CD02EX", "CD02VE", "CD03AQ", "CD03EX", "CD03VE", "CD04AQ", "CD05AQ", "CD05EX", "CD05TE", "CD06AQ",
+    "CD06EX", "CD06TE", "CD07AQ", "CD07EX", "CD07TE", "CD08AQ", "CD08EX", "CD08TE", "CD09AQ", "CD09EX", "CD09TE", "CD10AQ", "CD10EX", "CD10TE",
+    "CD11AQ", "CD11EX", "CD11TE", "CD12AQ", "CD12EX", "CD12TE", "CD13AQ", "CD13VE", "DC02AQ", "DC02EX", "DC02TE", "DC02VE", "DC03AQ", "DC03EX",
+    "DC03TE", "DC03VE", "DC04AQ", "DC04EX", "DC04TE", "DC04VE", "DC05AQ", "DC05EX", "DC05TE", "DC05VE", "DC06AQ", "DC06EX", "DC06TE", "DC06VE",
+    "DC07AQ", "DC07EX", "DC07TE", "DC07VE", "DC08AQ", "DC08EX", "DC08TE", "DC08VE", "DC09AQ", "DC09EX", "DC09TE", "DC09VE", "DC10AQ", "DC10EX",
+    "DC10TE", "DC10VE", "DC11AQ", "DC11TE", "DC11VE", "DC12AQ", "DC12EX", "DC12TE", "DC12VE", "DC13AQ", "DC13EX", "DC13TE", "DC13VE", "DC14AQ",
+    "DC14EX", "DC14TE", "DC14VE", "DC15AQ", "DC15TE", "DC15VE", "DI01EX", "DI01VE", "DI02AQ", "DI02EX", "DI02TE", "DI02VE", "DI03EX", "DI03VE",
+    "DI04AQ", "DI04EX", "DP01AQ", "DP01TE", "DP01VE", "DP02AQ", "DP02TE", "DP02VE", "DP03AQ", "DP03VE", "DP04VE", "DP05AQ", "DP05EX", "DP05TE",
+    "DP05VE", "DP06AQ", "DP06EX", "DP06TE", "DP06VE", "DP07AQ", "DP07EX", "DP07TE", "DP07VE", "DP08AQ", "DP08TE", "DP09AQ", "DP11AQ", "DP12AQ",
+    "DP13VE", "DP14EX", "DP15AQ", "DP15EX", "DP15TE", "DP15VE", "DP16AQ", "DP16EX", "DP16TE", "DP16VE", "HE01AQ", "HE01EX", "HE01TE", "HE01VE",
+    "HE02AQ", "HE02EX", "HE02TE", "HE02VE", "HE03AQ", "HE03TE", "HE03VE", "HE04AQ", "HE04TE", "HE05AQ", "HE05EX", "HE05TE", "HE05VE", "HE06AQ",
+    "JB01EX", "JB09EX", "JB11EX", "JB50AQ", "JB50TE", "JB50VE", "JB51AQ", "JB51VE", "JB52AQ", "JB52VE", "JB53VE", "KG01AQ", "KG01EX", "KG01TE",
+    "KG01VE", "KG02AQ", "KG02EX", "KG02TE", "KG02VE", "KG03AQ", "KG03EX", "KG03TE", "KG03VE", "KG04AQ", "KG04TE", "KG04VE", "KG05AQ", "KG05TE",
+    "KG05VE", "KG06AQ", "KG06TE", "KG06VE", "KG07AQ", "KG07EX", "KG07TE", "KG07VE", "KG08AQ", "KG08TE", "KG08VE", "KG09AQ", "KG09TE", "KG09VE",
     "KG56VE", "LS01AQ", "LS01EX", "LS01TE", "LS01VE", "LS02AQ", "LS02EX", "LS02TE", "LS02VE", "LS03AQ", "LS03EX", "LS03TE", "LS03VE", "LS04AQ",
     "LS04EX", "LS04TE", "LS04VE", "LS05AQ", "LS05EX", "LS05TE", "LS05VE", "LS06AQ", "LS06EX", "LS06TE", "LS06VE", "LS07AQ", "LS07EX", "LS07TE",
     "LS07VE", "LS08EX", "LS08VE", "LS09AQ", "LS09EX", "LS09TE", "LS09VE", "LS10AQ", "LS10EX", "LS10TE", "LS10VE", "LS11TE", "LS11VE", "LS12VE",
@@ -413,7 +428,8 @@ export const BBS_VALID_PRESET_ARC = ["CD01AQ", "CD01EX", "CD01VE", "CD02AQ", "CD
     "SW06EX", "SW06TE", "SW07AQ", "SW07EX", "SW07TE", "SW07VE", "SW08AQ", "SW08EX", "SW08VE", "SW09AQ", "SW09TE", "SW10AQ", "SW10EX", "SW10VE",
     "SW11AQ", "SW11EX", "SW11VE", "SW12EX", "SW12VE", "VS01AQ", "VS01EX", "VS01TE", "VS01VE", "VS02EX", "VS03EX", "VS04EX", "VS05EX", "VS06EX",
     "VS07EX", "VS08EX", "VS09EX", "VS10EX", "VS11EX", "VS12EX", "VS13EX", "VS14EX", "VS15EX", "WM01AQ", "WM01EX", "WM01TE", "WM01VE", "YT01AQ",
-    "YT01EX", "YT01VE", "YT02AQ", "YT02EX", "YT02TE", "YT02VE", "YT03AQ", "YT03EX", "YT03TE", "YT03VE", "YT04AQ", "YT04EX", "YT04TE", "YT04VE"
+    "YT01EX", "YT01VE", "YT02AQ", "YT02EX", "YT02TE", "YT02VE", "YT03AQ", "YT03EX", "YT03TE", "YT03VE", "YT04AQ", "YT04EX", "YT04TE", "YT04VE",
+    "KG10TE", "KG11TE", "KG12AQ", "KG12VE", "KG50VE", "KG51VE", "KG52VE", "KG53AQ", "KG55TE", "KG56AQ", "KG56TE"
 ];
 
 export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
@@ -558,15 +574,13 @@ export const BBS_PAM: Map<string, { name: string, index: number }> = new Map([
     ["g32dc00", { name: "g32dc_000", index: 0 }], // tornado
 ]);
 
-export const BBS_MODEL_REMAP = ["b10ex01", "b10ex02", "m02vs00", "m12vs00", "m14vs00", "m04vs00", "m03vs00", "m13vs00", "m01vs00",
-    "m21vs00", "m17vs00", "m07vs00", "m18vs00", "m05vs00", "m19vs00", "b75vs00", "b74vs00", "b78vs00", "b77vs00", "b76vs00", "b71vs00",
-    "m06vs00", "m20vs00", "m09vs00", "m16vs00", "m10vs00", "m15vs00", "m08vs00", "m22vs00", "b40vs00", "b90vs00", "b60vs00", "b80vs00",
-    "g46dc00"
+export const BBS_MODEL_REMAP = [
+    "b10ex01", "b10ex02", "m02vs00", "m12vs00", "m14vs00", "m04vs00", "m03vs00", "m13vs00", "m01vs00", "m21vs00", "m17vs00", "m07vs00",
+    "m18vs00", "m05vs00", "m19vs00", "b75vs00", "b74vs00", "b78vs00", "b77vs00", "b76vs00", "b71vs00", "m06vs00", "m20vs00", "m09vs00",
+    "m16vs00", "m10vs00", "m15vs00", "m08vs00", "m22vs00", "b40vs00", "b90vs00", "b60vs00", "b80vs00", "g46dc00"
 ];
 
-export const BBS_ARC_PMO_OVERRIDE: Map<string, string> = new Map([
-    ["n02cd01", "n02cd00"]
-]);
+export const BBS_ARC_PMO_OVERRIDE: Map<string, string> = new Map([["n02cd01", "n02cd00"]]);
 
 // list of pmos to load from a parent arc
 export const BBS_PMO_ARC_OVERRIDE: Map<string, string[]> = new Map([
@@ -581,6 +595,10 @@ export const BBS_PMO_ARC_OVERRIDE: Map<string, string[]> = new Map([
 
 // list of room parts to manually set at world origin to look right as the skybox
 // no idea why these are offset to some random point, every other skybox part is at world origin
-export const DREAMDROP_SKYBOX_CENTER: string[] = ["tm04_0_177", "tm04_1_178", "tl06_0_61", "tl06_1_65", "tl06_2_63", "tl15_0_0", "tl15_1_4",
-    "tl15_2_2", "tl18_0_62", "tl18_1_66", "tl18_2_64"
+export const DREAMDROP_SKYBOX_CENTER: string[] = [
+    "tm04_0_177", "tm04_1_178", "tl06_0_61", "tl06_1_65", "tl06_2_63", "tl15_0_0", "tl15_1_4", "tl15_2_2", "tl18_0_62", "tl18_1_66",
+    "tl18_2_64", "di01_2_45", "di01_3_46"
 ];
+
+// weird geometry that's not normally visible (???), turn them off by default
+export const DREAMDROP_HIDDEN_ROOM_PARTS: string[] = ["rg02_0_413", "rg02_25_414"];

@@ -7,7 +7,7 @@ import { BBSShader } from "./shader";
 import { AABB } from "../Geometry";
 
 export class BBSRoomRenderer extends LuxRoomRenderer {
-    protected override setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler): void {
+    protected setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler): void {
         const bbsPMP = pmp as BBSPMP;
         const model = info.pmo as BBSModel;
         const materials: LuxMaterialInstance[] = [];
@@ -25,7 +25,7 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
         this.parts[i].instances = [{ shiftMatrix, setId: -1, bbox }];
     }
 
-    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
+    protected setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
         const index = this.objects.findIndex(r => r.name === instance.name);
         const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId, bbox: new AABB() };
         if (index > -1) {
@@ -54,7 +54,7 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
 }
 
 class ModelRenderer extends LuxModelRenderer {
-    protected override getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
+    protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
         return new ShapeRenderer(cache, shape as BBSShape, model.scale, materials[shape.textureIndex], this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
     }
 }
@@ -64,7 +64,11 @@ class ShapeRenderer extends LuxShapeRenderer {
         super(cache, shape, scale, material, undefined, isSkybox, isBackground, boneCount);
     }
 
-    protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
+    protected setMegaStateFlags(shape: LuxShape): void {
+        
+    }
+
+    protected setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
         const inVertexAttributeDescriptors = [
             { location: BBSShader.a_Position, bufferIndex: BBSShader.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
             { location: BBSShader.a_Color, bufferIndex: BBSShader.a_Color, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
@@ -199,7 +203,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         });
     }
 
-    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
+    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
         this.gfxProgram = cache.createProgram(new BBSShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, weightCount, doRigidSkinning));
     }
 }

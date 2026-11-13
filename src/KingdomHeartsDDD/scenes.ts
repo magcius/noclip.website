@@ -6,7 +6,7 @@ import { DreamDropParser, DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropCTRTexture, DreamDropCTRTFormat, decodeDreamDropCTRT } from "./texture";
 import { Texture as ViewerTexture } from "../viewer.js";
 import { DreamDropRoomRenderer } from "./render";
-import { getDreamDropRoomConfig, DreamDropRoomConfig, DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_DROP_OLO, DREAMDROP_VALID_OLO, DREAMDROP_NO_CULL_ROOMS } from "./config/room";
+import { getDreamDropRoomConfig, DreamDropRoomConfig, DREAMDROP_INVALID_SETDATA, DREAMDROP_VALID_DROP_OLO, DREAMDROP_VALID_OLO, DREAMDROP_NO_CULL_ROOMS, DREAMDROP_VALID_PVD } from "./config/room";
 import { COOL_BLUE_COLOR, EYE_ICON, MultiSelect, Panel } from "../ui";
 import { DREAMDROP_PAM, DREAMDROP_TXA, DREAMDROP_VALID_BOSS, DREAMDROP_VALID_D_OBJ, DREAMDROP_VALID_E_OBJ, DREAMDROP_VALID_ENEMY, DREAMDROP_VALID_F_OBJ, DREAMDROP_VALID_GIM, DREAMDROP_VALID_HIGH, DREAMDROP_VALID_NPC, DREAMDROP_VALID_PC, DREAMDROP_VALID_WEP } from "./config/data";
 import { LuxObjectSet, LuxOLOInstance, LuxPVD, LuxRenderer, LuxRoomObjects, LuxSkeletalAnimation, LuxTXA } from "./lux";
@@ -102,10 +102,10 @@ class Renderer extends LuxRenderer {
         this.roomRenderer.setCullingOverride(cullingOverride);
     }
 
-    protected override getSetPanel() {
+    protected getSetPanel() {
         const setPanel = new Panel();
         setPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
-        setPanel.setTitle(EYE_ICON, "Object Sets");
+        setPanel.setTitle(EYE_ICON, "Object Set Visibility");
         const setNames = this.roomRenderer!.sets.map(s => getPrettyDataSetName(s.name));
         const select = new MultiSelect();
         select.setStrings(setNames);
@@ -127,7 +127,7 @@ class Renderer extends LuxRenderer {
         return setPanel;
     }
 
-    protected override isPlayerCharacterModel(name: string) {
+    protected isPlayerCharacterModel(name: string) {
         return name.toLowerCase().startsWith("p_");
     }
 }
@@ -216,13 +216,16 @@ class Room implements SceneDesc {
             }
         }
 
-        const pvdFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.pvd`, { allow404: true });
-        let pvd = pvdFile.byteLength > 0 ? new DreamDropParser(pvdFile).parsePVD() : undefined;
-        if (!pvd) {
-            pvd = { clearColor: [0, 0, 0, 1], fogColor: [1, 1, 1, 0], fogNear: 400, fogFar: 480 };
-        } else {
-            pvd.clearColor = pvd.clearColor.map(c => c / 255);
-            pvd.fogColor = pvd.fogColor.map(c => c / 255);
+        let pvd = { clearColor: [0, 0, 0, 1], fogColor: [1, 1, 1, 0], fogNear: 400, fogFar: 480 };
+        if (DREAMDROP_VALID_PVD.includes(this.id)) {
+            const pvdFile = await context.dataFetcher.fetchData(`${pathBase}/map/${pmpName}.pvd`);
+            if (pvdFile.byteLength === 0) {
+                console.warn("Could not find PVD file for", this.id);
+            } else {
+                pvd = new DreamDropParser(pvdFile).parsePVD();
+                pvd.clearColor = pvd.clearColor.map(c => c / 255);
+                pvd.fogColor = pvd.fogColor.map(c => c / 255);
+            }
         }
 
         return new Renderer(device, pmp, pvd, { sets, models, animations }, txas, DREAMDROP_NO_CULL_ROOMS.includes(this.id), config);
@@ -230,13 +233,29 @@ class Room implements SceneDesc {
 }
 
 /*
+Known Issues
+
+Leaf textures on destiny island have bilinear bleed, however this is present in the actual game (easy to see on the 3DS screen if you look for it)
+    They fixed this in 2.8, but I will leave it broken since that's more accurate
+Shadows in the third district are the wrong color, they are supposed to be black, not silver (they're correct everywhere else though???)
+Spellican's broomstick is stretched
+Both rhino variants have the spike ball visible (it doesn't hide when animated, as if the bone weights were to be set to 0)
+Hunchback boss has its chains missing when animated
+Tron turrets have their left arm backwards when animated
+Shop moogle's balloon is upside down (happens in BBS too, which uses almost the exact same model)
+Some of the post office pistons are rotated backwards
+Some instances of z-fighting, see note below
+Some instances of incorrect depth sorting for transparent objects, see note below
+Some TXA speeds and frame construction is wrong, see note below
+
 TODO
 
-Find a way to do proper depth sorting. Bboxes for room parts are inconsistent, so typical approaches completely break some rooms (yt04 for example)
+Find a way to do proper depth sorting. Typical approaches completely break some rooms (yt04 for example)
     I've tried different render inst lists, depth (vec distance & aabb) and material based sort keys, and different permutations of mega state
     flags/blending options. These all introduce more problems than they fix, so the current configuration is the "least bad" of them all.
     See the water in destiny islands or the rainbow colored arch signs in the fourth district for examples where the sorting is wrong. Depth write
-    may also be related to this. A possible shape flag for it is 256, but testing has been inconsistent so far
+    may also be related to this. A possible shape flag for it is 256, but testing has been inconsistent so far.
+    Also in the console/PC ports, there are some visible instances of incorrect draw order, alebit at long distanes not noticeable in the original version
 TXAs need some touchup
     What determines if the textures are blended needs refinement (right now it's more of a heuristic, supposedly the shape attribute could be used?)
     There's also an edge case where the same animation will get out of sync across two separate models when one of them is culled
@@ -245,6 +264,7 @@ TXAs need some touchup
     How frames are handled that have displayFrames as 0 might need tweaking, right need it just defaults to 1.5 since that matches the game the best
     Also want to figure out how eye blinking TXAs should work since they're way too fast when used as-is (might need some rng for the timing)
     Add the ability the choose specific textures to exclude from animation (n_ex020 for example needs the shadow to not pulse when idle)
+    The logic that builds the frames is not exactly right, see the post office conveyer belt lights which should be faster
 Depth bias/poly offset needs more work to fix z-fighting. Only some z-fighting is fixed with the current logic
     Mostly the buildings in twtnw are affected by this (or something very similar)
     There's also pretty bad z-fighting on the ground path in the Traverse Town garden
@@ -263,49 +283,43 @@ Figure out how world map objects are loaded
     Within _grpdef/wm01.rgr, the model names and some MCV files are referenced. It's possible that
     the world map is technically handled as a cutscene, therefore the loading of models is entirely different
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
-Shadows in the third district are the wrong color, they appear as black in game (they're correct everywhere else though???)
 Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron, pinocchio and twtnw
-Model fixes
-    Spellican's broomstick is stretched
-    Both rhino variants have the spike ball visible (it doesn't hide when animated, as if the bone weights were to be set to 0)
-    Hunchback boss has its chains missing when animated
-    Tron turrets have their left arm backwards when animated
-    Shop moogle's balloon is upside down (happens in BBS too, which uses almost the exact same model)
-    Some of the post office pistons are rotated backwards
 Figure out how to handle models with different parts in separate files
     These are defined in _grpdef/*.rgr, for example the skeleton t-rex has its head as a separate model
-Clean up unused data leftover from parsing (numbers, flags, etc not used for rendering or anything else)
-    Most of it gets garbage collected anyway, but might as well to make debugging a little cleaner
 Rigid skinning should probably be checked for and applied at the model level, rather than the shape level
     There may also be a model flag that indicates this, rather than checking to see if the weights are all zero
-Make a whitelist of PVD files to avoid 404s for the few rooms that don't have them (similar to how OLOs work)
-Try to combine meshes of room parts with the same texture together to reduce number of draw calls
-    This might make the frustum culling less impactful, but some rooms reaching over 1000 draw calls is ridiulous...
-Trees on destiny island have a weird line on their leaf texure, issue with decoding or alpha check in shader?
-    This was not there during initial implementation, which was all done on di01, so something must have changed somewhere
 The container suspended from the ceiling (gl_tl110) should be moving up and down in tl05
     The animation is there for it and works fine, but only one of these containers actually moves in the
     game, so it would require additional code to enable per-instance animation application (as opposed to all instances of the model)
-Stray geometry in rg02?
 The timing of UV scrolling and TXAs may need some tweaking or further confirmation
     UV scrolling uses a multipler for 60 FPS, even though the game runs at 30 (if you're lucky). This was done using a side by side comparsion
     with an actual 3DS running the game. A frame time of 30 made the scrolling too slow. For TXAs, using a frame time of 30 resulted in a better
     match than 60, but the displayFrames value is less understood and just my best guess for how to use it
+Look into making back-face culling logic be always applied to objects and only be affected by the override for room parts
+    This would be more so for BBS, but here in DDD a few objects need the culling to not have "inside out" textures
+    The result would be objects always have it enabled, and room parts will use the existing logic of a default value and user override
+Look into removing manual bbox calculation for objects and by finding a way to use what the game provides
+    The ones provided by the game are usually fine, but sometimes they can be too big or stuck at the world origin
 
 Nice to have
 
 Save points (could just be glorified particle effects?)
 More accurate "lighting," like on the neon signs and windows in Traverse Town and TWTNW
-    This seems to be a simple form of bloom, likely determined by a model or shape's flags or attribute value
-    Possibly remove the hardcoded increase in brightness in the shader as well (without this, it's too dark compared to the game, which is already dark)
+    This seems to be a simple form of bloom, maybe determined by a model or shape's flags or attribute value?
+    Possibly remove the hardcoded increase in brightness in the shader (without this, it's too dark compared to the game, which is already dark)
 Shimmering/pulsing effect on objects that can have flowmotion used on them
+    No idea how the game signifies which objects have the effect. Could be buried in the BCD file, or as simple as an instance or model flag
 Battle/link portals
     The files are in /mission, but need to figure out which room uses which olo file since only the world ID is in the name
     These olo files are only the enemy/companion dream eaters and don't include the portal itself or its location
+    They should be hidden by default, like how enemies currently are, but be configurable with a UI panel or shoehorned in as an object set
 Look into handling some animation/movement logic that's driven by the Lua scripts in /game, for example g_tw200 moving in the post office
     These will need to be decompiled on the fly, however initial attempts have resulted in only a few lines being readable
+    Like TXAs in BBS, this may not be worth the effort for how rare these are used for idle animations...
 Look into how boss models are loaded, since only a few of them are loaded with OLOs
+    Potentially handled by cutscene or "mission" files? Basically just need to find a plaintext reference to the models somewhere
 Investigate other file types such as GPL, SEB, EAD and ABC (known types listed in bin.ts)
+Eye blinking TXAs for character idle animations, see notes on TXAs further above
 
 May your heart be your guiding key
 */
@@ -320,7 +334,7 @@ const sceneDescs = [
     new Room("di03", "Beach (Night)"),
     new Room("di05", "Combat Tutorial"),
     new Room("di60", "Dive (Sora)"),
-    "Traverse Town", // tw = the world ends with you
+    "Traverse Town",
     new Room("tw01", "First District"),
     new Room("tw02", "Second District"),
     new Room("tw03", "Third District"),
@@ -336,7 +350,7 @@ const sceneDescs = [
     new Room("tw12", "Fountain Plaza (Boss)"),
     new Room("tw60", "Dive (Sora)"),
     new Room("tw61", "Dive (Riku)"),
-    "La Cité des Cloches", // nd = the hunchback of notre-dame
+    "La Cité des Cloches",
     new Room("nd10", "Town"),
     new Room("nd01", "Square"),
     new Room("nd02", "Square (Burning)"),
@@ -358,7 +372,7 @@ const sceneDescs = [
     new Room("nd08", "Catacombs"),
     new Room("nd60", "Dive (Sora)"),
     new Room("nd61", "Dive (Riku)"),
-    "The Grid", // tl = tron legacy
+    "The Grid",
     new Room("tl01", "Portal"),
     new Room("tl17", "Portal"),
     new Room("tl02", "Portal Stairs"),
@@ -378,7 +392,7 @@ const sceneDescs = [
     new Room("tl14", "Flynn's Hideout"),
     new Room("tl61", "Dive (Sora)"),
     new Room("tl60", "Dive (Riku)"),
-    "Prankster's Paradise", // pi = pinocchio
+    "Prankster's Paradise",
     new Room("pi01", "Amusement Park"),
     new Room("pi11", "Windup Way"),
     new Room("pi12", "Circus"),
@@ -399,7 +413,7 @@ const sceneDescs = [
     new Room("pi10", "Monstro: Bowels"),
     new Room("pi60", "Dive (Sora)"),
     new Room("pi61", "Dive (Riku)"),
-    "Country of the Musketeers", // tm = the three musketeers
+    "Country of the Musketeers",
     new Room("tm14", "Mountain Road"),
     new Room("tm08", "Training Yard"),
     new Room("tm15", "Training Yard (Night)"),
@@ -419,7 +433,7 @@ const sceneDescs = [
     new Room("tm13", "Cell"),
     new Room("tm60", "Dive (Sora)"),
     new Room("tm61", "Dive (Riku)"),
-    "Symphony of Sorcery", // fa = fantasia
+    "Symphony of Sorcery",
     new Room("fa15", "Chamber"),
     new Room("fa16", "Chamber (Flooded)"),
     new Room("fa19", "Tower Entrance (Flooded)"),
@@ -435,7 +449,7 @@ const sceneDescs = [
     new Room("fa62", "Chernabog (Boss Dive)"),
     new Room("fa60", "Dive (Sora)"),
     new Room("fa61", "Dive (Riku)"),
-    "The World That Never Was", // eh = ???
+    "The World That Never Was",
     new Room("eh13", "Memory's Skyscraper"),
     new Room("eh01", "Avenue to Dreams"),
     new Room("eh02", "Contorted City"),
@@ -453,7 +467,7 @@ const sceneDescs = [
     new Room("eh11", "Where Nothing Gathers"),
     new Room("eh60", "Dive (Sora)"),
     new Room("eh61", "Dive (Riku)"),
-    "Mysterious Tower", // yt = yensid tower
+    "Mysterious Tower",
     new Room("yt01", "Chamber"),
     new Room("yt07", "Chamber (Open Door)"),
     new Room("yt02", "Tower"),
@@ -470,7 +484,7 @@ const sceneDescs = [
     new Room("rg03", "Station Plaza (Twilight Town)"),
     new Room("rg05", "Library (Disney Castle)"),
     new Room("rg08", "Dark Margin (Realm of Darkness)"),
-    "Spirit Space", // de = dream eater
+    "Spirit Space",
     new Room("de01", "Flick Rush"),
     new Room("de02", "Hexagonal Stage"),
     new Room("de03", "Final Round Stage"),
