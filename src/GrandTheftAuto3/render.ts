@@ -224,6 +224,9 @@ layout(location = 0) in vec3 a_Position;
 void main() {
     gl_Position = vec4(a_Position, 1.0);
     v_Position = a_Position;
+#if GFX_CLIPSPACE_NEAR_ZERO()
+    gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
+#endif
 }
 #else
 layout(location = 1) in vec4 a_Color;
@@ -243,13 +246,11 @@ void main() {
 #ifdef FRAG
 #ifdef SKY
 void main() {
-    gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, v_Position.y);
-
-    // TODO: get this working again
     vec3 nearPlane = v_Position * u_Frustum.xyz;
     vec3 cameraRay = UnpackMatrix(u_WorldMatrix) * vec4(nearPlane, 0.0);
     vec3 cameraPos = UnpackMatrix(u_WorldMatrix) * vec4(vec3(0.0), 1.0);
     float elevation = atan(cameraRay.y, length(cameraRay.zx));
+
     gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / radians(45.0)), 0.0, 1.0));
     gl_FragDepth = 0.0;
 
@@ -270,7 +271,9 @@ void main() {
         vec3 viewSpacePos = (UnpackMatrix(u_ViewMatrix) * vec4(oceanPlane, 1.0)) + clipOffset;
         vec4 clipSpacePos = UnpackMatrix(u_Projection) * vec4(viewSpacePos, 1.0);
         float depthNDC = clipSpacePos.z / clipSpacePos.w;
+#if !GFX_CLIPSPACE_NEAR_ZERO()
         gl_FragDepth = 0.5 + 0.5 * depthNDC;
+#endif
     }
 }
 #else
