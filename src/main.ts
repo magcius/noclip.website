@@ -123,6 +123,7 @@ import * as Scenes_RumbleRacing from "./RumbleRacing/Scenes.js";
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
 import { UI, Panel } from './ui.js';
+import { buildShareURL } from './ShareURL.js';
 import { Camera, FPSCameraController } from './Camera.js';
 import { assertExists, assert } from './util.js';
 import { loadRustLib } from './rustlib.js';
@@ -840,7 +841,8 @@ class Main {
         }
 
         if (shouldUpdateURL) {
-            window.history.replaceState('', document.title, `#${saveState}`);
+            const loc = window.location;
+            window.history.replaceState('', document.title, buildShareURL(saveState, `${loc.pathname}${loc.search}`));
 
             const timeSeconds = window.performance.now() / 1000;
             this.lastUpdatedURLTimeSeconds = timeSeconds;
