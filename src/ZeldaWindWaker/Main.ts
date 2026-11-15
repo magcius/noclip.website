@@ -838,12 +838,9 @@ class d_s_play extends fopScn {
 }
 
 class SceneDesc {
-    public id: string;
     protected globals: dGlobals;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public layerNames: Record<number, string> = []) {
-        this.id = stageDir;
-
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public layerNames: Record<number, string> = {}, public id: string = stageDir) {
         // Garbage hack.
         if (this.stageDir === 'sea' && roomList.length === 1)
             this.id = `Room${roomList[0]}.arc`;
@@ -1214,7 +1211,8 @@ const sceneDescs = [
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),
-    new SceneDesc("Ojhous", "Orca's House", [0]), // I forget who lives upstairs
+    new SceneDesc("Ojhous", "Orca's House", [0]),
+    new SceneDesc("Ojhous", "Sturgeon's House", [1], {}, "Ojhous_1"),
     new SceneDesc("Omasao", "Mesa's House"),
     new SceneDesc("Onobuta", "Abe and Rose's House"),
     new SceneDesc("Pjavdou", "Jabun's Cavern"),
