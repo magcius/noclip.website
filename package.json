@@ -47,7 +47,8 @@
     "build:TheWitness": "tsx src/TheWitness/tools/extractor.ts",
     "build:Fez": "tsx src/Fez/tools/extractor.ts",
     "build:RatchetAndClank": "tsx src/RatchetAndClank/tools/extractor.ts",
-    "typecheck": "tsc -w --noEmit"
+    "typecheck": "tsc -w --noEmit",
+    "test:share-url": "tsx --test test/ShareURL.test.ts"
   },
   "wireit": {
     "build": {

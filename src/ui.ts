@@ -11,6 +11,7 @@ import { clamp, invlerp, lerp, MathConstants } from './MathHelpers.js';
 import { RenderStatistics } from './RenderStatistics.js';
 import { GlobalSaveManager, SaveManager } from "./SaveManager.js";
 import { SceneDesc, SceneGroup } from './SceneBase.js';
+import { buildShareURL } from './ShareURL.js';
 import { CLAPBOARD_ICON, StudioPanel } from './Studio.js';
 import { assert, assertExists } from './util.js';
 import * as Viewer from './viewer.js';
@@ -1251,18 +1252,6 @@ class SceneSelect extends Panel {
         this.syncFlairs();
         this.syncVisibility('levels');
     }
-}
-
-function makeHashSafe(s: string): string {
-    // The set of characters that we encode is basically determined by Twitter's URL parsing.
-    return s.replace(/[{}()^]/g, (c) => {
-        return `%${c.charCodeAt(0).toString(16)}`;
-    });
-}
-
-function buildShareURL(saveState: string): string {
-    const loc = window.location;
-    return `${loc.origin}${loc.pathname}#${makeHashSafe(saveState)}`;
 }
 
 function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
@@ -2901,7 +2890,8 @@ export class UI {
     }
 
     public setShareSaveState(saveState: string) {
-        const shareURL = buildShareURL(saveState);
+        const loc = window.location;
+        const shareURL = buildShareURL(saveState, `${loc.origin}${loc.pathname}`);
         this.shareButton.setShareURL(shareURL);
     }
 
