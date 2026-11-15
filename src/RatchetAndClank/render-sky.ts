@@ -5,8 +5,8 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { RatchetShaderLib } from "./shader-lib";
 import { SkyShell } from "./bin-core";
-import { mat4, vec3 } from "gl-matrix";
-import { noclipSpaceFromRatchetSpace } from "./utils";
+import { mat4, quat, vec3 } from "gl-matrix";
+import { GN, noclipSpaceFromRatchetSpace } from "./utils";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
@@ -28,7 +28,7 @@ ${RatchetShaderLib.SceneParams}
 
 layout(std140) uniform ub_SkyParams {
     Mat4x4 u_SkyTransform;
-    vec4 u_ExtraData; // x = isTextured, yzw = padding
+    vec4 u_ExtraData; // x = bloom, y = material id, z = apply 0-128 alpha correction
 };
 
 layout(binding = 0) uniform sampler2D u_Texture;
@@ -63,11 +63,20 @@ void main() {
     // discard the hemisphere behind the camera (needed for ortho view since no backface culling)
     if (dot(u_CameraData.direction.xyz, v_WorldPos - u_CameraData.position.xyz) > 0.0) discard;
 
-    float isTextured = u_ExtraData.x;
-    if (isTextured == 1.0) {
+    float materialId = u_ExtraData.y;
+    float bloom = u_ExtraData.x;
+
+    // TODO bloom
+    if (bloom != 0.0) discard;
+
+    if (materialId != 255.0) {
+        // textured sky shell
         if (u_RenderSettings.x == 0.0) discard;
-        gl_FragColor = commonFragmentShader(v_Rgba, texture(SAMPLER_2D(u_Texture), v_ST), 0.0, 0.0);
+        vec4 textureSample = texture(SAMPLER_2D(u_Texture), v_ST);
+        textureSample.a *= (255.0 / 128.0);
+        gl_FragColor = commonFragmentShader(v_Rgba, textureSample, 0.0, 0.0);
     } else {
+        // vertex colored sky shell
         if (u_RenderSettings.x == 0.0) { gl_FragColor = v_Rgba; return; }
         gl_FragColor = commonFragmentShader(v_Rgba, vec4(1.0, 1.0, 1.0, 1.0), 0.0, 0.0);
     }
@@ -76,16 +85,16 @@ void main() {
 
 }
 
-type SkyDraw = { material: number, flags: { textured: boolean }, indexCount: number, startIndex: number };
+type SkyDraw = { material: number, bloom: boolean, indexCount: number, startIndex: number };
 
 export class SkyGeometry {
     public inputLayout: GfxInputLayout;
 
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
-    private draws: { material: number, flags: { textured: boolean }, indexCount: number, startIndex: number }[] = [];
+    private draws: SkyDraw[] = [];
 
-    constructor(private cache: GfxRenderCache, public index: number, private skyShell: SkyShell) {
+    constructor(private cache: GfxRenderCache, public index: number, public skyShell: SkyShell) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: SkyProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
@@ -122,15 +131,13 @@ export class SkyGeometry {
         const positionScale = 1 / 1024;
         const texcoordScale = 1 / 4096;
 
-        let clusterBaseVerts: number[] = [];
         let vertexCount = 0;
         let triangleCount = 0;
 
         const clusters = skyShell.clusters;
         for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
             const cluster = clusters[clusterIndex];
-            clusterBaseVerts.push(vertexCount);
-            vertexCount += cluster.vertices.length;
+            vertexCount += cluster.triangles.length * 3;
             triangleCount += cluster.triangles.length;
         }
 
@@ -142,46 +149,43 @@ export class SkyGeometry {
 
         for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
             const cluster = clusters[clusterIndex];
-            const baseVert = clusterBaseVerts[clusterIndex];
-
-            for (let vertIndex = 0; vertIndex < cluster.vertices.length; vertIndex++) {
-                const vert = cluster.vertices[vertIndex];
-                const st = cluster.texcoords[vertIndex];
-                const rgba = cluster.rgbas[vertIndex];
-                if (skyShell.header.flags.textured) {
-                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.x;
-                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.y;
-                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.z;
-                    vertexArrayBuffer[vertexPtr++] = texcoordScale * st.s;
-                    vertexArrayBuffer[vertexPtr++] = texcoordScale * st.t;
-                    vertexArrayBuffer[vertexPtr++] = 1;
-                    vertexArrayBuffer[vertexPtr++] = 1;
-                    vertexArrayBuffer[vertexPtr++] = 1;
-                    vertexArrayBuffer[vertexPtr++] = vert.alpha / 0x80;
-                } else {
-                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.x;
-                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.y;
-                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.z;
-                    vertexArrayBuffer[vertexPtr++] = 0;
-                    vertexArrayBuffer[vertexPtr++] = 0;
-                    vertexArrayBuffer[vertexPtr++] = rgba.r / 0xFF;
-                    vertexArrayBuffer[vertexPtr++] = rgba.g / 0xFF;
-                    vertexArrayBuffer[vertexPtr++] = rgba.b / 0xFF;
-                    vertexArrayBuffer[vertexPtr++] = (vert.alpha / 0x80) * (rgba.a / 0x80);
-                }
-            }
-
             for (let triIndex = 0; triIndex < cluster.triangles.length; triIndex++) {
                 const triangle = cluster.triangles[triIndex];
+                const textured = triangle.texture !== 0xFF;
                 draws.push({
                     material: triangle.texture,
-                    flags: skyShell.header.flags,
+                    bloom: skyShell.header.flags.bloom,
                     indexCount: 3,
                     startIndex: indexPtr,
                 });
-                indexArrayBuffer[indexPtr++] = baseVert + triangle.indices[0];
-                indexArrayBuffer[indexPtr++] = baseVert + triangle.indices[1];
-                indexArrayBuffer[indexPtr++] = baseVert + triangle.indices[2];
+
+                for (let corner = 0; corner < 3; corner++) {
+                    const vertIndex = triangle.indices[corner];
+                    const vert = cluster.vertices[vertIndex];
+                    const st = cluster.texcoords[vertIndex];
+                    const rgba = cluster.rgbas[vertIndex];
+
+                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.x;
+                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.y;
+                    vertexArrayBuffer[vertexPtr++] = positionScale * vert.z;
+                    if (textured) {
+                        vertexArrayBuffer[vertexPtr++] = texcoordScale * st.s;
+                        vertexArrayBuffer[vertexPtr++] = texcoordScale * st.t;
+                        vertexArrayBuffer[vertexPtr++] = 1;
+                        vertexArrayBuffer[vertexPtr++] = 1;
+                        vertexArrayBuffer[vertexPtr++] = 1;
+                        vertexArrayBuffer[vertexPtr++] = vert.alpha / 0x80;
+                    } else {
+                        vertexArrayBuffer[vertexPtr++] = 0;
+                        vertexArrayBuffer[vertexPtr++] = 0;
+                        vertexArrayBuffer[vertexPtr++] = rgba.r / 0xFF;
+                        vertexArrayBuffer[vertexPtr++] = rgba.g / 0xFF;
+                        vertexArrayBuffer[vertexPtr++] = rgba.b / 0xFF;
+                        vertexArrayBuffer[vertexPtr++] = (vert.alpha / 0x80) * (rgba.a / 0x80);
+                    }
+                    indexArrayBuffer[indexPtr] = indexPtr;
+                    indexPtr++;
+                }
             }
         }
 
@@ -238,14 +242,18 @@ const megaStateFlags = {
     }],
 };
 
+export interface SkyAnimationState {
+    quat: quat;
+}
+
 export class SkyRenderer {
     private skyProgram: GfxProgram;
 
-    constructor(private renderHelper: GfxRenderHelper) {
+    constructor(private renderHelper: GfxRenderHelper, private gn: GN) {
         this.skyProgram = renderHelper.renderCache.createProgram(new SkyProgram());
     }
 
-    renderSky(renderInstList: GfxRenderInstList, cameraPosition: vec3, time: number, skyShellGeometry: SkyGeometry, skyShellTextures: GfxTexture[], skySampler: GfxSampler, isOrtho: boolean): void {
+    renderSky(renderInstList: GfxRenderInstList, cameraPosition: vec3, dt: number, skyShellGeometry: SkyGeometry, skyShellTextures: GfxTexture[], skySampler: GfxSampler, animationState: SkyAnimationState, isOrtho: boolean): void {
         const objectMatrix = mat4.identity(scratchMat4);
         mat4.translate(objectMatrix, objectMatrix, cameraPosition);
         if (isOrtho) {
@@ -254,10 +262,15 @@ export class SkyRenderer {
         }
         mat4.multiply(objectMatrix, objectMatrix, noclipSpaceFromRatchetSpace);
 
-        // can't find data for sky shell rotation speed
-        // if (...) {
-        //     mat4.rotateZ(objectMatrix, objectMatrix, time / ...);
-        // }
+        if (skyShellGeometry.skyShell.header.angularVelocity) {
+            const rotationScale = (dt / 1000) * (Math.PI / 180) / 4;
+            quat.rotateX(animationState.quat, animationState.quat, skyShellGeometry.skyShell.header.angularVelocity.x * rotationScale);
+            quat.rotateY(animationState.quat, animationState.quat, skyShellGeometry.skyShell.header.angularVelocity.y * rotationScale);
+            quat.rotateZ(animationState.quat, animationState.quat, skyShellGeometry.skyShell.header.angularVelocity.z * rotationScale);
+        }
+
+        const rotationMatrix = mat4.fromQuat(mat4.create(), animationState.quat);
+        mat4.multiply(objectMatrix, objectMatrix, rotationMatrix);
 
         const template1 = this.renderHelper.pushTemplateRenderInst();
         template1.setGfxProgram(this.skyProgram);
@@ -266,6 +279,7 @@ export class SkyRenderer {
 
         const vertexData = skyShellGeometry.getOrCreateVertexBuffer();
         const { draws, vertexBuffer, indexBuffer } = vertexData;
+        const applyAlphaCorrection = this.gn >= 2 ? 1 : 0;
 
         for (const draw of draws) {
             const renderInst = this.renderHelper.renderInstManager.newRenderInst();
@@ -273,14 +287,15 @@ export class SkyRenderer {
             const skyParams = renderInst.allocateUniformBufferF32(SkyProgram.ub_SkyParams, 20);
             let offs = 0;
             offs += fillMatrix4x4(skyParams, offs, objectMatrix);
-            offs += fillVec4(skyParams, offs, Number(draw.flags.textured), 0, 0, 0);
+            const textured = draw.material !== 0xFF;
+            offs += fillVec4(skyParams, offs, Number(draw.bloom), draw.material, applyAlphaCorrection, 0);
 
             renderInst.setVertexInput(
                 skyShellGeometry.inputLayout,
                 [{ buffer: vertexBuffer, byteOffset: 0 }],
                 { buffer: indexBuffer, byteOffset: 0 },
             );
-            if (draw.flags.textured) {
+            if (textured) {
                 renderInst.setSamplerBindingsFromTextureMappings([
                     { gfxTexture: skyShellTextures[draw.material], gfxSampler: skySampler }
                 ]);

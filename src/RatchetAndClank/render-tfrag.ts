@@ -1,3 +1,4 @@
+import { vec3 } from "gl-matrix";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxSamplerFormatKind, GfxTextureDimension, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
@@ -5,8 +6,8 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DeviceProgram } from "../Program";
 import { assert } from "../util";
 import { RatchetShaderLib } from "./shader-lib";
-import { Tfrag, TfragLight, TfragVertexInfo } from "./bin-core";
-import { packRemap, PaletteTexture, TextureAtlases } from "./textures";
+import { Tfrag, TfragVertexInfo } from "./bin-core";
+import { decodeLodK, packRemap, PaletteTexture, TextureAtlas } from "./textures";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { noclipSpaceFromRatchetSpace } from "./utils";
@@ -14,13 +15,13 @@ import { fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 
 export class TfragProgram extends DeviceProgram {
     public static a_Position = 0;
-    public static a_Normal = 1;
-    public static a_Rgba = 2;
+    public static a_NormalAzimuthElevationRad = 1;
+    public static a_AmbientColor = 2;
     public static a_TextureParams = 3;
     public static a_ST = 4;
-    public static a_DirLightIndices = 5;
+    public static a_DirectionLightSelector = 5;
 
-    public static elementsPerVertex = 18; // position(3) + normal(3) + rgba(4) + texture(2) + st(2) + lights(4) = 18
+    public static elementsPerVertex = 16; // position(3) + normal angles(2) + ambient color(3) + texture(3) + st(2) + lights(3) = 16
 
     public static ub_SceneParams = 0;
     public static ub_TfragParams = 1;
@@ -48,17 +49,18 @@ layout(binding = 4) uniform sampler2DArray u_Texture_256;
     public override vert = `
 
 layout(location = ${TfragProgram.a_Position}) in vec3 a_Position;
-layout(location = ${TfragProgram.a_Normal}) in vec3 a_Normal;
-layout(location = ${TfragProgram.a_Rgba}) in vec4 a_Rgba;
-layout(location = ${TfragProgram.a_TextureParams}) in vec2 a_TextureParams;
+layout(location = ${TfragProgram.a_NormalAzimuthElevationRad}) in vec2 a_NormalAzimuthElevationRad;
+layout(location = ${TfragProgram.a_AmbientColor}) in vec3 a_AmbientColor;
+layout(location = ${TfragProgram.a_TextureParams}) in vec3 a_TextureParams;
 layout(location = ${TfragProgram.a_ST}) in vec2 a_ST;
-layout(location = ${TfragProgram.a_DirLightIndices}) in vec4 a_DirLightIndices;
+layout(location = ${TfragProgram.a_DirectionLightSelector}) in vec3 a_DirectionLightSelector;
 
 out vec4 v_Rgba;
 out vec2 v_ST;
 out float v_FogFactor;
 flat out int v_TextureIndex;
 flat out int v_Clamp;
+flat out float v_LodK;
 
 ${RatchetShaderLib.LightingFunctions}
 ${GfxShaderLibrary.MulNormalMatrix}
@@ -68,15 +70,17 @@ void main() {
     vec3 t_PositionWorld = worldTransform * vec4(a_Position.xyz, 1.0f);
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0f);
 
-    vec3 normal = MulNormalMatrix(worldTransform, a_Normal);
-    vec4 lights = a_DirLightIndices;
+    vec3 normal = normalFromAzumithElevation(a_NormalAzimuthElevationRad.x, a_NormalAzimuthElevationRad.y);
+    normal = MulNormalMatrix(worldTransform, normal);
+    vec3 lightSelector = a_DirectionLightSelector;
 
-    v_Rgba = commonVertexLighting(a_Rgba, normal, lights);
+    v_Rgba = commonVertexLighting(vec4(a_AmbientColor, 1.0), normal, lightSelector);
 
     v_ST = a_ST.xy;
-    v_FogFactor = fogFactor(t_PositionWorld.xyz);
+    v_FogFactor = fogFactor(t_PositionWorld.xyz, u_FogParams);
     v_TextureIndex = int(a_TextureParams.x);
     v_Clamp = int(a_TextureParams.y);
+    v_LodK = a_TextureParams.z;
 }
 `;
 
@@ -89,11 +93,12 @@ in vec2 v_ST;
 in float v_FogFactor;
 flat in int v_TextureIndex;
 flat in int v_Clamp;
+flat in float v_LodK;
 
 void main() {
     if (u_RenderSettings.x == 0.0) { gl_FragColor = vec4(v_Rgba.rgb / 2.0, v_Rgba.a); return; }
     ivec2 texRemap = getTexRemap(v_TextureIndex);
-    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST);
+    vec4 textureSample = ratchetSampler(texRemap, v_Clamp, v_ST, v_LodK);
     gl_FragColor = commonFragmentShader(v_Rgba, textureSample, v_FogFactor, u_AlphaTest.x);
 }
 `;
@@ -110,15 +115,15 @@ export class TfragGeometry {
         vertexCountTransparent: number,
     } | null)[] = [null, null, null];
 
-    constructor(private cache: GfxRenderCache, private tfrags: Tfrag[], private textureAssets: PaletteTexture[], private textureAtlases: TextureAtlases) {
+    constructor(private cache: GfxRenderCache, private tfrags: Tfrag[], private textureAssets: PaletteTexture[], private textureAtlas: TextureAtlas) {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: TfragProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
-                { location: TfragProgram.a_Normal, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 0x4, bufferIndex: 0, },
-                { location: TfragProgram.a_Rgba, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x4, bufferIndex: 0, },
-                { location: TfragProgram.a_TextureParams, format: GfxFormat.F32_RG, bufferByteOffset: 10 * 0x4, bufferIndex: 0, },
-                { location: TfragProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 12 * 0x4, bufferIndex: 0, },
-                { location: TfragProgram.a_DirLightIndices, format: GfxFormat.F32_RGBA, bufferByteOffset: 14 * 0x4, bufferIndex: 0, },
+                { location: TfragProgram.a_NormalAzimuthElevationRad, format: GfxFormat.F32_RG, bufferByteOffset: 3 * 0x4, bufferIndex: 0, },
+                { location: TfragProgram.a_AmbientColor, format: GfxFormat.F32_RGB, bufferByteOffset: 5 * 0x4, bufferIndex: 0, },
+                { location: TfragProgram.a_TextureParams, format: GfxFormat.F32_RGB, bufferByteOffset: 8 * 0x4, bufferIndex: 0, },
+                { location: TfragProgram.a_ST, format: GfxFormat.F32_RG, bufferByteOffset: 11 * 0x4, bufferIndex: 0, },
+                { location: TfragProgram.a_DirectionLightSelector, format: GfxFormat.F32_RGB, bufferByteOffset: 13 * 0x4, bufferIndex: 0, },
             ],
             vertexBufferDescriptors: [
                 { byteStride: TfragProgram.elementsPerVertex * 0x4, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -214,6 +219,7 @@ export class TfragGeometry {
         const positionScale = 1 / 1024;
         const texcoordScale = 1 / 4096;
         const colorScale = 1 / 0x80;
+        const angleScale = (2 * Math.PI) / 256;
 
         let vertexPtr = baseVertex * TfragProgram.elementsPerVertex;
 
@@ -240,9 +246,12 @@ export class TfragGeometry {
             const indices = tfragIndices[lod];
             let stripIndicesPtr = 0;
 
-            let activeMaterial = 0;
-            let activeMaterialIsTransparent = false;
-            let activeClamp = 0;
+            let currentMaterial = {
+                texture: 0,
+                textureIsTransparent: false,
+                clamp: 0,
+                lodK: 0,
+            };
 
             stripLoop: while (true) {
                 const strip = strips[stripPtr];
@@ -262,15 +271,19 @@ export class TfragGeometry {
                     } else if (strip.adGifOffset >= 0) {
                         const localAdGifIndex = strip.adGifOffset / 0x5;
                         assert(tfragTextures[localAdGifIndex] !== undefined);
-                        activeMaterial = tfragTextures[localAdGifIndex].tex0.low;
-                        activeMaterialIsTransparent = textureAssets[activeMaterial].hasAlpha;
-                        activeClamp = tfragTextures[localAdGifIndex].clamp.low + (tfragTextures[localAdGifIndex].clamp.high << 2);
+                        const texture = tfragTextures[localAdGifIndex].tex0.low;
+                        currentMaterial = {
+                            texture,
+                            textureIsTransparent: textureAssets[texture].hasAlpha,
+                            clamp: tfragTextures[localAdGifIndex].clamp.low + (tfragTextures[localAdGifIndex].clamp.high << 2),
+                            lodK: decodeLodK(tfragTextures[localAdGifIndex].tex1.low),
+                        }
                     } else {
                         throw new Error(`invalid adGifOffset`);
                     }
                 }
 
-                if (activeMaterialIsTransparent !== transparentMode) {
+                if (currentMaterial.textureIsTransparent !== transparentMode) {
                     stripIndicesPtr += stripVertexCount;
                     stripPtr++;
                     continue;
@@ -282,28 +295,24 @@ export class TfragGeometry {
                         const vertexIndex = triangleIndices[tri];
                         const vertInfo = tfragInfo[vertexIndex];
                         const vertPos = tfragVerts[vertInfo.vertex / 2];
-                        const rgba = tfrag.rgbas[vertInfo.vertex / 2];
                         const light = tfrag.lights[vertInfo.vertex / 2];
-                        const normal = this.lightToNormal(light);
 
                         vertexArrayBuffer[vertexPtr++] = positionScale * (basePosition.x + vertPos.x);
                         vertexArrayBuffer[vertexPtr++] = positionScale * (basePosition.y + vertPos.y);
                         vertexArrayBuffer[vertexPtr++] = positionScale * (basePosition.z + vertPos.z);
-                        vertexArrayBuffer[vertexPtr++] = normal.x;
-                        vertexArrayBuffer[vertexPtr++] = normal.y;
-                        vertexArrayBuffer[vertexPtr++] = normal.z;
-                        vertexArrayBuffer[vertexPtr++] = colorScale * rgba.r;
-                        vertexArrayBuffer[vertexPtr++] = colorScale * rgba.g;
-                        vertexArrayBuffer[vertexPtr++] = colorScale * rgba.b;
-                        vertexArrayBuffer[vertexPtr++] = colorScale * rgba.a;
-                        vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlases.tfragTextureRemap[activeMaterial]);
-                        vertexArrayBuffer[vertexPtr++] = activeClamp;
+                        vertexArrayBuffer[vertexPtr++] = angleScale * light.azimuth;
+                        vertexArrayBuffer[vertexPtr++] = angleScale * light.elevation;
+                        vertexArrayBuffer[vertexPtr++] = colorScale * light.ambientColor.r;
+                        vertexArrayBuffer[vertexPtr++] = colorScale * light.ambientColor.g;
+                        vertexArrayBuffer[vertexPtr++] = colorScale * light.ambientColor.b;
+                        vertexArrayBuffer[vertexPtr++] = packRemap(this.textureAtlas.textureRemap[currentMaterial.texture]);
+                        vertexArrayBuffer[vertexPtr++] = currentMaterial.clamp;
+                        vertexArrayBuffer[vertexPtr++] = currentMaterial.lodK;
                         vertexArrayBuffer[vertexPtr++] = texcoordScale * this.fixTexcoord(vertInfo.s);
                         vertexArrayBuffer[vertexPtr++] = texcoordScale * this.fixTexcoord(vertInfo.t);
-                        vertexArrayBuffer[vertexPtr++] = light.directionalLights[0];
-                        vertexArrayBuffer[vertexPtr++] = light.directionalLights[1];
-                        vertexArrayBuffer[vertexPtr++] = light.directionalLights[2];
-                        vertexArrayBuffer[vertexPtr++] = light.directionalLights[3];
+                        vertexArrayBuffer[vertexPtr++] = light.lightSelector.lightIndices[0];
+                        vertexArrayBuffer[vertexPtr++] = light.lightSelector.lightIndices[1];
+                        vertexArrayBuffer[vertexPtr++] = light.lightSelector.weight;
                     }
                     stripIndicesPtr++;
                 }
@@ -321,24 +330,6 @@ export class TfragGeometry {
         if (n < 0) return n / 2;
         return n;
     }
-
-    private lightToNormal(light: TfragLight) {
-        const angleScale = Math.PI / 128;
-
-        const azimuth = light.azimuth * angleScale;
-        const elevation = light.elevation * angleScale;
-        const cosAzimuth = Math.cos(azimuth);
-        const sinAzimuth = Math.sin(azimuth);
-        const cosElevation = Math.cos(elevation);
-        const sinElevation = Math.sin(elevation);
-
-        return {
-            x: cosAzimuth * cosElevation,
-            y: sinAzimuth * cosElevation,
-            z: sinElevation,
-        };
-    }
-
 
     public destroy(device: GfxDevice): void {
         for (const lod of this.lods) {
@@ -370,7 +361,7 @@ export class TfragRenderer {
         this.tfragProgram = renderHelper.renderCache.createProgram(new TfragProgram());
     }
 
-    renderTfrag(renderInstList: GfxRenderInstList, tfragGeometry: TfragGeometry, settingLodPreset: number, textureMappings: GfxSamplerBinding[]) {
+    renderTfrag(renderInstList: GfxRenderInstList, tfragGeometry: TfragGeometry, settingLodPreset: number, textureMappings: GfxSamplerBinding[], cameraPosition: vec3) {
         const objectMatrix = noclipSpaceFromRatchetSpace; // the tfrag has no transform, it's already in world space
 
         let lodLevel = settingLodPreset;

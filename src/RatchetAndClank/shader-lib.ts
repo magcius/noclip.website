@@ -10,8 +10,10 @@ export const RatchetShaderLib = {
         12, // fog params
         16 * 16, // directional lights
         4 * 32 * 4, // texture remaps (3 arrays of 64 vec4s)
+        4, // scene time
     ].reduce((a, b) => a + b, 0),
     SceneParams: `
+#define PI 3.14159265
 
 // size 12
 struct CameraData {
@@ -38,6 +40,7 @@ struct DirectionLight {
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
     CameraData u_CameraData;
+    vec4 u_Time; // x = scene time in seconds
     vec4 u_LodSettings; // x = preset, y = bias
     vec4 u_RenderSettings; // x = enable textures
     vec4 u_BackgroundColor;
@@ -48,57 +51,85 @@ layout(std140) uniform ub_SceneParams {
     `,
     LightingFunctions: `
 
-vec3 normalFromAzumithElevation(float azimuth, float elevation) {
-    float cosAzimuth = cos(azimuth);
-    float sinAzimuth = sin(azimuth);
-    float cosElevation = cos(elevation);
-    float sinElevation = sin(elevation);
+// returns an x,y amount of skew to apply to a vertex in modelspace, as a ratio of height
+vec2 windSkew(float seed, float t, float mode) {
+    // only allow mode values of 2 (windy) or 4 (very windy), reduce to 1 or 2
+    if (mode == 2.0 || mode == 4.0) {
+        mode = mode / 2.0;
+    } else {
+        return vec2(0.0, 0.0);
+    }
 
+    float w1 = seed * 67.0 + t;
+    float w2 = seed * 123.0 + t * (mode - 1.0);
+    float w3 = ((sin(w1) * sin(w1 / 2.0)) * 0.2 + 0.8) * 0.1;
+    float sx = (sin(w2 + 64.0) * 0.02 + w3);
+    float sy = sin(w2 / 2.0) * 0.02;
+    return vec2(sx, sy) * mode;
+}
+
+float seededRandom(vec3 position, float seed) {
+    float positionSeed = dot(position, vec3(12.9898, 78.233, 37.719)) + seed;
+    return fract(sin(positionSeed) * 43758.5453);
+}
+
+vec3 normalFromAzumithElevation(float azimuth, float elevation) {
     return vec3(
-        sinAzimuth * cosElevation,
-        cosAzimuth * cosElevation,
-        sinElevation
+        cos(azimuth) * cos(elevation),
+        sin(azimuth) * cos(elevation),
+        sin(elevation)
     );
 }
 
-bool isNullLight(int position, int dirLightIndex) {
-    if (dirLightIndex == 15) return true;
-    if (position > 0 && dirLightIndex == 0) return true;
-    return false;
+DirectionLight blendDirectionalLights(vec3 directionLightSelector) {
+    DirectionLight blended = DirectionLight(
+        vec4(0.0), vec4(0.0),
+        vec4(0.0), vec4(0.0)
+    );
+
+    DirectionLight selected_0 = u_DirectionLights[int(directionLightSelector[0])];
+    DirectionLight selected_1 = u_DirectionLights[int(directionLightSelector[1])];
+
+    blended.directionA = mix(selected_0.directionA, selected_1.directionA, directionLightSelector[2]);
+    blended.colorA = mix(selected_0.colorA, selected_1.colorA, directionLightSelector[2]);
+    blended.directionB = mix(selected_0.directionB, selected_1.directionB, directionLightSelector[2]);
+    blended.colorB = mix(selected_0.colorB, selected_1.colorB, directionLightSelector[2]);
+
+    return blended;
 }
 
-vec4 applyDirectionalLight(vec3 normal, int dirLightIndex) {
-    DirectionLight dirlight = u_DirectionLights[dirLightIndex];
-
+vec4 applyDirectionalLight(vec3 normal, DirectionLight dirlight) {
     vec4 light = vec4(0.0);
+
     float nDotL_A = dot(normal, dirlight.directionA.xyz);
-    if (nDotL_A > 0.0) light += nDotL_A * dirlight.colorA;
+    nDotL_A = max(nDotL_A, nDotL_A * dirlight.colorA.a); // alpha controls how much light is applied to backfaces
+    light += nDotL_A * dirlight.colorA;
+
     float nDotL_B = dot(normal, dirlight.directionB.xyz);
-    if (nDotL_B > 0.0) light += nDotL_B * dirlight.colorB;
-    return light;
-}
-
-vec4 commonVertexLighting(vec4 rgba, vec3 normal, vec4 dirLightIndices) {
-    vec4 light = rgba;
-
-    for(int i = 0; i < 4; i++) {
-        int dirLightIndex = int(dirLightIndices[i]);
-        if (isNullLight(i, dirLightIndex)) continue;
-        light += applyDirectionalLight(normalize(normal), dirLightIndex);
-    }
-
-    if (rgba.a >= 1.0 && light.a < 1.0) {
-        light.a = rgba.a;
-    }
+    nDotL_B = max(nDotL_B, nDotL_B * dirlight.colorB.a);
+    light += nDotL_B * dirlight.colorB;
 
     return light;
 }
 
-float fogFactor(vec3 vertexPosWorld) {
-    float nearDist = u_FogParams.distanceNearFar.x;
-    float farDist = u_FogParams.distanceNearFar.y;
-    float nearIntensity = u_FogParams.intensityNearFar.x;
-    float farIntensity = u_FogParams.intensityNearFar.y;
+vec4 commonVertexLighting(vec4 ambient, vec3 normal, vec3 directionLightSelector) {
+    vec4 light = ambient;
+
+    DirectionLight dirlight = blendDirectionalLights(directionLightSelector);
+    light += applyDirectionalLight(normalize(normal), dirlight);
+
+    if (ambient.a >= 1.0 && light.a < 1.0) {
+        light.a = ambient.a;
+    }
+
+    return light;
+}
+
+float fogFactor(vec3 vertexPosWorld, FogParams fogParams) {
+    float nearDist = fogParams.distanceNearFar.x;
+    float farDist = fogParams.distanceNearFar.y;
+    float nearIntensity = fogParams.intensityNearFar.x;
+    float farIntensity = fogParams.intensityNearFar.y;
 
     // for ortho, use arbitrary constant fog factor
     if (u_CameraData.extras.z == 1.0) return (nearIntensity + farIntensity) / 2.0;
@@ -112,15 +143,12 @@ float fogFactor(vec3 vertexPosWorld) {
     CommonFragmentShader: `
 ${GfxShaderLibrary.MonochromeNTSCLinear}
 
-const float SATURATION_ADJUST = 1.15;
-
-vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest) {
+vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest, vec3 fogColor) {
     // texture color is multiplied with vertex color immediately
     rgba *= textureSample;
 
     // fog step (ignores alpha)
     vec3 rgb = rgba.rgb;
-    vec3 fogColor = u_FogParams.color.rgb;
     rgb = mix(rgb, fogColor, fogFactor);
 
     // bring back alpha
@@ -129,10 +157,11 @@ vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float 
     // alpha test
     if (rgba.a < alphaTest) discard;
 
-    // with saturation filter (not authentic but looks washed out without it)
-    rgba.rgb = mix(vec3(MonochromeNTSCLinear(rgba.rgb)), rgba.rgb, SATURATION_ADJUST);
-
     return rgba;
+}
+
+vec4 commonFragmentShader(vec4 rgba, vec4 textureSample, float fogFactor, float alphaTest) {
+    return commonFragmentShader(rgba, textureSample, fogFactor, alphaTest, u_FogParams.color.rgb);
 }
 
     `,
@@ -148,7 +177,7 @@ Custom texture sampling function that can dynamically select textures and sampli
 - clampRegister: bit 1 = S clamp, bit 3 = T clamp (other bits are used for region clamp, not supported)
 - st: the texture coordinates
 */
-vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
+vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st, float lodK) {
     int lod = 0;
     int bucket = remap.x + 4;
     int bucketSize = 1 << bucket;
@@ -156,15 +185,15 @@ vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
 
     if (u_CameraData.extras.z == 0.0) { // skip mip selection for ortho
         // GS manual page 62
-        // ps2 selects mips based on depth not texcoords
-        // L and K are guesses
-        // the mesh classes have mip biases that aren't implemented yet
-        float K = float(bucket) - 10.0 - (u_LodSettings.y / 40.0);
+        // formula is: LOD = (log2(1/Q) << L) + K
+        // PS2 selects mips based on depth not texcoords
+        float K = lodK - (u_LodSettings.y / 16.0 + 1.0);
         float L = 0.0;
-        float LOD = (log2(1.0 / gl_FragCoord.w) * pow(2.0, L)) + K;
+        float NEARCLIP = 1.0 / 64.0;
+        float Q = NEARCLIP * gl_FragCoord.w; // something is wrong with this math, it should give the same results regardless of the near clip, but by coincidence it looks about right
+        float LOD = log2(1.0 / Q) + K;
 
-        float maxLod = float(bucket) - 2.0;
-        lod = int(clamp(LOD, 0.0, maxLod));
+        lod = int(clamp(LOD, 0.0, float(bucket)));
     }
 
     vec2 texSize = vec2(bucketSize) / pow(2.0, float(lod));
@@ -239,8 +268,11 @@ vec4 ratchetSampler(ivec2 remap, int clampRegister, vec2 st) {
     vec4 s0 = mix(s00, s10, frac.x);
     vec4 s1 = mix(s01, s11, frac.x);
     vec4 res = mix(s0, s1, frac.y);
+
+    // ps2 convention has alpha from 0-0x80, when converted to float that's 0-(128/255), remap to 0-1
+    res.a *= (255.0 / 128.0);
+
     return res;
 }
 `
 };
-

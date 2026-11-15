@@ -1,10 +1,33 @@
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, quat, vec3 } from "gl-matrix";
 import { DataViewExt } from "./DataViewExt";
 import { GN, matrixToNoclipSpace, noclipSpaceFromRatchetSpace } from "./utils";
-import { assert } from "../util";
+import { align, assert } from "../util";
+import { clamp } from "../MathHelpers";
 
-export type GameplayHeader = ReturnType<typeof readGameplayHeader>;
-export function readGameplayHeader(gn: GN, view: DataViewExt) {
+export type GameplayHeader = {
+    levelSettings: number,
+    directionLightInstances: number,
+    tieClasses: number,
+    tieInstances: number,
+    tieGroups: number,
+    shrubClasses: number,
+    shrubInstances: number,
+    shrubGroups: number,
+    mobyClasses: number,
+    mobyInstances: number,
+    mobyGroups: number,
+    pvarTable: number,
+    pvarData: number,
+    shapesCuboids: number,
+    shapesSpheres: number,
+    shapesCylinders: number,
+    shapesPills: number,
+    paths: number,
+    grindPaths: number,
+    occlusionMappings: number,
+    tieAmbientRgbas: number, // rac2+ only
+}
+export function readGameplayHeader(gn: GN, view: DataViewExt, artFileView_Rac4: DataViewExt | null): GameplayHeader {
     switch (gn) {
         case 1: {
             /*
@@ -12,61 +35,40 @@ export function readGameplayHeader(gn: GN, view: DataViewExt) {
             struct GameplayHeader {
                 // 0x0 
                 int32 levelSettings;
-                // 0x4 - InstanceBlock<DirectionLightInstance>
                 int32 directionLightInstances;
-                // 0x8 - InstanceBlock<CameraInstance>
                 int32 cameraInstances;
-                // 0xc - InstanceBlock<SoundInstance>
                 int32 soundInstances;
-                // 0x10 - 0x2c
-                // help message fields
+                // 0x10
+                int32 helpMessagesByLanguage[8];
                 // 0x30
-                int32 tieClasses; // just an array of o_class numbers, not class definitions
-                // 0x34 - InstanceBlock<TieInstance>
+                int32 tieClasses;
                 int32 tieInstances;
-                // 0x38
                 int32 shrubClasses;
-                // 0x3c - InstanceBlock<ShrubInstance>
                 int32 shrubInstances;
                 // 0x40
                 int32 mobyClasses;
-                // 0x44 (not the same InstanceBlock structure as the other instance blocks)
                 int32 mobyInstances;
-                // 0x48
-                int32 mobyGroupInstances;
-                // 0x4c
+                int32 mobyGroups;
                 int32 sharedData;
                 // 0x50
                 int32 pvarMobyLinks;
-                // 0x54
                 int32 pvarTable;
-                // 0x58
                 int32 pvarData;
-                // 0x5c
                 int32 pvarRelativePointers;
                 // 0x60
                 int32 shapesCuboids;
-                // 0x64
                 int32 shapesSpheres;
-                // 0x68
                 int32 shapesCylinders;
-                // 0x6c
                 int32 shapesPills;
                 // 0x70
                 int32 paths;
-                // 0x74
                 int32 grindPaths;
-                // 0x78
                 int32 pointLightGrid;
-                // 0x7c
                 int32 pointLightInstances;
                 // 0x80
                 int32 envTransitions;
-                // 0x84
                 int32 camColGrid;
-                // 0x88
                 int32 envSamplePoints;
-                // 0x8c
                 int32 occlusionMappings;
             }
             */
@@ -75,86 +77,70 @@ export function readGameplayHeader(gn: GN, view: DataViewExt) {
                 directionLightInstances: view.getInt32(0x4),
                 tieClasses: view.getInt32(0x30),
                 tieInstances: view.getInt32(0x34),
+                tieGroups: 0,
                 shrubClasses: view.getInt32(0x38),
                 shrubInstances: view.getInt32(0x3c),
+                shrubGroups: 0,
                 mobyClasses: view.getInt32(0x40),
                 mobyInstances: view.getInt32(0x44),
+                mobyGroups: view.getInt32(0x48),
+                pvarTable: view.getInt32(0x54),
+                pvarData: view.getInt32(0x58),
                 shapesCuboids: view.getInt32(0x60),
                 shapesSpheres: view.getInt32(0x64),
                 shapesCylinders: view.getInt32(0x68),
                 shapesPills: view.getInt32(0x6c),
                 paths: view.getInt32(0x70),
                 grindPaths: view.getInt32(0x74),
-                pointLightInstances: view.getInt32(0x7c),
+                occlusionMappings: view.getInt32(0x8c),
+                tieAmbientRgbas: 0, // not in rac1
             };
         }
-        case 2: {
+        case 2:
+        case 3: {
             /*
             // https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay.cpp#L113
             struct GameplayHeader {
                 // 0x0
                 int32 levelSettings;
-                // 0x4
                 int32 directionLightInstances;
-                // 0x8
                 int32 cameraInstances;
-                // 0xc
                 int32 soundInstances;
-                // 0x10 - 0x2c
-                // help message fields
+                // 0x10
+                int32 helpMessagesByLanguage[8];
                 // 0x30
                 int32 tieClasses;
-                // 0x34
                 int32 tieInstances;
-                // 0x38
                 int32 tieGroups;
-                // 0x3c
                 int32 shrubClasses;
                 // 0x40
                 int32 shrubInstances;
-                // 0x44
                 int32 shrubGroups;
-                // 0x48
                 int32 mobyClasses;
-                // 0x4c
                 int32 mobyInstances;
                 // 0x50
                 int32 mobyGroups;
-                // 0x54
                 int32 sharedData;
-                // 0x58
                 int32 pvarMobyLinks;
-                // 0x5c
                 int32 pvarTable;
                 // 0x60
                 int32 pvarData;
-                // 0x64
                 int32 pvarRelativePointers;
-                // 0x68
                 int32 cuboids;
-                // 0x6c
                 int32 spheres;
                 // 0x70
                 int32 cylinders;
-                // 0x74
                 int32 pills;
-                // 0x78
                 int32 paths;
-                // 0x7c
                 int32 grindPaths;
                 // 0x80
                 int32 pointLights;
-                // 0x84
                 int32 envTransitions;
-                // 0x88
                 int32 camCollGrid;
-                // 0x8c
                 int32 envSamplePoints;
                 // 0x90
-                int32 occlusion;
-                // 0x94
+                int32 occlusionMappings;
                 int32 tieAmbientRgbas;
-                // 0x98
                 int32 areas;
             }
             */
@@ -164,23 +150,136 @@ export function readGameplayHeader(gn: GN, view: DataViewExt) {
                 directionLightInstances: view.getInt32(0x4),
                 tieClasses: view.getInt32(0x30),
                 tieInstances: view.getInt32(0x34),
+                tieGroups: view.getInt32(0x38),
                 shrubClasses: view.getInt32(0x3c),
                 shrubInstances: view.getInt32(0x40),
+                shrubGroups: view.getInt32(0x44),
                 mobyClasses: view.getInt32(0x48),
                 mobyInstances: view.getInt32(0x4c),
+                mobyGroups: view.getInt32(0x50),
+                pvarTable: view.getInt32(0x5c),
+                pvarData: view.getInt32(0x60),
                 shapesCuboids: view.getInt32(0x68),
                 shapesSpheres: view.getInt32(0x6c),
                 shapesCylinders: view.getInt32(0x70),
                 shapesPills: view.getInt32(0x64),
                 paths: view.getInt32(0x78),
                 grindPaths: view.getInt32(0x7c),
-                pointLightInstances: view.getInt32(0x80),
+                occlusionMappings: view.getInt32(0x90),
                 tieAmbientRgbas: view.getInt32(0x94),
             };
+        }
+        case 4: {
+            /*
+            struct GameplayHeader {
+                // 0x0
+                int32 levelSettings;
+                int32 cameraInstances;
+                int32 soundInstances;
+                // 0xc
+                int32 helpMessagesByLanguage[8];
+                // 0x2c
+                int32 mobyClasses;
+                // 0x30
+                int32 mobyInstances;
+                int32 mobyGroups;
+                int32 sharedData;
+                int32 mobyLinkFixupTable;
+                // 0x40
+                int32 pvarTable;
+                int32 pvarData;
+                int32 pvarRelativePointers;
+                int32 cuboids;
+                // 0x50
+                int32 spheres;
+                int32 cylinders;
+                int32 pills;
+                int32 paths;
+                // 0x60
+                int32 grindPaths;
+                int32 pointLights;
+                int32 unused;
+                int32 camColGrid;
+                // 0x70
+                int32 envSamplePoints;
+                int32 areas;
+            }
+
+            struct ArtInstancesFileHeader {
+                // 0x0
+                int32 directionLightInstances;
+                int32 tieClasses;
+                int32 tieInstances;
+                int32 tieGroups;
+                // 0x10
+                int32 shrubClasses;
+                int32 shrubInstances;
+                int32 shrubGroups;
+                int32 occlusionMappings;
+                // 0x20
+                int32 tieAmbientRgbas;
+            }
+            */
+
+            assert(artFileView_Rac4 !== null);
+
+            return {
+                levelSettings: view.getInt32(0x0),
+                mobyClasses: view.getInt32(0x2c),
+                mobyInstances: view.getInt32(0x30),
+                mobyGroups: view.getInt32(0x34),
+                pvarTable: view.getInt32(0x40),
+                pvarData: view.getInt32(0x44),
+                shapesCuboids: view.getInt32(0x4c),
+                shapesSpheres: view.getInt32(0x50),
+                shapesCylinders: view.getInt32(0x54),
+                shapesPills: view.getInt32(0x58),
+                paths: view.getInt32(0x5c),
+                grindPaths: view.getInt32(0x60),
+                // in rac4, these belong to the art file instead of gameplay
+                directionLightInstances: artFileView_Rac4.getInt32(0x0),
+                tieClasses: artFileView_Rac4.getInt32(0x4),
+                tieInstances: artFileView_Rac4.getInt32(0x8),
+                tieGroups: artFileView_Rac4.getInt32(0xc),
+                shrubClasses: artFileView_Rac4.getInt32(0x10),
+                shrubInstances: artFileView_Rac4.getInt32(0x14),
+                shrubGroups: artFileView_Rac4.getInt32(0x18),
+                occlusionMappings: artFileView_Rac4.getInt32(0x1c),
+                tieAmbientRgbas: artFileView_Rac4.getInt32(0x20),
+            }
         }
         default: {
             throw new Error("not implemented");
         }
+    }
+}
+
+export interface MissionGameplayHeader {
+    mobyClasses: number,
+    mobyInstances: number,
+    mobyGroups: number,
+}
+export function readMissionGameplayHeader(view: DataViewExt) {
+    /*
+    struct MissionInstancesFileHeader {
+        // 0x0
+        int32 mobyClasses
+        int32 mobyInstances;
+        int32 mobyGroups;
+        int32 globalPvar;
+        // 0x10
+        int32 mobyLinkFixupTable;
+        int32 pvarTable;
+        int32 pvarData;
+        int32 relativePvarPointers;
+    }
+    */
+    return {
+        mobyClasses: view.getInt32(0x0),
+        mobyInstances: view.getInt32(0x4),
+        mobyGroups: view.getInt32(0x8),
+        pvarTable: view.getInt32(0x14),
+        pvarData: view.getInt32(0x18)
     }
 }
 
@@ -257,8 +356,10 @@ export function readChunkPlanes(view: DataViewExt): ChunkPlane[] {
 export type ChunkPlane = {
     count: number,
     point: vec3,
-    _pointInNoclipSpace: vec3,
     normal: vec3,
+
+    // cached pre-transformed data
+    _pointInNoclipSpace: vec3,
     _normalInNoclipSpace: vec3,
 }
 export const SIZEOF_CHUNK_PLANE = 0x20;
@@ -271,8 +372,9 @@ export function readChunkPlane(view: DataViewExt): ChunkPlane {
     return {
         count: view.getInt32(0xc),
         point,
-        _pointInNoclipSpace: vec3.transformMat4(vec3.create(), point, noclipSpaceFromRatchetSpace),
         normal,
+
+        _pointInNoclipSpace: vec3.transformMat4(vec3.create(), point, noclipSpaceFromRatchetSpace),
         _normalInNoclipSpace: vec3.transformMat4(vec3.create(), normal, noclipSpaceFromRatchetSpace),
     }
 }
@@ -289,16 +391,42 @@ export function readClassPositionBlock(view: DataViewExt) {
     return oClasses;
 }
 
+export interface DirectionLightSelector {
+    lightIndices: [number, number],
+    weight: number,
+}
+export function readDirectionLightSelector(view: DataViewExt): DirectionLightSelector {
+    return {
+        weight: view.getUint8(0x1) / 256,
+        lightIndices: view.getNibbleArray(0x0, 1) as [number, number],
+    };
+}
+export function readInstanceDirectionLightSelector(view: DataViewExt): DirectionLightSelector {
+    return {
+        lightIndices: [view.getUint8(0x0), view.getUint8(0x1)],
+        weight: view.getUint8(0x2) / 256,
+    };
+}
+
 export interface TieInstance {
-    instanceIndex: number,
     oClass: number,
     drawDistance: number,
     occlusionIndex: number,
     matrix: mat4,
-    _matrixInNoclipSpace: mat4,
-    ambientRgbas: Uint16Array,
-    directionalLights: number[],
+    ambientRgbas_Rac1: Uint16Array | null,
+    lightSelector: DirectionLightSelector,
     uid: number,
+
+    // the position within the original instance array
+    _i: number,
+    // the bit to use for the occlusion check (-1 means disable precomputed occlusion)
+    _occlusionBit: number,
+    // cached pre-transformed matrix
+    _matrixPretransformed: mat4,
+    // translation of pre-transformed matrix
+    _positionPretransformed: vec3,
+    // instance scale
+    _scalePretransformed: number,
 }
 export const SIZEOF_TIE_INSTANCE = (gn: GN,) => gn === 1 ? 0xe0 : 0x60;
 export function readTieInstance(gn: GN, view: DataViewExt, instanceIndex: number): TieInstance {
@@ -308,32 +436,48 @@ export function readTieInstance(gn: GN, view: DataViewExt, instanceIndex: number
             https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L611
             */
             const matrix = view.getMat4Slice(0x10).slice();
+            const _matrixPretransformed = matrixToNoclipSpace(matrix);
+            const _positionPretransformed = mat4.getTranslation(vec3.create(), _matrixPretransformed);
+            const _scalePretransformed = vec3.length(vec3.fromValues(_matrixPretransformed[0], _matrixPretransformed[1], _matrixPretransformed[2]));
+
             return {
-                instanceIndex,
                 oClass: view.getInt32(0x0),
                 drawDistance: view.getInt32(0x4),
                 occlusionIndex: view.getInt32(0xc),
                 matrix,
-                _matrixInNoclipSpace: matrixToNoclipSpace(matrix),
-                ambientRgbas: view.subview(0x50, 0x80).getTypedArrayView(Uint16Array), // array of 64 A1BGR5 colors
-                directionalLights: view.getNibbleArray(0xd0, 2),
+                ambientRgbas_Rac1: view.subview(0x50, 0x80).getTypedArrayView(Uint16Array), // array of 64 A1BGR5 colors
+                lightSelector: readDirectionLightSelector(view.subview(0xd0)),
                 uid: view.getInt32(0xd4),
+
+                _i: instanceIndex,
+                _occlusionBit: -1, // populated elsewhere
+                _matrixPretransformed,
+                _positionPretransformed,
+                _scalePretransformed
             }
         }
         case 2:
         case 3:
         case 4: {
             const matrix = view.getMat4Slice(0x10).slice();
+            const _matrixPretransformed = matrixToNoclipSpace(matrix);
+            const _positionPretransformed = mat4.getTranslation(vec3.create(), _matrixPretransformed);
+            const _scalePretransformed = vec3.length(vec3.fromValues(_matrixPretransformed[0], _matrixPretransformed[1], _matrixPretransformed[2]));
+
             return {
-                instanceIndex,
                 oClass: view.getInt32(0x0),
                 drawDistance: view.getInt32(0x4),
                 occlusionIndex: view.getInt32(0xc),
                 matrix,
-                _matrixInNoclipSpace: matrixToNoclipSpace(matrix),
-                ambientRgbas: new Uint16Array(0x80).fill(0xFFFF), // TODO: remove this
-                directionalLights: view.getNibbleArray(0x50, 2),
+                ambientRgbas_Rac1: null,
+                lightSelector: readDirectionLightSelector(view.subview(0x50)),
                 uid: view.getInt32(0x54),
+
+                _i: instanceIndex,
+                _occlusionBit: -1, // populated elsewhere
+                _matrixPretransformed,
+                _positionPretransformed,
+                _scalePretransformed
             }
         }
         default: {
@@ -343,6 +487,9 @@ export function readTieInstance(gn: GN, view: DataViewExt, instanceIndex: number
 }
 
 export interface MobyInstance {
+    size: number,
+    mission: number,
+    uid: number,
     oClass: number,
     scale: number,
     drawDistance: number,
@@ -350,7 +497,23 @@ export interface MobyInstance {
     position: { x: number, y: number, z: number },
     rotation: { x: number, y: number, z: number },
     color: { r: number, g: number, b: number },
-    directionalLights: number[],
+    lightSelector: DirectionLightSelector,
+    skipOcclusionCheck: number,
+    pvarIndex: number,
+
+    // the position within the original instance array
+    _i: number,
+    // the bit to use for the occlusion check (if skipOcclusionCheck=1 then occlusion checks are disabled)
+    _occlusionBit: number,
+    // pre-transformed matrix
+    _matrixPretransformed: mat4,
+    // translation of pre-transformed matrix
+    _positionPretransformed: vec3,
+    // instance scale
+    _scalePretransformed: number,
+    // don't render this instance
+    _skipDraw: boolean,
+
     [unknown: string]: unknown,
 };
 
@@ -362,29 +525,51 @@ export const SIZEOF_MOBY_INSTANCE = (gn: GN) => {
         case 4: return 0x70;
     };
 }
-export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
+export function readMobyInstance(gn: GN, view: DataViewExt, i: number): MobyInstance {
     switch (gn) {
         case 1: {
             /*
             https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L58
             (drawDistance is incorrectly a float in the linked code)
             */
+            const scale = view.getFloat32(0x1c);
+            const position = view.getFloat32_Xyz(0x30);
+            const rotation = view.getFloat32_Xyz(0x3c);
+            const _matrixPretransformed = mat4.create();
+            mat4.fromRotationTranslationScale(_matrixPretransformed,
+                quat.fromEuler(quat.create(), rotation.x * (180 / Math.PI), rotation.y * (180 / Math.PI), rotation.z * (180 / Math.PI)),
+                vec3.fromValues(position.x, position.y, position.z),
+                vec3.fromValues(scale, scale, scale),
+            );
+            mat4.mul(_matrixPretransformed, noclipSpaceFromRatchetSpace, _matrixPretransformed);
+            const _positionPretransformed = mat4.getTranslation(vec3.create(), _matrixPretransformed);
+            const _scalePretransformed = vec3.length(vec3.fromValues(_matrixPretransformed[0], _matrixPretransformed[1], _matrixPretransformed[2]));
+
             return {
                 size: view.getInt32(0x0),
+                mission: view.getInt32(0x4),
+                uid: view.getInt32(0xc),
                 oClass: view.getInt32(0x18),
-                scale: view.getFloat32(0x1c),
+                scale,
                 drawDistance: view.getInt32(0x20),
                 updateDistance: view.getInt32(0x24),
-                position: view.getFloat32_Xyz(0x30),
-                rotation: view.getFloat32_Xyz(0x3c),
+                position,
+                rotation,
                 group: view.getInt32(0x48),
                 isRooted: view.getInt32(0x4c),
                 rootedDistance: view.getFloat32(0x50),
                 pvarIndex: view.getInt32(0x58),
-                occlusion: view.getInt32(0x5c),
+                skipOcclusionCheck: view.getInt32(0x5c),
                 modeBits: view.getInt32(0x60),
                 color: view.getInt32_Rgb(0x64),
-                directionalLights: view.getNibbleArray(0x70, 2),
+                lightSelector: readInstanceDirectionLightSelector(view.subview(0x70)),
+
+                _i: i,
+                _occlusionBit: 0, // populated elsewhere
+                _matrixPretransformed,
+                _positionPretransformed,
+                _scalePretransformed,
+                _skipDraw: false,
             }
         }
         case 2:
@@ -392,25 +577,87 @@ export function readMobyInstance(gn: GN, view: DataViewExt): MobyInstance {
             /*
             https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L157
             */
+            const scale = view.getFloat32(0x2c);
+            const position = view.getFloat32_Xyz(0x40);
+            const rotation = view.getFloat32_Xyz(0x4c);
+            const _matrixPretransformed = mat4.create();
+            mat4.fromRotationTranslationScale(_matrixPretransformed,
+                quat.fromEuler(quat.create(), rotation.x * (180 / Math.PI), rotation.y * (180 / Math.PI), rotation.z * (180 / Math.PI)),
+                vec3.fromValues(position.x, position.y, position.z),
+                vec3.fromValues(scale, scale, scale),
+            );
+            mat4.mul(_matrixPretransformed, noclipSpaceFromRatchetSpace, _matrixPretransformed);
+            const _positionPretransformed = mat4.getTranslation(vec3.create(), _matrixPretransformed);
+            const _scalePretransformed = vec3.length(vec3.fromValues(_matrixPretransformed[0], _matrixPretransformed[1], _matrixPretransformed[2]));
+
             return {
                 size: view.getInt32(0x0),
                 mission: view.getInt32(0x4),
                 uid: view.getInt32(0x10),
                 bolts: view.getInt32(0x14),
                 oClass: view.getInt32(0x28),
-                scale: view.getFloat32(0x2c),
+                scale,
                 drawDistance: view.getInt32(0x30),
                 updateDistance: view.getInt32(0x34),
-                position: view.getFloat32_Xyz(0x40),
-                rotation: view.getFloat32_Xyz(0x4c),
+                position,
+                rotation,
                 group: view.getInt32(0x58),
                 isRooted: view.getInt32(0x5c),
                 rootedDistance: view.getFloat32(0x60),
                 pvarIndex: view.getInt32(0x68),
-                occlusion: view.getInt32(0x6c),
+                skipOcclusionCheck: view.getInt32(0x6c),
                 modeBits: view.getInt32(0x70),
                 color: view.getInt32_Rgb(0x74), // wrench calls this lightColor, not sure if different from the color field in rac1
-                directionalLights: view.getNibbleArray(0x80, 2),
+                lightSelector: readInstanceDirectionLightSelector(view.subview(0x80)),
+
+                _i: i,
+                _occlusionBit: 0, // populated elsewhere
+                _matrixPretransformed,
+                _positionPretransformed,
+                _scalePretransformed,
+                _skipDraw: false,
+            };
+        }
+        case 4: {
+            const scale = view.getFloat32(0x14);
+            const position = view.getFloat32_Xyz(0x28);
+            const rotation = view.getFloat32_Xyz(0x34);
+            const _matrixPretransformed = mat4.create();
+            mat4.fromRotationTranslationScale(_matrixPretransformed,
+                quat.fromEuler(quat.create(), rotation.x * (180 / Math.PI), rotation.y * (180 / Math.PI), rotation.z * (180 / Math.PI)),
+                vec3.fromValues(position.x, position.y, position.z),
+                vec3.fromValues(scale, scale, scale),
+            );
+            mat4.mul(_matrixPretransformed, noclipSpaceFromRatchetSpace, _matrixPretransformed);
+            const _positionPretransformed = mat4.getTranslation(vec3.create(), _matrixPretransformed);
+            const _scalePretransformed = vec3.length(vec3.fromValues(_matrixPretransformed[0], _matrixPretransformed[1], _matrixPretransformed[2]));
+
+            return {
+                size: view.getInt32(0x0),
+                mission: view.getInt32(0x4),
+                uid: view.getInt32(0x8),
+                bolts: view.getInt32(0xc),
+                oClass: view.getInt32(0x10),
+                scale,
+                drawDistance: view.getInt32(0x18),
+                updateDistance: view.getInt32(0x1c),
+                position,
+                rotation,
+                group: view.getInt32(0x40),
+                isRooted: view.getInt32(0x44),
+                rootedDistance: view.getFloat32(0x48),
+                pvarIndex: view.getInt32(0x50),
+                skipOcclusionCheck: view.getInt32(0x54),
+                modeBits: view.getInt32(0x58),
+                color: view.getInt32_Rgb(0x5c),
+                lightSelector: readInstanceDirectionLightSelector(view.subview(0x68)),
+
+                _i: i,
+                _occlusionBit: 0, // populated elsewhere
+                _matrixPretransformed,
+                _positionPretransformed,
+                _scalePretransformed,
+                _skipDraw: false,
             };
         }
         default: {
@@ -423,50 +670,120 @@ export interface ShrubInstance {
     oClass: number,
     drawDistance: number,
     matrix: mat4,
-    _matrixInNoclipSpace: mat4,
     color: { r: number, g: number, b: number },
-    directionalLights: number[],
+    lightSelector: DirectionLightSelector,
+
+    // original index within the instance array
+    _i: number,
+    // pre-transformed matrix
+    _matrixPretransformed: mat4,
+    // translation of pre-transformed matrix
+    _positionPretransformed: vec3,
+    // instance scale
+    _scalePretransformed: number,
 }
 export const SIZEOF_SHRUB_INSTANCE = 0x70;
-export function readShrubInstance(view: DataViewExt): ShrubInstance {
+export function readShrubInstance(view: DataViewExt, instanceIndex: number): ShrubInstance {
     /*
     https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_classes.inl#L673
     */
 
     const matrix = view.getMat4Slice(0x10).slice();
+    const _matrixPretransformed = matrixToNoclipSpace(matrix);
+    const _positionPretransformed = mat4.getTranslation(vec3.create(), _matrixPretransformed);
+    const _scalePretransformed = vec3.length(vec3.fromValues(_matrixPretransformed[0], _matrixPretransformed[1], _matrixPretransformed[2]));
 
     return {
         oClass: view.getInt32(0x0),
         drawDistance: view.getFloat32(0x4),
         matrix,
-        _matrixInNoclipSpace: matrixToNoclipSpace(matrix),
         color: view.getInt32_Rgb(0x50),
-        directionalLights: view.getNibbleArray(0x60, 2),
+        lightSelector: readDirectionLightSelector(view.subview(0x60)),
+
+        _i: instanceIndex,
+        _matrixPretransformed,
+        _positionPretransformed,
+        _scalePretransformed,
     }
 }
 
 
-type InstanceBlock<T> = {
-    count: number,
-    instances: T[]
-}
 const SIZEOF_INSTANCE_BLOCK_HEADER = 0x10;
-export function readInstanceBlock<T>(view: DataViewExt, instanceSize: number, readerFn: (buf: DataViewExt, i: number) => T): InstanceBlock<T> {
+export function readInstanceBlock<T>(view: DataViewExt, instanceSize: number, readerFn: (buf: DataViewExt, i: number) => T): T[] {
     /*
     struct InstanceBlockHeader<T> {
         // 0x0
         int32 count;
-        int32 pad[3];
+        int32 unknown4;
+        int32 pad[2];
         // 0x10
         T instances[count];
     }
     */
     const count = view.getInt32(0);
-    const instances = view.subdivide(SIZEOF_INSTANCE_BLOCK_HEADER, count, instanceSize).map((view, i) => readerFn(view, i));
-    return {
-        count,
-        instances,
+    return view.subdivide(SIZEOF_INSTANCE_BLOCK_HEADER, count, instanceSize).map((view, i) => readerFn(view, i));
+}
+
+export interface InstanceGroupBlock {
+    groupCount: number,
+    dataSize: number,
+    pointers: number[],
+    memberData: Uint16Array,
+    groups: InstanceGroup[]
+}
+export interface InstanceGroup {
+    members: number[],
+}
+export function readInstanceGroupBlock(view: DataViewExt): InstanceGroupBlock {
+    /*
+    struct InstanceGroupList {
+        int32 group_count;
+        int32 member_data_size; // in bytes
+        int32 pad[2];
+        int32 pointers[group_count]; // byte pointers into member data, -1 means empty group
     }
+    // member data follows, list of 16-bit instance indices, high bit indicates last member of group
+    */
+
+    const groupCount = view.getInt32(0x0);
+    const dataSize = view.getInt32(0x4);
+    if (groupCount === 0 || dataSize === 0) {
+        // in some cases groupCount is 1 but dataSize is 0, dunno what to do there
+        return {
+            groupCount,
+            dataSize,
+            pointers: [],
+            memberData: new Uint16Array(),
+            groups: []
+        };
+    }
+
+    const memberDataOffset = align(0x10 + groupCount * 4, 0x10);
+    const pointers = view.subview(0x10, groupCount * 4).getTypedArrayView(Int32Array);
+    const memberData = view.subview(memberDataOffset).getTypedArrayView(Uint16Array);
+
+    const groups = Array.from<number, InstanceGroup>(pointers, startPtr => {
+        if (startPtr < 0) return { members: [] };
+        let ptr = startPtr / 2;
+        const members: number[] = [];
+        while (true) {
+            const member = memberData[ptr];
+            members.push(member & 0x7fff);
+            if (member & 0x8000) break;
+            ptr++;
+        }
+        return {
+            members
+        };
+    });
+
+    return {
+        groupCount,
+        dataSize,
+        pointers: Array.from(pointers),
+        memberData,
+        groups,
+    };
 }
 
 export interface DirectionLightInstance {
@@ -485,23 +802,6 @@ export function readDirectionLightInstance(view: DataViewExt): DirectionLightIns
         directionA: view.getFloat32_Xyzw(0x10),
         colorB: view.getFloat32_Rgba(0x20),
         directionB: view.getFloat32_Xyzw(0x30),
-    }
-}
-
-export interface PointLightInstance {
-    position: Float32Array,
-    radius: number,
-    color: { r: number, g: number, b: number },
-}
-export const SIZEOF_POINT_LIGHT_INSTANCE = 0x20;
-export function readPointLightInstance(view: DataViewExt): PointLightInstance {
-    /*
-    https://github.com/chaoticgd/wrench/blob/d80ca3a0b70c756c90f727faafc5513bd14def60/src/instancemgr/gameplay_impl_env.inl#L628
-    */
-    return {
-        position: view.getVec3Slice(0x0),
-        radius: view.getFloat32(0xc),
-        color: view.getUint8_Rgb(0x10),
     }
 }
 
@@ -590,13 +890,31 @@ export function readSpline(view: DataViewExt): Spline {
     };
 }
 
+export interface Shape {
+    matrix: mat4,
+    inverseMatrix: mat4,
+}
+export function readShapeArray(view: DataViewExt): Shape[] {
+    const count = view.getInt32(0x0);
+    return view.subdivide(0x10, count, 0x80).map(shapeView => {
+        const matrix = shapeView.getMat4Slice(0x0);
+        const inverseMatrix = shapeView.getMat4Slice(0x40).slice();
+        // inverse matrix is 4x3 so clear last row
+        inverseMatrix[12] = 0;
+        inverseMatrix[13] = 0;
+        inverseMatrix[14] = 0;
+        inverseMatrix[15] = 1;
+        return {
+            matrix,
+            inverseMatrix,
+        };
+    });
+}
+
 export type TieAmbientRgbaBlock = {
-    maxCount: number,
     list: {
         tieIndex: number,
-        count: number,
-        unknown: number,
-        ambientRgbas: Uint16Array,
+        ambientRgbas: { r: number, g: number, b: number }[],
     }[]
 };
 export function readTieAmbientRgbaBlock(view: DataViewExt): TieAmbientRgbaBlock {
@@ -604,22 +922,110 @@ export function readTieAmbientRgbaBlock(view: DataViewExt): TieAmbientRgbaBlock 
     struct TieAmbientRgbaBlock {
         int16 tieIndex;
         uint16 count;
-        uint16 ambientRgbas[count * 2]; // array of A1BGR5 colors
+        uint8 base_r;
+        uint8 base_g;
+        uint8 base_b;
+        uint8 colorShift;
+        uint16 ambientRgbas[count - 2]; // array of A1BGR5 colors
     }
     */
-    const out: TieAmbientRgbaBlock = { maxCount: 0, list: [] };
+    const out: TieAmbientRgbaBlock = { list: [] };
     while (true) {
         const tieIndex = view.getInt16(0x0);
         if (tieIndex === -1) break;
-        const count = view.getUint16(0x2);
+        const wordCount = view.getUint16(0x2);
+        const baseColor = view.getUint8_Rgb(0x4);
+        const colorShift = view.getUint8(0x7);
+        const rawColors = view.subview(0x8, wordCount * 2 - 4);
         out.list.push({
             tieIndex,
-            count,
-            unknown: view.getInt32(0x4),
-            ambientRgbas: view.subview(8, count * 2 - 4).getTypedArrayView(Uint16Array),
+            ambientRgbas: readTieAmbientRgbaBuffer(rawColors, wordCount - 2, baseColor, colorShift),
         });
-        out.maxCount = Math.max(out.maxCount, count);
-        view = view.subview(4 + count * 2);
+        view = view.subview(4 + wordCount * 2);
     }
     return out;
+}
+
+function readTieAmbientRgbaBuffer(view: DataViewExt, count: number, baseColor: { r: number, g: number, b: number }, shift: number): { r: number, g: number, b: number }[] {
+    const out: { r: number, g: number, b: number }[] = [];
+    for (let i = 0; i < count; i++) {
+        const value5 = view.getUint16(i * 2);
+        out.push({
+            r: readTieAmbientRgbaColorComponent(baseColor.r, shift, value5 & 0x1f),
+            g: readTieAmbientRgbaColorComponent(baseColor.g, shift, (value5 >> 5) & 0x1f),
+            b: readTieAmbientRgbaColorComponent(baseColor.b, shift, (value5 >> 10) & 0x1f),
+        });
+    }
+    return out;
+}
+
+export function readTieAmbientRgbaColorComponent(base: number, shift: number, value5: number): number {
+    const expanded = (value5 << 3) | (value5 >> 2);
+    const shifted = shift < 8 ? expanded >> shift : 0;
+    return clamp(base + shifted, 0, 255);
+}
+
+export interface OcclusionMappings {
+    tfragMappings: Int32Array;
+    tieMappings: Int32Array;
+    mobyMappings: Int32Array;
+}
+export const SIZEOF_OCCLUSION_MAPPING = 0x8;
+export const OCCLUSION_MAPPING_NONE = 0x1FFFF;
+export function readOcclusionMappings(view: DataViewExt): OcclusionMappings {
+    /*
+    typedef struct {
+        // ! this is signed for some reason !
+        // the bit to check in the occlusion mask
+        int32 bit;
+        // the uid of the object
+        int32 uid;
+    } OcclusionMapping;
+
+    typedef struct {
+        uint32 tfrag_count;
+        uint32 tie_count;
+        uint32 moby_count;
+        OcclusionMapping tfrag_mappings[tfrag_count];
+        OcclusionMapping tie_mappings[tie_count];
+        OcclusionMapping moby_mappings[moby_count];
+    } OcclusionMappings;
+    */
+    const tfragCount = view.getUint32(0x0);
+    const tieCount = view.getUint32(0x4);
+    const mobyCount = view.getUint32(0x8);
+
+    let ptr = 0x10;
+    const tfragMappings = view.subview(ptr, tfragCount * SIZEOF_OCCLUSION_MAPPING).getTypedArrayView(Int32Array);
+    ptr += tfragCount * SIZEOF_OCCLUSION_MAPPING;
+    const tieMappings = view.subview(ptr, tieCount * SIZEOF_OCCLUSION_MAPPING).getTypedArrayView(Int32Array);
+    ptr += tieCount * SIZEOF_OCCLUSION_MAPPING;
+    const mobyMappings = view.subview(ptr, mobyCount * SIZEOF_OCCLUSION_MAPPING).getTypedArrayView(Int32Array);
+    ptr += mobyCount * SIZEOF_OCCLUSION_MAPPING;
+
+    return {
+        tfragMappings,
+        tieMappings,
+        mobyMappings,
+    }
+}
+
+export interface Pvar {
+    index: number;
+    data: DataViewExt;
+}
+
+export function readPvars(gameplayFileView: DataViewExt, tablePtr: number, dataPtr: number): Pvar[] {
+    const table = gameplayFileView.subview(tablePtr, dataPtr - tablePtr).subdivide(0, 0xFFFF, 8).map(view => {
+        return {
+            offset: view.getInt32(0x0),
+            size: view.getInt32(0x4)
+        }
+    });
+    return table.map((entry, index) => {
+        return {
+            index,
+            data: gameplayFileView.subview(dataPtr + entry.offset, entry.size)
+        }
+    });
 }

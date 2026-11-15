@@ -1,0 +1,261 @@
+import { mat4, vec2, vec3 } from "gl-matrix";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { MobyInstance } from "../bin-gameplay";
+import { LevelResources } from "../loader";
+import { MobyUpdateKit, MobyImpl, ownPvars } from "./moby";
+import { WaterGeometry } from "../render-water";
+import { lerp } from "../../MathHelpers";
+
+interface Water_I_Pvars {
+    colorSurfaceNear: { a: number, r: number, g: number, b: number };
+    colorSurfaceFar: { a: number, r: number, g: number, b: number };
+    colorHorizonTop: { a: number, r: number, g: number, b: number };
+    colorRippleNear: { a: number, r: number, g: number, b: number };
+    colorRippleFar: { a: number, r: number, g: number, b: number };
+    height: number;
+    tileSize: number;
+    fxTextureId: number;
+    minCameraHeight: number;
+    wallDrop: number;
+    oceanForwardReach: number;
+    surfaceFadeHeight: number;
+}
+
+const ZERO_VEC2 = vec2.create();
+
+/**
+ * A dynamic ocean plane centered on the camera
+ * 
+ * - Used on pokitaru and kalebo iii
+ */
+export class Water_I implements MobyImpl {
+    private pvars: Water_I_Pvars;
+
+    private surfaceGeometry: WaterGeometry | null = null;
+    private rippleGeometry1: WaterGeometry | null = null;
+    private rippleGeometry2: WaterGeometry | null = null;
+
+    private baseTextureId: number; // texture id from pvar is added to this
+
+    private surfaceUVVelocity1 = vec2.fromValues(0.04, 0.04); // these should be read from the overlay, but the data always has these values so I must be missing something
+    private surfaceUVVelocity2 = vec2.fromValues(0, -0.04);
+
+    private surfaceUVScroll1 = vec2.create();
+    private surfaceUVScroll2 = vec2.create();
+
+    constructor(private mobyInstance: MobyInstance, private resources: LevelResources) {
+        const pv = ownPvars(mobyInstance, resources);
+
+        switch (resources.gn) {
+            case 1:
+                this.baseTextureId = 40;
+                break;
+            case 2:
+                this.baseTextureId = 63;
+                // not quite working...
+                return;
+            case 3:
+            case 4:
+                // some levels (e.g. aquatos sewers, annihilation nation) have this, but some others (daxx) have it but should not
+                // (also pvar layout is different)
+                return;
+        }
+
+        this.pvars = {
+            colorSurfaceNear: pv.getUint8_Rgba(0x0),
+            colorSurfaceFar: pv.getUint8_Rgba(0x4),
+            colorHorizonTop: pv.getUint8_Rgba(0x8),
+            colorRippleNear: pv.getUint8_Rgba(0xc),
+            colorRippleFar: pv.getUint8_Rgba(0x10),
+            height: pv.getFloat32(0x14),
+            tileSize: pv.getFloat32(0x18),
+            fxTextureId: pv.getUint32(0x1c),
+            minCameraHeight: pv.getFloat32(0x20),
+            wallDrop: pv.getFloat32(0x24),
+            oceanForwardReach: pv.getFloat32(0x28),
+            surfaceFadeHeight: pv.getFloat32(0x2c)
+        }
+    }
+
+    update(updateKit: MobyUpdateKit) {
+        const dtSeconds = updateKit.dt / 1000;
+        vec2.scaleAndAdd(this.surfaceUVScroll1, this.surfaceUVScroll1, this.surfaceUVVelocity1, dtSeconds);
+        vec2.scaleAndAdd(this.surfaceUVScroll2, this.surfaceUVScroll2, this.surfaceUVVelocity2, dtSeconds);
+    }
+
+    private getOrCreateGeometries(updateKit: MobyUpdateKit): [WaterGeometry, WaterGeometry, WaterGeometry] {
+        if (this.surfaceGeometry && this.rippleGeometry1 && this.rippleGeometry2) {
+            return [this.surfaceGeometry, this.rippleGeometry1, this.rippleGeometry2];
+        }
+
+        const positions: number[] = [];
+        const texcoords: number[] = [];
+        const colors: number[] = [];
+        const indices: number[] = [];
+        const halfWidth = 100000;
+        const middleEnd = this.pvars.oceanForwardReach;
+        const farEnd = 3000;
+
+        const addBand = (nearDistance: number, farDistance: number, nearColor: { a: number, r: number, g: number, b: number }, farColor: { a: number, r: number, g: number, b: number }) => {
+            const firstVertex = positions.length / 3;
+            positions.push(
+                -halfWidth, nearDistance, 0,
+                halfWidth, nearDistance, 0,
+                -halfWidth, farDistance, 0,
+                halfWidth, farDistance, 0,
+            );
+            texcoords.push(0, 0, 1, 0, 0, 1, 1, 1);
+            colors.push(
+                nearColor.r / 0x80, nearColor.g / 0x80, nearColor.b / 0x80, nearColor.a / 0x80,
+                nearColor.r / 0x80, nearColor.g / 0x80, nearColor.b / 0x80, nearColor.a / 0x80,
+                farColor.r / 0x80, farColor.g / 0x80, farColor.b / 0x80, farColor.a / 0x80,
+                farColor.r / 0x80, farColor.g / 0x80, farColor.b / 0x80, farColor.a / 0x80,
+            );
+            indices.push(
+                firstVertex, firstVertex + 1, firstVertex + 2,
+                firstVertex + 1, firstVertex + 3, firstVertex + 2,
+            );
+        };
+
+        addBand(-middleEnd, middleEnd, this.pvars.colorSurfaceNear, this.pvars.colorSurfaceFar);
+        addBand(middleEnd, farEnd, this.pvars.colorSurfaceFar, this.pvars.colorHorizonTop);
+        this.surfaceGeometry = new WaterGeometry(
+            updateKit.renderHelper.renderCache,
+            new Float32Array(positions),
+            new Float32Array(texcoords),
+            new Float32Array(colors),
+            new Uint16Array(indices),
+        );
+
+        const halfSurfaceSize = this.pvars.tileSize * 2;
+        const gridSize = 4;
+        const vertexCount = (gridSize + 1) * (gridSize + 1);
+        const surfacePositions = new Float32Array(vertexCount * 3);
+        const surfaceColors = new Float32Array(vertexCount * 4);
+        const nearColor = this.pvars.colorRippleNear;
+        const farColor = this.pvars.colorRippleFar;
+        for (let y = 0; y < gridSize + 1; y++) {
+            for (let x = 0; x < gridSize + 1; x++) {
+                const vertexIndex = y * (gridSize + 1) + x;
+                const localX = -halfSurfaceSize + (2 * halfSurfaceSize * x) / gridSize;
+                const localY = -halfSurfaceSize + (2 * halfSurfaceSize * y) / gridSize;
+                const dist = Math.hypot(localX, localY);
+                const colorBlend = dist / halfSurfaceSize;
+                surfacePositions[vertexIndex * 3 + 0] = localX;
+                surfacePositions[vertexIndex * 3 + 1] = localY;
+                surfaceColors[vertexIndex * 4 + 0] = lerp(nearColor.r, farColor.r, colorBlend) / 0x80;
+                surfaceColors[vertexIndex * 4 + 1] = lerp(nearColor.g, farColor.g, colorBlend) / 0x80;
+                surfaceColors[vertexIndex * 4 + 2] = lerp(nearColor.b, farColor.b, colorBlend) / 0x80;
+                surfaceColors[vertexIndex * 4 + 3] = lerp(nearColor.a, farColor.a, colorBlend) / 0x80;
+            }
+        }
+
+        const surfaceIndices = new Uint16Array(gridSize * gridSize * 6);
+        let surfaceIndex = 0;
+        for (let y = 0; y < gridSize; y++) {
+            for (let x = 0; x < gridSize; x++) {
+                const topLeft = y * (gridSize + 1) + x;
+                const topRight = topLeft + 1;
+                const bottomLeft = topLeft + gridSize + 1;
+                const bottomRight = bottomLeft + 1;
+                surfaceIndices[surfaceIndex++] = topLeft;
+                surfaceIndices[surfaceIndex++] = topRight;
+                surfaceIndices[surfaceIndex++] = bottomLeft;
+                surfaceIndices[surfaceIndex++] = topRight;
+                surfaceIndices[surfaceIndex++] = bottomRight;
+                surfaceIndices[surfaceIndex++] = bottomLeft;
+            }
+        }
+
+        const createRippleGeometry = (uvRepeat: number) => {
+            const surfaceTexcoords = new Float32Array(vertexCount * 2);
+            for (let y = 0; y <= gridSize; y++) {
+                for (let x = 0; x <= gridSize; x++) {
+                    const vertexIndex = y * (gridSize + 1) + x;
+                    surfaceTexcoords[vertexIndex * 2 + 0] = (x / gridSize) * uvRepeat;
+                    surfaceTexcoords[vertexIndex * 2 + 1] = (y / gridSize) * uvRepeat;
+                }
+            }
+            return new WaterGeometry(
+                updateKit.renderHelper.renderCache,
+                surfacePositions,
+                surfaceTexcoords,
+                surfaceColors,
+                surfaceIndices,
+            );
+        };
+        this.rippleGeometry1 = createRippleGeometry(4);
+        this.rippleGeometry2 = createRippleGeometry(6);
+
+        return [this.surfaceGeometry, this.rippleGeometry1, this.rippleGeometry2];
+    }
+
+    // copy the x/z of the camera position and rotation
+    private getCameraTransform(updateKit: MobyUpdateKit): mat4 {
+        const transform = mat4.fromTranslation(mat4.create(), vec3.fromValues(
+            updateKit.cameraPosition[0],
+            this.pvars.height,
+            updateKit.cameraPosition[2],
+        ));
+        const forward = vec3.fromValues(updateKit.cameraForward[0], 0, updateKit.cameraForward[2]);
+        vec3.normalize(forward, forward);
+        mat4.rotateY(transform, transform, Math.atan2(-forward[0], -forward[2]));
+        mat4.rotateX(transform, transform, -Math.PI / 2);
+        return transform;
+    }
+
+    // copy the x/z of the camera position
+    private getSurfaceTransform(updateKit: MobyUpdateKit): mat4 {
+        const transform = mat4.fromTranslation(mat4.create(), vec3.fromValues(
+            updateKit.cameraPosition[0],
+            this.pvars.height,
+            updateKit.cameraPosition[2],
+        ));
+        mat4.rotateX(transform, transform, -Math.PI / 2);
+        return transform;
+    }
+
+    drawAfterTies(updateKit: MobyUpdateKit) {
+    }
+
+    drawAfterMobys(updateKit: MobyUpdateKit) {
+        if (this.resources.gn >= 2) return;
+        if (!updateKit.fxTextures) return;
+
+        const [surfaceGeometry, rippleGeometry1, rippleGeometry2] = this.getOrCreateGeometries(updateKit);
+        const transform = this.getCameraTransform(updateKit);
+        const surfaceTransform = this.getSurfaceTransform(updateKit);
+        const surfaceSize = this.pvars.tileSize * 2;
+
+        const MAGIC_TEXTURE = 22;
+        updateKit.renderers.water.renderWater(
+            updateKit, surfaceGeometry, [transform], updateKit.fxTextures[MAGIC_TEXTURE],
+            { uvScroll: ZERO_VEC2, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid, uvRandomSeed: this.mobyInstance.uid, useWorldspaceWobble: false, uvWorldSpaceScale: 0 },
+            { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
+            null,
+            { depthWrite: false, useAdditiveBlend: false, vertexColorTexture: null, vertexColorLayers: null, vertexColorScale: 1 },
+        );
+
+        updateKit.renderers.water.renderWater(
+            updateKit, rippleGeometry1, [surfaceTransform], updateKit.fxTextures[this.baseTextureId + this.pvars.fxTextureId],
+            { uvScroll: this.surfaceUVScroll1, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid + 1, uvRandomSeed: this.mobyInstance.uid + 1, useWorldspaceWobble: false, uvWorldSpaceScale: 4 / surfaceSize },
+            { blendAlpha: 1, useTextureAlpha: false, useVertexColorAlpha: true },
+            null,
+            { depthWrite: false, useAdditiveBlend: true, vertexColorTexture: null, vertexColorLayers: null, vertexColorScale: 1 },
+        );
+
+        updateKit.renderers.water.renderWater(
+            updateKit, rippleGeometry2, [surfaceTransform], updateKit.fxTextures[this.baseTextureId + this.pvars.fxTextureId + 1],
+            { uvScroll: this.surfaceUVScroll2, zWobble: ZERO_VEC2, randomSeed: this.mobyInstance.uid + 2, uvRandomSeed: this.mobyInstance.uid + 2, useWorldspaceWobble: false, uvWorldSpaceScale: 6 / surfaceSize },
+            { blendAlpha: 1, useTextureAlpha: true, useVertexColorAlpha: true },
+            null,
+            { depthWrite: false, useAdditiveBlend: true, vertexColorTexture: null, vertexColorLayers: null, vertexColorScale: 1 },
+        );
+    }
+
+    destroy(device: GfxDevice) {
+        this.surfaceGeometry?.destroy(device);
+        this.rippleGeometry1?.destroy(device);
+        this.rippleGeometry2?.destroy(device);
+    }
+}

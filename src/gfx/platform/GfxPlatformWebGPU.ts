@@ -305,6 +305,10 @@ function translateBlendFactor(factor: GfxBlendFactor): GPUBlendFactor {
         return 'constant';
     else if (factor === GfxBlendFactor.OneMinusConstantColor)
         return 'one-minus-constant';
+    else if (factor === GfxBlendFactor.ConstantAlpha)
+        return 'constant';
+    else if (factor === GfxBlendFactor.OneMinusConstantAlpha)
+        return 'one-minus-constant';
     else
         throw new Error("whoops");
 }
