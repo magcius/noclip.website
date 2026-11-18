@@ -18,7 +18,7 @@ export class QuakeSceneDesc implements SceneDesc {
         const bspFile = new BSPFile(bspData);
 
         const context = new IdTech2Context(bspFile.version);
-        const renderer = new IdTech2Renderer(device, context);
+        const renderer = new IdTech2Renderer(device, context, bspFile.defaultWorldMatrix);
 
         const paletteData = await sceneContext.dataFetcher.fetchData(`${pathBase}/id1/gfx/palette.lmp`);
         const palette = paletteData.createTypedArray(Uint8Array);

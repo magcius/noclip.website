@@ -1,4 +1,3 @@
-
 import { mat4, ReadonlyVec4, vec4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { AABB } from "../../Geometry.js";
@@ -131,6 +130,32 @@ function parseVec3Str(str: string): vec3 {
     );
 }
 
+function getSpawnMatrix(entities: BSPEntity[]): mat4 {
+    for (const entity of entities) {
+        if (
+            entity.classname === "info_player_start" ||
+            entity.classname === "info_player_coop" ||
+            entity.classname === "info_player_deathmatch"
+        ) {
+            const scratch: mat4 = mat4.create();
+
+            var angle = parseFloat(entity.kvs.angle || "0");
+            mat4.mul(scratch, scratch, entity.transform);
+            // HARDCODED: The spawn entity origin is on the ground and the eye
+            // level is 46u above for Quake and 64u for Half-Life, but most of
+            // the time the entity is floating 8-32u above the ground.
+            // An offset of 32u works well enough for both engines.
+            mat4.translate(scratch, scratch, vec3.fromValues(0, 0, 32));
+            mat4.rotateZ(scratch, scratch, (angle - 90) * Math.PI / 180);
+            mat4.rotateX(scratch, scratch, Math.PI/2); // Look up.
+
+            return scratch;
+        }
+    }
+
+    return mat4.create();
+}
+
 export class BSPFile {
     public version: number;
 
@@ -142,6 +167,7 @@ export class BSPFile {
     public surfaces: Surface[] = [];
     public extraTexData: ArrayBufferSlice[] = [];
     public lightmapPackerPage = new LightmapPackerPage(2048, 2048);
+    public defaultWorldMatrix: mat4;
 
     constructor(buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
@@ -159,6 +185,7 @@ export class BSPFile {
         // Parse out entities.
         this.entitiesStr = decodeString(getLumpData(LumpType.ENTITIES));
         this.entities = parseEntitiesLump(this.entitiesStr);
+        this.defaultWorldMatrix = getSpawnMatrix(this.entities);
 
         function readVec4(view: DataView, offs: number): vec4 {
             const x = view.getFloat32(offs + 0x00, true);
