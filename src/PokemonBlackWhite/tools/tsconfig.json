@@ -1,0 +1,9 @@
+{
+    "extends": "../../../tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "types": ["node", "gl-matrix", "webxr"]
+    },
+    "include": ["./*.ts", "../../env.d.ts", "../../main.ts", "../../../node_modules/@webgpu/types"],
+    "exclude": []
+}
