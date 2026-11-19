@@ -1,4 +1,4 @@
-import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder, TextureHolder, TextureMapping } from "../TextureHolder";
@@ -7,12 +7,12 @@ import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
+import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
-import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON } from "../ui";
+import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON, Slider } from "../ui";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp } from "../MathHelpers";
-import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
@@ -27,12 +27,17 @@ export enum LuxShapeAttribute {
     NO_CULL = 4,
     BLEND_SEMITRANSPARENT = 32,
     BLEND_ADDITIVE = 64,
-    DEPTH_WRITE = 256, // testing has been inconsistent, unused for now
+    UNK8 = 256, // every blended shape in a model's first list has this or 512
+    UNK9 = 512,
     DROP_SHADOW = 1024, // used for polygon offset value, somewhat inconsistent, fixes some shapes and breaks others
 }
 
+// this might be more of a group number, since room parts will always be grouped together by this value to determine rendering behavior
 export enum LuxModelFlags {
     SKYBOX = 1,
+    UNSORTED_FIRST = 8,
+    UNSORTED_LAST = 16,
+    UNSORTED_SECOND = 32,
     BACKGROUND = 64, // geometry that's effectively the skybox but rendered normally (just scaled up a lot)
     BILLBOARD = 1024
 }
@@ -185,9 +190,10 @@ export interface LuxRoomObjects {
 const FRAME_TIME_30 = 0.03;
 const FRAME_TIME_60 = 0.06;
 const WORLD_SCALE = 200.0; // to make camera movement better, tiny coords are scaled up
-const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
 const SCRATCH_BONE = mat4.create();
+const SCRATCH_VEC3 = vec3.create();
+const TRANSLUCENT_MAX_DEPTH = 0x80000;
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 1 }];
 const BINDING_LAYOUTS_TXA: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 2 }];
 
@@ -222,10 +228,8 @@ export class LuxTexture {
 
     constructor(device: GfxDevice, public name: string, public width: number, public height: number, data: Uint8Array) {
         const gfxTexture = device.createTexture({
-            width, height,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            usage: GfxTextureUsage.Sampled,
-            dimension: GfxTextureDimension.n2D,
+            width, height, pixelFormat: GfxFormat.U8_RGBA_NORM,
+            usage: GfxTextureUsage.Sampled, dimension: GfxTextureDimension.n2D,
             depthOrArrayLayers: 1, numLevels: 1
         });
         device.setResourceName(gfxTexture, name);
@@ -241,6 +245,7 @@ export class LuxShape {
     public indices: Uint32Array;
     public weights: Float32Array;
     public joints: Uint8Array;
+    public inFirstList: boolean = false;
 
     constructor(public vertexCount: number, public textureIndex: number, public attribute: number, public boneIndices: number[]) {
         this.vertices = new Float32Array(vertexCount * 3);
@@ -262,6 +267,7 @@ export class LuxMaterialInstance {
         this.name = textures[0].name;
         this.scrollX = material.scrollX;
         this.scrollY = material.scrollY;
+        // mutliple textures are assumed to be for txa and not mips
         this.textureMappings = [];
         for (const texture of textures) {
             const tm = new TextureMapping();
@@ -272,7 +278,7 @@ export class LuxMaterialInstance {
     }
 }
 
-export class LuxShapeRenderer implements Destroyable {
+export abstract class LuxShapeRenderer implements Destroyable {
     protected hasTXA: boolean;
     protected doBlendTXA: boolean = false;
     protected gfxProgram?: GfxProgram;
@@ -281,6 +287,7 @@ export class LuxShapeRenderer implements Destroyable {
     protected indexBufferDescriptor: GfxIndexBufferDescriptor;
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     private sortKey: number;
+    private isSortedTranslucent: boolean;
     private drawCount: number;
     private txaFactor: number = 0;
     private txaKeyframes: TXAKeyframe[] = [];
@@ -312,7 +319,9 @@ export class LuxShapeRenderer implements Destroyable {
             this.megaStateFlags.depthWrite = false;
             this.megaStateFlags.depthCompare = GfxCompareMode.Always;
         }
-        this.sortKey = makeSortKeyOpaque(transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
+        this.isSortedTranslucent = transparent && !shape.inFirstList;
+        const layer = !transparent ? GfxRendererLayer.OPAQUE : shape.inFirstList ? GfxRendererLayer.OPAQUE + 1 : GfxRendererLayer.TRANSLUCENT;
+        this.sortKey = makeSortKeyOpaque(layer, 0);
 
         this.setVertexBuffers(cache, shape, scale);
 
@@ -340,14 +349,14 @@ export class LuxShapeRenderer implements Destroyable {
         }
         this.hasTXA = txa !== undefined;
 
-        // if weights are all zero then rigid skinning is used (assuming an animation is specified as well)
-        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount, shape.weights.filter(w => w !== 0.0).length === 0);
+        const doRigidSkinning = shape.weights.filter(w => w !== 0.0).length === 0;
+        this.setShader(cache, boneCount, shape.weights.length / shape.vertexCount, doRigidSkinning);
         
         this.drawCount = shape.indices.length;
         this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shape.indices.buffer), byteOffset: 0 };
     }
 
-    public prepareToRender(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, ranTXA: boolean) {
+    public prepareToRender(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, ranTXA: boolean, instanceDepth: number) {
         const renderInst = renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setGfxProgram(this.gfxProgram!);
@@ -382,7 +391,7 @@ export class LuxShapeRenderer implements Destroyable {
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
         if (!this.isSkybox) {
-            renderInst.sortKey = this.sortKey;
+            renderInst.sortKey = this.isSortedTranslucent ? setSortKeyDepth(this.sortKey, instanceDepth, TRANSLUCENT_MAX_DEPTH) : this.sortKey;
         }
         renderInst.setDrawCount(this.drawCount);
 
@@ -391,6 +400,12 @@ export class LuxShapeRenderer implements Destroyable {
 
     public setCullingOverride(v: boolean) {
         this.megaStateFlags.cullMode = v ? GfxCullMode.None : this.cullMode;
+    }
+
+    public setDrawAfterRoomParts() {
+        if (this.isSortedTranslucent) {
+            this.sortKey = setSortKeyLayer(this.sortKey, GfxRendererLayer.TRANSLUCENT + 1);
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -427,20 +442,14 @@ export class LuxShapeRenderer implements Destroyable {
         }
     }
 
-    protected setMegaStateFlags(shape: LuxShape) {
+    protected abstract setMegaStateFlags(shape: LuxShape): void;
 
-    }
+    protected abstract setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void;
 
-    protected setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number) {
-        
-    }
-
-    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean) {
-
-    }
+    protected abstract setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void;
 }
 
-export class LuxModelRenderer implements Destroyable, Layer {
+export abstract class LuxModelRenderer implements Destroyable, Layer {
     public visible: boolean = true;
     public instances: LuxModelInstance[] = [];
     public bbox: AABB;
@@ -449,6 +458,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
     protected isBillboard: boolean;
     protected isSkybox: boolean;
     protected isBackground: boolean;
+    protected unsortedDepth: number | undefined;
     protected currentPAMFrame: number;
     protected pamFramerate: number;
     protected bones: LuxBone[];
@@ -458,6 +468,13 @@ export class LuxModelRenderer implements Destroyable, Layer {
         this.name = name;
         this.isSkybox = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.SKYBOX) !== 0;
         this.isBackground = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.BACKGROUND) !== 0;
+        if (model.pmpFlags !== -1) {
+            if ((model.pmpFlags & (LuxModelFlags.UNSORTED_FIRST | LuxModelFlags.UNSORTED_SECOND)) !== 0) {
+                this.unsortedDepth = Infinity;
+            } else if ((model.pmpFlags & LuxModelFlags.UNSORTED_LAST) !== 0) {
+                this.unsortedDepth = 0;
+            }
+        }
         const calcBbox = this.name.substring(1, 2) === "_" || !this.name.includes("_");
         const allVertices = [];
         this.shapes = Array(model.shapes.length);
@@ -480,6 +497,9 @@ export class LuxModelRenderer implements Destroyable, Layer {
                 }
             }
             this.shapes[i] = this.getShapeRenderer(cache, model, shape, materials, txa);
+            if (model.pmpFlags === -1) {
+                this.shapes[i].setDrawAfterRoomParts();
+            }
         }
         this.isBillboard = (model.flags & LuxModelFlags.BILLBOARD) !== 0;
 
@@ -554,6 +574,11 @@ export class LuxModelRenderer implements Destroyable, Layer {
                 computeViewMatrix(SCRATCH_VIEW, viewerInput.camera);
             }
             mat4.mul(SCRATCH_VIEW, SCRATCH_VIEW, instance.shiftMatrix);
+            let instanceDepth = this.unsortedDepth;
+            if (instanceDepth === undefined) {
+                instance.bbox.centerPoint(SCRATCH_VEC3);
+                instanceDepth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, SCRATCH_VEC3);
+            }
             if (this.isBillboard && !this.isSkybox) {
                 calcBillboardMatrix(SCRATCH_VIEW, SCRATCH_VIEW, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
             }
@@ -566,7 +591,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
             }
 
             for (const shape of this.shapes) {
-                shape.prepareToRender(renderHelper, viewerInput, ranTXA);
+                shape.prepareToRender(renderHelper, viewerInput, ranTXA, instanceDepth);
             }
             ranTXA = true;
         }
@@ -618,18 +643,17 @@ export class LuxModelRenderer implements Destroyable, Layer {
         }
     }
 
-    protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
-        return new LuxShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
-    }
+    protected abstract getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer;
 }
 
-export class LuxRoomRenderer implements Destroyable {
+export abstract class LuxRoomRenderer implements Destroyable {
     public parts: LuxModelRenderer[];
     public objects: LuxModelRenderer[];
     public sets: LuxObjectSet[];
     public selectedSetIndices: number[];
     public applyTextures: boolean = true;
     public showFog: boolean = true;
+    public brightness: number = 0.13; // darknesses and 7 lights shall clash...
     private allSetIndices: number[][];
 
     constructor(cache: GfxRenderCache, pmp: LuxPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], private pvd: LuxPVD) {
@@ -664,7 +688,6 @@ export class LuxRoomRenderer implements Destroyable {
         }
         this.selectedSetIndices = [];
         // approximation to appearance in game
-        // idk why only world scale doesn't work, but double seems to be about right
         this.pvd.fogNear *= (WORLD_SCALE * 2);
         this.pvd.fogFar *= (WORLD_SCALE * 2);
     }
@@ -693,6 +716,8 @@ export class LuxRoomRenderer implements Destroyable {
         uniformBuffer[offset++] = this.applyTextures ? 1.0 : 0.0;
         // u_ShowFog (1)
         uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
+        // u_Brightness (1)
+        uniformBuffer[offset++] = this.brightness;
 
         offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 8);
         const uniformBuffer2 = template.mapUniformBufferF32(DreamDropShader.ub_EnvParams);
@@ -730,16 +755,12 @@ export class LuxRoomRenderer implements Destroyable {
         }
     }
 
-    protected setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]) {
+    protected abstract setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]): void;
 
-    }
-
-    protected setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
-
-    }
+    protected abstract setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void;
 }
 
-export class LuxRenderer implements SceneGfx {
+export abstract class LuxRenderer implements SceneGfx {
     public textureHolder: TextureHolder;
     protected roomRenderer?: LuxRoomRenderer;
     protected textures: LuxTexture[];
@@ -792,15 +813,14 @@ export class LuxRenderer implements SceneGfx {
 
     public createPanels(): Panel[] {
         const layersPanel = new LayerPanel();
-        layersPanel.setLayers([...this.roomRenderer!.parts, ...this.roomRenderer!.objects]);
-        layersPanel.setTitle(LAYER_ICON, "Model Visiblity");
+        layersPanel.setLayers([...this.roomRenderer!.objects, ...this.roomRenderer!.parts]);
+        layersPanel.setTitle(LAYER_ICON, "Model Visibility");
 
         const setPanel = this.getSetPanel();
 
         const renderOptions = new Panel();
         renderOptions.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         renderOptions.setTitle(RENDER_HACKS_ICON, "Render Hacks");
-        // player models seem to be used to indicate spawn/entrance locations, hide by default
         const showPC = new Checkbox("Show Player Characters", false);
         showPC.onchanged = () => {
             for (const o of this.roomRenderer!.objects) {
@@ -827,15 +847,18 @@ export class LuxRenderer implements SceneGfx {
             this.roomRenderer!.setCullingOverride(!backCull.checked);
         };
         renderOptions.contents.appendChild(backCull.elem);
+        const brightnessSlider = new Slider("Brightness");
+        brightnessSlider.setRange(0, 0.20, 0.01);
+        brightnessSlider.setValue(this.roomRenderer!.brightness);
+        brightnessSlider.onvalue = () => {
+            this.roomRenderer!.brightness = brightnessSlider.getValue();
+        };
+        renderOptions.contents.appendChild(brightnessSlider.elem);
 
         return [setPanel, layersPanel, renderOptions];
     }
 
-    protected isPlayerCharacterModel(name: string): boolean {
-        return false;
-    }
+    protected abstract isPlayerCharacterModel(name: string): boolean;
 
-    protected getSetPanel(): Panel {
-        return new Panel();
-    }
+    protected abstract getSetPanel(): Panel;
 }

@@ -27,6 +27,7 @@ layout(std140) uniform ub_SceneParams {
 #define u_Time (u_Misc0[0].x)
 #define u_ApplyTextures (u_Misc0[0].y)
 #define u_ShowFog (u_Misc0[0].z)
+#define u_Brightness (u_Misc0[0].w)
 
 layout(std140) uniform ub_EnvParams {
     vec4 u_FogColor;
@@ -83,7 +84,7 @@ void main() {
         if (texColor.a < 0.1) {
             discard;
         }
-        finalColor = texColor * vec4(clamp(v_Color.rgb + vec3(0.08), 0.0, 1.0), v_Color.a);
+        finalColor = texColor * vec4(clamp(v_Color.rgb + vec3(u_Brightness), 0.0, 1.0), v_Color.a);
     } else {
         finalColor = v_Color;
     }

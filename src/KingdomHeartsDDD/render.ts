@@ -5,7 +5,7 @@ import { DreamDropPMO, DreamDropPMP } from "./bin";
 import { DreamDropRoomConfig } from "./config/room";
 import { DreamDropShader } from "./shader";
 import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxPVD, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
-import { DREAMDROP_SKYBOX_CENTER } from "./config/data";
+import { DREAMDROP_HIDDEN_ROOM_PARTS, DREAMDROP_SKYBOX_CENTER } from "./config/data";
 import { vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
 
@@ -21,7 +21,7 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
         }
     }
 
-    protected override setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]): void {
+    protected setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[]): void {
         const model = info.pmo as DreamDropPMO;
         const materials: LuxMaterialInstance[] = Array(model.materials.length);
         const modelTXAs: LuxTXA[] = [];
@@ -48,7 +48,7 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
         this.parts[i].instances = [{ shiftMatrix, setId: -1, bbox }];
     }
 
-    protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
+    protected setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
         const index = this.objects.findIndex(r => r.name === instance.name);
         const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId, bbox: new AABB() };
         if (index > -1) {
@@ -86,7 +86,12 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
 }
 
 class ModelRenderer extends LuxModelRenderer {
-    protected override getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
+    constructor(cache: GfxRenderCache, name: string, model: LuxModel, materials: LuxMaterialInstance[], txas: LuxTXA[], animation?: LuxSkeletalAnimation) {
+        super(cache, name, model, materials, txas, animation);
+        this.setVisible(!DREAMDROP_HIDDEN_ROOM_PARTS.includes(this.name));
+    }
+
+    protected getShapeRenderer(cache: GfxRenderCache, model: LuxModel, shape: LuxShape, materials: LuxMaterialInstance[], txa?: LuxTextureAnimation): LuxShapeRenderer {
         return new ShapeRenderer(cache, shape, model.scale, materials[shape.textureIndex], txa, this.isSkybox, this.isBackground, this.animation ? model.skeleton!.bones.length : 0);
     }
 }
@@ -96,11 +101,11 @@ class ShapeRenderer extends LuxShapeRenderer {
         super(cache, shape, scale, material, txa, isSkybox, isBackground, boneCount);
     }
 
-    protected override setMegaStateFlags(shape: LuxShape): void {
+    protected setMegaStateFlags(shape: LuxShape): void {
         this.megaStateFlags.polygonOffset = (shape.attribute & LuxShapeAttribute.DROP_SHADOW) === 0;
     }
 
-    protected override setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
+    protected setVertexBuffers(cache: GfxRenderCache, shape: LuxShape, scale: number): void {
         const inVertexAttributeDescriptors = [
             { location: DreamDropShader.a_Position, bufferIndex: DreamDropShader.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
             { location: DreamDropShader.a_Color, bufferIndex: DreamDropShader.a_Color, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },
@@ -134,7 +139,7 @@ class ShapeRenderer extends LuxShapeRenderer {
         });
     }
 
-    protected override setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
+    protected setShader(cache: GfxRenderCache, boneCount: number, weightCount: number, doRigidSkinning: boolean): void {
         this.gfxProgram = cache.createProgram(new DreamDropShader(this.vertexBufferDescriptors.length, boneCount, this.isSkybox || this.isBackground, 4, doRigidSkinning, this.doBlendTXA));
     }
 }

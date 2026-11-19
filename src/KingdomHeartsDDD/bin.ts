@@ -359,6 +359,7 @@ export class DreamDropParser {
         const opaqueShapes: DreamDropShape[] = Array(opaqueShapeCount);
         for (let i = 0; i < opaqueShapeCount; i++) {
             opaqueShapes[i] = this.parsePMOShape();
+            opaqueShapes[i].inFirstList = true;
         }
         if (opaqueShapeCount > 0) {
             this.offset += 24;
