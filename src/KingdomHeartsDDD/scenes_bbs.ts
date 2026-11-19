@@ -222,7 +222,6 @@ class Renderer extends LuxRenderer {
         }
         viewerTextures.sort((a, b) => a.gfxTexture.ResourceName!.localeCompare(b.gfxTexture.ResourceName!));
         this.textureHolder = new FakeTextureHolder(viewerTextures);
-        this.renderHelper = new GfxRenderHelper(device);
         this.roomRenderer = new BBSRoomRenderer(this.renderHelper.renderCache, pmp, this.textures, objects, [], pvd);
         // sync culling override with ui toggle
         this.roomRenderer.setCullingOverride(cullingOverride);

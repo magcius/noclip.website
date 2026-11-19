@@ -380,7 +380,11 @@ export class BBSParser extends DreamDropParser {
         const shapes: BBSShape[] = [];
         if (mesh0Offset !== 0) {
             this.offset = start + mesh0Offset;
-            shapes.push(...this.getShapes(skeletonOffset !== 0));
+            const firstList = this.getShapes(skeletonOffset !== 0);
+            for (const shape of firstList) {
+                shape.inFirstList = true;
+            }
+            shapes.push(...firstList);
         }
         if (mesh1Offset !== 0) {
             this.offset = start + mesh1Offset;

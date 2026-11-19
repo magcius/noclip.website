@@ -233,10 +233,10 @@ class Room implements SceneDesc {
 }
 
 /*
-Known Issues
+Known issues
 
-Leaf textures on destiny island have bilinear bleed, however this is present in the actual game (easy to see on the 3DS screen if you look for it)
-    They fixed this in 2.8, but I will leave it broken since that's more accurate
+Leaf textures on destiny island have bilinear bleed, however this is present in the actual game (obvious on the 3DS screen if you look for it)
+    They fixed this in 2.8, but I will leave it broken since that's more accurate (it's not an easy fix anyway...)
 Shadows in the third district are the wrong color, they are supposed to be black, not silver (they're correct everywhere else though???)
 Spellican's broomstick is stretched
 Both rhino variants have the spike ball visible (it doesn't hide when animated, as if the bone weights were to be set to 0)
@@ -250,12 +250,9 @@ Some TXA speeds and frame construction is wrong, see note below
 
 TODO
 
-Find a way to do proper depth sorting. Typical approaches completely break some rooms (yt04 for example)
-    I've tried different render inst lists, depth (vec distance & aabb) and material based sort keys, and different permutations of mega state
-    flags/blending options. These all introduce more problems than they fix, so the current configuration is the "least bad" of them all.
-    See the water in destiny islands or the rainbow colored arch signs in the fourth district for examples where the sorting is wrong. Depth write
-    may also be related to this. A possible shape flag for it is 256, but testing has been inconsistent so far.
-    Also in the console/PC ports, there are some visible instances of incorrect draw order, alebit at long distanes not noticeable in the original version
+Find a better way to do depth sorting. The current approach is haphazard and doesn't work 100% of the time
+    Most of the remaining issues are either room parts or objects overlapping eachother. Parts to objects and objects to parts seems fine for now
+    Also in 2.8, there are some visible instances of incorrect draw order, alebit at long distanes not noticeable in the original version
 TXAs need some touchup
     What determines if the textures are blended needs refinement (right now it's more of a heuristic, supposedly the shape attribute could be used?)
     There's also an edge case where the same animation will get out of sync across two separate models when one of them is culled
@@ -281,7 +278,7 @@ Figure out a better solution for back-face culling based on a shape's attribute
 Figure out how world map objects are loaded
     The models exist in chara/gim/g_wm*. I can't find any OLO files that reference them.
     Within _grpdef/wm01.rgr, the model names and some MCV files are referenced. It's possible that
-    the world map is technically handled as a cutscene, therefore the loading of models is entirely different
+    the world map is technically handled as a cutscene, therefore the loading of models is entirely different and less understood
 Investigate di60 some more to see if the text of the credits can be loaded (in English)
 Add more descriptors to duplicate room names, such as "(Boss)" or "(Cutscene)", mostly in tron, pinocchio and twtnw
 Figure out how to handle models with different parts in separate files
@@ -295,11 +292,12 @@ The timing of UV scrolling and TXAs may need some tweaking or further confirmati
     UV scrolling uses a multipler for 60 FPS, even though the game runs at 30 (if you're lucky). This was done using a side by side comparsion
     with an actual 3DS running the game. A frame time of 30 made the scrolling too slow. For TXAs, using a frame time of 30 resulted in a better
     match than 60, but the displayFrames value is less understood and just my best guess for how to use it
-Look into making back-face culling logic be always applied to objects and only be affected by the override for room parts
+Make back-face culling logic be always applied to objects and only be affected by the override for room parts
     This would be more so for BBS, but here in DDD a few objects need the culling to not have "inside out" textures
     The result would be objects always have it enabled, and room parts will use the existing logic of a default value and user override
 Look into removing manual bbox calculation for objects and by finding a way to use what the game provides
-    The ones provided by the game are usually fine, but sometimes they can be too big or stuck at the world origin
+    The ones provided by the game are usually fine, but sometimes they can be too big or stuck at the world origin. Upon further
+    debugging, it seems that these game-provided ones may be used for draw order?
 
 Nice to have
 
@@ -307,8 +305,9 @@ Save points (could just be glorified particle effects?)
 More accurate "lighting," like on the neon signs and windows in Traverse Town and TWTNW
     This seems to be a simple form of bloom, maybe determined by a model or shape's flags or attribute value?
     Possibly remove the hardcoded increase in brightness in the shader (without this, it's too dark compared to the game, which is already dark)
+    While debugging draw order, I noticed that room parts in a certain flag "group" may all be set for the lighting/bloom pass; might be as simple as that
 Shimmering/pulsing effect on objects that can have flowmotion used on them
-    No idea how the game signifies which objects have the effect. Could be buried in the BCD file, or as simple as an instance or model flag
+    No idea how the game signifies which room parts have the effect
 Battle/link portals
     The files are in /mission, but need to figure out which room uses which olo file since only the world ID is in the name
     These olo files are only the enemy/companion dream eaters and don't include the portal itself or its location

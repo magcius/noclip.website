@@ -170,11 +170,13 @@ export const DREAMDROP_VALID_DROP_OLO = [
 ];
 
 // rooms with mirrored geometry that doesn't work with the current backface culling logic
-export const DREAMDROP_NO_CULL_ROOMS = ["nd15", "nd03", "tl01", "tl02", "tl04", "tl17", "tm02", "tm03", "tm16", "fa02", "rg02", "tp01"];
+export const DREAMDROP_NO_CULL_ROOMS = [
+    "nd15", "nd03", "tl01", "tl02", "tl04", "tl17", "tm02", "tm03", "tm16", "fa02", "rg02", "tp01", "tw12"
+];
 
 export const BBS_NO_CULL_ROOMS = [
     "dp02", "sw04", "cd07", "cd08", "cd09", "cd10", "sb03", "sb05", "sb17", "sb19", "sb38", "sb11", "sb12", "rg02", "he01", "ls01", "ls02",
-    "vs02", "vs10", "bd03"
+    "vs02", "vs10", "bd03", "rg07", "rg09"
 ];
 
 export const DREAMDROP_VALID_PVD = [

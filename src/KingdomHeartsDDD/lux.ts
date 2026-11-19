@@ -7,12 +7,12 @@ import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
+import { makeSortKeyOpaque, GfxRendererLayer, GfxRenderInstList, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DreamDropShader } from "./shader";
 import { Checkbox, COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RENDER_HACKS_ICON, Slider } from "../ui";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixSRT, lerp } from "../MathHelpers";
-import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
@@ -27,12 +27,17 @@ export enum LuxShapeAttribute {
     NO_CULL = 4,
     BLEND_SEMITRANSPARENT = 32,
     BLEND_ADDITIVE = 64,
-    DEPTH_WRITE = 256, // testing has been inconsistent, unused for now
+    UNK8 = 256, // every blended shape in a model's first list has this or 512
+    UNK9 = 512,
     DROP_SHADOW = 1024, // used for polygon offset value, somewhat inconsistent, fixes some shapes and breaks others
 }
 
+// this might be more of a group number, since room parts will always be grouped together by this value to determine rendering behavior
 export enum LuxModelFlags {
     SKYBOX = 1,
+    UNSORTED_FIRST = 8,
+    UNSORTED_LAST = 16,
+    UNSORTED_SECOND = 32,
     BACKGROUND = 64, // geometry that's effectively the skybox but rendered normally (just scaled up a lot)
     BILLBOARD = 1024
 }
@@ -185,9 +190,10 @@ export interface LuxRoomObjects {
 const FRAME_TIME_30 = 0.03;
 const FRAME_TIME_60 = 0.06;
 const WORLD_SCALE = 200.0; // to make camera movement better, tiny coords are scaled up
-const SCRATCH_MVP = mat4.create();
 const SCRATCH_VIEW = mat4.create();
 const SCRATCH_BONE = mat4.create();
+const SCRATCH_VEC3 = vec3.create();
+const TRANSLUCENT_MAX_DEPTH = 0x80000;
 const BINDING_LAYOUTS: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 1 }];
 const BINDING_LAYOUTS_TXA: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 4, numSamplers: 2 }];
 
@@ -239,6 +245,7 @@ export class LuxShape {
     public indices: Uint32Array;
     public weights: Float32Array;
     public joints: Uint8Array;
+    public inFirstList: boolean = false;
 
     constructor(public vertexCount: number, public textureIndex: number, public attribute: number, public boneIndices: number[]) {
         this.vertices = new Float32Array(vertexCount * 3);
@@ -280,6 +287,7 @@ export abstract class LuxShapeRenderer implements Destroyable {
     protected indexBufferDescriptor: GfxIndexBufferDescriptor;
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     private sortKey: number;
+    private isSortedTranslucent: boolean;
     private drawCount: number;
     private txaFactor: number = 0;
     private txaKeyframes: TXAKeyframe[] = [];
@@ -311,7 +319,9 @@ export abstract class LuxShapeRenderer implements Destroyable {
             this.megaStateFlags.depthWrite = false;
             this.megaStateFlags.depthCompare = GfxCompareMode.Always;
         }
-        this.sortKey = makeSortKeyOpaque(transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE, 0);
+        this.isSortedTranslucent = transparent && !shape.inFirstList;
+        const layer = !transparent ? GfxRendererLayer.OPAQUE : shape.inFirstList ? GfxRendererLayer.OPAQUE + 1 : GfxRendererLayer.TRANSLUCENT;
+        this.sortKey = makeSortKeyOpaque(layer, 0);
 
         this.setVertexBuffers(cache, shape, scale);
 
@@ -346,7 +356,7 @@ export abstract class LuxShapeRenderer implements Destroyable {
         this.indexBufferDescriptor = { buffer: createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shape.indices.buffer), byteOffset: 0 };
     }
 
-    public prepareToRender(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, ranTXA: boolean) {
+    public prepareToRender(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, ranTXA: boolean, instanceDepth: number) {
         const renderInst = renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setGfxProgram(this.gfxProgram!);
@@ -381,7 +391,7 @@ export abstract class LuxShapeRenderer implements Destroyable {
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
         if (!this.isSkybox) {
-            renderInst.sortKey = this.sortKey;
+            renderInst.sortKey = this.isSortedTranslucent ? setSortKeyDepth(this.sortKey, instanceDepth, TRANSLUCENT_MAX_DEPTH) : this.sortKey;
         }
         renderInst.setDrawCount(this.drawCount);
 
@@ -390,6 +400,12 @@ export abstract class LuxShapeRenderer implements Destroyable {
 
     public setCullingOverride(v: boolean) {
         this.megaStateFlags.cullMode = v ? GfxCullMode.None : this.cullMode;
+    }
+
+    public setDrawAfterRoomParts() {
+        if (this.isSortedTranslucent) {
+            this.sortKey = setSortKeyLayer(this.sortKey, GfxRendererLayer.TRANSLUCENT + 1);
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -442,6 +458,7 @@ export abstract class LuxModelRenderer implements Destroyable, Layer {
     protected isBillboard: boolean;
     protected isSkybox: boolean;
     protected isBackground: boolean;
+    protected unsortedDepth: number | undefined;
     protected currentPAMFrame: number;
     protected pamFramerate: number;
     protected bones: LuxBone[];
@@ -451,6 +468,13 @@ export abstract class LuxModelRenderer implements Destroyable, Layer {
         this.name = name;
         this.isSkybox = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.SKYBOX) !== 0;
         this.isBackground = model.pmpFlags !== -1 && (model.pmpFlags & LuxModelFlags.BACKGROUND) !== 0;
+        if (model.pmpFlags !== -1) {
+            if ((model.pmpFlags & (LuxModelFlags.UNSORTED_FIRST | LuxModelFlags.UNSORTED_SECOND)) !== 0) {
+                this.unsortedDepth = Infinity;
+            } else if ((model.pmpFlags & LuxModelFlags.UNSORTED_LAST) !== 0) {
+                this.unsortedDepth = 0;
+            }
+        }
         const calcBbox = this.name.substring(1, 2) === "_" || !this.name.includes("_");
         const allVertices = [];
         this.shapes = Array(model.shapes.length);
@@ -473,6 +497,9 @@ export abstract class LuxModelRenderer implements Destroyable, Layer {
                 }
             }
             this.shapes[i] = this.getShapeRenderer(cache, model, shape, materials, txa);
+            if (model.pmpFlags === -1) {
+                this.shapes[i].setDrawAfterRoomParts();
+            }
         }
         this.isBillboard = (model.flags & LuxModelFlags.BILLBOARD) !== 0;
 
@@ -547,6 +574,11 @@ export abstract class LuxModelRenderer implements Destroyable, Layer {
                 computeViewMatrix(SCRATCH_VIEW, viewerInput.camera);
             }
             mat4.mul(SCRATCH_VIEW, SCRATCH_VIEW, instance.shiftMatrix);
+            let instanceDepth = this.unsortedDepth;
+            if (instanceDepth === undefined) {
+                instance.bbox.centerPoint(SCRATCH_VEC3);
+                instanceDepth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, SCRATCH_VEC3);
+            }
             if (this.isBillboard && !this.isSkybox) {
                 calcBillboardMatrix(SCRATCH_VIEW, SCRATCH_VIEW, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
             }
@@ -559,7 +591,7 @@ export abstract class LuxModelRenderer implements Destroyable, Layer {
             }
 
             for (const shape of this.shapes) {
-                shape.prepareToRender(renderHelper, viewerInput, ranTXA);
+                shape.prepareToRender(renderHelper, viewerInput, ranTXA, instanceDepth);
             }
             ranTXA = true;
         }
